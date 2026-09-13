@@ -65,21 +65,23 @@ func _draw() -> void:
 	if _relevant_tiles.is_empty():
 		return
 
-	var tw: int = terrain_grid.tile_width
-	var th: int = terrain_grid.tile_height
+	var visible_rect: Rect2 = terrain_grid.get_visible_world_rect()
 
 	for pos: Vector2i in _relevant_tiles:
 		var elevation: int = terrain_grid.get_elevation(pos)
-		var screen_pos: Vector2 = terrain_grid.grid_to_screen(pos)
-		var local_pos: Vector2 = to_local(screen_pos)
+		if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
+			continue
 
 		# --- Contour lines at elevation boundaries ---
 		if elevation != 0 or _has_elevated_neighbor(pos):
-			_draw_contour_lines(pos, local_pos, tw, th)
+			_draw_contour_lines(pos)
 
 		# --- Elevation numbers ---
 		if elevation != 0:
-			var text_pos: Vector2 = local_pos + Vector2(tw * 0.35, th * 0.7)
+			# Anchored at the same spot within the tile as before, but projected
+			# so the label stays inside the diamond when the view is isometric.
+			var text_pos: Vector2 = OverlayGeometry.point_in_tile(
+					terrain_grid, self, pos, Vector2(0.35, 0.7))
 			var sign_str: String = "+" if elevation > 0 else ""
 			draw_string(
 				ThemeDB.fallback_font,
@@ -100,13 +102,13 @@ func _has_elevated_neighbor(pos: Vector2i) -> bool:
 	return false
 
 ## Draw contour lines with variable weight at elevation boundaries
-func _draw_contour_lines(pos: Vector2i, local_pos: Vector2, tw: int, th: int) -> void:
+func _draw_contour_lines(pos: Vector2i) -> void:
 	var elevation: int = terrain_grid.get_elevation(pos)
 
 	# Check each edge for elevation change (right, bottom, left, top)
 	var offsets: Array[Vector2i] = [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]
-	var line_starts: Array[Vector2] = [Vector2(tw, 0), Vector2(0, th), Vector2.ZERO, Vector2.ZERO]
-	var line_ends: Array[Vector2] = [Vector2(tw, th), Vector2(tw, th), Vector2(0, th), Vector2(tw, 0)]
+	var line_starts: Array[Vector2] = [Vector2(1, 0), Vector2(0, 1), Vector2.ZERO, Vector2.ZERO]
+	var line_ends: Array[Vector2] = [Vector2(1, 1), Vector2(1, 1), Vector2(0, 1), Vector2(1, 0)]
 
 	for i in offsets.size():
 		var n_pos: Vector2i = pos + offsets[i]
@@ -131,4 +133,7 @@ func _draw_contour_lines(pos: Vector2i, local_pos: Vector2, tw: int, th: int) ->
 			contour_color = Color(0.2, 0.25, 0.4, alpha)    # Cool blue-gray
 
 		# Draw the edge line
-		draw_line(local_pos + line_starts[i], local_pos + line_ends[i], contour_color, line_width, true)
+		draw_line(
+				OverlayGeometry.point_in_tile(terrain_grid, self, pos, line_starts[i]),
+				OverlayGeometry.point_in_tile(terrain_grid, self, pos, line_ends[i]),
+				contour_color, line_width, true)

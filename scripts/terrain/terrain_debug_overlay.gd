@@ -41,9 +41,6 @@ func _draw() -> void:
 	if not _enabled or not terrain_grid:
 		return
 
-	var tile_width = terrain_grid.tile_width
-	var tile_height = terrain_grid.tile_height
-
 	# Only draw visible tiles instead of full 128x128 grid
 	var tile_range = terrain_grid.get_visible_tile_range()
 	var min_tile = tile_range[0]
@@ -52,17 +49,14 @@ func _draw() -> void:
 	for x in range(min_tile.x, max_tile.x + 1):
 		for y in range(min_tile.y, max_tile.y + 1):
 			var pos = Vector2i(x, y)
-			var screen_pos = terrain_grid.grid_to_screen(pos)
-			var local_pos = to_local(screen_pos)
 			var terrain_type = terrain_grid.get_tile(pos)
 			var color = TYPE_COLORS.get(terrain_type, Color.MAGENTA)
 
-			# Draw colored overlay rectangle
-			var rect = Rect2(local_pos, Vector2(tile_width, tile_height))
-			draw_rect(rect, color)
+			# Tile outline: a 2:1 diamond when isometric, a square when top-down.
+			draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, pos), color)
 
 			# Draw terrain type number in center
-			var center = local_pos + Vector2(tile_width / 2.0 - 4, tile_height / 2.0 + 4)
+			var center = OverlayGeometry.tile_center(terrain_grid, self, pos) + Vector2(-4, 4)
 			var font = ThemeDB.fallback_font
 			if font:
 				draw_string(font, center, str(terrain_type), HORIZONTAL_ALIGNMENT_CENTER, -1, 10, Color.WHITE)

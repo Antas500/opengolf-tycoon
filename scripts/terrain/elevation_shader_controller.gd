@@ -14,6 +14,14 @@ func setup(terrain_grid: TerrainGrid, color_rect: ColorRect, shader_material: Sh
 	_color_rect = color_rect
 	_shader_material = shader_material
 
+func apply_projection(proj: GridProjection) -> void:
+	if _shader_material == null or proj == null:
+		return
+	_shader_material.set_shader_parameter("grid_origin", proj.grid_origin())
+	_shader_material.set_shader_parameter("grid_axis_x", proj.axis_x())
+	_shader_material.set_shader_parameter("grid_axis_y", proj.axis_y())
+	_shader_material.set_shader_parameter("surface_origin", proj.world_bounds().position)
+
 func _process(_delta: float) -> void:
 	if not _shader_material:
 		return

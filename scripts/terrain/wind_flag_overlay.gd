@@ -38,6 +38,16 @@ func _on_load_completed(_success: bool) -> void:
 	# Rebuild flags after a save is loaded
 	call_deferred("_rebuild_all_flags")
 
+func refresh_flag_positions() -> void:
+	if not _terrain_grid or not GameManager.course_data:
+		return
+	var holes: Array = GameManager.course_data.holes
+	for i in range(_flags.size()):
+		var flag := _flags[i]
+		if not is_instance_valid(flag) or i >= holes.size():
+			continue
+		flag.position = _terrain_grid.grid_to_screen_center(holes[i].hole_position)
+
 func _rebuild_all_flags() -> void:
 	# Remove existing flags immediately (not queue_free) to prevent stale _draw() calls
 	for flag in _flags:

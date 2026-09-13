@@ -54,26 +54,28 @@ func _draw() -> void:
 		_calculate_boundary_edges()
 		_needs_recalculate = false
 
-	var tw = terrain_grid.tile_width
-	var th = terrain_grid.tile_height
 	var lm = GameManager.land_manager
+	var visible_rect = terrain_grid.get_visible_world_rect()
 
 	# Draw tint on unowned tiles
 	for x in range(terrain_grid.grid_width):
 		for y in range(terrain_grid.grid_height):
 			var pos = Vector2i(x, y)
 			if not lm.is_tile_owned(pos):
-				var screen_pos = terrain_grid.grid_to_screen(pos)
-				var local_pos = to_local(screen_pos)
-				draw_rect(Rect2(local_pos, Vector2(tw, th)), UNOWNED_TINT)
+				if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
+					continue
+				# Projected tile outline, so the tint is a diamond when isometric.
+				draw_colored_polygon(
+						OverlayGeometry.tile_polygon(terrain_grid, self, pos), UNOWNED_TINT)
 
-	# Draw property line borders
+	# Draw property line borders.
 	for edge in _boundary_edges:
-		var start_screen = terrain_grid.grid_to_screen(edge.start_tile) + edge.start_offset
-		var end_screen = terrain_grid.grid_to_screen(edge.end_tile) + edge.end_offset
-		var local_start = to_local(start_screen)
-		var local_end = to_local(end_screen)
-		draw_line(local_start, local_end, BOUNDARY_COLOR, BOUNDARY_WIDTH, true)
+		var start_world = terrain_grid.grid_point_to_screen(
+				Vector2(edge.start_tile) + edge.start_offset)
+		var end_world = terrain_grid.grid_point_to_screen(
+				Vector2(edge.end_tile) + edge.end_offset)
+		draw_line(to_local(start_world), to_local(end_world), BOUNDARY_COLOR,
+				BOUNDARY_WIDTH, true)
 
 func _calculate_boundary_edges() -> void:
 	"""Calculate all boundary edges between owned and unowned tiles."""
@@ -83,8 +85,6 @@ func _calculate_boundary_edges() -> void:
 		return
 
 	var lm = GameManager.land_manager
-	var tw = terrain_grid.tile_width
-	var th = terrain_grid.tile_height
 
 	# Check every tile for boundary edges
 	for x in range(terrain_grid.grid_width):
@@ -101,9 +101,9 @@ func _calculate_boundary_edges() -> void:
 			if not lm.is_tile_owned(right):
 				_boundary_edges.append({
 					"start_tile": pos,
-					"start_offset": Vector2(tw, 0),
+					"start_offset": Vector2(1, 0),
 					"end_tile": pos,
-					"end_offset": Vector2(tw, th)
+					"end_offset": Vector2(1, 1)
 				})
 
 			# Bottom neighbor
@@ -111,9 +111,9 @@ func _calculate_boundary_edges() -> void:
 			if not lm.is_tile_owned(bottom):
 				_boundary_edges.append({
 					"start_tile": pos,
-					"start_offset": Vector2(0, th),
+					"start_offset": Vector2(0, 1),
 					"end_tile": pos,
-					"end_offset": Vector2(tw, th)
+					"end_offset": Vector2(1, 1)
 				})
 
 			# Left neighbor
@@ -123,7 +123,7 @@ func _calculate_boundary_edges() -> void:
 					"start_tile": pos,
 					"start_offset": Vector2(0, 0),
 					"end_tile": pos,
-					"end_offset": Vector2(0, th)
+					"end_offset": Vector2(0, 1)
 				})
 
 			# Top neighbor
@@ -133,5 +133,5 @@ func _calculate_boundary_edges() -> void:
 					"start_tile": pos,
 					"start_offset": Vector2(0, 0),
 					"end_tile": pos,
-					"end_offset": Vector2(tw, 0)
+					"end_offset": Vector2(1, 0)
 				})

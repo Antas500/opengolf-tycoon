@@ -234,9 +234,6 @@ func _is_tile_valid_for_placement(grid_pos: Vector2i) -> bool:
 	return false
 
 func _draw_isometric_tile(grid_pos: Vector2i, is_valid: bool, alpha_mod: float, is_primary: bool, is_terrain_mode: bool = false) -> void:
-	var screen_pos = terrain_grid.grid_to_screen(grid_pos)
-	var tw = terrain_grid.tile_width
-	var th = terrain_grid.tile_height
 
 	# Fill color based on validity and mode
 	var fill_color: Color
@@ -256,13 +253,12 @@ func _draw_isometric_tile(grid_pos: Vector2i, is_valid: bool, alpha_mod: float, 
 	fill_color.a *= alpha_mod
 	outline_color.a *= alpha_mod
 
-	# Draw filled rectangle (matching actual terrain tile shape)
-	var rect = Rect2(screen_pos, Vector2(tw, th))
-	draw_rect(rect, fill_color)
+	draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, grid_pos), fill_color)
 
 	# Draw outline
 	var outline_width = 2.0 if is_primary else 1.0
-	draw_rect(rect, outline_color, false, outline_width)
+	draw_polyline(OverlayGeometry.tile_polyline(terrain_grid, self, grid_pos),
+			outline_color, outline_width)
 
 func _get_terrain_preview_color() -> Color:
 	"""Get a preview color based on the current terrain tool or active mode"""
@@ -309,8 +305,7 @@ func _draw_entity_ghost(alpha_mod: float) -> void:
 		PlacementManager.PlacementMode.ROCK:
 			_draw_rock_ghost(base_pos, ghost_color)
 		PlacementManager.PlacementMode.BUILDING:
-			var top_left = terrain_grid.grid_to_screen(current_grid_pos)
-			_draw_building_ghost(top_left, ghost_color)
+			_draw_building_ghost(current_grid_pos, ghost_color)
 		PlacementManager.PlacementMode.DECORATION:
 			var top_left_dec = terrain_grid.grid_to_screen(current_grid_pos)
 			_draw_decoration_ghost(top_left_dec, ghost_color)
@@ -439,8 +434,7 @@ func _draw_rock_ghost(pos: Vector2, color: Color) -> void:
 	highlight.a *= 0.5
 	draw_circle(pos + Vector2(-3, -6), 4, highlight)
 
-func _draw_building_ghost(pos: Vector2, color: Color) -> void:
-	# pos is the top-left screen position of the footprint
+func _draw_building_ghost(grid_pos: Vector2i, color: Color) -> void:
 	var footprint = placement_manager.get_building_footprint()
 	var fw = 1
 	var fh = 1
@@ -450,6 +444,13 @@ func _draw_building_ghost(pos: Vector2, color: Color) -> void:
 
 	var w = fw * 64.0
 	var h = fh * 32.0
+	var pos: Vector2
+	if terrain_grid.is_view_isometric():
+		var center := terrain_grid.grid_point_to_screen(
+				Vector2(grid_pos) + Vector2(fw * 0.5, fh * 0.5))
+		pos = center - Vector2(w * 0.5, h)
+	else:
+		pos = terrain_grid.grid_to_screen(grid_pos)
 	var building_type = placement_manager.selected_building_type
 
 	if not is_instance_valid(_building_ghost):
@@ -707,11 +708,9 @@ func _draw_hole_move_preview() -> void:
 
 	var pulse = 0.7 + sin(_pulse_time) * 0.3
 	preview_color.a *= pulse
-	var screen_pos = terrain_grid.grid_to_screen(hover_pos)
-	var tw = terrain_grid.tile_width
-	var th = terrain_grid.tile_height
-	draw_rect(Rect2(screen_pos, Vector2(tw, th)), preview_color)
-	draw_rect(Rect2(screen_pos, Vector2(tw, th)), Color(1.0, 1.0, 1.0, 0.7 * pulse), false, 2.0)
+	draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, hover_pos), preview_color)
+	draw_polyline(OverlayGeometry.tile_polyline(terrain_grid, self, hover_pos),
+			Color(1.0, 1.0, 1.0, 0.7 * pulse), 2.0)
 
 	var font = ThemeDB.fallback_font
 	var center = terrain_grid.grid_to_screen_center(hover_pos)
@@ -728,11 +727,9 @@ func _draw_tee_placement_preview() -> void:
 
 	var pulse = 0.7 + sin(_pulse_time) * 0.3
 	var tee_color = Color(0.4, 0.85, 0.45, 0.5 * pulse)
-	var screen_pos = terrain_grid.grid_to_screen(hover_grid_pos)
-	var tw = terrain_grid.tile_width
-	var th = terrain_grid.tile_height
-	draw_rect(Rect2(screen_pos, Vector2(tw, th)), tee_color)
-	draw_rect(Rect2(screen_pos, Vector2(tw, th)), Color(1.0, 1.0, 1.0, 0.7 * pulse), false, 2.0)
+	draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, hover_grid_pos), tee_color)
+	draw_polyline(OverlayGeometry.tile_polyline(terrain_grid, self, hover_grid_pos),
+			Color(1.0, 1.0, 1.0, 0.7 * pulse), 2.0)
 
 	# Label
 	var font = ThemeDB.fallback_font
@@ -823,10 +820,9 @@ func _draw_hole_creation_preview() -> void:
 	var pulse = 0.7 + sin(_pulse_time) * 0.3
 	var green_preview_color = Color(0.3, 0.9, 0.5, 0.4 * pulse) if is_valid else Color(0.9, 0.3, 0.3, 0.4 * pulse)
 	if terrain_grid.is_valid_position(hover_grid_pos):
-		var screen_pos = terrain_grid.grid_to_screen(hover_grid_pos)
-		var tw = terrain_grid.tile_width
-		var th = terrain_grid.tile_height
-		draw_rect(Rect2(screen_pos, Vector2(tw, th)), green_preview_color)
+		draw_colored_polygon(
+				OverlayGeometry.tile_polygon(terrain_grid, self, hover_grid_pos),
+				green_preview_color)
 
 	# Show where forward/middle tees will be auto-placed (when multi-tee enabled)
 	if is_valid and GameManager.multi_tee_enabled:
@@ -841,8 +837,8 @@ func _draw_hole_creation_preview() -> void:
 			]
 			for tp in tee_previews:
 				if tp["pos"] != tee_pos and terrain_grid.is_valid_position(tp["pos"]):
-					var tp_screen = terrain_grid.grid_to_screen(tp["pos"])
-					draw_rect(Rect2(tp_screen, Vector2(terrain_grid.tile_width, terrain_grid.tile_height)), tp["color"])
+					draw_colored_polygon(
+							OverlayGeometry.tile_polygon(terrain_grid, self, tp["pos"]), tp["color"])
 					var label_pos = terrain_grid.grid_to_screen_center(tp["pos"]) + Vector2(-10, -12)
 					draw_string(font, label_pos, tp["label"], HORIZONTAL_ALIGNMENT_CENTER, -1, 10, tp["color"])
 

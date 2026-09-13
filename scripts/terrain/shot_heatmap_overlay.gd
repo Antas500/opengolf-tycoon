@@ -76,11 +76,10 @@ func _draw_density(tw: int, th: int) -> void:
 		var normalized: float = float(count) / float(max_count)
 		var color: Color = _density_color(normalized)
 
-		var screen_pos = terrain_grid.grid_to_screen(pos)
-		if not visible_rect.has_point(screen_pos):
+		if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
 			continue
-		var local_pos = to_local(screen_pos)
-		draw_rect(Rect2(local_pos, Vector2(tw, th)), color)
+		# Projected tile shape: diamond when isometric, square when top-down.
+		draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, pos), color)
 
 func _draw_trouble(tw: int, th: int) -> void:
 	# Viewport culling
@@ -94,11 +93,10 @@ func _draw_trouble(tw: int, th: int) -> void:
 			continue
 
 		var color: Color = _trouble_color(score)
-		var screen_pos = terrain_grid.grid_to_screen(pos)
-		if not visible_rect.has_point(screen_pos):
+		if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
 			continue
-		var local_pos = to_local(screen_pos)
-		draw_rect(Rect2(local_pos, Vector2(tw, th)), color)
+		# Projected tile shape: diamond when isometric, square when top-down.
+		draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, pos), color)
 
 func _density_color(normalized: float) -> Color:
 	# Cool-to-hot gradient: blue -> cyan -> green -> yellow -> red

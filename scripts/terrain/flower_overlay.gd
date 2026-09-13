@@ -114,23 +114,23 @@ func _draw() -> void:
 	var margin = Vector2(terrain_grid.tile_width, terrain_grid.tile_height)
 	visible_rect = visible_rect.grow_individual(margin.x, margin.y, margin.x, margin.y)
 
+	var tile_size := Vector2(float(terrain_grid.tile_width), float(terrain_grid.tile_height))
 	for pos in _flower_positions:
-		var screen_pos = terrain_grid.grid_to_screen(pos)
-		if not visible_rect.has_point(screen_pos):
+		if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
 			continue
-		var local_pos = to_local(screen_pos)
 		var data = _flower_positions[pos]
 
 		# Draw foliage first (background)
 		for leaf in data.foliage:
-			_draw_foliage(local_pos, leaf)
+			_draw_foliage(OverlayGeometry.point_in_tile(terrain_grid, self, pos,
+					Vector2(leaf.x, leaf.y) / tile_size), leaf)
 
 		# Draw flowers on top
 		for flower in data.flowers:
-			_draw_flower(local_pos, flower)
+			_draw_flower(OverlayGeometry.point_in_tile(terrain_grid, self, pos,
+					Vector2(flower.x, flower.y) / tile_size), flower)
 
-func _draw_foliage(tile_pos: Vector2, leaf: Dictionary) -> void:
-	var center = tile_pos + Vector2(leaf.x, leaf.y)
+func _draw_foliage(center: Vector2, leaf: Dictionary) -> void:
 	var size = leaf.size
 
 	var leaf_color := TilesetGenerator.get_color("rough").darkened(0.12)
@@ -139,8 +139,7 @@ func _draw_foliage(tile_pos: Vector2, leaf: Dictionary) -> void:
 	draw_circle(Vector2(-size * 0.35, -size * 0.25), size * 0.65, leaf_color.lightened(0.10))
 	draw_set_transform(Vector2.ZERO)
 
-func _draw_flower(tile_pos: Vector2, flower: Dictionary) -> void:
-	var center = tile_pos + Vector2(flower.x, flower.y)
+func _draw_flower(center: Vector2, flower: Dictionary) -> void:
 	var size = flower.size
 	var petals = flower.petals
 	var color = flower.color

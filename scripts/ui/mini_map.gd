@@ -110,14 +110,21 @@ func _on_land_boundary_changed() -> void:
 	_needs_redraw = true
 	queue_redraw()
 
-func set_camera_rect(viewport_rect: Rect2, grid_width: int, grid_height: int) -> void:
-	# Convert screen rect to normalized coordinates (0-1)
-	_camera_rect = Rect2(
-		viewport_rect.position.x / (grid_width * _terrain_grid.tile_width),
-		viewport_rect.position.y / (grid_height * _terrain_grid.tile_height),
-		viewport_rect.size.x / (grid_width * _terrain_grid.tile_width),
-		viewport_rect.size.y / (grid_height * _terrain_grid.tile_height)
-	)
+func set_camera_rect(viewport_rect: Rect2, _grid_width: int, _grid_height: int) -> void:
+	var proj := _terrain_grid.projection
+	var corners: Array[Vector2] = [
+		proj.unproject(viewport_rect.position),
+		proj.unproject(Vector2(viewport_rect.end.x, viewport_rect.position.y)),
+		proj.unproject(viewport_rect.end),
+		proj.unproject(Vector2(viewport_rect.position.x, viewport_rect.end.y)),
+	]
+	var min_g: Vector2 = corners[0]
+	var max_g: Vector2 = corners[0]
+	for point in corners:
+		min_g = Vector2(minf(min_g.x, point.x), minf(min_g.y, point.y))
+		max_g = Vector2(maxf(max_g.x, point.x), maxf(max_g.y, point.y))
+	var size := Vector2(float(_terrain_grid.grid_width), float(_terrain_grid.grid_height))
+	_camera_rect = Rect2(min_g / size, (max_g - min_g) / size)
 	queue_redraw()
 
 func _process(delta: float) -> void:

@@ -16,6 +16,10 @@ signal bulldozer_pressed
 signal staff_pressed
 signal brush_size_changed(new_size: int)
 signal green_preset_selected(preset_name: String)
+## View controls (SimGolf-style course rotation).
+signal view_rotate_cw_pressed
+signal view_rotate_ccw_pressed
+signal view_isometric_toggled(enabled: bool)
 
 var _current_tool: int = TerrainTypes.Type.FAIRWAY
 var _tool_buttons: Dictionary = {}  # tool_type -> ToolButton
@@ -27,6 +31,11 @@ var _brush_label: Label = null
 var _green_preset_row: HBoxContainer = null
 var _green_preset_buttons: Dictionary = {}  # preset_name -> Button
 var _active_green_preset: String = ""
+var _rotate_cw_btn: Button = null
+var _rotate_ccw_btn: Button = null
+var _iso_toggle_btn: Button = null
+var _view_orientation_label: Label = null
+const ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
 const BRUSH_SIZES = [1, 3, 5, 7, 9]
 
 const TOOL_SECTIONS = {
@@ -157,6 +166,50 @@ func _build_ui() -> void:
 	brush_row.add_child(brush_increase)
 
 	main_vbox.add_child(brush_row)
+
+	var view_row = HBoxContainer.new()
+	view_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	view_row.add_theme_constant_override("separation", 6)
+
+	var view_title = Label.new()
+	view_title.text = "View:"
+	view_title.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	view_title.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+	view_row.add_child(view_title)
+
+	_rotate_ccw_btn = Button.new()
+	_rotate_ccw_btn.text = "⟲"
+	_rotate_ccw_btn.custom_minimum_size = Vector2(30, 26)
+	_rotate_ccw_btn.tooltip_text = "Rotate course counter-clockwise (Q)"
+	_rotate_ccw_btn.pressed.connect(_on_rotate_ccw_pressed)
+	view_row.add_child(_rotate_ccw_btn)
+
+	_view_orientation_label = Label.new()
+	_view_orientation_label.text = "N"
+	_view_orientation_label.custom_minimum_size = Vector2(20, 0)
+	_view_orientation_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_view_orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	_view_orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+	_view_orientation_label.tooltip_text = "Which way the course is facing"
+	view_row.add_child(_view_orientation_label)
+
+	_rotate_cw_btn = Button.new()
+	_rotate_cw_btn.text = "⟳"
+	_rotate_cw_btn.custom_minimum_size = Vector2(30, 26)
+	_rotate_cw_btn.tooltip_text = "Rotate course clockwise (Shift+Q)"
+	_rotate_cw_btn.pressed.connect(_on_rotate_cw_pressed)
+	view_row.add_child(_rotate_cw_btn)
+
+	_iso_toggle_btn = Button.new()
+	_iso_toggle_btn.text = "Iso"
+	_iso_toggle_btn.toggle_mode = true
+	_iso_toggle_btn.button_pressed = true
+	_iso_toggle_btn.custom_minimum_size = Vector2(46, 26)
+	_iso_toggle_btn.tooltip_text = "Toggle isometric diamonds / top-down squares (I)"
+	_iso_toggle_btn.pressed.connect(_on_iso_toggle_pressed)
+	view_row.add_child(_iso_toggle_btn)
+
+	main_vbox.add_child(view_row)
 
 	# Green preset row (hidden until GREEN tool selected)
 	_green_preset_row = HBoxContainer.new()
@@ -511,3 +564,20 @@ func set_brush_size(value: int) -> void:
 		_brush_size = value
 		_update_brush_label()
 		brush_size_changed.emit(value)
+
+func _on_rotate_cw_pressed() -> void:
+	view_rotate_cw_pressed.emit()
+
+func _on_rotate_ccw_pressed() -> void:
+	view_rotate_ccw_pressed.emit()
+
+func _on_iso_toggle_pressed() -> void:
+	if _iso_toggle_btn:
+		view_isometric_toggled.emit(_iso_toggle_btn.button_pressed)
+
+func set_view_state(orientation: int, isometric: bool) -> void:
+	if _view_orientation_label:
+		var index: int = wrapi(orientation, 0, ORIENTATION_LABELS.size())
+		_view_orientation_label.text = ORIENTATION_LABELS[index]
+	if _iso_toggle_btn:
+		_iso_toggle_btn.set_pressed_no_signal(isometric)

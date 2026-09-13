@@ -10,6 +10,31 @@ uniform vec2 grid_size = vec2(128.0);
 uniform vec2 tile_size = vec2(64.0, 32.0);
 uniform vec4 fringe_color : source_color = vec4(0.38, 0.65, 0.28, 1.0);
 
+uniform vec2 grid_origin = vec2(0.0);
+uniform vec2 grid_axis_x = vec2(64.0, 32.0);
+uniform vec2 grid_axis_y = vec2(0.0, 32.0);
+uniform vec2 surface_origin = vec2(0.0);
+uniform vec2 surface_size = vec2(8192.0, 4096.0);
+
+vec2 world_to_grid(vec2 world) {
+	vec2 d = world - grid_origin;
+	float det = grid_axis_x.x * grid_axis_y.y - grid_axis_y.x * grid_axis_x.y;
+	if (abs(det) < 0.000001) {
+		return vec2(-1.0);
+	}
+	return vec2(
+		(d.x * grid_axis_y.y - grid_axis_y.x * d.y) / det,
+		(grid_axis_x.x * d.y - grid_axis_x.y * d.x) / det);
+}
+
+float elevation_at(vec2 world) {
+	vec2 g = world_to_grid(world) / grid_size;
+	if (g.x < 0.0 || g.y < 0.0 || g.x > 1.0 || g.y > 1.0) {
+		return 0.5;
+	}
+	return texture(elevation_data, g).b;
+}
+
 float hash(vec2 p) {
 	// Keep intermediates small: large sin hashes form bands on mobile/GL drivers.
 	vec3 q = fract(vec3(p.x, p.y, p.x) * 0.1031);
@@ -79,8 +104,12 @@ vec3 surface(float id, float cover, float depth, vec2 world, float grain, float 
 }
 
 void fragment() {
-	vec2 world = UV * grid_size * tile_size;
-	vec2 p = UV * grid_size;
+	vec2 world = surface_origin + UV * surface_size;
+	vec2 p = world_to_grid(world);
+	if (p.x < 0.0 || p.y < 0.0 || p.x > grid_size.x || p.y > grid_size.y) {
+		COLOR = vec4(0.0);
+	}
+	vec2 tile_world = p * tile_size;
 	// A restrained contour perturbation breaks stair steps without moving tile centers.
 	vec2 warp = vec2(noise(p * 0.72), noise(p * 0.72 + 37.0)) - 0.5;
 	vec2 sample_pos = p - 0.5 + warp * 0.16;
@@ -97,18 +126,19 @@ void fragment() {
 	// Sharpen material boundaries while rounding the outside of connected corners.
 	vec4 blends = weights * pow(covers, vec4(5.0));
 	blends /= max(dot(blends, vec4(1.0)), 0.0001);
-	float grain = hash(floor(world));
-	float patch = noise(world * 0.009) * 0.65 + noise(world * 0.035) * 0.35;
-	vec3 color = surface(a.x, covers.x, a.y, world, grain, patch) * blends.x
-		+ surface(b.x, covers.y, b.y, world, grain, patch) * blends.y
-		+ surface(c.x, covers.z, c.y, world, grain, patch) * blends.z
-		+ surface(d.x, covers.w, d.y, world, grain, patch) * blends.w;
+	float grain = hash(floor(tile_world));
+	float patch = noise(tile_world * 0.009) * 0.65 + noise(tile_world * 0.035) * 0.35;
+	vec3 color = surface(a.x, covers.x, a.y, tile_world, grain, patch) * blends.x
+		+ surface(b.x, covers.y, b.y, tile_world, grain, patch) * blends.y
+		+ surface(c.x, covers.z, c.y, tile_world, grain, patch) * blends.z
+		+ surface(d.x, covers.w, d.y, tile_world, grain, patch) * blends.w;
 	// Base elevations provide broad, continuous relief without per-tile profiles.
-	vec2 step_uv = 1.5 / grid_size;
-	float left_h = texture(elevation_data, UV - vec2(step_uv.x, 0.0)).b;
-	float right_h = texture(elevation_data, UV + vec2(step_uv.x, 0.0)).b;
-	float up_h = texture(elevation_data, UV - vec2(0.0, step_uv.y)).b;
-	float down_h = texture(elevation_data, UV + vec2(0.0, step_uv.y)).b;
+	vec2 step_x = grid_axis_x * 1.5;
+	vec2 step_y = grid_axis_y * 1.5;
+	float left_h = elevation_at(world - step_x);
+	float right_h = elevation_at(world + step_x);
+	float up_h = elevation_at(world - step_y);
+	float down_h = elevation_at(world + step_y);
 	vec3 normal = normalize(vec3(-(right_h-left_h)*5.0, -(down_h-up_h)*5.0, 1.0));
 	vec3 sunlight = normalize(vec3(relief_light, 1.5));
 	float relief = clamp(1.0 + (dot(normal, sunlight) - sunlight.z) * 0.45, 0.75, 1.12);
