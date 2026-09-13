@@ -119,7 +119,6 @@ void fragment() {
 	// diamond (or the rotated square) is empty space, not terrain.
 	if (p.x < 0.0 || p.y < 0.0 || p.x > grid_size.x || p.y > grid_size.y) {
 		COLOR = vec4(0.0);
-		return;
 	}
 	// Patterns are driven from grid space so mowing stripes, grain and water
 	// ripples stay locked to the tiles and rotate together with the view.
