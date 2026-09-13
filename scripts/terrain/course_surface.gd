@@ -64,6 +64,8 @@ func refresh_palette() -> void:
 	_palette = ImageTexture.create_from_image(colors)
 	material.set_shader_parameter("palette", _palette)
 	material.set_shader_parameter("fringe_color", TilesetGenerator.get_color("fringe"))
+	var rock := TilesetGenerator.get_color("rocks")
+	material.set_shader_parameter("cliff_color", Vector3(rock.r, rock.g, rock.b))
 
 func rebuild() -> void:
 	for x in range(_grid.grid_width):

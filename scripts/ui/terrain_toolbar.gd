@@ -9,9 +9,8 @@ signal rock_placement_pressed
 signal flower_bed_pressed
 signal building_placement_pressed
 signal decoration_placement_pressed
-signal raise_elevation_pressed
-signal sculpt_terrain_pressed(raising: bool)
-signal lower_elevation_pressed
+signal vertex_selector_pressed
+signal square_selector_pressed
 signal bulldozer_pressed
 signal staff_pressed
 signal brush_size_changed(new_size: int)
@@ -71,10 +70,8 @@ const TOOL_SECTIONS = {
 	"Elevation": {
 		"icon": "[E]",
 		"tools": [
-			{"type": "mound", "name": "Rolling hill", "icon": "∩", "hotkey": "", "desc": "Sculpt a rounded hill with gently tapering slopes"},
-			{"type": "hollow", "name": "Hollow", "icon": "∪", "hotkey": "", "desc": "Carve a soft valley; preserves water, paths, and buildings"},
-			{"type": "raise", "name": "Raise", "icon": "[+]", "hotkey": "+", "desc": "Raise terrain elevation"},
-			{"type": "lower", "name": "Lower", "icon": "[-]", "hotkey": "-", "desc": "Lower terrain elevation"},
+			{"type": "vertex_selector", "name": "Vertex Selector", "icon": "◇", "hotkey": "+", "desc": "Raise/lower one terrain corner; Right-click raises, Left-click lowers"},
+			{"type": "square_selector", "name": "Square Selector", "icon": "◼", "hotkey": "-", "desc": "Level a square's corners, then move the whole square; Right-click raises, Left-click lowers"},
 		]
 	},
 	"Course": {
@@ -332,7 +329,7 @@ func _get_special_tool_costs(tool_type: String) -> Dictionary:
 			return {"cost": 0, "maintenance": 0}
 		"staff":
 			return {"cost": 0, "maintenance": 0}
-		"raise", "lower":
+		"vertex_selector", "square_selector":
 			return {"cost": 0, "maintenance": 0}
 	return {"cost": 0, "maintenance": 0}
 
@@ -390,14 +387,10 @@ func _on_tool_button_pressed(tool_type) -> void:
 				decoration_placement_pressed.emit()
 			"create_hole":
 				create_hole_pressed.emit()
-			"mound":
-				sculpt_terrain_pressed.emit(true)
-			"hollow":
-				sculpt_terrain_pressed.emit(false)
-			"raise":
-				raise_elevation_pressed.emit()
-			"lower":
-				lower_elevation_pressed.emit()
+			"vertex_selector":
+				vertex_selector_pressed.emit()
+			"square_selector":
+				square_selector_pressed.emit()
 			"bulldozer":
 				bulldozer_pressed.emit()
 			"staff":
@@ -442,11 +435,11 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 					return
 				KEY_EQUAL:  # Shift+= = +
-					_on_tool_button_pressed("raise")
+					_on_tool_button_pressed("vertex_selector")
 					get_viewport().set_input_as_handled()
 					return
 				KEY_MINUS:  # Shift+- = _
-					_on_tool_button_pressed("lower")
+					_on_tool_button_pressed("square_selector")
 					get_viewport().set_input_as_handled()
 					return
 				KEY_R:  # Shift+R = routing overlay (handled in main.gd)
@@ -460,8 +453,8 @@ func _input(event: InputEvent) -> void:
 				_toggle_section("Objects & Decor")
 			KEY_E:  # E for Elevation
 				_toggle_section("Elevation")
-			KEY_MINUS:  # - for lower elevation
-				_on_tool_button_pressed("lower")
+			KEY_MINUS:  # - for the square selector
+				_on_tool_button_pressed("square_selector")
 			KEY_1:
 				_on_tool_button_pressed(TerrainTypes.Type.FAIRWAY)
 			KEY_2:

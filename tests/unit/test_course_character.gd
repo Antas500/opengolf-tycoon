@@ -24,59 +24,159 @@ func after_each() -> void:
 	GameManager.is_paused = previous_pause
 	GameManager.current_speed = previous_speed
 
-func test_sculpted_brush_tapers_preserves_surfaces_and_can_be_undone() -> void:
-	grid.set_tile(Vector2i(8, 7), TerrainTypes.Type.WATER)
-	grid.set_tile(Vector2i(7, 8), TerrainTypes.Type.PATH)
-	var saved := grid.serialize()
+func test_vertex_selector_moves_single_vertex_and_nothing_else() -> void:
 	var tool := ElevationTool.new()
 	add_child_autofree(tool)
-	tool.start_raising()
-	tool.sculpted = true
-	var changes := tool.paint_elevation(Vector2i(8, 8), grid, 9)
-	assert_eq(grid.get_vertex_elevation(Vector2i(9, 9)), 3)
-	assert_eq(grid.get_vertex_elevation(Vector2i(12, 9)), 1)
-	assert_eq(grid.get_vertex_elevation(Vector2i(13, 9)), 0)
-	assert_eq(grid.get_elevation(Vector2i(9, 9)), 3)
-	assert_eq(grid.get_elevation(Vector2i(11, 9)), 1)
-	assert_eq(grid.get_elevation(Vector2i(12, 9)), 0)
-	assert_eq(grid.get_elevation(Vector2i(8, 8)), 1)
-	assert_eq(grid.get_elevation(Vector2i(8, 7)), 0)
-	assert_eq(grid.get_elevation(Vector2i(7, 8)), 0)
-	assert_eq(grid.get_vertex_elevation(Vector2i(9, 8)), 0)
-	assert_eq(grid.serialize(), saved)
-	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0 - 5.0), 3)
+	tool.start_vertex_selector()
+	assert_true(tool.is_active())
+	# Right-click raises exactly one vertex.
+	var changes := tool.paint_vertex(Vector2i(8, 8), grid, true)
+	assert_eq(changes.size(), 1)
+	assert_eq(changes[0]["position"], Vector2i(8, 8))
+	assert_eq(changes[0]["old_elevation"], 0)
+	assert_eq(changes[0]["new_elevation"], 1)
+	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), 1)
+	for neighbour in [Vector2i(7, 8), Vector2i(9, 8), Vector2i(8, 7), Vector2i(8, 9),
+			Vector2i(7, 7), Vector2i(9, 9)]:
+		assert_eq(grid.get_vertex_elevation(neighbour), 0)
+	# Left-click lowers it back.
+	changes = tool.paint_vertex(Vector2i(8, 8), grid, false)
+	assert_eq(changes.size(), 1)
+	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), 0)
+	# paint_at_point routes through the active selector.
+	changes = tool.paint_at_point(Vector2(8.2, 7.8), grid, true)
+	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), 1)
+	# Height limits clamp without recording no-op changes.
+	grid.set_vertex_elevation(Vector2i(8, 8), TerrainGrid.MAX_ELEVATION)
+	assert_true(tool.paint_vertex(Vector2i(8, 8), grid, true).is_empty())
+	grid.set_vertex_elevation(Vector2i(8, 8), TerrainGrid.MIN_ELEVATION)
+	assert_true(tool.paint_vertex(Vector2i(8, 8), grid, false).is_empty())
+	# Undo round-trips through serialization.
 	var heights := grid.serialize_elevation()
 	grid.deserialize_elevation(heights)
-	assert_eq(grid.get_elevation(Vector2i(9, 9)), 3)
-	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0 - 5.0), 3)
-	for i in range(changes.size() - 1, -1, -1):
-		var change = changes[i]
-		grid.set_vertex_elevation(change.position, change.old_elevation)
-	assert_eq(grid.get_elevation(Vector2i(9, 9)), 0)
-	assert_eq(grid.get_elevation(Vector2i(8, 8)), 0)
+	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), TerrainGrid.MIN_ELEVATION)
 	grid.deserialize_elevation({})
-	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0 - 5.0), 0)
+	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), 0)
+	# An inactive tool paints nothing.
+	tool.cancel()
+	assert_false(tool.is_active())
+	assert_true(tool.paint_vertex(Vector2i(8, 8), grid, true).is_empty())
+	assert_true(tool.paint_at_point(Vector2(8.0, 8.0), grid, true).is_empty())
 
-func test_sculpting_respects_buildings_and_height_limits() -> void:
+func test_square_selector_levels_then_lifts_and_lowers() -> void:
+	var tool := ElevationTool.new()
+	add_child_autofree(tool)
+	tool.start_square_selector()
+	var tile := Vector2i(4, 4)
+	var corners: Array[Vector2i] = grid.vertices_of_tile(tile)
+	grid.set_vertex_elevation(corners[0], 0)
+	grid.set_vertex_elevation(corners[1], 0)
+	grid.set_vertex_elevation(corners[2], 1)
+	grid.set_vertex_elevation(corners[3], 2)
+	# Raising lifts only the lowest corners until the square is even.
+	var changes := tool.paint_square(tile, grid, true)
+	assert_eq(changes.size(), 2)
+	assert_eq(_corner_heights(tile), [1, 1, 1, 2])
+	changes = tool.paint_square(tile, grid, true)
+	assert_eq(changes.size(), 3)
+	assert_eq(_corner_heights(tile), [2, 2, 2, 2])
+	# Once even, the whole square rises together.
+	changes = tool.paint_square(tile, grid, true)
+	assert_eq(changes.size(), 4)
+	assert_eq(_corner_heights(tile), [3, 3, 3, 3])
+	# Lowering an even square drops it together.
+	changes = tool.paint_square(tile, grid, false)
+	assert_eq(changes.size(), 4)
+	assert_eq(_corner_heights(tile), [2, 2, 2, 2])
+	# Lowering an uneven square drops only the highest corner(s).
+	grid.set_vertex_elevation(corners[3], 4)
+	changes = tool.paint_square(tile, grid, false)
+	assert_eq(changes.size(), 1)
+	assert_eq(_corner_heights(tile), [2, 2, 2, 3])
+	# Neighbouring vertices outside the square are never touched.
+	assert_eq(grid.get_vertex_elevation(Vector2i(3, 4)), 0)
+	assert_eq(grid.get_vertex_elevation(Vector2i(6, 5)), 0)
+	# paint_at_point routes tile centres to the square selector.
+	changes = tool.paint_at_point(Vector2(4.5, 4.5), grid, true)
+	assert_eq(_corner_heights(tile), [3, 3, 3, 3])
+	# square_targets previews exactly the corners paint would move.
+	assert_eq(ElevationTool.square_targets(tile, grid, true).size(), 4)
+	assert_eq(ElevationTool.square_targets(tile, grid, false).size(), 4)
+	# A square parked at the height limit does not move.
+	for corner in corners:
+		grid.set_vertex_elevation(corner, TerrainGrid.MAX_ELEVATION)
+	assert_true(tool.paint_square(tile, grid, true).is_empty())
+	for corner in corners:
+		grid.set_vertex_elevation(corner, TerrainGrid.MIN_ELEVATION)
+	assert_true(tool.paint_square(tile, grid, false).is_empty())
+
+func test_square_selector_respects_buildings() -> void:
 	var entities := EntityLayer.new()
 	entities.map_seed = 1234
 	add_child_autofree(entities)
 	entities.set_terrain_grid(grid)
 	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))["buildings"]
 	entities.place_building("clubhouse", Vector2i(6, 6), registry)
-	SculptedTerrain.stamp(grid, Vector2i(8, 8), 5, 3, entities)
+	var tool := ElevationTool.new()
+	add_child_autofree(tool)
+	tool.start_square_selector()
+	# Squares pinned by the clubhouse footprint cannot move its vertices.
+	var pinned := tool.paint_square(Vector2i(7, 7), grid, true, entities)
 	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), 0)
-	assert_eq(grid.get_elevation(Vector2i(8, 8)), 0)
-	# Just outside the footprint the same stamp still lifts the ground.
-	assert_eq(grid.get_vertex_elevation(Vector2i(5, 8)), 1)
-	grid.set_elevation(Vector2i(3, 3), 4)
-	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), 4)
-	SculptedTerrain.stamp(grid, Vector2i(3, 3), 3, 3)
-	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), 5)
-	assert_eq(grid.get_elevation(Vector2i(3, 3)), 5)
-	SculptedTerrain.stamp(grid, Vector2i(3, 3), 3, -20)
-	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), -5)
-	assert_eq(grid.get_elevation(Vector2i(3, 3)), -5)
+	assert_lt(pinned.size(), 4)
+	# Just outside the footprint the same tool still lifts the ground.
+	var free := tool.paint_square(Vector2i(3, 7), grid, true, entities)
+	assert_eq(free.size(), 4)
+	assert_eq(grid.get_vertex_elevation(Vector2i(3, 7)), 1)
+	# The vertex selector is pinned the same way.
+	tool.start_vertex_selector()
+	assert_true(tool.paint_vertex(Vector2i(8, 8), grid, true, entities).is_empty())
+	assert_eq(tool.paint_vertex(Vector2i(5, 8), grid, true, entities).size(), 1)
+
+func test_cliff_helpers_measure_steps_and_edges() -> void:
+	# A steep single-corner spike is a cliff.
+	grid.set_vertex_elevation(Vector2i(5, 5), 4)
+	assert_eq(grid.get_tile_corner_step(Vector2i(5, 5)), 4)
+	assert_true(grid.is_cliff_tile(Vector2i(5, 5)))
+	# A gentle slope is not.
+	grid.set_vertex_elevation(Vector2i(5, 5), 1)
+	assert_eq(grid.get_tile_corner_step(Vector2i(5, 5)), 1)
+	assert_false(grid.is_cliff_tile(Vector2i(5, 5)))
+	assert_true(grid.get_cliff_edges(Vector2i(5, 5)).is_empty())
+	# A raised plateau tile drops away on all four sides.
+	for corner in grid.vertices_of_tile(Vector2i(10, 10)):
+		grid.set_vertex_elevation(corner, 4)
+	assert_eq(grid.get_cliff_edges(Vector2i(10, 10)), [0, 1, 2, 3])
+	assert_true(grid.is_cliff_tile(Vector2i(10, 10)))
+	assert_false(grid.is_cliff_tile(Vector2i(0, 0)))
+
+func test_plateau_stamp_creates_flat_top_with_cliff_rim() -> void:
+	NaturalTerrainGenerator.stamp_plateau(grid, Vector2i(8, 8), 4.0, 3)
+	# The mesa top is perfectly flat.
+	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), 3)
+	assert_eq(grid.get_vertex_elevation(Vector2i(7, 7)), 3)
+	assert_eq(grid.get_vertex_elevation(Vector2i(9, 8)), 3)
+	assert_eq(_corner_heights(Vector2i(7, 7)), [3, 3, 3, 3])
+	# Far-away ground is untouched.
+	assert_eq(grid.get_vertex_elevation(Vector2i(2, 2)), 0)
+	assert_eq(grid.get_vertex_elevation(Vector2i(14, 14)), 0)
+	# The abrupt rim reads as cliffs, while the flat top does not.
+	var found_cliff := false
+	for x in range(16):
+		for y in range(16):
+			if grid.is_cliff_tile(Vector2i(x, y)):
+				found_cliff = true
+	assert_true(found_cliff)
+	assert_false(grid.is_cliff_tile(Vector2i(7, 7)))
+	# Sunken stamps carve below grade the same way.
+	NaturalTerrainGenerator.stamp_plateau(grid, Vector2i(3, 3), 2.0, -3)
+	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), -3)
+
+func _corner_heights(tile: Vector2i) -> Array:
+	var heights: Array = []
+	for corner in grid.vertices_of_tile(tile):
+		heights.append(grid.get_vertex_elevation(corner))
+	return heights
 
 func test_clubhouse_upgrades_grow_without_changing_footprint_or_duplicate_clicks() -> void:
 	var building := Building.new()

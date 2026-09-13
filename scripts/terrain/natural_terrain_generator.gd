@@ -14,6 +14,9 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 	# Generate elevation first (hills and valleys)
 	_generate_elevation(terrain_grid, rng)
 
+	# Stamp flat-topped plateaus with abrupt cliff rims (theme-dependent count)
+	_generate_plateaus(terrain_grid, rng)
+
 	# Generate large water bodies (coastal ocean for Links, lagoon for Resort)
 	_generate_large_water_body(terrain_grid, rng)
 	_generate_water(terrain_grid, rng)
@@ -57,6 +60,40 @@ static func _generate_elevation(terrain_grid: TerrainGrid, rng: RandomNumberGene
 
 			if elevation != 0:
 				terrain_grid.set_vertex_elevation(vertex, elevation)
+
+static func _generate_plateaus(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
+	## Stamp flat-topped mesas (or sunken quarries) with abrupt cliff rims.
+	var params = CourseTheme.get_generation_params(GameManager.current_theme)
+	var plateau_range: Vector2i = params.get("plateaus", Vector2i(0, 0))
+	var count := rng.randi_range(plateau_range.x, plateau_range.y)
+	for i in count:
+		var cx := rng.randi_range(20, terrain_grid.grid_width - 20)
+		var cy := rng.randi_range(20, terrain_grid.grid_height - 20)
+		var radius := rng.randf_range(4.0, 9.0)
+		var height := rng.randi_range(2, 4)
+		if rng.randf() < 0.2:
+			height = -height  # Sunken canyon floor instead of a mesa
+		stamp_plateau(terrain_grid, Vector2i(cx, cy), radius, height)
+
+## Flatten every vertex inside an organic disc to `height`, leaving the outside
+## untouched. The abrupt rim this creates is a vertical cliff face: neighbouring
+## tiles step by `height` over a single tile. Deterministic for tests.
+static func stamp_plateau(terrain_grid: TerrainGrid, center: Vector2i,
+		radius: float, height: int) -> void:
+	var flat := clampi(height, TerrainGrid.MIN_ELEVATION, TerrainGrid.MAX_ELEVATION)
+	var reach := int(ceil(radius)) + 3
+	for x in range(center.x - reach, center.x + reach + 1):
+		for y in range(center.y - reach, center.y + reach + 1):
+			var vertex := Vector2i(x, y)
+			if not terrain_grid.is_valid_vertex(vertex):
+				continue
+			var dx := float(x - center.x)
+			var dy := float(y - center.y)
+			var angle := atan2(dy, dx)
+			var wobble := sin(angle * 3.0 + float(center.x)) * 1.2 \
+				+ cos(angle * 5.0 + float(center.y)) * 0.8
+			if sqrt(dx * dx + dy * dy) <= radius + wobble:
+				terrain_grid.set_vertex_elevation(vertex, flat)
 
 static func _generate_large_water_body(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate large water bodies - coastal ocean for Links, lagoon for Resort

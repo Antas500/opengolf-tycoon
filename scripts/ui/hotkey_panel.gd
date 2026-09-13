@@ -65,8 +65,9 @@ func _build_ui() -> void:
 	])
 
 	_add_section(vbox, "Elevation", [
-		["Shift+=", "Raise terrain"],
-		["Shift+-", "Lower terrain"],
+		["Shift+=", "Vertex Selector (one corner)"],
+		["-", "Square Selector (level, then lift)"],
+		["LMB / RMB", "Lower / Raise selected terrain"],
 	])
 
 	_add_section(vbox, "Management Panels", [

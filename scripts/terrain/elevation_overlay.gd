@@ -65,6 +65,7 @@ func _draw() -> void:
 
 	_draw_vertex_markers(visible_rect, zoom, show_labels, show_lattice)
 	_draw_contours(visible_rect)
+	_draw_cliff_faces(visible_rect)
 
 ## Markers + height numbers on the vertices inside the viewport.
 func _draw_vertex_markers(visible_rect: Rect2, _zoom: float, show_labels: bool,
@@ -107,6 +108,29 @@ func _draw_contours(visible_rect: Rect2) -> void:
 			if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
 				continue
 			_draw_contour_lines(pos)
+
+## Cliff faces: rock outlines on tiles whose corners step steeply, plus thick
+## edge lines where a neighbour tile's average height drops away sharply.
+func _draw_cliff_faces(visible_rect: Rect2) -> void:
+	var tile_range: Array[Vector2i] = terrain_grid.get_visible_tile_range()
+	var outline_color := Color(0.35, 0.28, 0.24, 0.85)
+	var edge_color := Color(0.25, 0.18, 0.15, 0.9)
+	var line_starts: Array[Vector2] = [Vector2(1, 0), Vector2(0, 1), Vector2.ZERO, Vector2.ZERO]
+	var line_ends: Array[Vector2] = [Vector2(1, 1), Vector2(1, 1), Vector2(0, 1), Vector2(1, 0)]
+	for x in range(tile_range[0].x, tile_range[1].x + 1):
+		for y in range(tile_range[0].y, tile_range[1].y + 1):
+			var pos := Vector2i(x, y)
+			if not terrain_grid.is_cliff_tile(pos):
+				continue
+			if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
+				continue
+			draw_polyline(OverlayGeometry.tile_polyline(terrain_grid, self, pos),
+					outline_color, 2.0)
+			for edge in terrain_grid.get_cliff_edges(pos):
+				draw_line(
+						OverlayGeometry.point_in_tile(terrain_grid, self, pos, line_starts[edge]),
+						OverlayGeometry.point_in_tile(terrain_grid, self, pos, line_ends[edge]),
+						edge_color, 3.0, true)
 
 ## Vertices inside the visible world rect (bounded by the viewport, not the course).
 func _visible_vertices(visible_rect: Rect2) -> Array[Vector2i]:

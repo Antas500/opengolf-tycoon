@@ -10,6 +10,9 @@ uniform sampler2D palette : source_color, filter_nearest, repeat_disable;
 uniform vec2 grid_size = vec2(128.0);
 uniform vec2 tile_size = vec2(64.0, 32.0);
 uniform vec4 fringe_color : source_color = vec4(0.38, 0.65, 0.28, 1.0);
+uniform vec3 cliff_color : source_color = vec3(0.45, 0.42, 0.38);
+uniform float cliff_start = 1.75; // elevation levels per tile where rock starts showing
+uniform float cliff_full = 3.0; // elevation levels per tile for a full cliff face
 
 uniform vec2 grid_origin = vec2(0.0);
 uniform vec2 grid_axis_x = vec2(64.0, 32.0);
@@ -134,6 +137,23 @@ void fragment() {
 		+ surface(b.x, covers.y, b.y, tile_world, grain, patch) * blends.y
 		+ surface(c.x, covers.z, c.y, tile_world, grain, patch) * blends.z
 		+ surface(d.x, covers.w, d.y, tile_world, grain, patch) * blends.w;
+	// Vertical cliff faces: where the vertex field steps steeply across a single
+	// tile, exposed rock with faint strata replaces the turf. Water stays wet.
+	vec2 cstep_x = grid_axis_x * 0.5;
+	vec2 cstep_y = grid_axis_y * 0.5;
+	float ch_l = elevation_at(world - cstep_x);
+	float ch_r = elevation_at(world + cstep_x);
+	float ch_u = elevation_at(world - cstep_y);
+	float ch_d = elevation_at(world + cstep_y);
+	float cliff_slope = length(vec2(ch_r - ch_l, ch_d - ch_u)) * 10.0;
+	float cliff = smoothstep(cliff_start, cliff_full, cliff_slope);
+	cliff *= 1.0 - coverage(8.0, ids, weights);
+	if (cliff > 0.001) {
+		float strata = sin(world.y * 0.9 + patch * 5.0) * 0.5 + 0.5;
+		vec3 rock = cliff_color * (0.82 + patch * 0.30 + strata * 0.08);
+		float shade = clamp(1.0 - (ch_r - ch_l + ch_d - ch_u) * 2.0, 0.72, 1.08);
+		color = mix(color, rock * shade, cliff * 0.9);
+	}
 	// Base elevations provide broad, continuous relief without per-tile profiles.
 	vec2 step_x = grid_axis_x * 1.5;
 	vec2 step_y = grid_axis_y * 1.5;

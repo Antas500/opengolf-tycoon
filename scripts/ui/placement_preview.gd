@@ -10,9 +10,8 @@ var camera: IsometricCamera
 var hole_tool: HoleCreationTool  # Reference for hole creation preview
 var current_terrain_tool: int = -1  # Current terrain painting tool
 var terrain_painting_enabled: bool = false  # Whether to show terrain preview
-var elevation_mode_active: bool = false  # Whether elevation tool is active
-var elevation_raising: bool = true  # True = raising, false = lowering
-var elevation_sculpted: bool = false  # True = rolling hill / hollow brush
+var elevation_mode_active: bool = false  # Whether an elevation selector is active
+var elevation_tool_kind: int = 0  # ElevationTool.ToolKind (0=NONE, 1=VERTEX, 2=SQUARE)
 var bulldozer_mode_active: bool = false  # Whether bulldozer mode is active
 var brush_size: int = 1  # Current brush size (1, 3, or 5)
 var green_preset: String = ""  # Active green preset ("small"/"medium"/"large" or "")
@@ -90,10 +89,9 @@ func set_terrain_painting_enabled(enabled: bool) -> void:
 func set_brush_size(size: int) -> void:
 	brush_size = size
 
-func set_elevation_mode(active: bool, raising: bool = true, sculpted: bool = false) -> void:
+func set_elevation_mode(active: bool, tool_kind: int = 1) -> void:
 	elevation_mode_active = active
-	elevation_raising = raising
-	elevation_sculpted = sculpted
+	elevation_tool_kind = tool_kind if active else 0
 
 func set_bulldozer_mode(active: bool) -> void:
 	bulldozer_mode_active = active
@@ -130,6 +128,10 @@ func _update_preview(delta: float) -> void:
 				current_preview_positions = [grid_pos]
 		# Check overall validity for entity placement
 		current_preview_valid = placement_manager.can_place_at(grid_pos, terrain_grid)
+	elif elevation_mode_active:
+		# Elevation selectors always act on exactly one square/vertex.
+		current_preview_positions = [grid_pos]
+		current_preview_valid = terrain_grid.is_valid_position(grid_pos)
 	else:
 		# Terrain painting mode - show full brush area
 		if green_preset != "" and current_terrain_tool == TerrainTypes.Type.GREEN:
@@ -204,32 +206,26 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 		return
 
 	var mouse_world: Vector2 = camera.get_mouse_world_position()
-	var center: Vector2i = terrain_grid.nearest_vertex(terrain_grid.screen_to_grid_point(mouse_world))
+	if elevation_tool_kind == ElevationTool.ToolKind.SQUARE:
+		_draw_square_selector_preview(mouse_world, alpha_mod)
+	else:
+		_draw_vertex_selector_preview(mouse_world, alpha_mod)
+
+## Vertex Selector: mark the single corner that will move, with its height.
+func _draw_vertex_selector_preview(mouse_world: Vector2, alpha_mod: float) -> void:
+	var center: Vector2i = terrain_grid.nearest_vertex(
+		terrain_grid.screen_to_grid_point(mouse_world))
 	if not terrain_grid.is_valid_vertex(center):
 		return
-
-	var brush_color: Color = Color(0.55, 0.78, 1.0, 0.85 * alpha_mod) if elevation_raising \
-		else Color(1.0, 0.6, 0.5, 0.85 * alpha_mod)
-	var vertices: Array[Vector2i] = ElevationTool.brush_vertices(
-		terrain_grid, center, brush_size, elevation_sculpted)
-	for vertex in vertices:
-		if vertex == center:
-			continue
-		_draw_vertex_marker(vertex, brush_color, 0.10)
-
-	var current_height: int = terrain_grid.get_vertex_elevation(center)
-	var step: int = ElevationTool.SCULPT_AMOUNT if elevation_sculpted else 1
-	if not elevation_raising:
-		step = -step
-	var next_height: int = clampi(current_height + step,
-		terrain_grid.MIN_ELEVATION, terrain_grid.MAX_ELEVATION)
 	_draw_vertex_marker(center, Color(1, 1, 1, 0.95 * alpha_mod), 0.18)
 
-	var label: String
-	if current_height == next_height:
-		label = "%d (max)" % current_height if elevation_raising else "%d (min)" % current_height
-	else:
-		label = "%d -> %d" % [current_height, next_height]
+	var height: int = terrain_grid.get_vertex_elevation(center)
+	var signed: String = ("+" if height > 0 else "") + str(height)
+	var label: String = "%s  (LMB -1 / RMB +1)" % signed
+	if height >= terrain_grid.MAX_ELEVATION:
+		label = "%s (max)  (LMB -1)" % signed
+	elif height <= terrain_grid.MIN_ELEVATION:
+		label = "%s (min)  (RMB +1)" % signed
 	draw_string(
 		ThemeDB.fallback_font,
 		to_local(terrain_grid.grid_point_to_screen(Vector2(center))) + Vector2(10, -8),
@@ -237,6 +233,43 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
 		12,
+		Color(1, 1, 1, 0.9 * alpha_mod)
+	)
+
+## Square Selector: mark all four corners; warm markers move on Right-click
+## (raise the lowest), cool markers move on Left-click (lower the highest).
+func _draw_square_selector_preview(mouse_world: Vector2, alpha_mod: float) -> void:
+	var tile: Vector2i = terrain_grid.screen_to_grid(mouse_world)
+	if not terrain_grid.is_valid_position(tile):
+		return
+	var raise_targets: Array[Vector2i] = ElevationTool.square_targets(
+		tile, terrain_grid, true)
+	var lower_targets: Array[Vector2i] = ElevationTool.square_targets(
+		tile, terrain_grid, false)
+	var heights: Array[int] = []
+	for corner in terrain_grid.vertices_of_tile(tile):
+		heights.append(terrain_grid.get_vertex_elevation(corner))
+		var marker := Color(1, 1, 1, 0.55 * alpha_mod)
+		if corner in raise_targets and corner in lower_targets:
+			# All corners even: the whole square moves either way.
+			marker = Color(1.0, 0.9, 0.5, 0.95 * alpha_mod)
+		elif corner in raise_targets:
+			marker = Color(1.0, 0.65, 0.45, 0.95 * alpha_mod)
+		elif corner in lower_targets:
+			marker = Color(0.55, 0.78, 1.0, 0.95 * alpha_mod)
+		_draw_vertex_marker(corner, marker, 0.13)
+
+	var signed: Array[String] = []
+	for h in heights:
+		signed.append(("+" if h > 0 else "") + str(h))
+	var label := "corners %s, %s, %s, %s" % signed
+	draw_string(
+		ThemeDB.fallback_font,
+		to_local(terrain_grid.grid_to_screen_center(tile)) + Vector2(-44, -18),
+		label,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		11,
 		Color(1, 1, 1, 0.9 * alpha_mod)
 	)
 
@@ -317,10 +350,7 @@ func _draw_isometric_tile(grid_pos: Vector2i, is_valid: bool, alpha_mod: float, 
 func _get_terrain_preview_color() -> Color:
 	"""Get a preview color based on the current terrain tool or active mode"""
 	if elevation_mode_active:
-		if elevation_raising:
-			return Color(0.5, 0.7, 1.0, 0.5)  # Light blue for raise
-		else:
-			return Color(1.0, 0.5, 0.5, 0.5)  # Light red for lower
+		return Color(0.65, 0.75, 1.0, 0.4)  # Neutral: LMB lowers, RMB raises
 	if bulldozer_mode_active:
 		return Color(1.0, 0.5, 0.3, 0.5)  # Orange for bulldozer
 	match current_terrain_tool:

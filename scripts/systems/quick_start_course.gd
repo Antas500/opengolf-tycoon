@@ -139,11 +139,39 @@ static func _paint_hole(terrain_grid: TerrainGrid, tee: Vector2i, green: Vector2
 				if current != TerrainTypes.Type.GREEN and current != TerrainTypes.Type.TEE_BOX:
 					terrain_grid.set_tile(bp, TerrainTypes.Type.BUNKER)
 
-	# Three signature holes have real elevation, rather than decorative shading.
+	# Three signature holes have real elevation, rather than decorative shading:
+	# raised green pads, elevated tees, and a mid-fairway swale.
 	if tee in [Vector2i(65, 46), Vector2i(59, 80), Vector2i(74, 58)]:
-		SculptedTerrain.stamp_at_tile(terrain_grid, green, 5, 2)
-		SculptedTerrain.stamp_at_tile(terrain_grid, tee, 4, 3)
-		SculptedTerrain.stamp_at_tile(terrain_grid, Vector2i((Vector2(tee) + Vector2(green)) * 0.5), 4, -1)
+		_apply_vertex_mound(terrain_grid, green, [2, 2, 1])
+		_apply_vertex_mound(terrain_grid, tee, [3, 2, 1])
+		_apply_vertex_mound(terrain_grid,
+				Vector2i((Vector2(tee) + Vector2(green)) * 0.5), [-1, -1, -1])
+
+
+## Raise (positive ring heights) or carve (negative ring heights) the vertices
+## around a tile in Chebyshev rings, blending with the existing ground instead
+## of flattening it. Skips protected surfaces, buildings, and unowned land.
+static func _apply_vertex_mound(terrain_grid: TerrainGrid, center_tile: Vector2i,
+		ring_heights: Array) -> void:
+	var center_vertex := center_tile + Vector2i(1, 1)
+	var reach := ring_heights.size()
+	for dx in range(-reach, reach + 1):
+		for dy in range(-reach, reach + 1):
+			var ring := maxi(absi(dx), absi(dy))
+			if ring >= ring_heights.size():
+				continue
+			var vertex := center_vertex + Vector2i(dx, dy)
+			if not terrain_grid.is_valid_vertex(vertex):
+				continue
+			if not terrain_grid.is_vertex_editable(vertex, null, true):
+				continue
+			var target: int = ring_heights[ring]
+			var current := terrain_grid.get_vertex_elevation(vertex)
+			if target >= 0:
+				if current < target:
+					terrain_grid.set_vertex_elevation(vertex, target)
+			elif current > target:
+				terrain_grid.set_vertex_elevation(vertex, target)
 
 
 ## Paint a water hazard at the given position
