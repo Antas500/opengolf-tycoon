@@ -39,6 +39,9 @@ var _measure_start: Vector2i = Vector2i.ZERO
 var _measure_end: Vector2i = Vector2i.ZERO
 var _measure_overlay: Node2D = null
 
+## Moving entities captured (in grid space) across a view projection change.
+var _pending_moving_entities: Array = []
+
 var hole_tool: HoleCreationTool = HoleCreationTool.new()
 var placement_manager: PlacementManager = PlacementManager.new()
 var undo_manager: UndoManager = UndoManager.new()
@@ -371,6 +374,17 @@ func _input(event: InputEvent) -> void:
 				for vis in hole_manager.get_all_hole_visualizers():
 					vis._update_carry_annotations()
 				get_viewport().set_input_as_handled()
+			elif event.keycode == KEY_Q:
+				# Rotate the course view, like SimGolf's rotate buttons.
+				if event.shift_pressed:
+					_on_view_rotate_cw()
+				else:
+					_on_view_rotate_ccw()
+				get_viewport().set_input_as_handled()
+			elif event.keycode == KEY_I:
+				# Toggle between isometric diamonds and top-down squares.
+				_on_view_isometric_toggled(not terrain_grid.is_view_isometric())
+				get_viewport().set_input_as_handled()
 			elif event.keycode == KEY_SPACE:
 				# Space = pause/play toggle
 				if GameManager.current_mode == GameManager.GameMode.SIMULATING:
@@ -447,6 +461,9 @@ func _connect_signals() -> void:
 	EventBus.load_completed.connect(_on_load_completed)
 	EventBus.new_game_started.connect(_on_new_game_started)
 	hole_manager.hole_selected.connect(_on_hole_flag_selected)
+	# Any projection change (rotate buttons, iso toggle, or a loaded save)
+	# needs placed entities re-anchored and the camera re-clamped.
+	terrain_grid.view_rotated.connect(_on_terrain_view_rotated)
 
 func _connect_ui_buttons() -> void:
 	# Replace old tool panel with new terrain toolbar
@@ -494,6 +511,11 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.staff_pressed.connect(_on_staff_pressed)
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
 	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
+	# SimGolf-style view rotation controls.
+	terrain_toolbar.view_rotate_cw_pressed.connect(_on_view_rotate_cw)
+	terrain_toolbar.view_rotate_ccw_pressed.connect(_on_view_rotate_ccw)
+	terrain_toolbar.view_isometric_toggled.connect(_on_view_isometric_toggled)
+	_sync_view_controls()
 
 func _initialize_game() -> void:
 	# Show main menu instead of auto-starting
@@ -522,9 +544,7 @@ func _on_main_menu_new_game(course_name: String, theme_type: int) -> void:
 	GameManager.new_game(course_name, theme_type, difficulty)
 
 	# Center camera on the middle of the grid
-	var center_x = (terrain_grid.grid_width / 2) * terrain_grid.tile_width
-	var center_y = (terrain_grid.grid_height / 2) * terrain_grid.tile_height
-	camera.focus_on(Vector2(center_x, center_y), true)
+	_center_camera_on_course()
 	# Start with no tool selected — player chooses their first action
 	current_tool = -1
 	if terrain_toolbar:
@@ -549,9 +569,7 @@ func _on_main_menu_prebuilt_course(course_name: String, theme_type: int, package
 	_prebuilt_pending = package_id
 	GameManager.new_game(course_name, theme_type, difficulty)
 
-	var center_x = (terrain_grid.grid_width / 2) * terrain_grid.tile_width
-	var center_y = (terrain_grid.grid_height / 2) * terrain_grid.tile_height
-	camera.focus_on(Vector2(center_x, center_y), true)
+	_center_camera_on_course()
 	current_tool = -1
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
@@ -570,9 +588,7 @@ func _on_main_menu_quick_start(course_name: String, theme_type: int) -> void:
 	_quick_start_pending = true
 	GameManager.new_game(course_name, theme_type, difficulty)
 
-	var center_x = (terrain_grid.grid_width / 2) * terrain_grid.tile_width
-	var center_y = (terrain_grid.grid_height / 2) * terrain_grid.tile_height
-	camera.focus_on(Vector2(center_x, center_y), true)
+	_center_camera_on_course()
 	current_tool = -1
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
@@ -1197,6 +1213,133 @@ func _on_brush_size_changed(new_size: int) -> void:
 func _on_green_preset_selected(preset_name: String) -> void:
 	_green_preset = preset_name
 	placement_preview.green_preset = preset_name
+
+# =============================================================================
+# VIEW ROTATION (Sid Meier's SimGolf style)
+# =============================================================================
+
+func _on_view_rotate_cw() -> void:
+	_change_view_projection(true)
+
+func _on_view_rotate_ccw() -> void:
+	_change_view_projection(false)
+
+func _on_view_isometric_toggled(enabled: bool) -> void:
+	if terrain_grid.is_view_isometric() == enabled:
+		# The widget was flipped but the grid already matches - resync it.
+		_sync_view_controls()
+		return
+	var focus_grid := _begin_view_change()
+	terrain_grid.set_view_isometric(enabled)
+	_finish_view_change(focus_grid)
+
+## Rotate the course 90 degrees, keeping whatever the player is looking at
+## under the camera rather than spinning the view off to a new corner.
+func _change_view_projection(clockwise: bool) -> void:
+	var focus_grid := _begin_view_change()
+	if clockwise:
+		terrain_grid.rotate_view_cw()
+	else:
+		terrain_grid.rotate_view_ccw()
+	_finish_view_change(focus_grid)
+
+## Capture the grid point under the camera and every moving entity's grid
+## position before the projection changes. Returns the camera anchor.
+func _begin_view_change() -> Vector2:
+	_pending_moving_entities = _snapshot_moving_entities()
+	if camera and terrain_grid:
+		return terrain_grid.screen_to_grid_precise(camera.global_position)
+	return Vector2.ZERO
+
+## Restore moving entities and re-centre the camera on the same piece of course.
+func _finish_view_change(focus_grid: Vector2) -> void:
+	_restore_moving_entities(_pending_moving_entities)
+	_pending_moving_entities = []
+	if camera and terrain_grid:
+		camera.focus_on(terrain_grid.grid_to_screen_precise(focus_grid), true)
+
+## Fired by TerrainGrid for every projection change, including one restored from
+## a save file.
+func _on_terrain_view_rotated(_orientation: int, _isometric: bool) -> void:
+	_after_view_change()
+
+## Record where every moving entity is in *grid* space before the projection
+## changes. Without this a golfer's world coordinates would silently re-map to
+## a different tile after the rotation, teleporting them around the course.
+func _snapshot_moving_entities() -> Array:
+	var snapshot: Array = []
+	if not terrain_grid:
+		return snapshot
+	if golfer_manager:
+		for golfer in golfer_manager.get_active_golfers():
+			if is_instance_valid(golfer):
+				snapshot.append([golfer, terrain_grid.screen_to_grid_precise(golfer.global_position)])
+	if ball_manager:
+		for ball in ball_manager.get_all_balls():
+			if is_instance_valid(ball):
+				snapshot.append([ball, terrain_grid.screen_to_grid_precise(ball.global_position)])
+	return snapshot
+
+func _restore_moving_entities(snapshot: Array) -> void:
+	for entry in snapshot:
+		var entity: Node2D = entry[0]
+		if is_instance_valid(entity):
+			entity.global_position = terrain_grid.grid_to_screen_precise(entry[1])
+
+## Re-anchor every placed entity and refresh the camera + tool widgets after the
+## projection changed.
+func _after_view_change() -> void:
+	_reposition_placed_entities()
+	_sync_camera_bounds_to_view()
+	_sync_view_controls()
+	if placement_preview:
+		placement_preview.queue_redraw()
+	if mini_map:
+		mini_map.queue_redraw()
+	if _measure_overlay:
+		_measure_overlay.queue_redraw()
+	if routing_overlay:
+		routing_overlay.queue_redraw()
+
+func _reposition_placed_entities() -> void:
+	if not entity_layer:
+		return
+	for tree in entity_layer.get_all_trees():
+		if is_instance_valid(tree):
+			tree.set_position_in_grid(tree.grid_position)
+	for rock in entity_layer.get_all_rocks():
+		if is_instance_valid(rock):
+			rock.set_position_in_grid(rock.grid_position)
+	for building in entity_layer.get_all_buildings():
+		if is_instance_valid(building):
+			building.set_position_in_grid(building.grid_position)
+	for decoration in entity_layer.get_all_decorations():
+		if is_instance_valid(decoration):
+			decoration.set_position_in_grid(decoration.grid_position)
+	for visualizer in hole_manager.get_all_hole_visualizers():
+		if is_instance_valid(visualizer) and visualizer.has_method("refresh_positions"):
+			visualizer.refresh_positions()
+
+## Frame the camera on the middle of the course at its current rotation.
+func _center_camera_on_course() -> void:
+	if not camera or not terrain_grid:
+		return
+	_sync_camera_bounds_to_view()
+	camera.focus_on(terrain_grid.world_bounds().get_center(), true)
+
+
+## Clamp the camera to the course at its current rotation.
+func _sync_camera_bounds_to_view() -> void:
+	if not camera or not terrain_grid:
+		return
+	var bounds := terrain_grid.world_bounds().grow(512.0)
+	camera.bounds_min = bounds.position
+	camera.bounds_max = bounds.end
+
+func _sync_view_controls() -> void:
+	if terrain_toolbar and terrain_grid:
+		terrain_toolbar.set_view_state(
+				terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
 
 func _on_create_hole_pressed() -> void:
 	# Cancel any building/tree placement, elevation, bulldozer, or terrain painting
@@ -2196,9 +2339,7 @@ func _on_load_completed(_success: bool) -> void:
 		if terrain_grid:
 			terrain_grid.regenerate_tileset()
 		# Center camera on grid (same as new game) so player starts on their course
-		var center_x = (terrain_grid.grid_width / 2) * terrain_grid.tile_width
-		var center_y = (terrain_grid.grid_height / 2) * terrain_grid.tile_height
-		camera.focus_on(Vector2(center_x, center_y), true)
+		_center_camera_on_course()
 
 # --- Hole Context Menu & Move Modes ---
 

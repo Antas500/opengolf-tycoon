@@ -110,8 +110,17 @@ func set_position_in_grid(pos: Vector2i) -> void:
 	grid_position = pos
 	# Calculate world position from grid position
 	if terrain_grid:
-		var world_pos = terrain_grid.grid_to_screen(pos)
-		global_position = world_pos
+		if terrain_grid.is_view_isometric():
+			# Isometric: the drawn rect's ground point (bottom-centre) sits on
+			# the centre of the footprint's projected diamond, so the building
+			# stands on its plot instead of floating off the corner tile.
+			var tile_w := float(terrain_grid.tile_width)
+			var tile_h := float(terrain_grid.tile_height)
+			var center := terrain_grid.grid_point_to_screen(
+					Vector2(pos) + Vector2(width * 0.5, height * 0.5))
+			global_position = center - Vector2(width * tile_w * 0.5, height * tile_h)
+		else:
+			global_position = terrain_grid.grid_to_screen(pos)
 
 func get_footprint() -> Array:
 	"""Returns array of grid positions occupied by this building"""

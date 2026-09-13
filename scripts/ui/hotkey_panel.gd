@@ -85,7 +85,9 @@ func _build_ui() -> void:
 	_add_section(vbox, "Camera & View", [
 		["WASD", "Pan camera"],
 		["Scroll / [ ]", "Zoom in/out"],
-		["Q", "Rotate camera"],
+		["Q", "Rotate course counter-clockwise"],
+		["Shift+Q", "Rotate course clockwise"],
+		["I", "Isometric / top-down view"],
 		["Tab", "Toggle minimap"],
 		["V", "Shot heatmap"],
 		["Shift+V", "Cycle heatmap mode"],

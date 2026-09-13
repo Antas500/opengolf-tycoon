@@ -63,13 +63,12 @@ func _draw() -> void:
 	visible_rect = visible_rect.grow_individual(margin.x, margin.y, margin.x, margin.y)
 
 	for pos in _boundary_positions:
-		var screen_pos = terrain_grid.grid_to_screen(pos)
-		if not visible_rect.has_point(screen_pos):
+		if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
 			continue
-		var local_pos = to_local(screen_pos)
-		# Center the stake in the tile
-		var stake_x = local_pos.x + terrain_grid.tile_width * 0.5
-		var stake_base_y = local_pos.y + terrain_grid.tile_height * 0.5
+		# Stake sits at the centre of the projected tile (diamond when isometric).
+		var local_pos = OverlayGeometry.tile_center(terrain_grid, self, pos)
+		var stake_x = local_pos.x
+		var stake_base_y = local_pos.y
 
 		# White stake: thin white rectangle
 		var stake_rect = Rect2(

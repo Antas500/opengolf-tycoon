@@ -163,6 +163,11 @@ func _build_save_data() -> Dictionary:
 		data["elevation"] = terrain_grid.serialize_elevation()
 		data["player_placed"] = terrain_grid.serialize_player_placed()
 		data["bunker_depth"] = terrain_grid.serialize_bunker_depth()
+		# How the player was looking at the course (rotate buttons / iso toggle).
+		data["view"] = {
+			"orientation": terrain_grid.get_view_orientation(),
+			"isometric": terrain_grid.is_view_isometric(),
+		}
 
 	# Entities
 	if entity_layer:
@@ -306,6 +311,12 @@ func _apply_save_data(data: Dictionary) -> void:
 	if terrain_grid:
 		terrain_grid.deserialize_bunker_depth(data.get("bunker_depth", {}))
 		terrain_grid.queue_redraw()
+	# Restore how the player was looking at the course. Older saves have no
+	# "view" key and keep the default isometric, unrotated view.
+	if terrain_grid and data.has("view"):
+		var view: Dictionary = data["view"]
+		terrain_grid.set_view_isometric(bool(view.get("isometric", true)))
+		terrain_grid.set_view_orientation(int(view.get("orientation", 0)))
 
 	# Milestones — restore BEFORE holes so hole_created signals don't re-award
 	if milestone_manager and data.has("milestones"):

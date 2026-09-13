@@ -468,6 +468,14 @@ func update_visualization() -> void:
 	_update_tee_markers()
 	_update_pin_markers()
 
+## Re-anchor the flag and every derived marker after the view projection changes
+## (rotate buttons / isometric toggle). The underlying grid data is untouched -
+## only the world positions move.
+func refresh_positions() -> void:
+	if flag and is_instance_valid(flag) and hole_data:
+		flag.set_position_in_grid(hole_data.hole_position)
+	update_visualization()
+
 func get_hole_number() -> int:
 	return hole_data.hole_number if hole_data else 0
 

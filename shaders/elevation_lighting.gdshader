@@ -23,15 +23,33 @@ uniform float contour_opacity : hint_range(0.0, 1.0) = 0.3;
 uniform vec3 contour_color_high = vec3(0.45, 0.35, 0.25);  // Warm brown
 uniform vec3 contour_color_low = vec3(0.25, 0.30, 0.40);   // Cool blue-gray
 
+// --- View projection (must match course_surface.gdshader) ---
+// world = grid_origin + grid_axis_x * gx + grid_axis_y * gy
+uniform vec2 grid_origin = vec2(0.0);
+uniform vec2 grid_axis_x = vec2(64.0, 32.0);
+uniform vec2 grid_axis_y = vec2(0.0, 32.0);
+uniform vec2 surface_origin = vec2(0.0);
+
 varying vec2 world_pos;
 
 void vertex() {
-	world_pos = VERTEX;
+	// VERTEX is local to this rect, which is offset to the projection bounds.
+	world_pos = VERTEX + surface_origin;
 }
 
-// Convert world position to heightmap UV
+// Convert world position to heightmap UV by inverting the view projection.
+// Doing this here (rather than dividing by a fixed rect size) is what keeps the
+// relief shading aligned to the grid when the course is rotated or isometric.
 vec2 world_to_uv(vec2 wp) {
-	return wp / (grid_size * tile_size);
+	vec2 d = wp - grid_origin;
+	float det = grid_axis_x.x * grid_axis_y.y - grid_axis_y.x * grid_axis_x.y;
+	if (abs(det) < 0.000001) {
+		return vec2(-1.0);
+	}
+	vec2 g = vec2(
+		(d.x * grid_axis_y.y - grid_axis_y.x * d.y) / det,
+		(grid_axis_x.x * d.y - grid_axis_x.y * d.x) / det);
+	return g / grid_size;
 }
 
 float sample_height(vec2 wp) {
@@ -44,13 +62,15 @@ float sample_height(vec2 wp) {
 
 // Compute pseudo-normal from heightmap gradient using central differences
 vec3 compute_normal(vec2 wp, out float slope_mag) {
-	float step_x = tile_size.x / 4.0;
-	float step_y = tile_size.y / 4.0;
+	// Quarter-tile steps along the grid axes, so the derived slope - and the
+	// shading that follows it - rotates together with the view.
+	vec2 step_x = grid_axis_x * 0.25;
+	vec2 step_y = grid_axis_y * 0.25;
 
-	float h_l = sample_height(wp - vec2(step_x, 0.0));
-	float h_r = sample_height(wp + vec2(step_x, 0.0));
-	float h_u = sample_height(wp - vec2(0.0, step_y));
-	float h_d = sample_height(wp + vec2(0.0, step_y));
+	float h_l = sample_height(wp - step_x);
+	float h_r = sample_height(wp + step_x);
+	float h_u = sample_height(wp - step_y);
+	float h_d = sample_height(wp + step_y);
 
 	// Scale for visible slopes — more = steeper perceived hills
 	float height_scale = 8.0;
@@ -64,13 +84,13 @@ vec3 compute_normal(vec2 wp, out float slope_mag) {
 // Compute ambient occlusion from heightmap curvature (Laplacian)
 // Concavities (valleys) return positive values, convexities (ridges) return negative
 float compute_ao(vec2 wp, float center_height) {
-	float step_x = tile_size.x / 4.0;
-	float step_y = tile_size.y / 4.0;
+	vec2 step_x = grid_axis_x * 0.25;
+	vec2 step_y = grid_axis_y * 0.25;
 
-	float h_l = sample_height(wp - vec2(step_x, 0.0));
-	float h_r = sample_height(wp + vec2(step_x, 0.0));
-	float h_u = sample_height(wp - vec2(0.0, step_y));
-	float h_d = sample_height(wp + vec2(0.0, step_y));
+	float h_l = sample_height(wp - step_x);
+	float h_r = sample_height(wp + step_x);
+	float h_u = sample_height(wp - step_y);
+	float h_d = sample_height(wp + step_y);
 
 	// Laplacian: sum of neighbors minus 4x center
 	// Positive = valley (concave), negative = ridge (convex)
