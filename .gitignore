@@ -22,7 +22,6 @@ addons/godot_mcp/
 *.exe
 *.x86_64
 *.pck
-*.zip
 
 # OS/IDE specific
 .DS_Store
