@@ -13,14 +13,30 @@ uniform bool contour_enabled = true;
 uniform float contour_line_width = 1.5;
 uniform float contour_opacity : hint_range(0.0, 1.0) = 0.3;
 
+// --- View projection (must match course_surface.gdshader) ---
+uniform vec2 grid_origin = vec2(0.0);
+uniform vec2 grid_axis_x = vec2(64.0, 32.0);
+uniform vec2 grid_axis_y = vec2(0.0, 32.0);
+uniform vec2 surface_origin = vec2(0.0);
+
 varying vec2 world_pos;
 
 void vertex() {
-	world_pos = VERTEX;
+	world_pos = VERTEX + surface_origin;
 }
 
+// Invert the view projection so relief stays aligned to the grid when the
+// course is rotated or drawn isometrically.
 vec2 world_to_uv(vec2 wp) {
-	return wp / (grid_size * tile_size);
+	vec2 d = wp - grid_origin;
+	float det = grid_axis_x.x * grid_axis_y.y - grid_axis_y.x * grid_axis_x.y;
+	if (abs(det) < 0.000001) {
+		return vec2(-1.0);
+	}
+	vec2 g = vec2(
+		(d.x * grid_axis_y.y - grid_axis_y.x * d.y) / det,
+		(grid_axis_x.x * d.y - grid_axis_x.y * d.x) / det);
+	return g / grid_size;
 }
 
 float sample_height(vec2 wp) {
@@ -40,14 +56,15 @@ void fragment() {
 	if (!in_bounds) {
 		COLOR = vec4(0.0);
 	} else {
-		float step_x = tile_size.x / 4.0;
-		float step_y = tile_size.y / 4.0;
+		// Quarter-tile steps along the grid axes so shading rotates with the view.
+		vec2 step_x = grid_axis_x * 0.25;
+		vec2 step_y = grid_axis_y * 0.25;
 
 		// Forward differences (2 samples for web perf) + extra 2 for AO
-		float h_r = sample_height(world_pos + vec2(step_x, 0.0));
-		float h_d = sample_height(world_pos + vec2(0.0, step_y));
-		float h_l = sample_height(world_pos - vec2(step_x, 0.0));
-		float h_u = sample_height(world_pos - vec2(0.0, step_y));
+		float h_r = sample_height(world_pos + step_x);
+		float h_d = sample_height(world_pos + step_y);
+		float h_l = sample_height(world_pos - step_x);
+		float h_u = sample_height(world_pos - step_y);
 
 		float dx = (h_r - h_l) * 8.0;
 		float dy = (h_d - h_u) * 8.0;

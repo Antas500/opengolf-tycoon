@@ -16,7 +16,6 @@ var _dirty := false
 func initialize(grid: TerrainGrid) -> void:
 	_grid = grid
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	size = Vector2(grid.grid_width * grid.tile_width, grid.grid_height * grid.tile_height)
 	_data = Image.create(grid.grid_width, grid.grid_height, false, Image.FORMAT_RGBA8)
 	_texture = ImageTexture.create_from_image(_data)
 	var surface_material := ShaderMaterial.new()
@@ -26,12 +25,34 @@ func initialize(grid: TerrainGrid) -> void:
 	surface_material.set_shader_parameter("grid_size", Vector2(grid.grid_width, grid.grid_height))
 	surface_material.set_shader_parameter("tile_size", Vector2(grid.tile_width, grid.tile_height))
 	material = surface_material
+	apply_projection(grid.projection)
 	refresh_palette()
 	rebuild()
 	grid.tile_changed.connect(_on_tile_changed)
 	grid.elevation_changed.connect(_on_elevation_changed)
 	EventBus.theme_changed.connect(_on_theme_changed)
 	EventBus.load_completed.connect(_on_load_completed)
+
+## Re-anchor the rect to the projected course and tell the shader how world
+## space maps back onto the grid. The rect covers the projection's bounding box;
+## the shader discards the fragments outside the diamond and samples the terrain
+## texture along grid axes, so a rotation needs no texture rebuild.
+func apply_projection(proj: GridProjection) -> void:
+	if proj == null:
+		return
+	var bounds := proj.world_bounds()
+	position = bounds.position
+	size = bounds.size
+	if material == null:
+		return
+	var mat := material as ShaderMaterial
+	if mat == null:
+		return
+	mat.set_shader_parameter("grid_origin", proj.grid_origin())
+	mat.set_shader_parameter("grid_axis_x", proj.axis_x())
+	mat.set_shader_parameter("grid_axis_y", proj.axis_y())
+	mat.set_shader_parameter("surface_origin", bounds.position)
+	mat.set_shader_parameter("surface_size", bounds.size)
 
 func refresh_palette() -> void:
 	var colors := Image.create(PALETTE_KEYS.size(), 1, false, Image.FORMAT_RGBA8)

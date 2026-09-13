@@ -1,11 +1,29 @@
 extends Node2D
 class_name TerrainGrid
-## TerrainGrid - Manages the isometric tile grid for the golf course
+## TerrainGrid - Manages the tile grid for the golf course
+##
+## Simulation data always lives on an orthogonal grid; how that grid is drawn is
+## decided by a GridProjection, which can render it top-down or as 2:1
+## isometric diamonds and spin it through four 90-degree view orientations
+## (the rotate buttons from Sid Meier's SimGolf).
+##
+## Every renderer and input handler in the game converts coordinates through the
+## helpers below, so rotating the view re-projects the terrain shader, the
+## overlays, the entities and the mouse cursor together in one step.
 
 @export var grid_width: int = 128
 @export var grid_height: int = 128
 @export var tile_width: int = 64
 @export var tile_height: int = 32
+## Draw the course as 2:1 isometric diamonds instead of top-down squares.
+@export var view_isometric: bool = true
+## View rotation in 90-degree steps (0-3); increasing spins the course clockwise.
+@export_range(0, 3) var view_orientation: int = 0
+
+## Grid <-> world projection shared by every renderer and the input handlers.
+## Constructed eagerly so it is valid even before _ready() runs (and in tests
+## that build a TerrainGrid without adding it to the tree).
+var projection: GridProjection = GridProjection.new()
 
 var _grid: Dictionary = {}
 var _elevation_grid: Dictionary = {}  # Vector2i -> int (-5 to +5)
@@ -20,6 +38,8 @@ var _wildlife: CourseWildlife = null
 signal surface_refreshed
 signal tile_changed(position: Vector2i, old_type: int, new_type: int)
 signal elevation_changed(position: Vector2i, old_elevation: int, new_elevation: int)
+## Emitted after the view projection changes (rotate button, iso toggle).
+signal view_rotated(orientation: int, isometric: bool)
 
 ## Batch mode — defers signals until end_batch() to avoid overlay redraw cascade
 var _batch_mode: bool = false
@@ -51,6 +71,7 @@ var _last_camera_pos: Vector2 = Vector2.ZERO
 var _last_camera_zoom: float = 1.0
 
 func _ready() -> void:
+	_init_projection()
 	_course_surface = CourseSurface.new()
 	# Variation shader disabled — it overwrites TilesetGenerator's mowing stripe
 	# patterns on fairways/greens. The FairwayOverlay handles stripes instead.
@@ -221,21 +242,137 @@ func _initialize_grid() -> void:
 			_grid[pos] = TerrainTypes.Type.GRASS
 			_update_tile_visual(pos)
 
+## Rebuild the projection from the exported grid/tile/view settings.
+func _init_projection() -> void:
+	projection.configure(Vector2i(grid_width, grid_height), Vector2(tile_width, tile_height))
+	projection.set_isometric(view_isometric)
+	projection.set_orientation(view_orientation)
+	view_orientation = projection.orientation
+
+# =============================================================================
+# COORDINATE CONVERSION
+#
+# These four functions are the single conversion path for the whole game. Every
+# overlay, entity, tool and input handler goes through them, so the isometric
+# projection and the four view orientations apply everywhere at once.
+# =============================================================================
+
 func screen_to_grid(screen_pos: Vector2) -> Vector2i:
-	# Simple grid conversion for regular tile layout
-	return Vector2i(int(floor(screen_pos.x / tile_width)), int(floor(screen_pos.y / tile_height)))
+	# Inverse of grid_to_screen: the tile under a world-space point.
+	return projection.world_to_cell(screen_pos)
+
+## Fractional grid coordinate for a world-space point (inverse of
+## grid_to_screen_precise). Used where sub-tile accuracy matters.
+func screen_to_grid_precise(screen_pos: Vector2) -> Vector2:
+	return projection.unproject(screen_pos) - Vector2(0.5, 0.5)
 
 func grid_to_screen(grid_pos: Vector2i) -> Vector2:
-	# Simple grid conversion for regular tile layout
-	return Vector2(grid_pos.x * tile_width, grid_pos.y * tile_height)
+	# World position of the tile's leading corner (its top vertex when isometric).
+	return projection.cell_corner(grid_pos)
 
 func grid_to_screen_center(grid_pos: Vector2i) -> Vector2:
 	# Returns the center of the tile (for entity positioning)
-	return Vector2(grid_pos.x * tile_width + tile_width / 2.0, grid_pos.y * tile_height + tile_height / 2.0)
+	return projection.cell_center(grid_pos)
 
 func grid_to_screen_precise(grid_pos: Vector2) -> Vector2:
-	# Returns screen position for a sub-tile grid coordinate (used for putting precision)
-	return Vector2(grid_pos.x * tile_width + tile_width / 2.0, grid_pos.y * tile_height + tile_height / 2.0)
+	# Returns screen position for a sub-tile grid coordinate (used for putting
+	# precision). Grid coordinate space counts integer values as tile centres.
+	return projection.project(grid_pos + Vector2(0.5, 0.5))
+
+# =============================================================================
+# TILE GEOMETRY HELPERS (for overlays drawing per-tile shapes)
+# =============================================================================
+
+## Raw projection of a fractional grid *point* (whole numbers are tile corners,
+## no half-tile offset). Use for multi-tile footprints whose centre falls
+## between tiles.
+func grid_point_to_screen(grid_pos: Vector2) -> Vector2:
+	return projection.project(grid_pos)
+
+## World-space outline of a tile: a 2:1 diamond when isometric, a square
+## when top-down. Draw with draw_colored_polygon() / draw_polyline().
+func tile_polygon(grid_pos: Vector2i) -> PackedVector2Array:
+	return projection.cell_polygon(grid_pos)
+
+## World-space AABB of a tile, for cheap viewport culling.
+func tile_world_rect(grid_pos: Vector2i) -> Rect2:
+	return projection.cell_world_rect(grid_pos)
+
+## World rectangle that contains the whole course at the current rotation.
+func world_bounds() -> Rect2:
+	return projection.world_bounds()
+
+## Push the projection into a shader as its affine terms, so the fragment stage
+## can invert world position back into grid coordinates:
+##   world = grid_origin + grid_axis_x * gx + grid_axis_y * gy
+## Both terrain shaders use this to keep sampling their data textures along grid
+## axes, which is what makes the relief lighting rotate with the view.
+static func _apply_projection_uniforms(material: ShaderMaterial, proj: GridProjection) -> void:
+	material.set_shader_parameter("grid_origin", proj.grid_origin())
+	material.set_shader_parameter("grid_axis_x", proj.axis_x())
+	material.set_shader_parameter("grid_axis_y", proj.axis_y())
+	# The rect is offset to the projection bounds; the shader adds this back to
+	# VERTEX so local coordinates resolve to true world positions.
+	material.set_shader_parameter("surface_origin", proj.world_bounds().position)
+
+# =============================================================================
+# VIEW ROTATION
+# =============================================================================
+
+## Rotate the view 90 degrees clockwise (the SimGolf rotate button).
+func rotate_view_cw() -> void:
+	_apply_view(projection.orientation + 1, projection.isometric)
+
+## Rotate the view 90 degrees counter-clockwise.
+func rotate_view_ccw() -> void:
+	_apply_view(projection.orientation - 1, projection.isometric)
+
+## Switch between isometric diamonds and the legacy top-down squares.
+func set_view_isometric(enabled: bool) -> void:
+	_apply_view(projection.orientation, enabled)
+
+func is_view_isometric() -> bool:
+	return projection.isometric
+
+func get_view_orientation() -> int:
+	return projection.orientation
+
+func set_view_orientation(orientation: int) -> void:
+	_apply_view(orientation, projection.isometric)
+
+func _apply_view(orientation: int, isometric: bool) -> void:
+	projection.set_orientation(orientation)
+	projection.set_isometric(isometric)
+	view_orientation = projection.orientation
+	view_isometric = projection.isometric
+	_sync_projection_dependents()
+	view_rotated.emit(projection.orientation, projection.isometric)
+	EventBus.view_rotated.emit(projection.orientation, projection.isometric)
+
+## Resize the full-world shader rects and repaint everything that is cached in
+## world space. Called whenever the projection changes.
+func _sync_projection_dependents() -> void:
+	var bounds := projection.world_bounds()
+	if _course_surface:
+		_course_surface.apply_projection(projection)
+	if _elevation_shader_rect:
+		_elevation_shader_rect.position = bounds.position
+		_elevation_shader_rect.size = bounds.size
+	if _elevation_shader_controller:
+		_elevation_shader_controller.apply_projection(projection)
+	_redraw_all_overlays()
+	if _elevation_overlay:
+		_elevation_overlay.queue_redraw()
+	if _ob_markers_overlay:
+		_ob_markers_overlay.queue_redraw()
+	if _debug_overlay:
+		_debug_overlay.queue_redraw()
+	if _land_boundary_overlay:
+		_land_boundary_overlay.queue_redraw()
+	if _wind_flag_overlay:
+		_wind_flag_overlay.refresh_flag_positions()
+	queue_redraw()
+
 
 func is_valid_position(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < grid_width and pos.y >= 0 and pos.y < grid_height
@@ -441,12 +578,13 @@ func calculate_distance_yards_precise(from: Vector2, to: Vector2) -> int:
 ## Get the world-space rectangle currently visible in the camera viewport.
 ## Overlays use this to skip drawing off-screen tiles (viewport culling).
 func get_visible_world_rect() -> Rect2:
+	var fallback := world_bounds()
 	var viewport = get_viewport()
 	if not viewport:
-		return Rect2(Vector2.ZERO, Vector2(grid_width * tile_width, grid_height * tile_height))
+		return fallback
 	var camera = viewport.get_camera_2d()
 	if not camera:
-		return Rect2(Vector2.ZERO, Vector2(grid_width * tile_width, grid_height * tile_height))
+		return fallback
 	var viewport_size = viewport.get_visible_rect().size
 	var cam_zoom = camera.zoom
 	var visible_size = viewport_size / cam_zoom
@@ -455,11 +593,27 @@ func get_visible_world_rect() -> Rect2:
 
 ## Get the range of grid tiles currently visible in the camera viewport.
 ## Returns [min_tile, max_tile] as Vector2i, clamped to grid bounds.
+##
+## The visible world rectangle is unprojected at all four corners: under an
+## isometric (or rotated) projection its grid-space footprint is a rotated
+## rectangle, so the corners - not the edges - bound the tile range.
 func get_visible_tile_range() -> Array[Vector2i]:
 	var world_rect = get_visible_world_rect()
 	var margin = Vector2(tile_width * 2, tile_height * 2)
-	var min_tile = screen_to_grid(world_rect.position - margin)
-	var max_tile = screen_to_grid(world_rect.end + margin)
+	var grown = world_rect.grow_individual(margin.x, margin.y, margin.x, margin.y)
+	var corners: Array[Vector2] = [
+		projection.unproject(grown.position),
+		projection.unproject(Vector2(grown.end.x, grown.position.y)),
+		projection.unproject(grown.end),
+		projection.unproject(Vector2(grown.position.x, grown.end.y)),
+	]
+	var min_g: Vector2 = corners[0]
+	var max_g: Vector2 = corners[0]
+	for point in corners:
+		min_g = Vector2(minf(min_g.x, point.x), minf(min_g.y, point.y))
+		max_g = Vector2(maxf(max_g.x, point.x), maxf(max_g.y, point.y))
+	var min_tile = Vector2i(floori(min_g.x), floori(min_g.y))
+	var max_tile = Vector2i(ceili(max_g.x), ceili(max_g.y))
 	min_tile = Vector2i(maxi(min_tile.x, 0), maxi(min_tile.y, 0))
 	max_tile = Vector2i(mini(max_tile.x, grid_width - 1), mini(max_tile.y, grid_height - 1))
 	return [min_tile, max_tile]
@@ -593,6 +747,7 @@ func _setup_elevation_shader() -> void:
 	material.set_shader_parameter("heightmap_size", Vector2(grid_width * Heightmap.PIXELS_PER_TILE, grid_height * Heightmap.PIXELS_PER_TILE))
 	material.set_shader_parameter("grid_size", Vector2(grid_width, grid_height))
 	material.set_shader_parameter("tile_size", Vector2(tile_width, tile_height))
+	_apply_projection_uniforms(material, projection)
 
 	# Create full-viewport ColorRect for shader overlay
 	_elevation_shader_rect = ColorRect.new()
@@ -601,9 +756,10 @@ func _setup_elevation_shader() -> void:
 	_elevation_shader_rect.material = material
 	_elevation_shader_rect.color = Color(1, 1, 1, 0)  # Transparent base — shader controls all output
 	_elevation_shader_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Size to cover the entire world (TerrainGrid is a Node2D, so no anchors)
-	_elevation_shader_rect.position = Vector2.ZERO
-	_elevation_shader_rect.size = Vector2(grid_width * tile_width, grid_height * tile_height)
+	# Cover the projected course (a diamond under isometric, sized to its AABB).
+	var bounds := projection.world_bounds()
+	_elevation_shader_rect.position = bounds.position
+	_elevation_shader_rect.size = bounds.size
 	add_child(_elevation_shader_rect)
 
 	# Create controller node to update uniforms each frame

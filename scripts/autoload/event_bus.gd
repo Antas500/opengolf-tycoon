@@ -26,6 +26,9 @@ signal course_rating_changed(rating: Dictionary)
 
 # Terrain/Building Signals
 signal terrain_tile_changed(position: Vector2i, old_type: int, new_type: int)
+## Emitted when the course view projection changes (rotate buttons / iso toggle).
+## Listeners holding world-space positions must reproject them.
+signal view_rotated(orientation: int, isometric: bool)
 signal building_placed(building_type: String, position: Vector2i)
 signal building_removed(position: Vector2i)
 signal building_upgraded(building, new_level: int)

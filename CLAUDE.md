@@ -75,7 +75,9 @@ Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/al
 ## Core Systems
 
 ### Terrain
-- **TerrainGrid**: 128x128 isometric grid (64x32 px tiles). `_grid` dict (Vector2i → terrain type int), `_elevation_grid` (Vector2i → -5..+5).
+- **TerrainGrid**: 128x128 grid (64x32 px tiles). `_grid` dict (Vector2i → terrain type int), `_elevation_grid` (Vector2i → -5..+5).
+- **GridProjection** (`terrain/grid_projection.gd`): the single grid ↔ world map. Renders the grid top-down or as 2:1 isometric diamonds and spins it through four 90° view orientations (SimGolf-style rotate). Purely affine, so `unproject()` is exact for mouse picking and both terrain shaders can invert it per fragment. The projected course always fills the same world rectangle, so camera bounds, the minimap and land boundaries are rotation-independent.
+- **Overlays** draw per-tile shapes through `OverlayGeometry` (`terrain/overlay_geometry.gd`), which projects tile outlines/centres into the overlay's local space so they render as diamonds when isometric.
 - **14 terrain types**: EMPTY, GRASS, FAIRWAY, ROUGH, HEAVY_ROUGH, GREEN, TEE_BOX, BUNKER, WATER, PATH, OUT_OF_BOUNDS, TREES, FLOWER_BED, ROCKS.
 - **TilesetGenerator**: Runtime procedural tileset (no external image assets required). Perlin noise, mowing stripes, sand stipple, water shimmer. Theme-aware via `set_theme_colors()` and `get_color()` methods.
 
@@ -133,7 +135,7 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 ### Tools
 - **ElevationTool**: Raise/lower tiles (-5 to +5). Affects shot distance and ball roll.
 - **UndoManager**: 50-action stack with cost refunds.
-- **IsometricCamera**: WASD pan, mouse wheel zoom, Q rotate.
+- **IsometricCamera**: WASD pan, mouse wheel zoom. View rotation lives on TerrainGrid, not the camera: **Q** / **Shift+Q** rotate the course counter-clockwise / clockwise, **I** toggles isometric ↔ top-down. Rotating re-projects terrain, overlays, entities and picking together, and preserves the grid point under the camera.
 
 ## Conventions
 
