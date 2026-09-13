@@ -253,8 +253,6 @@ func _draw_isometric_tile(grid_pos: Vector2i, is_valid: bool, alpha_mod: float, 
 	fill_color.a *= alpha_mod
 	outline_color.a *= alpha_mod
 
-	# Fill the projected tile shape - a 2:1 diamond when the view is isometric,
-	# a square when it is top-down. This is what the player is actually painting.
 	draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, grid_pos), fill_color)
 
 	# Draw outline
@@ -446,8 +444,6 @@ func _draw_building_ghost(grid_pos: Vector2i, color: Color) -> void:
 
 	var w = fw * 64.0
 	var h = fh * 32.0
-	# Anchor exactly like Building.set_position_in_grid, so the ghost stands
-	# where the finished building will - on its plot, not off the corner tile.
 	var pos: Vector2
 	if terrain_grid.is_view_isometric():
 		var center := terrain_grid.grid_point_to_screen(

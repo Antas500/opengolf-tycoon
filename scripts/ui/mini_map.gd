@@ -111,9 +111,6 @@ func _on_land_boundary_changed() -> void:
 	queue_redraw()
 
 func set_camera_rect(viewport_rect: Rect2, _grid_width: int, _grid_height: int) -> void:
-	# The viewport is a world-space rectangle. Under an isometric or rotated
-	# view its grid-space footprint is turned, so unproject all four corners
-	# instead of dividing world units by the tile size.
 	var proj := _terrain_grid.projection
 	var corners: Array[Vector2] = [
 		proj.unproject(viewport_rect.position),
@@ -126,7 +123,6 @@ func set_camera_rect(viewport_rect: Rect2, _grid_width: int, _grid_height: int) 
 	for point in corners:
 		min_g = Vector2(minf(min_g.x, point.x), minf(min_g.y, point.y))
 		max_g = Vector2(maxf(max_g.x, point.x), maxf(max_g.y, point.y))
-	# The overview map itself stays a north-up plan view of the grid.
 	var size := Vector2(float(_terrain_grid.grid_width), float(_terrain_grid.grid_height))
 	_camera_rect = Rect2(min_g / size, (max_g - min_g) / size)
 	queue_redraw()

@@ -14,8 +14,6 @@ func setup(terrain_grid: TerrainGrid, color_rect: ColorRect, shader_material: Sh
 	_color_rect = color_rect
 	_shader_material = shader_material
 
-## Push the current grid <-> world projection into the relief shader so its
-## height sampling follows the isometric/rotated view.
 func apply_projection(proj: GridProjection) -> void:
 	if _shader_material == null or proj == null:
 		return

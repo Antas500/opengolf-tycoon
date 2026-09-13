@@ -375,7 +375,7 @@ func _input(event: InputEvent) -> void:
 					vis._update_carry_annotations()
 				get_viewport().set_input_as_handled()
 			elif event.keycode == KEY_Q:
-				# Rotate the course view, like SimGolf's rotate buttons.
+				# Rotate the course view.
 				if event.shift_pressed:
 					_on_view_rotate_cw()
 				else:
@@ -461,8 +461,6 @@ func _connect_signals() -> void:
 	EventBus.load_completed.connect(_on_load_completed)
 	EventBus.new_game_started.connect(_on_new_game_started)
 	hole_manager.hole_selected.connect(_on_hole_flag_selected)
-	# Any projection change (rotate buttons, iso toggle, or a loaded save)
-	# needs placed entities re-anchored and the camera re-clamped.
 	terrain_grid.view_rotated.connect(_on_terrain_view_rotated)
 
 func _connect_ui_buttons() -> void:
@@ -511,7 +509,6 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.staff_pressed.connect(_on_staff_pressed)
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
 	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
-	# SimGolf-style view rotation controls.
 	terrain_toolbar.view_rotate_cw_pressed.connect(_on_view_rotate_cw)
 	terrain_toolbar.view_rotate_ccw_pressed.connect(_on_view_rotate_ccw)
 	terrain_toolbar.view_isometric_toggled.connect(_on_view_isometric_toggled)
@@ -1214,10 +1211,6 @@ func _on_green_preset_selected(preset_name: String) -> void:
 	_green_preset = preset_name
 	placement_preview.green_preset = preset_name
 
-# =============================================================================
-# VIEW ROTATION (Sid Meier's SimGolf style)
-# =============================================================================
-
 func _on_view_rotate_cw() -> void:
 	_change_view_projection(true)
 
@@ -1233,8 +1226,6 @@ func _on_view_isometric_toggled(enabled: bool) -> void:
 	terrain_grid.set_view_isometric(enabled)
 	_finish_view_change(focus_grid)
 
-## Rotate the course 90 degrees, keeping whatever the player is looking at
-## under the camera rather than spinning the view off to a new corner.
 func _change_view_projection(clockwise: bool) -> void:
 	var focus_grid := _begin_view_change()
 	if clockwise:
@@ -1243,29 +1234,21 @@ func _change_view_projection(clockwise: bool) -> void:
 		terrain_grid.rotate_view_ccw()
 	_finish_view_change(focus_grid)
 
-## Capture the grid point under the camera and every moving entity's grid
-## position before the projection changes. Returns the camera anchor.
 func _begin_view_change() -> Vector2:
 	_pending_moving_entities = _snapshot_moving_entities()
 	if camera and terrain_grid:
 		return terrain_grid.screen_to_grid_precise(camera.global_position)
 	return Vector2.ZERO
 
-## Restore moving entities and re-centre the camera on the same piece of course.
 func _finish_view_change(focus_grid: Vector2) -> void:
 	_restore_moving_entities(_pending_moving_entities)
 	_pending_moving_entities = []
 	if camera and terrain_grid:
 		camera.focus_on(terrain_grid.grid_to_screen_precise(focus_grid), true)
 
-## Fired by TerrainGrid for every projection change, including one restored from
-## a save file.
 func _on_terrain_view_rotated(_orientation: int, _isometric: bool) -> void:
 	_after_view_change()
 
-## Record where every moving entity is in *grid* space before the projection
-## changes. Without this a golfer's world coordinates would silently re-map to
-## a different tile after the rotation, teleporting them around the course.
 func _snapshot_moving_entities() -> Array:
 	var snapshot: Array = []
 	if not terrain_grid:
@@ -1286,8 +1269,6 @@ func _restore_moving_entities(snapshot: Array) -> void:
 		if is_instance_valid(entity):
 			entity.global_position = terrain_grid.grid_to_screen_precise(entry[1])
 
-## Re-anchor every placed entity and refresh the camera + tool widgets after the
-## projection changed.
 func _after_view_change() -> void:
 	_reposition_placed_entities()
 	_sync_camera_bounds_to_view()
@@ -1320,7 +1301,6 @@ func _reposition_placed_entities() -> void:
 		if is_instance_valid(visualizer) and visualizer.has_method("refresh_positions"):
 			visualizer.refresh_positions()
 
-## Frame the camera on the middle of the course at its current rotation.
 func _center_camera_on_course() -> void:
 	if not camera or not terrain_grid:
 		return
@@ -1328,7 +1308,6 @@ func _center_camera_on_course() -> void:
 	camera.focus_on(terrain_grid.world_bounds().get_center(), true)
 
 
-## Clamp the camera to the course at its current rotation.
 func _sync_camera_bounds_to_view() -> void:
 	if not camera or not terrain_grid:
 		return

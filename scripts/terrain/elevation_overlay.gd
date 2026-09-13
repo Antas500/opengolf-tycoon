@@ -105,9 +105,7 @@ func _has_elevated_neighbor(pos: Vector2i) -> bool:
 func _draw_contour_lines(pos: Vector2i) -> void:
 	var elevation: int = terrain_grid.get_elevation(pos)
 
-	# Check each edge for elevation change (right, bottom, left, top).
-	# Endpoints are grid-point fractions of the tile, so the contour follows the
-	# isometric/rotated projection instead of assuming a square tile.
+	# Check each edge for elevation change (right, bottom, left, top)
 	var offsets: Array[Vector2i] = [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]
 	var line_starts: Array[Vector2] = [Vector2(1, 0), Vector2(0, 1), Vector2.ZERO, Vector2.ZERO]
 	var line_ends: Array[Vector2] = [Vector2(1, 1), Vector2(1, 1), Vector2(0, 1), Vector2(1, 0)]

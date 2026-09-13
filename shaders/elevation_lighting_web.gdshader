@@ -13,7 +13,6 @@ uniform bool contour_enabled = true;
 uniform float contour_line_width = 1.5;
 uniform float contour_opacity : hint_range(0.0, 1.0) = 0.3;
 
-// --- View projection (must match course_surface.gdshader) ---
 uniform vec2 grid_origin = vec2(0.0);
 uniform vec2 grid_axis_x = vec2(64.0, 32.0);
 uniform vec2 grid_axis_y = vec2(0.0, 32.0);
@@ -25,8 +24,6 @@ void vertex() {
 	world_pos = VERTEX + surface_origin;
 }
 
-// Invert the view projection so relief stays aligned to the grid when the
-// course is rotated or drawn isometrically.
 vec2 world_to_uv(vec2 wp) {
 	vec2 d = wp - grid_origin;
 	float det = grid_axis_x.x * grid_axis_y.y - grid_axis_y.x * grid_axis_x.y;
@@ -56,7 +53,6 @@ void fragment() {
 	if (!in_bounds) {
 		COLOR = vec4(0.0);
 	} else {
-		// Quarter-tile steps along the grid axes so shading rotates with the view.
 		vec2 step_x = grid_axis_x * 0.25;
 		vec2 step_y = grid_axis_y * 0.25;
 

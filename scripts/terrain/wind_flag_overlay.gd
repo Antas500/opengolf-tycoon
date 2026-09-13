@@ -38,8 +38,6 @@ func _on_load_completed(_success: bool) -> void:
 	# Rebuild flags after a save is loaded
 	call_deferred("_rebuild_all_flags")
 
-## Re-anchor existing flags after the view projection changes (rotate / iso
-## toggle). Cheaper than a rebuild: only the positions move.
 func refresh_flag_positions() -> void:
 	if not _terrain_grid or not GameManager.course_data:
 		return

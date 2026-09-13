@@ -23,8 +23,6 @@ uniform float contour_opacity : hint_range(0.0, 1.0) = 0.3;
 uniform vec3 contour_color_high = vec3(0.45, 0.35, 0.25);  // Warm brown
 uniform vec3 contour_color_low = vec3(0.25, 0.30, 0.40);   // Cool blue-gray
 
-// --- View projection (must match course_surface.gdshader) ---
-// world = grid_origin + grid_axis_x * gx + grid_axis_y * gy
 uniform vec2 grid_origin = vec2(0.0);
 uniform vec2 grid_axis_x = vec2(64.0, 32.0);
 uniform vec2 grid_axis_y = vec2(0.0, 32.0);
@@ -33,13 +31,10 @@ uniform vec2 surface_origin = vec2(0.0);
 varying vec2 world_pos;
 
 void vertex() {
-	// VERTEX is local to this rect, which is offset to the projection bounds.
 	world_pos = VERTEX + surface_origin;
 }
 
-// Convert world position to heightmap UV by inverting the view projection.
-// Doing this here (rather than dividing by a fixed rect size) is what keeps the
-// relief shading aligned to the grid when the course is rotated or isometric.
+// Convert world position to heightmap UV
 vec2 world_to_uv(vec2 wp) {
 	vec2 d = wp - grid_origin;
 	float det = grid_axis_x.x * grid_axis_y.y - grid_axis_y.x * grid_axis_x.y;
@@ -62,8 +57,6 @@ float sample_height(vec2 wp) {
 
 // Compute pseudo-normal from heightmap gradient using central differences
 vec3 compute_normal(vec2 wp, out float slope_mag) {
-	// Quarter-tile steps along the grid axes, so the derived slope - and the
-	// shading that follows it - rotates together with the view.
 	vec2 step_x = grid_axis_x * 0.25;
 	vec2 step_y = grid_axis_y * 0.25;
 

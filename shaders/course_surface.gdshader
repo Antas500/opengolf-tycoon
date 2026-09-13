@@ -10,21 +10,12 @@ uniform vec2 grid_size = vec2(128.0);
 uniform vec2 tile_size = vec2(64.0, 32.0);
 uniform vec4 fringe_color : source_color = vec4(0.38, 0.65, 0.28, 1.0);
 
-// --- View projection ---
-// The rect covering the course is an axis-aligned box, but under the isometric
-// projection the playable area inside it is a diamond. These uniforms describe
-// the affine map  world = grid_origin + grid_axis_x * gx + grid_axis_y * gy,
-// which the fragment stage inverts to recover grid coordinates. Rotating the
-// view only changes these three vectors - no texture is rebuilt.
 uniform vec2 grid_origin = vec2(0.0);
 uniform vec2 grid_axis_x = vec2(64.0, 32.0);
 uniform vec2 grid_axis_y = vec2(0.0, 32.0);
-// World-space placement of this rect, so VERTEX-independent UV still resolves
-// to a true world position.
 uniform vec2 surface_origin = vec2(0.0);
 uniform vec2 surface_size = vec2(8192.0, 4096.0);
 
-// Invert the projection: world position -> fractional grid coordinate.
 vec2 world_to_grid(vec2 world) {
 	vec2 d = world - grid_origin;
 	float det = grid_axis_x.x * grid_axis_y.y - grid_axis_y.x * grid_axis_x.y;
@@ -115,13 +106,9 @@ vec3 surface(float id, float cover, float depth, vec2 world, float grain, float 
 void fragment() {
 	vec2 world = surface_origin + UV * surface_size;
 	vec2 p = world_to_grid(world);
-	// The rect covers the projection's bounding box; everything outside the
-	// diamond (or the rotated square) is empty space, not terrain.
 	if (p.x < 0.0 || p.y < 0.0 || p.x > grid_size.x || p.y > grid_size.y) {
 		COLOR = vec4(0.0);
 	}
-	// Patterns are driven from grid space so mowing stripes, grain and water
-	// ripples stay locked to the tiles and rotate together with the view.
 	vec2 tile_world = p * tile_size;
 	// A restrained contour perturbation breaks stair steps without moving tile centers.
 	vec2 warp = vec2(noise(p * 0.72), noise(p * 0.72 + 37.0)) - 0.5;
@@ -146,7 +133,6 @@ void fragment() {
 		+ surface(c.x, covers.z, c.y, tile_world, grain, patch) * blends.z
 		+ surface(d.x, covers.w, d.y, tile_world, grain, patch) * blends.w;
 	// Base elevations provide broad, continuous relief without per-tile profiles.
-	// Differencing runs along the grid axes so shading turns with the view.
 	vec2 step_x = grid_axis_x * 1.5;
 	vec2 step_y = grid_axis_y * 1.5;
 	float left_h = elevation_at(world - step_x);

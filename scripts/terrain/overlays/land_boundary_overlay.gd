@@ -68,8 +68,7 @@ func _draw() -> void:
 				draw_colored_polygon(
 						OverlayGeometry.tile_polygon(terrain_grid, self, pos), UNOWNED_TINT)
 
-	# Draw property line borders. Offsets are grid-point fractions, so they
-	# follow the isometric/rotated projection instead of assuming square tiles.
+	# Draw property line borders.
 	for edge in _boundary_edges:
 		var start_world = terrain_grid.grid_point_to_screen(
 				Vector2(edge.start_tile) + edge.start_offset)

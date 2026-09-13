@@ -33,10 +33,6 @@ func initialize(grid: TerrainGrid) -> void:
 	EventBus.theme_changed.connect(_on_theme_changed)
 	EventBus.load_completed.connect(_on_load_completed)
 
-## Re-anchor the rect to the projected course and tell the shader how world
-## space maps back onto the grid. The rect covers the projection's bounding box;
-## the shader discards the fragments outside the diamond and samples the terrain
-## texture along grid axes, so a rotation needs no texture rebuild.
 func apply_projection(proj: GridProjection) -> void:
 	if proj == null:
 		return

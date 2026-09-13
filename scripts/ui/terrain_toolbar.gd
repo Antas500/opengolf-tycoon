@@ -31,12 +31,10 @@ var _brush_label: Label = null
 var _green_preset_row: HBoxContainer = null
 var _green_preset_buttons: Dictionary = {}  # preset_name -> Button
 var _active_green_preset: String = ""
-## View control widgets.
 var _rotate_cw_btn: Button = null
 var _rotate_ccw_btn: Button = null
 var _iso_toggle_btn: Button = null
 var _view_orientation_label: Label = null
-## Compass label per view orientation (0 = unrotated).
 const ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
 const BRUSH_SIZES = [1, 3, 5, 7, 9]
 
@@ -169,7 +167,6 @@ func _build_ui() -> void:
 
 	main_vbox.add_child(brush_row)
 
-	# --- View controls: rotate the course like Sid Meier's SimGolf ---
 	var view_row = HBoxContainer.new()
 	view_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	view_row.add_theme_constant_override("separation", 6)
@@ -568,10 +565,6 @@ func set_brush_size(value: int) -> void:
 		_update_brush_label()
 		brush_size_changed.emit(value)
 
-# =============================================================================
-# VIEW CONTROLS (isometric + course rotation)
-# =============================================================================
-
 func _on_rotate_cw_pressed() -> void:
 	view_rotate_cw_pressed.emit()
 
@@ -582,12 +575,9 @@ func _on_iso_toggle_pressed() -> void:
 	if _iso_toggle_btn:
 		view_isometric_toggled.emit(_iso_toggle_btn.button_pressed)
 
-## Reflect the grid's current projection in the view controls. Called after a
-## rotate/toggle and after loading a save so the widgets never drift out of sync.
 func set_view_state(orientation: int, isometric: bool) -> void:
 	if _view_orientation_label:
 		var index: int = wrapi(orientation, 0, ORIENTATION_LABELS.size())
 		_view_orientation_label.text = ORIENTATION_LABELS[index]
 	if _iso_toggle_btn:
-		# Block the signal so syncing state doesn't re-trigger a toggle.
 		_iso_toggle_btn.set_pressed_no_signal(isometric)

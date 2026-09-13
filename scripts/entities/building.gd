@@ -111,9 +111,6 @@ func set_position_in_grid(pos: Vector2i) -> void:
 	# Calculate world position from grid position
 	if terrain_grid:
 		if terrain_grid.is_view_isometric():
-			# Isometric: the drawn rect's ground point (bottom-centre) sits on
-			# the centre of the footprint's projected diamond, so the building
-			# stands on its plot instead of floating off the corner tile.
 			var tile_w := float(terrain_grid.tile_width)
 			var tile_h := float(terrain_grid.tile_height)
 			var center := terrain_grid.grid_point_to_screen(

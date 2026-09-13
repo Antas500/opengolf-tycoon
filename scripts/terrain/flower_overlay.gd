@@ -120,8 +120,6 @@ func _draw() -> void:
 			continue
 		var data = _flower_positions[pos]
 
-		# Plant offsets are authored in pixels across a square tile; mapping them
-		# through the projection keeps the bed inside the diamond when isometric.
 		# Draw foliage first (background)
 		for leaf in data.foliage:
 			_draw_foliage(OverlayGeometry.point_in_tile(terrain_grid, self, pos,
