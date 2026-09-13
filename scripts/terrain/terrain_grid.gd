@@ -12,8 +12,13 @@ class_name TerrainGrid
 ## Grid <-> world projection shared by every renderer and the input handlers.
 var projection: GridProjection = GridProjection.new()
 
+const MIN_ELEVATION: int = -5
+const MAX_ELEVATION: int = 5
+const SLOPE_SAMPLE_STEP: float = 0.5
+
 var _grid: Dictionary = {}
-var _elevation_grid: Dictionary = {}  # Vector2i -> int (-5 to +5)
+var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) * (grid_height+1)
+var _vertex_stride: int = 0  # Row length of _vertex_elevation (grid_width + 1)
 var _bunker_depth_grid: Dictionary = {}  # Vector2i -> 0 (SHALLOW) or 1 (DEEP)
 var _player_placed_tiles: Dictionary = {}  # Vector2i -> true for tiles player placed (for maintenance)
 var _elevation_overlay: ElevationOverlay = null
@@ -25,6 +30,7 @@ var _wildlife: CourseWildlife = null
 signal surface_refreshed
 signal tile_changed(position: Vector2i, old_type: int, new_type: int)
 signal elevation_changed(position: Vector2i, old_elevation: int, new_elevation: int)
+signal vertex_elevation_changed(vertex: Vector2i, old_elevation: int, new_elevation: int)
 signal view_rotated(orientation: int, isometric: bool)
 
 ## Batch mode — defers signals until end_batch() to avoid overlay redraw cascade
@@ -222,6 +228,7 @@ func _apply_variation_shader() -> void:
 	tile_map.material = material
 
 func _initialize_grid() -> void:
+	_ensure_vertex_storage()
 	for x in range(grid_width):
 		for y in range(grid_height):
 			var pos = Vector2i(x, y)
@@ -239,6 +246,9 @@ func screen_to_grid(screen_pos: Vector2) -> Vector2i:
 
 func screen_to_grid_precise(screen_pos: Vector2) -> Vector2:
 	return projection.unproject(screen_pos) - Vector2(0.5, 0.5)
+
+func screen_to_grid_point(screen_pos: Vector2) -> Vector2:
+	return projection.unproject(screen_pos)
 
 func grid_to_screen(grid_pos: Vector2i) -> Vector2:
 	return projection.cell_corner(grid_pos)
@@ -709,19 +719,15 @@ func _setup_elevation_shader() -> void:
 	_elevation_shader_controller.setup(self, _elevation_shader_rect, material)
 
 	# Connect signals for heightmap updates
-	elevation_changed.connect(_on_elevation_changed_heightmap)
+	_heightmap.initialize(self)
 	tile_changed.connect(_on_tile_changed_heightmap)
 
 	# Build initial heightmap from current grid state
 	_heightmap.rebuild_from_grids(self)
 
-func _on_elevation_changed_heightmap(pos: Vector2i, _old: int, new_elev: int) -> void:
+func _on_tile_changed_heightmap(pos: Vector2i, _old: int, _new_type: int) -> void:
 	if _heightmap:
-		_heightmap.set_tile_elevation_blended(pos, new_elev, get_tile(pos), self)
-
-func _on_tile_changed_heightmap(pos: Vector2i, _old: int, new_type: int) -> void:
-	if _heightmap:
-		_heightmap.set_tile_elevation_blended(pos, get_elevation(pos), new_type, self)
+		_heightmap.refresh_tile(pos)
 
 func _setup_fairway_width_overlay() -> void:
 	_fairway_width_overlay = FairwayWidthOverlay.new()
@@ -763,47 +769,222 @@ func toggle_debug_overlay() -> void:
 func is_debug_overlay_enabled() -> bool:
 	return _debug_overlay and _debug_overlay.is_enabled()
 
-## Get elevation at a position (default 0)
-func get_elevation(pos: Vector2i) -> int:
-	return _elevation_grid.get(pos, 0)
+## Vertex field dimensions: a WxH tile grid has (W+1)x(H+1) vertices.
+func vertex_grid_size() -> Vector2i:
+	return Vector2i(grid_width + 1, grid_height + 1)
 
-## Set elevation at a position (clamped to -5..+5)
-func set_elevation(pos: Vector2i, height: int) -> void:
-	if not is_valid_position(pos):
+func is_valid_vertex(vertex: Vector2i) -> bool:
+	return vertex.x >= 0 and vertex.x <= grid_width \
+		and vertex.y >= 0 and vertex.y <= grid_height
+
+## Allocate (or re-allocate) the packed vertex height buffer
+func _ensure_vertex_storage() -> void:
+	var stride: int = grid_width + 1
+	var needed: int = stride * (grid_height + 1)
+	if needed <= 0:
 		return
-	var old_elevation = _elevation_grid.get(pos, 0)
-	var new_elevation = clampi(height, -5, 5)
-	if old_elevation == new_elevation:
+	if _vertex_elevation.size() == needed and _vertex_stride == stride:
 		return
-	if new_elevation == 0:
-		_elevation_grid.erase(pos)  # Don't store default value
-	else:
-		_elevation_grid[pos] = new_elevation
-	elevation_changed.emit(pos, old_elevation, new_elevation)
+	var previous: PackedInt32Array = _vertex_elevation
+	var previous_stride: int = _vertex_stride
+	_vertex_elevation = PackedInt32Array()
+	_vertex_elevation.resize(needed)
+	_vertex_elevation.fill(0)
+	_vertex_stride = stride
+	if previous.size() == 0 or previous_stride <= 0:
+		return
+	var rows: int = mini(previous.size() / previous_stride, grid_height + 1)
+	var cols: int = mini(previous_stride, stride)
+	for y in rows:
+		for x in cols:
+			_vertex_elevation[y * stride + x] = previous[y * previous_stride + x]
+
+func _vertex_index(vertex: Vector2i) -> int:
+	return vertex.y * (grid_width + 1) + vertex.x
+
+## Height stored at a grid vertex (clamped to MIN_ELEVATION..MAX_ELEVATION).
+func get_vertex_elevation(vertex: Vector2i) -> int:
+	if not is_valid_vertex(vertex):
+		return 0
+	_ensure_vertex_storage()
+	return _vertex_elevation[_vertex_index(vertex)]
+
+func set_vertex_elevation(vertex: Vector2i, height: int) -> void:
+	if not is_valid_vertex(vertex):
+		return
+	_ensure_vertex_storage()
+	var index: int = _vertex_index(vertex)
+	var new_height: int = clampi(height, MIN_ELEVATION, MAX_ELEVATION)
+	var old_height: int = _vertex_elevation[index]
+	if old_height == new_height:
+		return
+
+	var affected: Array[Vector2i] = tiles_around_vertex(vertex)
+	var before: Dictionary = {}
+	for tile in affected:
+		before[tile] = get_elevation(tile)
+
+	_vertex_elevation[index] = new_height
+	vertex_elevation_changed.emit(vertex, old_height, new_height)
+	_queue_elevation_refresh(vertex, affected)
+
+	for tile in affected:
+		var after: int = get_elevation(tile)
+		if int(before[tile]) != after:
+			elevation_changed.emit(tile, int(before[tile]), after)
 	if _elevation_overlay:
 		_elevation_overlay.queue_redraw()
 
-## Get elevation difference between two points (positive = uphill from→to)
-func get_elevation_difference(from: Vector2i, to: Vector2i) -> int:
-	return get_elevation(to) - get_elevation(from)
+func adjust_vertex_elevation(vertex: Vector2i, delta: int) -> int:
+	var updated: int = clampi(get_vertex_elevation(vertex) + delta, MIN_ELEVATION, MAX_ELEVATION)
+	set_vertex_elevation(vertex, updated)
+	return updated
 
-## Get downhill slope direction at a position (Vector2 pointing downhill)
+func vertices_of_tile(pos: Vector2i) -> Array[Vector2i]:
+	return [pos, pos + Vector2i(1, 0), pos + Vector2i(1, 1), pos + Vector2i(0, 1)]
+
+func tiles_around_vertex(vertex: Vector2i) -> Array[Vector2i]:
+	var tiles: Array[Vector2i] = []
+	for offset in [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(-1, 0), Vector2i(0, 0)]:
+		var tile: Vector2i = vertex + offset
+		if is_valid_position(tile):
+			tiles.append(tile)
+	return tiles
+
+func nearest_vertex(grid_point: Vector2) -> Vector2i:
+	return Vector2i(
+		clampi(roundi(grid_point.x), 0, grid_width),
+		clampi(roundi(grid_point.y), 0, grid_height))
+
+func get_tile_corner_heights(pos: Vector2i) -> Vector4:
+	_ensure_vertex_storage()
+	var x0: int = clampi(pos.x, 0, grid_width)
+	var y0: int = clampi(pos.y, 0, grid_height)
+	var x1: int = mini(x0 + 1, grid_width)
+	var y1: int = mini(y0 + 1, grid_height)
+	var stride: int = grid_width + 1
+	return Vector4(
+		float(_vertex_elevation[y0 * stride + x0]),
+		float(_vertex_elevation[y0 * stride + x1]),
+		float(_vertex_elevation[y1 * stride + x0]),
+		float(_vertex_elevation[y1 * stride + x1]))
+
+func get_elevation_at(grid_point: Vector2) -> float:
+	_ensure_vertex_storage()
+	var gx: float = clampf(grid_point.x, 0.0, float(grid_width))
+	var gy: float = clampf(grid_point.y, 0.0, float(grid_height))
+	var x0: int = clampi(int(floor(gx)), 0, grid_width)
+	var y0: int = clampi(int(floor(gy)), 0, grid_height)
+	var x1: int = mini(x0 + 1, grid_width)
+	var y1: int = mini(y0 + 1, grid_height)
+	var fx: float = gx - float(x0)
+	var fy: float = gy - float(y0)
+	var stride: int = grid_width + 1
+	var h00: float = float(_vertex_elevation[y0 * stride + x0])
+	var h10: float = float(_vertex_elevation[y0 * stride + x1])
+	var h01: float = float(_vertex_elevation[y1 * stride + x0])
+	var h11: float = float(_vertex_elevation[y1 * stride + x1])
+	return lerpf(lerpf(h00, h10, fx), lerpf(h01, h11, fx), fy)
+
+func get_elevation_at_precise(precise_pos: Vector2) -> float:
+	return get_elevation_at(precise_pos + Vector2(0.5, 0.5))
+
+func get_tile_height(pos: Vector2i) -> float:
+	if not is_valid_position(pos):
+		return 0.0
+	return get_elevation_at(Vector2(pos) + Vector2(0.5, 0.5))
+
+func get_elevation(pos: Vector2i) -> int:
+	return roundi(get_tile_height(pos))
+
+func set_elevation(pos: Vector2i, height: int) -> void:
+	if not is_valid_position(pos):
+		return
+	var clamped: int = clampi(height, MIN_ELEVATION, MAX_ELEVATION)
+	for vertex in vertices_of_tile(pos):
+		set_vertex_elevation(vertex, clamped)
+
+func get_elevation_difference(from: Vector2i, to: Vector2i) -> int:
+	return roundi(get_tile_height(to) - get_tile_height(from))
+
+func get_slope_at(grid_point: Vector2) -> Vector2:
+	var step: float = SLOPE_SAMPLE_STEP
+	var dhdx: float = (get_elevation_at(grid_point + Vector2(step, 0.0)) \
+		- get_elevation_at(grid_point - Vector2(step, 0.0))) / (2.0 * step)
+	var dhdy: float = (get_elevation_at(grid_point + Vector2(0.0, step)) \
+		- get_elevation_at(grid_point - Vector2(0.0, step))) / (2.0 * step)
+	return Vector2(-dhdx, -dhdy)
+
+## Downhill gradient for "precise" game coordinates (integers are tile centres).
+func get_slope_at_precise(precise_pos: Vector2) -> Vector2:
+	return get_slope_at(precise_pos + Vector2(0.5, 0.5))
+
+## Downhill slope direction at a tile (unit vector, zero on flat ground).
 func get_slope_direction(pos: Vector2i) -> Vector2:
-	var current_elev = get_elevation(pos)
-	var slope = Vector2.ZERO
-	var neighbors = [
-		[Vector2i(1, 0), Vector2(1, 0)],
-		[Vector2i(-1, 0), Vector2(-1, 0)],
-		[Vector2i(0, 1), Vector2(0, 1)],
-		[Vector2i(0, -1), Vector2(0, -1)]
-	]
-	for n in neighbors:
-		var neighbor_pos: Vector2i = pos + n[0]
-		if is_valid_position(neighbor_pos):
-			var diff = current_elev - get_elevation(neighbor_pos)
-			if diff > 0:
-				slope += n[1] * float(diff)
-	return slope.normalized() if slope.length() > 0 else Vector2.ZERO
+	if not is_valid_position(pos):
+		return Vector2.ZERO
+	var slope: Vector2 = get_slope_at(Vector2(pos) + Vector2(0.5, 0.5))
+	return slope.normalized() if slope.length_squared() > 0.000001 else Vector2.ZERO
+
+## Downhill slope direction at a tile-space point (unit vector).
+func get_slope_direction_at(grid_point: Vector2) -> Vector2:
+	var slope: Vector2 = get_slope_at(grid_point)
+	return slope.normalized() if slope.length_squared() > 0.000001 else Vector2.ZERO
+
+func vertex_enclosed_by_type(vertex: Vector2i, terrain_type: int) -> bool:
+	var tiles: Array[Vector2i] = tiles_around_vertex(vertex)
+	if tiles.is_empty():
+		return false
+	for tile in tiles:
+		if get_tile(tile) != terrain_type:
+			return false
+	return true
+
+func set_enclosed_elevation(bounds: Rect2i, terrain_type: int, height: int,
+		height_fn: Callable = Callable()) -> void:
+	var from_x: int = maxi(bounds.position.x, 0)
+	var from_y: int = maxi(bounds.position.y, 0)
+	var to_x: int = mini(bounds.end.x, grid_width)
+	var to_y: int = mini(bounds.end.y, grid_height)
+	for vx in range(from_x, to_x + 1):
+		for vy in range(from_y, to_y + 1):
+			var vertex := Vector2i(vx, vy)
+			if not vertex_enclosed_by_type(vertex, terrain_type):
+				continue
+			var target: int = height
+			if height_fn.is_valid():
+				target = int(height_fn.call(vertex))
+			set_vertex_elevation(vertex, target)
+
+func get_nonzero_vertices() -> Array[Vector2i]:
+	_ensure_vertex_storage()
+	var result: Array[Vector2i] = []
+	var stride: int = grid_width + 1
+	for y in range(grid_height + 1):
+		for x in range(stride):
+			if _vertex_elevation[y * stride + x] != 0:
+				result.append(Vector2i(x, y))
+	return result
+
+func is_vertex_editable(vertex: Vector2i, entity_layer: EntityLayer = null,
+		protect_surfaces: bool = false) -> bool:
+	if not is_valid_vertex(vertex):
+		return false
+	for tile in tiles_around_vertex(vertex):
+		if protect_surfaces and get_tile(tile) in [TerrainTypes.Type.WATER,
+				TerrainTypes.Type.PATH, TerrainTypes.Type.OUT_OF_BOUNDS]:
+			return false
+		if entity_layer and entity_layer.is_tile_occupied_by_building(tile):
+			return false
+		if GameManager.land_manager and not GameManager.land_manager.is_tile_owned(tile):
+			return false
+	return true
+
+func _queue_elevation_refresh(vertex: Vector2i, tiles: Array[Vector2i]) -> void:
+	if _course_surface:
+		_course_surface.update_vertex(vertex)
+	if _heightmap:
+		_heightmap.refresh_tiles(tiles)
 
 ## Get the heightmap texture for external use (e.g., shader debugging)
 func get_heightmap_texture() -> ImageTexture:
@@ -903,9 +1084,14 @@ func serialize_player_placed() -> Array:
 	return data
 
 func serialize_elevation() -> Dictionary:
+	_ensure_vertex_storage()
 	var data: Dictionary = {}
-	for pos in _elevation_grid:
-		data["%d,%d" % [pos.x, pos.y]] = _elevation_grid[pos]
+	var stride: int = grid_width + 1
+	for y in range(grid_height + 1):
+		for x in range(stride):
+			var height: int = _vertex_elevation[y * stride + x]
+			if height != 0:
+				data["%d,%d" % [x, y]] = height
 	return data
 
 func serialize_bunker_depth() -> Dictionary:
@@ -943,17 +1129,46 @@ func deserialize_player_placed(data: Array) -> void:
 				_player_placed_tiles[pos] = true
 
 func deserialize_elevation(data: Dictionary) -> void:
-	_elevation_grid.clear()
+	_ensure_vertex_storage()
+	_vertex_elevation.fill(0)
 	for key in data:
-		var parts = key.split(",")
+		var parts = str(key).split(",")
+		if parts.size() == 2:
+			var vertex = Vector2i(int(parts[0]), int(parts[1]))
+			if is_valid_vertex(vertex):
+				_vertex_elevation[_vertex_index(vertex)] = clampi(int(data[key]),
+						MIN_ELEVATION, MAX_ELEVATION)
+	_after_elevation_bulk_load()
+
+func migrate_tile_elevation(data: Dictionary) -> void:
+	var tiles: Dictionary = {}
+	for key in data:
+		var parts = str(key).split(",")
 		if parts.size() == 2:
 			var pos = Vector2i(int(parts[0]), int(parts[1]))
 			if is_valid_position(pos):
-				_elevation_grid[pos] = int(data[key])
+				tiles[pos] = clampi(int(data[key]), MIN_ELEVATION, MAX_ELEVATION)
+	_ensure_vertex_storage()
+	_vertex_elevation.fill(0)
+	for y in range(grid_height + 1):
+		for x in range(grid_width + 1):
+			var vertex := Vector2i(x, y)
+			var total: int = 0
+			var count: int = 0
+			# Missing tiles are sea level — the legacy map only stored non-zero ones.
+			for tile in tiles_around_vertex(vertex):
+				total += int(tiles.get(tile, 0))
+				count += 1
+			if count > 0:
+				_vertex_elevation[_vertex_index(vertex)] = roundi(float(total) / float(count))
+	_after_elevation_bulk_load()
+
+## Rebuild every elevation-derived texture after a bulk write (load, migration).
+func _after_elevation_bulk_load() -> void:
 	if _course_surface:
-		_course_surface.rebuild()
+		_course_surface.rebuild_elevation()
 	if _elevation_overlay:
-		_elevation_overlay._needs_redraw = true
+		_elevation_overlay.invalidate()
 		_elevation_overlay.queue_redraw()
 	if _heightmap:
 		_heightmap.rebuild_from_grids(self)

@@ -5,16 +5,10 @@ extends RefCounted
 ## Resolution: 512x512 (4 pixels per tile on a 128x128 grid)
 ## Value encoding: 0 = lowest (-5), 128 = sea level (0), 255 = highest (+5)
 ## Updated on elevation/tile changes, not every frame.
-##
-## FastNoiseLite Simplex noise is overlaid on top of per-terrain profiles to
-## break tile-aligned patterns and create natural rolling terrain.
-## A 5-tap Gaussian blur smooths sharp tile boundaries after pixel writes.
 
 const PIXELS_PER_TILE: int = 4
 const SEA_LEVEL: int = 128  # Grayscale value for elevation 0
 const ELEVATION_SCALE: float = 25.6  # Grayscale units per integer elevation level
-
-const NEIGHBOR_DIRS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 
 # 5-tap separable Gaussian kernel (sigma ~1.0, pre-normalized)
 const BLUR_KERNEL: Array[float] = [0.06136, 0.24477, 0.38774, 0.24477, 0.06136]
@@ -42,10 +36,11 @@ var _image: Image
 var _texture: ImageTexture
 var _grid_width: int
 var _grid_height: int
+var _terrain_grid: TerrainGrid = null  # Source of vertex heights + terrain types
 var _noise_detail: FastNoiseLite  # Small-scale texture (freq 0.15)
 var _noise_broad: FastNoiseLite   # Broad rolling hills (freq 0.03)
 var _noise_seed: int
-var _dirty_tiles: Array[Vector2i] = []  # Tiles needing blur + texture upload
+var _dirty_tiles: Dictionary = {}  # Vector2i -> true, tiles needing blur + upload
 
 func _init(grid_width: int = 128, grid_height: int = 128, noise_seed: int = 0) -> void:
 	_grid_width = grid_width
@@ -76,6 +71,10 @@ func _init(grid_width: int = 128, grid_height: int = 128, noise_seed: int = 0) -
 	_image.fill(Color(float(SEA_LEVEL) / 255.0, 0, 0))  # R8: uses red channel only
 	_texture = ImageTexture.create_from_image(_image)
 
+## Point the heightmap at the grid whose vertices supply the base surface.
+func initialize(terrain_grid: TerrainGrid) -> void:
+	_terrain_grid = terrain_grid
+
 func get_texture() -> ImageTexture:
 	return _texture
 
@@ -101,118 +100,57 @@ func _get_noise_offset(px: int, py: int, terrain_type: int) -> int:
 	var combined: float = broad * 0.6 + detail * 0.4
 	return roundi(combined * amplitude * ELEVATION_SCALE)
 
-## Update the heightmap for a single tile, applying its terrain profile
-func set_tile_elevation(pos: Vector2i, base_elevation: int, terrain_type: int) -> void:
+func refresh_tile(pos: Vector2i) -> void:
+	if _terrain_grid and _terrain_grid.is_valid_position(pos):
+		_dirty_tiles[pos] = true
+
+func refresh_tiles(tiles: Array) -> void:
+	for tile in tiles:
+		if tile is Vector2i:
+			refresh_tile(tile)
+
+func _write_tile(pos: Vector2i) -> void:
+	if _terrain_grid == null or not _terrain_grid.is_valid_position(pos):
+		return
+	var terrain_type: int = _terrain_grid.get_tile(pos)
 	var profile: Array = ElevationProfiles.get_varied_profile(terrain_type, pos)
-	var base_gray: int = elevation_to_grayscale(base_elevation)
+	var corners: Vector4 = _terrain_grid.get_tile_corner_heights(pos)
 	var px: int = pos.x * PIXELS_PER_TILE
 	var py: int = pos.y * PIXELS_PER_TILE
 
 	for ly in PIXELS_PER_TILE:
+		var fy: float = (float(ly) + 0.5) / float(PIXELS_PER_TILE)
+		var left: float = lerpf(corners.x, corners.z, fy)
+		var right: float = lerpf(corners.y, corners.w, fy)
 		for lx in PIXELS_PER_TILE:
+			var fx: float = (float(lx) + 0.5) / float(PIXELS_PER_TILE)
+			var base_gray: int = roundi(lerpf(left, right, fx) * ELEVATION_SCALE)
 			var offset_gray: int = roundi(profile[ly][lx] * ELEVATION_SCALE)
 			var noise_offset: int = _get_noise_offset(px + lx, py + ly, terrain_type)
-			var final_gray: int = clampi(base_gray + offset_gray + noise_offset, 0, 255)
-			_set_pixel_safe(px + lx, py + ly, final_gray)
+			_set_pixel_safe(px + lx, py + ly,
+					clampi(SEA_LEVEL + base_gray + offset_gray + noise_offset, 0, 255))
 
-	_dirty_tiles.append(pos)
-
-## Write heightmap with 1-pixel border blending into neighbors
-func set_tile_elevation_blended(pos: Vector2i, base_elevation: int, terrain_type: int,
-								terrain_grid: TerrainGrid) -> void:
-	var profile: Array = ElevationProfiles.get_varied_profile(terrain_type, pos)
-	var base_gray: int = elevation_to_grayscale(base_elevation)
-	var px: int = pos.x * PIXELS_PER_TILE
-	var py: int = pos.y * PIXELS_PER_TILE
-
-	# Write the core 4x4 block
-	for ly in PIXELS_PER_TILE:
-		for lx in PIXELS_PER_TILE:
-			var offset_gray: int = roundi(profile[ly][lx] * ELEVATION_SCALE)
-			var noise_offset: int = _get_noise_offset(px + lx, py + ly, terrain_type)
-			var final_gray: int = clampi(base_gray + offset_gray + noise_offset, 0, 255)
-			_set_pixel_safe(px + lx, py + ly, final_gray)
-
-	# Blend border pixels with each neighbor
-	for dir_idx in NEIGHBOR_DIRS.size():
-		var n_pos: Vector2i = pos + NEIGHBOR_DIRS[dir_idx]
-		if not terrain_grid.is_valid_position(n_pos):
-			continue
-		var n_elev: int = terrain_grid.get_elevation(n_pos)
-		var n_type: int = terrain_grid.get_tile(n_pos)
-		var n_profile: Array = ElevationProfiles.get_varied_profile(n_type, n_pos)
-		var n_base_gray: int = elevation_to_grayscale(n_elev)
-
-		# Average the border pixels where tiles meet
-		_blend_border(px, py, profile, base_gray, terrain_type,
-					  n_pos.x * PIXELS_PER_TILE, n_pos.y * PIXELS_PER_TILE,
-					  n_profile, n_base_gray, n_type, NEIGHBOR_DIRS[dir_idx])
-
-	_dirty_tiles.append(pos)
-
-## Flush all pending blur + texture uploads. Call once per frame from TerrainGrid.
 func flush_dirty() -> void:
 	if _dirty_tiles.is_empty():
 		return
-	for tile_pos in _dirty_tiles:
-		_blur_region(tile_pos)
+	var tiles: Array = _dirty_tiles.keys()
 	_dirty_tiles.clear()
+	for tile_pos in tiles:
+		_write_tile(tile_pos)
+	for tile_pos in tiles:
+		_blur_region(tile_pos)
 	_texture.update(_image)
 
 ## Bulk rebuild — call after loading a save or generating terrain
 func rebuild_from_grids(terrain_grid: TerrainGrid) -> void:
+	_terrain_grid = terrain_grid
+	_dirty_tiles.clear()
 	for y in _grid_height:
 		for x in _grid_width:
-			var pos: Vector2i = Vector2i(x, y)
-			var elev: int = terrain_grid.get_elevation(pos)
-			var ttype: int = terrain_grid.get_tile(pos)
-			var profile: Array = ElevationProfiles.get_varied_profile(ttype, pos)
-			var base_gray: int = elevation_to_grayscale(elev)
-			var px: int = pos.x * PIXELS_PER_TILE
-			var py: int = pos.y * PIXELS_PER_TILE
-
-			for ly in PIXELS_PER_TILE:
-				for lx in PIXELS_PER_TILE:
-					var offset_gray: int = roundi(profile[ly][lx] * ELEVATION_SCALE)
-					var noise_offset: int = _get_noise_offset(px + lx, py + ly, ttype)
-					var final_gray: int = clampi(base_gray + offset_gray + noise_offset, 0, 255)
-					_set_pixel_safe(px + lx, py + ly, final_gray)
+			_write_tile(Vector2i(x, y))
 
 	_blur_full()
 	_texture.update(_image)
-
-func _blend_border(px1: int, py1: int, prof1: Array, base1: int, ttype1: int,
-				   px2: int, py2: int, prof2: Array, base2: int, ttype2: int,
-				   dir: Vector2i) -> void:
-	# For each pixel on the shared edge, average values from both tiles (including noise)
-	if dir == Vector2i(1, 0):  # Neighbor to the right
-		for ly in PIXELS_PER_TILE:
-			var v1: int = base1 + roundi(prof1[ly][PIXELS_PER_TILE - 1] * ELEVATION_SCALE) + _get_noise_offset(px1 + PIXELS_PER_TILE - 1, py1 + ly, ttype1)
-			var v2: int = base2 + roundi(prof2[ly][0] * ELEVATION_SCALE) + _get_noise_offset(px2, py2 + ly, ttype2)
-			var avg: int = clampi((v1 + v2) / 2, 0, 255)
-			_set_pixel_safe(px1 + PIXELS_PER_TILE - 1, py1 + ly, avg)
-			_set_pixel_safe(px2, py2 + ly, avg)
-	elif dir == Vector2i(-1, 0):  # Neighbor to the left
-		for ly in PIXELS_PER_TILE:
-			var v1: int = base1 + roundi(prof1[ly][0] * ELEVATION_SCALE) + _get_noise_offset(px1, py1 + ly, ttype1)
-			var v2: int = base2 + roundi(prof2[ly][PIXELS_PER_TILE - 1] * ELEVATION_SCALE) + _get_noise_offset(px2 + PIXELS_PER_TILE - 1, py2 + ly, ttype2)
-			var avg: int = clampi((v1 + v2) / 2, 0, 255)
-			_set_pixel_safe(px1, py1 + ly, avg)
-			_set_pixel_safe(px2 + PIXELS_PER_TILE - 1, py2 + ly, avg)
-	elif dir == Vector2i(0, 1):  # Neighbor below
-		for lx in PIXELS_PER_TILE:
-			var v1: int = base1 + roundi(prof1[PIXELS_PER_TILE - 1][lx] * ELEVATION_SCALE) + _get_noise_offset(px1 + lx, py1 + PIXELS_PER_TILE - 1, ttype1)
-			var v2: int = base2 + roundi(prof2[0][lx] * ELEVATION_SCALE) + _get_noise_offset(px2 + lx, py2, ttype2)
-			var avg: int = clampi((v1 + v2) / 2, 0, 255)
-			_set_pixel_safe(px1 + lx, py1 + PIXELS_PER_TILE - 1, avg)
-			_set_pixel_safe(px2 + lx, py2, avg)
-	elif dir == Vector2i(0, -1):  # Neighbor above
-		for lx in PIXELS_PER_TILE:
-			var v1: int = base1 + roundi(prof1[0][lx] * ELEVATION_SCALE) + _get_noise_offset(px1 + lx, py1, ttype1)
-			var v2: int = base2 + roundi(prof2[PIXELS_PER_TILE - 1][lx] * ELEVATION_SCALE) + _get_noise_offset(px2 + lx, py2 + PIXELS_PER_TILE - 1, ttype2)
-			var avg: int = clampi((v1 + v2) / 2, 0, 255)
-			_set_pixel_safe(px1 + lx, py1, avg)
-			_set_pixel_safe(px2 + lx, py2 + PIXELS_PER_TILE - 1, avg)
 
 func _set_pixel_safe(x: int, y: int, gray_value: int) -> void:
 	if x >= 0 and x < _image.get_width() and y >= 0 and y < _image.get_height():

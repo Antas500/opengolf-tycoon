@@ -32,7 +32,7 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 	_generate_rocks(terrain_grid, entity_layer, rng)
 
 static func _generate_elevation(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
-	## Generate natural elevation using FastNoiseLite for organic distribution
+	## Generate natural elevation using FastNoiseLite for organic distribution.
 	var width = terrain_grid.grid_width
 	var height = terrain_grid.grid_height
 
@@ -47,16 +47,16 @@ static func _generate_elevation(terrain_grid: TerrainGrid, rng: RandomNumberGene
 	var params = CourseTheme.get_generation_params(GameManager.current_theme)
 	var elev_range = params.get("elevation_range", 3)
 
-	# Apply noise-based elevation across the entire map
-	for x in range(width):
-		for y in range(height):
-			var pos = Vector2i(x, y)
+	# Apply noise-based elevation across the whole vertex field
+	for x in range(width + 1):
+		for y in range(height + 1):
+			var vertex = Vector2i(x, y)
 			var noise_value = noise.get_noise_2d(float(x), float(y))
 			var elevation = roundi(noise_value * (elev_range + 0.5))
 			elevation = clampi(elevation, -elev_range, elev_range)
 
 			if elevation != 0:
-				terrain_grid.set_elevation(pos, elevation)
+				terrain_grid.set_vertex_elevation(vertex, elevation)
 
 static func _generate_large_water_body(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate large water bodies - coastal ocean for Links, lagoon for Resort
@@ -96,28 +96,38 @@ static func _generate_coastal_water(terrain_grid: TerrainGrid, rng: RandomNumber
 	for x in range(width):
 		for y in range(height):
 			var pos = Vector2i(x, y)
-			var dist_from_edge: float
-
-			match edge:
-				0: dist_from_edge = float(y)                   # North edge
-				1: dist_from_edge = float(width - 1 - x)       # East edge
-				2: dist_from_edge = float(height - 1 - y)      # South edge
-				3: dist_from_edge = float(x)                    # West edge
-				_: dist_from_edge = float(y)
-
-			# Irregular shoreline using noise
-			var coord_along_edge: float
-			match edge:
-				0, 2: coord_along_edge = float(x)
-				_: coord_along_edge = float(y)
-
-			var shore_variation = shore_noise.get_noise_2d(coord_along_edge, 0.0) * 5.0
-			var detail_variation = detail_noise.get_noise_2d(coord_along_edge, 0.0) * 2.0
-			var effective_depth = base_depth + shore_variation + detail_variation
+			var dist_from_edge := _coast_distance_from_edge(x, y, edge, width, height)
+			var effective_depth := _coast_effective_depth(x, y, edge, base_depth, shore_noise, detail_noise)
 
 			if dist_from_edge < effective_depth:
 				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
-				terrain_grid.set_elevation(pos, -2 if dist_from_edge < effective_depth * 0.5 else -1)
+
+	var bed_depth := func(vertex: Vector2i) -> int:
+		var dist := _coast_distance_from_edge(vertex.x, vertex.y, edge, width, height)
+		var depth := _coast_effective_depth(vertex.x, vertex.y, edge, base_depth, shore_noise, detail_noise)
+		return -2 if dist < depth * 0.5 else -1
+
+	terrain_grid.set_enclosed_elevation(Rect2i(0, 0, width, height), TerrainTypes.Type.WATER, -1, bed_depth)
+
+
+static func _coast_distance_from_edge(x: int, y: int, edge: int, width: int, height: int) -> float:
+	match edge:
+		0: return float(y)                    # North edge
+		1: return float(width - 1 - x)        # East edge
+		2: return float(height - 1 - y)       # South edge
+		3: return float(x)                    # West edge
+		_: return float(y)
+
+
+static func _coast_effective_depth(x: int, y: int, edge: int, base_depth: int,
+		shore_noise: FastNoiseLite, detail_noise: FastNoiseLite) -> float:
+	var coord_along_edge: float
+	match edge:
+		0, 2: coord_along_edge = float(x)
+		_: coord_along_edge = float(y)
+	return float(base_depth) \
+		+ shore_noise.get_noise_2d(coord_along_edge, 0.0) * 5.0 \
+		+ detail_noise.get_noise_2d(coord_along_edge, 0.0) * 2.0
 
 static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerator, width: int, height: int, depth_range: Vector2i) -> void:
 	## Create an interior lagoon with organic shape
@@ -153,7 +163,15 @@ static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerat
 
 			if normalized_dist < 1.0 + noise_val:
 				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
-				terrain_grid.set_elevation(pos, -2 if normalized_dist < 0.5 else -1)
+
+	# Lagoon bed: deeper in the middle, shallow at the enclosed rim (see vertices).
+	var lagoon_bounds := Rect2i(int(center_x) - search_radius, int(center_y) - search_radius,
+			search_radius * 2, search_radius * 2)
+	var lagoon_depth := func(vertex: Vector2i) -> int:
+		var dx: float = float(vertex.x - center_x) / base_radius_x
+		var dy: float = float(vertex.y - center_y) / base_radius_y
+		return -2 if sqrt(dx * dx + dy * dy) < 0.5 else -1
+	terrain_grid.set_enclosed_elevation(lagoon_bounds, TerrainTypes.Type.WATER, -1, lagoon_depth)
 
 	# Add a secondary smaller pond connected or nearby for more natural look
 	var offset_angle = rng.randf() * TAU
@@ -174,7 +192,11 @@ static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerat
 			var noise_offset = sin(angle * 3) * 1.5 + cos(angle * 5) * 1.0
 			if dist <= pond2_radius + noise_offset:
 				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
-				terrain_grid.set_elevation(pos, -1)
+
+	terrain_grid.set_enclosed_elevation(
+			Rect2i(pond2_x - int(pond2_radius) - 3, pond2_y - int(pond2_radius) - 3,
+					(int(pond2_radius) + 3) * 2, (int(pond2_radius) + 3) * 2),
+			TerrainTypes.Type.WATER, -1)
 
 static func _generate_water(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate natural water features (ponds)
@@ -215,8 +237,13 @@ static func _generate_water(terrain_grid: TerrainGrid, rng: RandomNumberGenerato
 
 				if dist <= effective_radius:
 					terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
-					# Ponds are typically in low areas
-					terrain_grid.set_elevation(pos, -1)
+
+		# Ponds sit in low ground: depress the vertices the pond encloses so the
+		# surrounding land keeps its height and the banks slope down to the water.
+		terrain_grid.set_enclosed_elevation(
+				Rect2i(center_x - int(base_radius) - 3, center_y - int(base_radius) - 3,
+						(int(base_radius) + 3) * 2, (int(base_radius) + 3) * 2),
+				TerrainTypes.Type.WATER, -1)
 
 static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate patches of rough and heavy rough to simulate overgrown undeveloped land

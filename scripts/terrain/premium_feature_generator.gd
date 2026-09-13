@@ -110,7 +110,7 @@ static func _generate_scoped_pond(
 			var noise_offset := sin(angle * 3) * 1.5 + cos(angle * 5) * 1.0
 			if dist <= base_radius + noise_offset:
 				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
-				terrain_grid.set_elevation(pos, -1)
+	terrain_grid.set_enclosed_elevation(bounds, TerrainTypes.Type.WATER, -1)
 
 
 ## Generate a cluster of theme-appropriate trees within the parcel bounds.
@@ -167,23 +167,24 @@ static func _generate_scoped_elevation(
 	noise.seed = rng.randi()
 	noise.frequency = 0.06  # Smaller features within parcel
 
-	for x in range(bounds.position.x, bounds.end.x):
-		for y in range(bounds.position.y, bounds.end.y):
-			var pos := Vector2i(x, y)
-			if not terrain_grid.is_valid_position(pos):
+	for x in range(bounds.position.x, bounds.end.x + 1):
+		for y in range(bounds.position.y, bounds.end.y + 1):
+			var vertex := Vector2i(x, y)
+			if not terrain_grid.is_valid_vertex(vertex):
 				continue
-			# Skip water tiles
-			if terrain_grid.get_tile(pos) == TerrainTypes.Type.WATER:
+			# Skip vertices inside water so pond beds keep their depth
+			if terrain_grid.vertex_enclosed_by_type(vertex, TerrainTypes.Type.WATER):
 				continue
 			var noise_value := noise.get_noise_2d(float(x), float(y))
 			var elevation := roundi(noise_value * (max_elevation + 0.3))
 			elevation = clampi(elevation, -max_elevation, max_elevation)
 			if elevation != 0:
-				# Add to existing elevation rather than replacing
-				var current := terrain_grid.get_elevation(pos)
-				var new_elev := clampi(current + elevation, -5, 5)
+				# Add to the existing vertex height rather than replacing it
+				var current := terrain_grid.get_vertex_elevation(vertex)
+				var new_elev := clampi(current + elevation,
+						terrain_grid.MIN_ELEVATION, terrain_grid.MAX_ELEVATION)
 				if new_elev != current:
-					terrain_grid.set_elevation(pos, new_elev)
+					terrain_grid.set_vertex_elevation(vertex, new_elev)
 
 
 ## Generate rough and heavy rough patches within the parcel bounds.

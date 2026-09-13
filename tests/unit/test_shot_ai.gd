@@ -147,9 +147,9 @@ func _setup_hole(tee: Vector2i, green: Vector2i, flag: Vector2i, par: int) -> vo
 	course_data.add_hole(hole)
 	GameManager.course_data = course_data
 
-## Set elevation for a position
+## Set elevation for a tile position
 func _set_elevation(pos: Vector2i, elev: int) -> void:
-	_terrain_grid._elevation_grid[pos] = elev
+	_terrain_grid.set_elevation(pos, elev)
 
 # ============================================================================
 # SCENARIO 1: STRAIGHT PAR 3 — Basic club selection and targeting

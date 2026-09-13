@@ -70,16 +70,15 @@ static func _calculate_elevation_difficulty(hole_data: GameManager.HoleData, ter
 	if samples < 2:
 		return 0.0
 
-	var total_elevation_change: int = 0
-	var prev_elevation: int = terrain_grid.get_elevation(tee)
+	var total_elevation_change: float = 0.0
+	var prev_elevation: float = terrain_grid.get_tile_height(tee)
 
 	for i in range(1, samples + 1):
 		var t = float(i) / float(samples)
-		var sample_pos = Vector2i(Vector2(tee) + direction * distance * t)
-		if terrain_grid.is_valid_position(sample_pos):
-			var current_elevation = terrain_grid.get_elevation(sample_pos)
-			total_elevation_change += abs(current_elevation - prev_elevation)
-			prev_elevation = current_elevation
+		var sample_point = Vector2(tee) + direction * distance * t + Vector2(0.5, 0.5)
+		var current_elevation: float = terrain_grid.get_elevation_at(sample_point)
+		total_elevation_change += absf(current_elevation - prev_elevation)
+		prev_elevation = current_elevation
 
 	# Each unit of total elevation change adds difficulty
 	return clampf(total_elevation_change * 0.15, 0.0, 1.5)
@@ -153,17 +152,20 @@ static func _calculate_green_difficulty(hole_data: GameManager.HoleData, terrain
 	elif green_size > 6:
 		size_difficulty = -0.2  # Large green (7+ tiles) is easier
 
-	# Check green slope (elevation variance)
+	# Check green slope (elevation variance across the vertices bounding the green).
+	# A crowned or bowl-shaped green reads even when every tile rounds to the same
+	# whole level, which the old per-tile model could not see.
 	var slope_difficulty: float = 0.0
 	if green_tiles.size() > 1:
-		var min_elev: int = 999
-		var max_elev: int = -999
+		var min_elev: float = INF
+		var max_elev: float = -INF
 		for tile in green_tiles:
-			var elev = terrain_grid.get_elevation(tile)
-			min_elev = min(min_elev, elev)
-			max_elev = max(max_elev, elev)
-		var slope_range = max_elev - min_elev
-		slope_difficulty = clampf(slope_range * 0.25, 0.0, 0.6)
+			for vertex in terrain_grid.vertices_of_tile(tile):
+				var height: float = float(terrain_grid.get_vertex_elevation(vertex))
+				min_elev = minf(min_elev, height)
+				max_elev = maxf(max_elev, height)
+		if min_elev <= max_elev:
+			slope_difficulty = clampf((max_elev - min_elev) * 0.25, 0.0, 0.6)
 
 	return size_difficulty + slope_difficulty
 
