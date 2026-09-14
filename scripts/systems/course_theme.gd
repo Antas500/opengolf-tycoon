@@ -390,6 +390,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.PARKLAND:
 			return {
 				"elevation_range": 3,
+				"plateaus": Vector2i(0, 1),
 				"water_ponds": Vector2i(1, 3),
 				"large_water_body": false,
 				"tree_clusters": Vector2i(12, 20),    # Dense woodland coverage
@@ -404,6 +405,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.DESERT:
 			return {
 				"elevation_range": 2,
+				"plateaus": Vector2i(1, 3),
 				"water_ponds": Vector2i(0, 1),
 				"large_water_body": false,
 				"tree_clusters": Vector2i(1, 3),       # Very sparse
@@ -418,6 +420,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.LINKS:
 			return {
 				"elevation_range": 2,                  # Dune mounds
+				"plateaus": Vector2i(0, 0),
 				"water_ponds": Vector2i(0, 1),
 				"large_water_body": true,              # Coastal ocean/lake
 				"large_water_edge": "random",          # Which map edge gets water
@@ -434,6 +437,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.MOUNTAIN:
 			return {
 				"elevation_range": 5,                  # Dramatic elevation
+				"plateaus": Vector2i(2, 4),
 				"water_ponds": Vector2i(1, 3),         # Mountain streams/lakes
 				"large_water_body": false,
 				"tree_clusters": Vector2i(15, 25),     # Dense pine forests
@@ -448,6 +452,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.CITY:
 			return {
 				"elevation_range": 1,                  # Very flat
+				"plateaus": Vector2i(0, 0),
 				"water_ponds": Vector2i(0, 2),
 				"large_water_body": false,
 				"tree_clusters": Vector2i(3, 7),
@@ -462,6 +467,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.RESORT:
 			return {
 				"elevation_range": 2,
+				"plateaus": Vector2i(0, 1),
 				"water_ponds": Vector2i(1, 3),
 				"large_water_body": true,              # Lagoon/lake feature
 				"large_water_edge": "interior",        # Interior lagoon, not edge
@@ -478,6 +484,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.HEATHLAND:
 			return {
 				"elevation_range": 2,                  # Gentle undulation
+				"plateaus": Vector2i(0, 1),
 				"water_ponds": Vector2i(0, 2),
 				"large_water_body": false,
 				"tree_clusters": Vector2i(4, 8),       # Scattered pine clusters
@@ -492,6 +499,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.WOODLAND:
 			return {
 				"elevation_range": 2,                  # Gentle forest hills
+				"plateaus": Vector2i(0, 1),
 				"water_ponds": Vector2i(0, 2),         # Occasional forest pond
 				"large_water_body": false,
 				"tree_clusters": Vector2i(20, 32),     # Very dense forest — highest
@@ -506,6 +514,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.TROPICAL:
 			return {
 				"elevation_range": 3,                  # Volcanic terrain variation
+				"plateaus": Vector2i(1, 2),
 				"water_ponds": Vector2i(1, 3),
 				"large_water_body": true,              # Coastal ocean
 				"large_water_edge": "random",          # Ocean on random map edge
@@ -522,6 +531,7 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 		Type.MARSHLAND:
 			return {
 				"elevation_range": 1,                  # Very flat lowcountry
+				"plateaus": Vector2i(0, 0),
 				"water_ponds": Vector2i(3, 6),         # Lots of water features
 				"large_water_body": true,              # Tidal creek/marsh edge
 				"large_water_edge": "random",          # Water on random map edge

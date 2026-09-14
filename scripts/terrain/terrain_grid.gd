@@ -15,6 +15,10 @@ var projection: GridProjection = GridProjection.new()
 const MIN_ELEVATION: int = -5
 const MAX_ELEVATION: int = 5
 const SLOPE_SAMPLE_STEP: float = 0.5
+const CLIFF_STEP: int = 2
+const CLIFF_EDGE_OFFSETS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1),
+]
 
 var _grid: Dictionary = {}
 var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) * (grid_height+1)
@@ -893,6 +897,34 @@ func get_tile_height(pos: Vector2i) -> float:
 	if not is_valid_position(pos):
 		return 0.0
 	return get_elevation_at(Vector2(pos) + Vector2(0.5, 0.5))
+
+## Largest height difference between the four corners of a tile.
+func get_tile_corner_step(pos: Vector2i) -> int:
+	if not is_valid_position(pos):
+		return 0
+	var corners: Vector4 = get_tile_corner_heights(pos)
+	return int(maxf(maxf(corners.x, corners.y), maxf(corners.z, corners.w)) \
+		- minf(minf(corners.x, corners.y), minf(corners.z, corners.w)))
+
+func get_cliff_edges(pos: Vector2i) -> Array[int]:
+	var edges: Array[int] = []
+	if not is_valid_position(pos):
+		return edges
+	var height: float = get_tile_height(pos)
+	for i in CLIFF_EDGE_OFFSETS.size():
+		var neighbour: Vector2i = pos + CLIFF_EDGE_OFFSETS[i]
+		if not is_valid_position(neighbour):
+			continue
+		if absf(get_tile_height(neighbour) - height) >= float(CLIFF_STEP):
+			edges.append(i)
+	return edges
+
+func is_cliff_tile(pos: Vector2i) -> bool:
+	if not is_valid_position(pos):
+		return false
+	if get_tile_corner_step(pos) >= CLIFF_STEP:
+		return true
+	return not get_cliff_edges(pos).is_empty()
 
 func get_elevation(pos: Vector2i) -> int:
 	return roundi(get_tile_height(pos))

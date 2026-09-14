@@ -120,8 +120,8 @@ const TOOL_ICONS := {
 	"flower": "[f]",
 	"building": "[B]",
 	"bulldozer": "[D]",
-	"raise": "[+]",
-	"lower": "[-]",
+	"vertex_selector": "◇",
+	"square_selector": "◼",
 	"create_hole": "[H]",
 	"staff": "[P]",
 }

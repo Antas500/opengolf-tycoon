@@ -33,7 +33,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 ### Course Designer
 
 - **Terrain painting** — 14 terrain types: fairway, rough, heavy rough, green, tee box, bunker, water, path, out of bounds, trees, flower beds, rocks, and more
-- **Elevation system** — Raise/lower individual tiles (-5 to +5), with slope affecting shots and ball roll; gradient hillshade visualization with contour lines
+- **Elevation system** — Vertex Selector edits one terrain corner and Square Selector levels a square before lifting it (-5 to +5, Left-click lowers / Right-click raises); slope affects shots and ball roll; steep steps render as rock cliff faces with contour lines
 - **Hole creation** — 3-step flow (tee box → green → flag); auto-calculates par based on yardage; holes numbered and renameable
 - **Object placement** — Theme-specific vegetation (oaks, pines, palms, cacti, fescue, heather, and more), 3 rock sizes, decorative flower beds
 - **Building placement** — 8 building types (Clubhouse, Pro Shop, Restaurant, Snack Bar, Driving Range, Cart Shed, Restroom, Bench) with proximity-based revenue/satisfaction effects and placement validation
