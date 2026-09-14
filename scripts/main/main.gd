@@ -32,6 +32,7 @@ var brush_size: int = 1
 var _green_preset: String = ""  # Active green preset ("small"/"medium"/"large" or "" for brush)
 var is_painting: bool = false
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
+var last_paint_vertex: Vector2i = Vector2i(-1, -1)
 
 # Measurement tool (Ctrl+click drag)
 var _measuring: bool = false
@@ -946,6 +947,12 @@ func _handle_mouse_hover() -> void:
 			coordinate_label.text = "(%d, %d) %s [Elev: %s%d]" % [grid_pos.x, grid_pos.y, terrain_name, sign_str, elevation]
 		else:
 			coordinate_label.text = "(%d, %d) %s" % [grid_pos.x, grid_pos.y, terrain_name]
+		if elevation_tool.is_active():
+			# Sculpting edits corners, so report the vertex the brush is on.
+			var vertex = terrain_grid.nearest_vertex(terrain_grid.screen_to_grid_point(mouse_world))
+			var vertex_elev = terrain_grid.get_vertex_elevation(vertex)
+			var vertex_sign = "+" if vertex_elev > 0 else ""
+			coordinate_label.text += "  [Vertex (%d, %d): %s%d]" % [vertex.x, vertex.y, vertex_sign, vertex_elev]
 	else:
 		coordinate_label.text = ""
 
@@ -1026,6 +1033,7 @@ func _stop_painting() -> void:
 		EventBus.notify("Cleared %d item%s (-$%d)" % [_bulldoze_drag_count, "s" if _bulldoze_drag_count != 1 else "", _bulldoze_drag_cost], "info")
 	is_painting = false
 	last_paint_pos = Vector2i(-1, -1)
+	last_paint_vertex = Vector2i(-1, -1)
 	if not elevation_tool.is_active():
 		undo_manager.end_stroke()
 
@@ -1734,6 +1742,11 @@ func _on_sculpt_terrain_pressed(raising: bool) -> void:
 		_on_lower_elevation_pressed()
 	elevation_tool.sculpted = true
 	terrain_toolbar.set_brush_size(7)
+	brush_size = maxi(brush_size, 7)
+	if placement_preview:
+		# The sculpted brush moves vertices with a radial falloff — show that footprint.
+		placement_preview.set_elevation_mode(true, raising, true)
+		placement_preview.set_brush_size(brush_size)
 	EventBus.notify("Sculpt a rolling hill" if raising else "Sculpt a hollow", "info")
 
 func _on_raise_elevation_pressed() -> void:
@@ -1749,7 +1762,7 @@ func _on_raise_elevation_pressed() -> void:
 	elevation_tool.start_raising()
 	terrain_grid.set_elevation_overlay_active(true)
 	if placement_preview:
-		placement_preview.set_elevation_mode(true, true)
+		placement_preview.set_elevation_mode(true, true, false)
 		placement_preview.set_brush_size(brush_size)
 	print("Elevation mode: RAISING")
 
@@ -1766,7 +1779,7 @@ func _on_lower_elevation_pressed() -> void:
 	elevation_tool.start_lowering()
 	terrain_grid.set_elevation_overlay_active(true)
 	if placement_preview:
-		placement_preview.set_elevation_mode(true, false)
+		placement_preview.set_elevation_mode(true, false, false)
 		placement_preview.set_brush_size(brush_size)
 	print("Elevation mode: LOWERING")
 
@@ -1893,14 +1906,14 @@ func _cancel_elevation_mode() -> void:
 
 func _paint_elevation_at_mouse() -> void:
 	var mouse_world = camera.get_mouse_world_position()
-	var grid_pos = terrain_grid.screen_to_grid(mouse_world)
-	if grid_pos == last_paint_pos:
+	# Tile-space point: integers are grid vertices, so the brush snaps to corners.
+	var grid_point = terrain_grid.screen_to_grid_point(mouse_world)
+	var vertex = terrain_grid.nearest_vertex(grid_point)
+	if vertex == last_paint_vertex:
 		return
-	last_paint_pos = grid_pos
-	if not terrain_grid.is_valid_position(grid_pos):
-		return
+	last_paint_vertex = vertex
 
-	var changes = elevation_tool.paint_elevation(grid_pos, terrain_grid, brush_size, entity_layer)
+	var changes = elevation_tool.paint_at_point(grid_point, terrain_grid, brush_size, entity_layer)
 	if not changes.is_empty():
 		undo_manager.record_elevation_stroke(changes)
 
@@ -2723,11 +2736,11 @@ func _execute_undo_action(action: Dictionary) -> void:
 			if refund > 0:
 				GameManager.modify_money(refund)
 		"elevation":
-			# Revert elevation changes in reverse order
+			# Revert vertex height changes in reverse order
 			var changes = action.get("changes", [])
 			for i in range(changes.size() - 1, -1, -1):
 				var change = changes[i]
-				terrain_grid.set_elevation(change["position"], change["old_elevation"])
+				terrain_grid.set_vertex_elevation(change["position"], change["old_elevation"])
 		"entity_place":
 			# Remove the entity and refund cost
 			var grid_pos = action.get("grid_pos", Vector2i.ZERO)
@@ -2801,10 +2814,10 @@ func _execute_redo_action(action: Dictionary) -> void:
 			if cost > 0:
 				GameManager.modify_money(-cost)
 		"elevation":
-			# Re-apply elevation changes in order
+			# Re-apply vertex height changes in order
 			var changes = action.get("changes", [])
 			for change in changes:
-				terrain_grid.set_elevation(change["position"], change["new_elevation"])
+				terrain_grid.set_vertex_elevation(change["position"], change["new_elevation"])
 		"entity_place":
 			# Re-place the entity and deduct cost
 			var grid_pos = action.get("grid_pos", Vector2i.ZERO)

@@ -1853,7 +1853,9 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 		return no_rollout
 
 	# --- Slope influence on rollout ---
-	var slope = terrain_grid.get_slope_direction(carry_grid)
+	var slope: Vector2 = terrain_grid.get_slope_at_precise(carry_precise)
+	var slope_strength: float = clampf(slope.length(), 0.0, 1.0)
+	var slope_dir: Vector2 = slope.normalized() if slope.length_squared() > 0.000001 else Vector2.ZERO
 
 	# Roll direction: continue along shot line, blended with slope
 	var shot_direction = (carry_precise - shot_origin).normalized()
@@ -1866,12 +1868,12 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 		roll_direction = shot_direction
 
 	# Blend slope into roll direction (slope has more effect on longer rolls)
-	if slope.length() > 0:
+	if slope_dir != Vector2.ZERO:
 		var slope_influence = clampf(rollout_distance / 3.0, 0.1, 0.5)
-		roll_direction = (roll_direction * (1.0 - slope_influence) + slope * slope_influence).normalized()
+		roll_direction = (roll_direction * (1.0 - slope_influence) + slope_dir * slope_influence).normalized()
 
 	# Slope dot product: positive = rolling downhill, negative = uphill
-	var slope_dot = slope.dot(roll_direction)
+	var slope_dot = slope_dir.dot(roll_direction) * slope_strength
 	if slope_dot > 0:
 		rollout_distance *= 1.0 + slope_dot * 0.5   # Downhill: up to +50% roll
 	elif slope_dot < 0:

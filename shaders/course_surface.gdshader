@@ -3,7 +3,8 @@ shader_type canvas_item;
 
 // Shared by desktop and WebGL 2. No screen reads or per-tile draw calls.
 uniform sampler2D terrain_data : filter_nearest, repeat_disable;
-uniform sampler2D elevation_data : filter_linear, repeat_disable;
+uniform sampler2D vertex_elevation : filter_linear, repeat_disable;
+uniform vec2 vertex_grid_size = vec2(129.0);
 uniform vec2 relief_light = vec2(-0.6, -0.8);
 uniform sampler2D palette : source_color, filter_nearest, repeat_disable;
 uniform vec2 grid_size = vec2(128.0);
@@ -28,11 +29,12 @@ vec2 world_to_grid(vec2 world) {
 }
 
 float elevation_at(vec2 world) {
-	vec2 g = world_to_grid(world) / grid_size;
-	if (g.x < 0.0 || g.y < 0.0 || g.x > 1.0 || g.y > 1.0) {
+	vec2 g = world_to_grid(world);
+	vec2 uv = (g + 0.5) / vertex_grid_size;
+	if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
 		return 0.5;
 	}
-	return texture(elevation_data, g).b;
+	return texture(vertex_elevation, uv).r;
 }
 
 float hash(vec2 p) {

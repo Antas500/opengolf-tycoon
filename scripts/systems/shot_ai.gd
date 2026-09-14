@@ -156,10 +156,24 @@ static func decide_shot_for(gd: GolferData, hole_position: Vector2i, ignore_wind
 # PUTTING — Green-reading system
 # ============================================================================
 
+## Average downhill gradient (elevation levels per tile) along a putt line.
+static func _read_green_slope(terrain_grid: TerrainGrid, from_precise: Vector2,
+		hole_position: Vector2i) -> Vector2:
+	if terrain_grid == null:
+		return Vector2.ZERO
+	var target := Vector2(hole_position)
+	var total := Vector2.ZERO
+	var samples := 0
+	for t in [0.0, 0.5, 1.0]:
+		total += terrain_grid.get_slope_at_precise(from_precise.lerp(target, t))
+		samples += 1
+	return total / float(maxi(samples, 1))
+
+
 ## Decide where to aim a putt, accounting for green slope.
 ## On sloped greens, aim uphill of the hole so gravity brings the ball back.
 static func _decide_putt(gd: GolferData, hole_position: Vector2i, terrain_grid: TerrainGrid) -> ShotDecision:
-	var slope: Vector2 = terrain_grid.get_slope_direction(hole_position)
+	var slope: Vector2 = _read_green_slope(terrain_grid, gd.ball_position_precise, hole_position)
 
 	# No slope or very weak slope: aim straight at the hole
 	if slope.length() < 0.1:
