@@ -19,7 +19,7 @@ extends Node
 
 const SAVE_DIR: String = "user://saves/"
 const SETTINGS_PATH: String = "user://settings.cfg"
-const SAVE_VERSION: int = 2
+const SAVE_VERSION: int = 3
 
 ## Scene-tree references (set by Main in _ready())
 var terrain_grid: TerrainGrid = null
@@ -160,7 +160,8 @@ func _build_save_data() -> Dictionary:
 	# Terrain
 	if terrain_grid:
 		data["terrain"] = terrain_grid.serialize()
-		data["elevation"] = terrain_grid.serialize_elevation()
+		# Heights live on grid vertices: (grid_width+1) x (grid_height+1) samples.
+		data["vertex_elevation"] = terrain_grid.serialize_elevation()
 		data["player_placed"] = terrain_grid.serialize_player_placed()
 		data["bunker_depth"] = terrain_grid.serialize_bunker_depth()
 		data["view"] = {
@@ -303,8 +304,12 @@ func _apply_save_data(data: Dictionary) -> void:
 	# Terrain
 	if terrain_grid and data.has("terrain"):
 		terrain_grid.deserialize(data["terrain"])
-	if terrain_grid and data.has("elevation"):
-		terrain_grid.deserialize_elevation(data["elevation"])
+	if terrain_grid and data.has("vertex_elevation"):
+		terrain_grid.deserialize_elevation(data["vertex_elevation"])
+	elif terrain_grid and data.has("elevation"):
+		# Pre-v3 saves stored one height per tile: average them onto the shared
+		# corners so older courses keep their shape and gain smooth slopes.
+		terrain_grid.migrate_tile_elevation(data["elevation"])
 	if terrain_grid and data.has("player_placed"):
 		terrain_grid.deserialize_player_placed(data["player_placed"])
 	if terrain_grid:

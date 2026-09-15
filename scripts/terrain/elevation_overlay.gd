@@ -2,29 +2,30 @@ extends Node2D
 class_name ElevationOverlay
 ## ElevationOverlay - Active-mode elevation tool feedback
 ##
-## When the elevation tool is selected, renders:
-## - Contour lines at elevation boundaries with variable weight
-## - Elevation numbers on non-zero tiles
-##
-## Passive hillshade and gradient shading are now handled by the
-## elevation_lighting shader (see heightmap.gd, elevation_shader_controller.gd).
+## Heights live on the grid vertices, so this overlay shows the lattice the player is actually editing:
 
 var terrain_grid: TerrainGrid
 var _elevation_active: bool = false  # More prominent when elevation tool is selected
-var _needs_redraw: bool = true       # Track when elevation data changes
-
-## Cached set of tiles that need drawing (elevated tiles + their neighbors)
-var _relevant_tiles: Dictionary = {}  # Vector2i -> true
+var _needs_redraw: bool = true       # Kept for callers that flag "data changed"
 
 ## Alpha levels
 const CONTOUR_ALPHA_MINOR: float = 0.2  # Thin contour lines (every level)
 const CONTOUR_ALPHA_MAJOR: float = 0.45 # Thick contour lines (every 2 levels)
+const VERTEX_ALPHA: float = 0.8
+const LATTICE_ALPHA: float = 0.16
+
+## Vertex markers are drawn as a fraction of a tile so they follow the projection.
+const MARKER_SCALE: float = 0.13
+const LATTICE_ZOOM: float = 1.1   # Show sea-level corners past this zoom
+const LABEL_ZOOM: float = 0.55    # Show height numbers past this zoom
 
 func initialize(grid: TerrainGrid) -> void:
 	terrain_grid = grid
 	z_index = 4  # Above terrain overlays when elevation tool active
 
-	# Listen for elevation changes to invalidate cache
+	# Vertex edits are the authoritative "the ground moved" signal.
+	if terrain_grid.has_signal("vertex_elevation_changed"):
+		terrain_grid.vertex_elevation_changed.connect(_on_vertex_elevation_changed)
 	if terrain_grid.has_signal("elevation_changed"):
 		terrain_grid.elevation_changed.connect(_on_elevation_changed)
 
@@ -32,66 +33,198 @@ func initialize(grid: TerrainGrid) -> void:
 
 func set_elevation_mode_active(active: bool) -> void:
 	_elevation_active = active
+	invalidate()
+
+## Flag the overlay as stale and ask for a redraw (bulk edits, save load, tools).
+func invalidate() -> void:
 	_needs_redraw = true
 	queue_redraw()
+
+func _on_vertex_elevation_changed(_vertex: Vector2i, _old: int, _new: int) -> void:
+	invalidate()
 
 func _on_elevation_changed(_pos: Vector2i, _old: int, _new: int) -> void:
-	_needs_redraw = true
-	queue_redraw()
+	invalidate()
 
-## Rebuild the set of tiles that need drawing: any tile with elevation + neighbors
-func _rebuild_relevant_tiles() -> void:
-	_relevant_tiles.clear()
-	for pos in terrain_grid._elevation_grid:
-		_relevant_tiles[pos] = true
-		# Include all 4 neighbors (for contour rendering at boundaries)
-		for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var neighbor: Vector2i = pos + offset
-			if terrain_grid.is_valid_position(neighbor):
-				_relevant_tiles[neighbor] = true
+func _camera_zoom() -> float:
+	var viewport := get_viewport()
+	if viewport == null:
+		return 1.0
+	var camera := viewport.get_camera_2d()
+	return camera.zoom.x if camera else 1.0
 
 func _draw() -> void:
-	if not terrain_grid:
+	if not terrain_grid or not _elevation_active:
 		return
-
-	# Only draw when elevation tool is active
-	if not _elevation_active:
-		return
-
-	if _needs_redraw:
-		_rebuild_relevant_tiles()
-		_needs_redraw = false
-
-	if _relevant_tiles.is_empty():
-		return
+	_needs_redraw = false
 
 	var visible_rect: Rect2 = terrain_grid.get_visible_world_rect()
+	var tile_range: Array[Vector2i] = terrain_grid.get_visible_tile_range()
+	var zoom: float = _camera_zoom()
+	var show_labels: bool = zoom >= LABEL_ZOOM
+	var show_lattice: bool = zoom >= 0.35
 
-	for pos: Vector2i in _relevant_tiles:
-		var elevation: int = terrain_grid.get_elevation(pos)
-		if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
+	if show_lattice:
+		_draw_3d_lattice(tile_range, visible_rect)
+	_draw_vertex_markers(visible_rect, zoom, show_labels, zoom >= LATTICE_ZOOM)
+	_draw_contours(visible_rect)
+	_draw_slope_arrows(tile_range, visible_rect, zoom)
+
+## 3D wireframe lattice connecting adjacent vertices across slopes
+func _draw_3d_lattice(tile_range: Array[Vector2i], visible_rect: Rect2) -> void:
+	var x_start: int = maxi(tile_range[0].x, 0)
+	var x_end: int = mini(tile_range[1].x + 1, terrain_grid.grid_width)
+	var y_start: int = maxi(tile_range[0].y, 0)
+	var y_end: int = mini(tile_range[1].y + 1, terrain_grid.grid_height)
+
+	for x in range(x_start, x_end + 1):
+		for y in range(y_start, y_end + 1):
+			var v0 := Vector2i(x, y)
+			var s0 := terrain_grid.grid_point_to_screen(Vector2(v0))
+			var p0 := to_local(s0)
+			var h0 := terrain_grid.get_vertex_elevation(v0)
+
+			# Segment to (x + 1, y)
+			if x < x_end:
+				var v1 := Vector2i(x + 1, y)
+				var s1 := terrain_grid.grid_point_to_screen(Vector2(v1))
+				if visible_rect.has_point(s0) or visible_rect.has_point(s1):
+					var p1 := to_local(s1)
+					var h1 := terrain_grid.get_vertex_elevation(v1)
+					_draw_lattice_line(p0, p1, h0, h1)
+
+			# Segment to (x, y + 1)
+			if y < y_end:
+				var v2 := Vector2i(x, y + 1)
+				var s2 := terrain_grid.grid_point_to_screen(Vector2(v2))
+				if visible_rect.has_point(s0) or visible_rect.has_point(s2):
+					var p2 := to_local(s2)
+					var h2 := terrain_grid.get_vertex_elevation(v2)
+					_draw_lattice_line(p0, p2, h0, h2)
+
+func _draw_lattice_line(p0: Vector2, p1: Vector2, h0: int, h1: int) -> void:
+	var has_slope: bool = h0 != h1
+	var has_elev: bool = h0 != 0 or h1 != 0
+
+	var color: Color
+	var width: float
+	if has_slope:
+		if h0 > 0 or h1 > 0:
+			color = Color(1.0, 0.82, 0.4, 0.5)
+		else:
+			color = Color(0.45, 0.75, 1.0, 0.5)
+		width = 1.6
+	elif has_elev:
+		color = Color(1.0, 0.85, 0.5, 0.25) if h0 > 0 else Color(0.5, 0.75, 1.0, 0.25)
+		width = 1.1
+	else:
+		color = Color(1.0, 1.0, 1.0, 0.10)
+		width = 1.0
+
+	draw_line(p0, p1, color, width, true)
+
+## Downhill slope arrows on sloped tiles
+func _draw_slope_arrows(tile_range: Array[Vector2i], visible_rect: Rect2, zoom: float) -> void:
+	if zoom < 0.6:
+		return
+	var x_start: int = maxi(tile_range[0].x, 0)
+	var x_end: int = mini(tile_range[1].x, terrain_grid.grid_width - 1)
+	var y_start: int = maxi(tile_range[0].y, 0)
+	var y_end: int = mini(tile_range[1].y, terrain_grid.grid_height - 1)
+
+	for x in range(x_start, x_end + 1):
+		for y in range(y_start, y_end + 1):
+			var pos := Vector2i(x, y)
+			var slope: Vector2 = terrain_grid.get_slope_at(Vector2(pos) + Vector2(0.5, 0.5))
+			var mag: float = slope.length()
+			if mag < 0.15:
+				continue
+			var world_c: Vector2 = terrain_grid.grid_to_screen_center(pos)
+			if not visible_rect.has_point(world_c):
+				continue
+			var center: Vector2 = to_local(world_c)
+
+			# Project downhill slope direction into screen space
+			var s_norm := slope.normalized()
+			var screen_dir := (terrain_grid.projection.axis_x() * s_norm.x + terrain_grid.projection.axis_y() * s_norm.y).normalized()
+
+			var arrow_len: float = clampf(mag * 9.0, 6.0, 15.0)
+			var arrow_end := center + screen_dir * (arrow_len * 0.5)
+			var arrow_start := center - screen_dir * (arrow_len * 0.5)
+
+			var arrow_color := Color(1.0, 0.88, 0.35, clampf(mag * 0.7, 0.35, 0.8))
+			draw_line(arrow_start, arrow_end, arrow_color, 1.5, true)
+
+			var perp := Vector2(-screen_dir.y, screen_dir.x) * (arrow_len * 0.28)
+			var head_base := arrow_end - screen_dir * (arrow_len * 0.35)
+			draw_colored_polygon(PackedVector2Array([
+				arrow_end, head_base + perp, head_base - perp
+			]), arrow_color)
+
+## Markers + height numbers on the vertices inside the viewport.
+func _draw_vertex_markers(visible_rect: Rect2, _zoom: float, show_labels: bool,
+		show_lattice: bool) -> void:
+	var vertices: Array[Vector2i] = _visible_vertices(visible_rect)
+	for vertex in vertices:
+		var height: int = terrain_grid.get_vertex_elevation(vertex)
+		if height == 0:
+			if show_lattice:
+				_draw_vertex_marker(vertex, Color(1, 1, 1, LATTICE_ALPHA), MARKER_SCALE * 0.7)
 			continue
 
-		# --- Contour lines at elevation boundaries ---
-		if elevation != 0 or _has_elevated_neighbor(pos):
-			_draw_contour_lines(pos)
+		var color: Color
+		if height > 0:
+			color = Color(1.0, 0.85, 0.55, VERTEX_ALPHA)  # Warm = raised
+		else:
+			color = Color(0.55, 0.78, 1.0, VERTEX_ALPHA)  # Cool = depressed
+		var center: Vector2 = _draw_vertex_marker(vertex, color, MARKER_SCALE)
 
-		# --- Elevation numbers ---
-		if elevation != 0:
-			# Anchored at the same spot within the tile as before, but projected
-			# so the label stays inside the diamond when the view is isometric.
-			var text_pos: Vector2 = OverlayGeometry.point_in_tile(
-					terrain_grid, self, pos, Vector2(0.35, 0.7))
-			var sign_str: String = "+" if elevation > 0 else ""
+		if show_labels:
+			var sign_str: String = "+" if height > 0 else ""
 			draw_string(
 				ThemeDB.fallback_font,
-				text_pos,
-				"%s%d" % [sign_str, elevation],
+				center + Vector2(4, -4),
+				"%s%d" % [sign_str, height],
 				HORIZONTAL_ALIGNMENT_LEFT,
 				-1,
 				9,
-				Color(1, 1, 1, 0.7)
+				Color(1, 1, 1, 0.75)
 			)
+
+## Contour lines on the edges of visible tiles whose derived height steps.
+func _draw_contours(visible_rect: Rect2) -> void:
+	var tile_range: Array[Vector2i] = terrain_grid.get_visible_tile_range()
+	for x in range(tile_range[0].x, tile_range[1].x + 1):
+		for y in range(tile_range[0].y, tile_range[1].y + 1):
+			var pos := Vector2i(x, y)
+			if terrain_grid.get_elevation(pos) == 0 and not _has_elevated_neighbor(pos):
+				continue
+			if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
+				continue
+			_draw_contour_lines(pos)
+
+## Vertices inside the visible world rect (bounded by the viewport, not the course).
+func _visible_vertices(visible_rect: Rect2) -> Array[Vector2i]:
+	var tile_range: Array[Vector2i] = terrain_grid.get_visible_tile_range()
+	var vertices: Array[Vector2i] = []
+	for x in range(tile_range[0].x, tile_range[1].x + 2):
+		for y in range(tile_range[0].y, tile_range[1].y + 2):
+			var vertex := Vector2i(x, y)
+			if not terrain_grid.is_valid_vertex(vertex):
+				continue
+			if visible_rect.has_point(terrain_grid.grid_point_to_screen(Vector2(vertex))):
+				vertices.append(vertex)
+	return vertices
+
+## Draw a small projection-aware diamond on a vertex; returns its local centre.
+func _draw_vertex_marker(vertex: Vector2i, color: Color, scale: float) -> Vector2:
+	var axis_x: Vector2 = terrain_grid.projection.axis_x() * scale
+	var axis_y: Vector2 = terrain_grid.projection.axis_y() * scale
+	var center: Vector2 = to_local(terrain_grid.grid_point_to_screen(Vector2(vertex)))
+	draw_colored_polygon(PackedVector2Array([
+		center - axis_x, center - axis_y, center + axis_x, center + axis_y,
+	]), color)
+	return center
 
 ## Check if any of the 4 neighbors has non-zero elevation
 func _has_elevated_neighbor(pos: Vector2i) -> bool:

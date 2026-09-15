@@ -17,6 +17,8 @@ uniform vec2 grid_origin = vec2(0.0);
 uniform vec2 grid_axis_x = vec2(64.0, 32.0);
 uniform vec2 grid_axis_y = vec2(0.0, 32.0);
 uniform vec2 surface_origin = vec2(0.0);
+uniform float elevation_step_y = 10.0;
+uniform bool is_isometric = true;
 
 varying vec2 world_pos;
 
@@ -33,6 +35,17 @@ vec2 world_to_uv(vec2 wp) {
 	vec2 g = vec2(
 		(d.x * grid_axis_y.y - grid_axis_y.x * d.y) / det,
 		(grid_axis_x.x * d.y - grid_axis_x.y * d.x) / det);
+
+	if (is_isometric && elevation_step_y > 0.0) {
+		for (int i = 0; i < 4; i++) {
+			vec2 uv_samp = g / grid_size;
+			float h = (texture(heightmap, clamp(uv_samp, vec2(0.0), vec2(1.0))).r - 0.5) * 10.0;
+			vec2 d2 = (wp + vec2(0.0, h * elevation_step_y)) - grid_origin;
+			g = vec2(
+				(d2.x * grid_axis_y.y - grid_axis_y.x * d2.y) / det,
+				(grid_axis_x.x * d2.y - grid_axis_y.x * d2.x) / det);
+		}
+	}
 	return g / grid_size;
 }
 

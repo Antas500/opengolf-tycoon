@@ -12,6 +12,7 @@ var current_terrain_tool: int = -1  # Current terrain painting tool
 var terrain_painting_enabled: bool = false  # Whether to show terrain preview
 var elevation_mode_active: bool = false  # Whether elevation tool is active
 var elevation_raising: bool = true  # True = raising, false = lowering
+var elevation_sculpted: bool = false  # True = rolling hill / hollow brush
 var bulldozer_mode_active: bool = false  # Whether bulldozer mode is active
 var brush_size: int = 1  # Current brush size (1, 3, or 5)
 var green_preset: String = ""  # Active green preset ("small"/"medium"/"large" or "")
@@ -89,9 +90,10 @@ func set_terrain_painting_enabled(enabled: bool) -> void:
 func set_brush_size(size: int) -> void:
 	brush_size = size
 
-func set_elevation_mode(active: bool, raising: bool = true) -> void:
+func set_elevation_mode(active: bool, raising: bool = true, sculpted: bool = false) -> void:
 	elevation_mode_active = active
 	elevation_raising = raising
+	elevation_sculpted = sculpted
 
 func set_bulldozer_mode(active: bool) -> void:
 	bulldozer_mode_active = active
@@ -190,9 +192,61 @@ func _draw() -> void:
 				tile_valid = true  # Terrain/elevation/bulldozer painting is always valid on valid tiles
 			_draw_isometric_tile(grid_pos, tile_valid, alpha_mod, i == 0, is_special_mode)
 
+	if elevation_mode_active:
+		_draw_elevation_brush(alpha_mod)
+
 	# Draw entity ghost preview (only for entity placement)
 	if is_entity_mode:
 		_draw_entity_ghost(alpha_mod)
+
+func _draw_elevation_brush(alpha_mod: float) -> void:
+	if not terrain_grid or not camera:
+		return
+
+	var mouse_world: Vector2 = camera.get_mouse_world_position()
+	var center: Vector2i = terrain_grid.nearest_vertex(terrain_grid.screen_to_grid_point(mouse_world))
+	if not terrain_grid.is_valid_vertex(center):
+		return
+
+	var brush_color: Color = Color(0.55, 0.78, 1.0, 0.85 * alpha_mod) if elevation_raising \
+		else Color(1.0, 0.6, 0.5, 0.85 * alpha_mod)
+	var vertices: Array[Vector2i] = ElevationTool.brush_vertices(
+		terrain_grid, center, brush_size, elevation_sculpted)
+	for vertex in vertices:
+		if vertex == center:
+			continue
+		_draw_vertex_marker(vertex, brush_color, 0.10)
+
+	var current_height: int = terrain_grid.get_vertex_elevation(center)
+	var step: int = ElevationTool.SCULPT_AMOUNT if elevation_sculpted else 1
+	if not elevation_raising:
+		step = -step
+	var next_height: int = clampi(current_height + step,
+		terrain_grid.MIN_ELEVATION, terrain_grid.MAX_ELEVATION)
+	_draw_vertex_marker(center, Color(1, 1, 1, 0.95 * alpha_mod), 0.18)
+
+	var label: String
+	if current_height == next_height:
+		label = "%d (max)" % current_height if elevation_raising else "%d (min)" % current_height
+	else:
+		label = "%d -> %d" % [current_height, next_height]
+	draw_string(
+		ThemeDB.fallback_font,
+		to_local(terrain_grid.grid_point_to_screen(Vector2(center))) + Vector2(10, -8),
+		label,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		12,
+		Color(1, 1, 1, 0.9 * alpha_mod)
+	)
+
+func _draw_vertex_marker(vertex: Vector2i, color: Color, scale: float) -> void:
+	var axis_x: Vector2 = terrain_grid.projection.axis_x() * scale
+	var axis_y: Vector2 = terrain_grid.projection.axis_y() * scale
+	var center: Vector2 = to_local(terrain_grid.grid_point_to_screen(Vector2(vertex)))
+	draw_colored_polygon(PackedVector2Array([
+		center - axis_x, center - axis_y, center + axis_x, center + axis_y,
+	]), color)
 
 func _is_tile_valid_for_placement(grid_pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(grid_pos):
@@ -445,12 +499,15 @@ func _draw_building_ghost(grid_pos: Vector2i, color: Color) -> void:
 	var w = fw * 64.0
 	var h = fh * 32.0
 	var pos: Vector2
-	if terrain_grid.is_view_isometric():
-		var center := terrain_grid.grid_point_to_screen(
-				Vector2(grid_pos) + Vector2(fw * 0.5, fh * 0.5))
-		pos = center - Vector2(w * 0.5, h)
+	if terrain_grid != null:
+		if terrain_grid.is_view_isometric():
+			var center := terrain_grid.grid_point_to_screen(
+					Vector2(grid_pos) + Vector2(fw * 0.5, fh * 0.5))
+			pos = center - Vector2(w * 0.5, h)
+		else:
+			pos = terrain_grid.grid_to_screen(Vector2i(grid_pos))
 	else:
-		pos = terrain_grid.grid_to_screen(grid_pos)
+		pos = Vector2(grid_pos)
 	var building_type = placement_manager.selected_building_type
 
 	if not is_instance_valid(_building_ghost):
