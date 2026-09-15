@@ -30,6 +30,8 @@ func initialize(grid: TerrainGrid) -> void:
 	surface_material.set_shader_parameter("vertex_grid_size", Vector2(grid.grid_width + 1, grid.grid_height + 1))
 	surface_material.set_shader_parameter("grid_size", Vector2(grid.grid_width, grid.grid_height))
 	surface_material.set_shader_parameter("tile_size", Vector2(grid.tile_width, grid.tile_height))
+	surface_material.set_shader_parameter("elevation_step_y", grid.ELEVATION_STEP_Y)
+	surface_material.set_shader_parameter("is_isometric", grid.view_isometric)
 	material = surface_material
 	apply_projection(grid.projection)
 	refresh_palette()
@@ -44,8 +46,9 @@ func apply_projection(proj: GridProjection) -> void:
 	if proj == null:
 		return
 	var bounds := proj.world_bounds()
-	position = bounds.position
-	size = bounds.size
+	var vertical_padding: float = 128.0 if proj.isometric else 0.0
+	position = bounds.position - Vector2(0.0, vertical_padding)
+	size = bounds.size + Vector2(0.0, vertical_padding * 2.0)
 	if material == null:
 		return
 	var mat := material as ShaderMaterial
@@ -54,8 +57,11 @@ func apply_projection(proj: GridProjection) -> void:
 	mat.set_shader_parameter("grid_origin", proj.grid_origin())
 	mat.set_shader_parameter("grid_axis_x", proj.axis_x())
 	mat.set_shader_parameter("grid_axis_y", proj.axis_y())
-	mat.set_shader_parameter("surface_origin", bounds.position)
-	mat.set_shader_parameter("surface_size", bounds.size)
+	mat.set_shader_parameter("surface_origin", position)
+	mat.set_shader_parameter("surface_size", size)
+	if _grid != null:
+		mat.set_shader_parameter("elevation_step_y", _grid.ELEVATION_STEP_Y)
+		mat.set_shader_parameter("is_isometric", _grid.view_isometric)
 
 func refresh_palette() -> void:
 	var colors := Image.create(PALETTE_KEYS.size(), 1, false, Image.FORMAT_RGBA8)

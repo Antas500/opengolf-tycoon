@@ -499,12 +499,15 @@ func _draw_building_ghost(grid_pos: Vector2i, color: Color) -> void:
 	var w = fw * 64.0
 	var h = fh * 32.0
 	var pos: Vector2
-	if terrain_grid.is_view_isometric():
-		var center := terrain_grid.grid_point_to_screen(
-				Vector2(grid_pos) + Vector2(fw * 0.5, fh * 0.5))
-		pos = center - Vector2(w * 0.5, h)
+	if terrain_grid != null:
+		if terrain_grid.is_view_isometric():
+			var center := terrain_grid.grid_point_to_screen(
+					Vector2(grid_pos) + Vector2(fw * 0.5, fh * 0.5))
+			pos = center - Vector2(w * 0.5, h)
+		else:
+			pos = terrain_grid.grid_to_screen(Vector2i(grid_pos))
 	else:
-		pos = terrain_grid.grid_to_screen(grid_pos)
+		pos = Vector2(grid_pos)
 	var building_type = placement_manager.selected_building_type
 
 	if not is_instance_valid(_building_ghost):

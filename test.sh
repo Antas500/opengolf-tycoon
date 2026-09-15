@@ -16,4 +16,4 @@ else
 fi
 
 echo "Using Godot: $GODOT_BIN"
-"$GODOT_BIN" --headless --path . -s addons/gut/gut_cmdln.gd "$@"
+"$GODOT_BIN" --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests/unit -gexit "$@"

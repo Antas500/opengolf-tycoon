@@ -13,14 +13,23 @@ func setup(terrain_grid: TerrainGrid, color_rect: ColorRect, shader_material: Sh
 	_terrain_grid = terrain_grid
 	_color_rect = color_rect
 	_shader_material = shader_material
+	apply_projection(terrain_grid.projection)
 
 func apply_projection(proj: GridProjection) -> void:
 	if _shader_material == null or proj == null:
 		return
+	var bounds := proj.world_bounds()
+	var vertical_padding: float = 128.0 if proj.isometric else 0.0
+	if _color_rect:
+		_color_rect.position = bounds.position - Vector2(0.0, vertical_padding)
+		_color_rect.size = bounds.size + Vector2(0.0, vertical_padding * 2.0)
 	_shader_material.set_shader_parameter("grid_origin", proj.grid_origin())
 	_shader_material.set_shader_parameter("grid_axis_x", proj.axis_x())
 	_shader_material.set_shader_parameter("grid_axis_y", proj.axis_y())
-	_shader_material.set_shader_parameter("surface_origin", proj.world_bounds().position)
+	_shader_material.set_shader_parameter("surface_origin", bounds.position - Vector2(0.0, vertical_padding))
+	if _terrain_grid != null:
+		_shader_material.set_shader_parameter("elevation_step_y", _terrain_grid.ELEVATION_STEP_Y)
+		_shader_material.set_shader_parameter("is_isometric", _terrain_grid.view_isometric)
 
 func _process(_delta: float) -> void:
 	if not _shader_material:

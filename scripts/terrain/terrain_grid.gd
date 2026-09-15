@@ -15,6 +15,7 @@ var projection: GridProjection = GridProjection.new()
 const MIN_ELEVATION: int = -5
 const MAX_ELEVATION: int = 5
 const SLOPE_SAMPLE_STEP: float = 0.5
+const ELEVATION_STEP_Y: float = 10.0
 
 var _grid: Dictionary = {}
 var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) * (grid_height+1)
@@ -241,31 +242,73 @@ func _init_projection() -> void:
 	projection.set_orientation(view_orientation)
 	view_orientation = projection.orientation
 
+func get_elevation_displacement(grid_pos: Vector2) -> Vector2:
+	if not view_isometric or ELEVATION_STEP_Y == 0.0:
+		return Vector2.ZERO
+	return Vector2(0.0, -get_elevation_at(grid_pos) * ELEVATION_STEP_Y)
+
+func get_vertex_elevation_displacement(vertex: Vector2i) -> Vector2:
+	if not view_isometric or ELEVATION_STEP_Y == 0.0:
+		return Vector2.ZERO
+	return Vector2(0.0, -float(get_vertex_elevation(vertex)) * ELEVATION_STEP_Y)
+
 func screen_to_grid(screen_pos: Vector2) -> Vector2i:
-	return projection.world_to_cell(screen_pos)
+	var g := screen_to_grid_point(screen_pos)
+	return Vector2i(floori(g.x), floori(g.y))
 
 func screen_to_grid_precise(screen_pos: Vector2) -> Vector2:
-	return projection.unproject(screen_pos) - Vector2(0.5, 0.5)
+	return screen_to_grid_point(screen_pos) - Vector2(0.5, 0.5)
 
 func screen_to_grid_point(screen_pos: Vector2) -> Vector2:
-	return projection.unproject(screen_pos)
+	if not view_isometric or ELEVATION_STEP_Y == 0.0:
+		return projection.unproject(screen_pos)
+
+	# Raymarch vertically from highest elevation to lowest to find the front-most surface
+	var best_g := projection.unproject(screen_pos)
+	var best_diff: float = 999999.0
+	var step_size: float = ELEVATION_STEP_Y * 0.5
+	var t: float = float(MAX_ELEVATION) * ELEVATION_STEP_Y
+	var min_t: float = float(MIN_ELEVATION) * ELEVATION_STEP_Y
+
+	while t >= min_t - 0.1:
+		var g := projection.unproject(screen_pos + Vector2(0.0, t))
+		var h_px: float = get_elevation_at(g) * ELEVATION_STEP_Y
+		var diff: float = absf(t - h_px)
+		if diff < best_diff:
+			best_diff = diff
+			best_g = g
+		if t <= h_px:
+			# Surface crossed: refine with exact height at this point
+			var h_final: float = get_elevation_at(g) * ELEVATION_STEP_Y
+			best_g = projection.unproject(screen_pos + Vector2(0.0, h_final))
+			return best_g
+		t -= step_size
+
+	return best_g
 
 func grid_to_screen(grid_pos: Vector2i) -> Vector2:
-	return projection.cell_corner(grid_pos)
+	return projection.cell_corner(grid_pos) + get_vertex_elevation_displacement(grid_pos)
 
 func grid_to_screen_center(grid_pos: Vector2i) -> Vector2:
 	# Returns the center of the tile (for entity positioning)
-	return projection.cell_center(grid_pos)
+	return projection.cell_center(grid_pos) + get_elevation_displacement(Vector2(grid_pos) + Vector2(0.5, 0.5))
 
 func grid_to_screen_precise(grid_pos: Vector2) -> Vector2:
 	# Returns screen position for a sub-tile grid coordinate (used for putting precision)
-	return projection.project(grid_pos + Vector2(0.5, 0.5))
+	var pos := grid_pos + Vector2(0.5, 0.5)
+	return projection.project(pos) + get_elevation_displacement(pos)
 
 func grid_point_to_screen(grid_pos: Vector2) -> Vector2:
-	return projection.project(grid_pos)
+	return projection.project(grid_pos) + get_elevation_displacement(grid_pos)
 
 func tile_polygon(grid_pos: Vector2i) -> PackedVector2Array:
-	return projection.cell_polygon(grid_pos)
+	var p := Vector2(grid_pos)
+	return PackedVector2Array([
+		grid_point_to_screen(p),
+		grid_point_to_screen(p + Vector2(1, 0)),
+		grid_point_to_screen(p + Vector2(1, 1)),
+		grid_point_to_screen(p + Vector2(0, 1)),
+	])
 
 func tile_world_rect(grid_pos: Vector2i) -> Rect2:
 	return projection.cell_world_rect(grid_pos)
@@ -549,7 +592,7 @@ func get_visible_world_rect() -> Rect2:
 ## Returns [min_tile, max_tile] as Vector2i, clamped to grid bounds.
 func get_visible_tile_range() -> Array[Vector2i]:
 	var world_rect = get_visible_world_rect()
-	var margin = Vector2(tile_width * 2, tile_height * 2)
+	var margin = Vector2(tile_width * 3, tile_height * 4)
 	var grown = world_rect.grow_individual(margin.x, margin.y, margin.x, margin.y)
 	var corners: Array[Vector2] = [
 		projection.unproject(grown.position),
