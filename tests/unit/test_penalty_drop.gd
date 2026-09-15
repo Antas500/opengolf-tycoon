@@ -12,11 +12,11 @@ var _saved_course_data
 
 
 func before_each() -> void:
-	# Create a lightweight Golfer instance (not added to tree — only need methods)
-	_golfer = Golfer.new()
+	# Create a lightweight Golfer instance (autofreed)
+	_golfer = autofree(Golfer.new())
 
-	# Create a minimal terrain grid with all grass (no visual setup needed)
-	_terrain_grid = TerrainGrid.new()
+	# Create a minimal terrain grid with all grass (autofreed, no visual setup needed)
+	_terrain_grid = autofree(TerrainGrid.new())
 	_terrain_grid.grid_width = 20
 	_terrain_grid.grid_height = 20
 	for x in range(20):
@@ -32,10 +32,8 @@ func before_each() -> void:
 func after_each() -> void:
 	GameManager.terrain_grid = _saved_terrain_grid
 	GameManager.course_data = _saved_course_data
-	if _golfer:
-		_golfer.free()
-	if _terrain_grid:
-		_terrain_grid.free()
+	_golfer = null
+	_terrain_grid = null
 
 
 func _setup_hole_at(hole_pos: Vector2i) -> void:

@@ -8,6 +8,7 @@ func before_each() -> void:
 	grid.grid_width = 16
 	grid.grid_height = 16
 	add_child_autofree(grid)
+	await get_tree().process_frame
 
 func test_vertex_elevation_displacement_in_isometric_view() -> void:
 	assert_true(grid.view_isometric)
@@ -102,3 +103,6 @@ func test_course_surface_shader_uniforms_configured() -> void:
 
 	var is_iso = mat.get_shader_parameter("is_isometric")
 	assert_eq(is_iso, true)
+
+func after_each() -> void:
+	await get_tree().process_frame

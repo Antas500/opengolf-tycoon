@@ -1,6 +1,31 @@
 extends GutTest
 ## Tests for CourseRatingSystem - Course quality and difficulty calculations
+##
+## Uses a fixed GameManager state (day/theme/difficulty) for deterministic value
+## rating results. Seasonal fee tolerance and difficulty sensitivity otherwise
+## shift expected values by ~0.4 stars.
 
+var _saved_day: int
+var _saved_theme: int
+var _saved_difficulty: int
+var _saved_course
+
+func before_each() -> void:
+	_saved_day = GameManager.current_day
+	_saved_theme = GameManager.current_theme
+	_saved_difficulty = GameManager.current_difficulty
+	_saved_course = GameManager.current_course
+	# Deterministic baseline: mid-Spring (day 4, no boundary blending)
+	# Parkland spawn=0.9 → fee_tolerance ≈0.995 ≈1.0, Normal difficulty sensitivity=1.0
+	GameManager.current_day = 4
+	GameManager.current_theme = CourseTheme.Type.PARKLAND
+	GameManager.current_difficulty = DifficultyPresets.Preset.NORMAL
+
+func after_each() -> void:
+	GameManager.current_day = _saved_day
+	GameManager.current_theme = _saved_theme
+	GameManager.current_difficulty = _saved_difficulty
+	GameManager.current_course = _saved_course
 
 # --- Helper: create a mock CourseData with specified holes ---
 
@@ -89,8 +114,9 @@ func test_design_rating_ignores_closed_holes() -> void:
 
 
 # --- Value Rating ---
-# Note: Value rating now uses GameManager.get_open_hole_count(), so we set up a course.
-# The green_fee parameter is per-hole fee; total = fee * holes.
+# Note: Value rating uses GameManager.get_open_hole_count(), reputation,
+# seasonal fee_tolerance, and difficulty green_fee_sensitivity.
+# before_each pins those globals for deterministic results.
 
 func _setup_course_with_holes(count: int) -> void:
 	"""Helper to set up GameManager with a course having N open holes."""
@@ -106,34 +132,36 @@ func _setup_course_with_holes(count: int) -> void:
 func test_value_rating_fair_price_18_holes() -> void:
 	_setup_course_with_holes(18)
 	# 18-hole course: per-hole fee $6 (total $108), reputation=50
-	# fair_price = max(100, 20) * clamp(18/18, 0.15, 1.0) = 100
-	# total_round_cost = 6 * 18 = 108, ratio = 108/100 = 1.08
-	# rating = 5.0 - (1.08 - 0.5) * 2.67 = 5.0 - 1.549 = 3.451
+	# fair_price = max(100, 20) * 1.0 * ~0.995(tolerance) ≈ 99.5
+	# ratio ≈ 1.085 → rating ≈ 3.44
 	var rating = CourseRatingSystem._calculate_value_rating(6, 50.0)
 	assert_almost_eq(rating, 3.45, 0.05, "Fair price 18 holes should give ~3.45 stars")
 
 func test_value_rating_cheap_18_holes() -> void:
 	_setup_course_with_holes(18)
-	# per-hole fee $2, total = $36, fair = $100, ratio = 0.36
 	var rating = CourseRatingSystem._calculate_value_rating(2, 50.0)
-	# 5.0 - (0.36 - 0.5)*2.67 = 5.0 + 0.374 = 5.374 -> clamped to 5.0
 	assert_eq(rating, 5.0, "Very cheap should clamp to 5.0")
 
 func test_value_rating_expensive_1_hole() -> void:
 	_setup_course_with_holes(1)
-	# 1-hole course: per-hole fee $15 (max for 1 hole), total = $15
-	# fair_price = max(100, 20) * clamp(1/18, 0.15, 1.0) = 100 * 0.15 = 15
-	# ratio = 15/15 = 1.0 => 5.0 - (1.0-0.5)*2.67 = 3.665
+	# 1-hole: fee $15 → total $15, fair ≈ 15*0.995 ≈14.9, ratio≈1.0 → ~3.65
 	var rating = CourseRatingSystem._calculate_value_rating(15, 50.0)
 	assert_almost_eq(rating, 3.665, 0.05, "1-hole at max fee should be roughly fair")
 
 func test_value_rating_low_reputation() -> void:
 	_setup_course_with_holes(18)
-	# reputation=5, fair=max(10, 20)*1.0=20, fee=$1/hole, total=$18
-	# ratio = 18/20 = 0.9
-	# rating = 5.0 - (0.9 - 0.5)*2.67 = 5.0 - 1.068 = 3.932
+	# reputation=5, fair=max(10,20)*1.0*0.995≈19.9, fee $1/hole total $18 ratio≈0.90 → ~3.93
 	var rating = CourseRatingSystem._calculate_value_rating(1, 5.0)
 	assert_almost_eq(rating, 3.93, 0.05, "Low rep with low fee should be slightly above fair")
+
+func test_value_rating_extreme_tolerance_still_bounded() -> void:
+	# Verify value rating stays in [1,5] even at seasonal extremes
+	_saved_day = GameManager.current_day # preserve outer save
+	GameManager.current_day = 7 # Spring boundary (blended tolerance ~0.82)
+	_setup_course_with_holes(18)
+	var low = CourseRatingSystem._calculate_value_rating(50, 50.0)
+	assert_between(low, 1.0, 5.0, "Extreme overpricing should still be bounded")
+	GameManager.current_day = _saved_day
 
 
 # --- Pace Rating ---

@@ -23,7 +23,7 @@ func before_each() -> void:
 	_saved_wind_system = GameManager.wind_system
 
 	# Create a 40x40 grass grid (big enough for all test holes)
-	_terrain_grid = TerrainGrid.new()
+	_terrain_grid = autofree(TerrainGrid.new())
 	_terrain_grid.grid_width = 40
 	_terrain_grid.grid_height = 40
 	for x in range(40):
@@ -33,14 +33,14 @@ func before_each() -> void:
 	GameManager.terrain_grid = _terrain_grid
 	# Disable wind by default (tests that need it will set it up)
 	GameManager.wind_system = null
+	await get_tree().process_frame
 
 func after_each() -> void:
+	await get_tree().process_frame
 	GameManager.terrain_grid = _saved_terrain_grid
 	GameManager.course_data = _saved_course_data
 	GameManager.wind_system = _saved_wind_system
-	if _terrain_grid:
-		_terrain_grid.free()
-		_terrain_grid = null
+	_terrain_grid = null
 
 # ============================================================================
 # HELPERS
@@ -377,7 +377,7 @@ func test_wind_compensation_aims_into_wind() -> void:
 	_setup_hole(tee, Vector2i(15, 20), flag, 3)
 
 	# Set up wind system with strong crosswind
-	var wind = WindSystem.new()
+	var wind = autofree(WindSystem.new())
 	wind.wind_direction = PI / 2.0  # East wind
 	wind.wind_speed = 15.0
 	GameManager.wind_system = wind
@@ -404,8 +404,6 @@ func test_wind_compensation_aims_into_wind() -> void:
 	assert_true(_terrain_grid.is_valid_position(beginner_decision.target),
 		"Beginner target should be on grid")
 
-	# Clean up
-	wind.free()
 
 # ============================================================================
 # SCENARIO 8: RISK ANALYSIS — Water on one side
@@ -619,8 +617,8 @@ func test_rocks_forces_wedge_only() -> void:
 # ============================================================================
 
 func test_golfer_data_from_golfer_copies_fields() -> void:
-	# Create a real Golfer node (not added to tree — lightweight)
-	var golfer = Golfer.new()
+	# Create a real Golfer node (autofreed)
+	var golfer = autofree(Golfer.new())
 	golfer.ball_position = Vector2i(10, 15)
 	golfer.ball_position_precise = Vector2(10.5, 15.3)
 	golfer.driving_skill = 0.85
@@ -648,7 +646,7 @@ func test_golfer_data_from_golfer_copies_fields() -> void:
 	assert_eq(gd.total_strokes, 12)
 	assert_eq(gd.total_par, 8)
 
-	golfer.free()
+	# golfer is autofreed via test - no manual free needed
 
 # ============================================================================
 # SCENARIO 16: EDGE CASE — Ball at hole position
