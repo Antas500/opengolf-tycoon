@@ -61,7 +61,7 @@ static func serialize_records(records: Dictionary) -> Dictionary:
 ## Deserialize records dictionary from save data
 static func deserialize_records(data: Dictionary) -> Dictionary:
 	var records: Dictionary = {
-		"total_hole_in_ones": data.get("total_hole_in_ones", 0),
+		"total_hole_in_ones": int(data.get("total_hole_in_ones", 0)),
 		"lowest_round": null,
 		"hole_in_ones": [],
 		"best_per_hole": {},
