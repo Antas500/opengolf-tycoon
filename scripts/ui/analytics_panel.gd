@@ -196,8 +196,8 @@ func update_display() -> void:
 			}
 			for tier in [GolferTier.Tier.BEGINNER, GolferTier.Tier.CASUAL, GolferTier.Tier.SERIOUS, GolferTier.Tier.PRO]:
 				var pct = int(float(totals[tier]) / grand_total * 100)
-				var name = GolferTier.get_tier_name(tier)
-				_content_vbox.add_child(_create_stat_row("  %s:" % name, "%d%% (%d)" % [pct, totals[tier]], tier_colors[tier]))
+				var tier_name = GolferTier.get_tier_name(tier)
+				_content_vbox.add_child(_create_stat_row("  %s:" % tier_name, "%d%% (%d)" % [pct, totals[tier]], tier_colors[tier]))
 		else:
 			_add_dim_label("  No golfer data yet")
 

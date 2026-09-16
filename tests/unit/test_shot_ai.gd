@@ -5,8 +5,6 @@ extends GutTest
 ## a GolferData snapshot, and asserts that ShotAI makes the correct decision.
 ## No scene tree required — everything runs on ShotAI.GolferData + TerrainGrid.
 
-const TerrainTypes = preload("res://scripts/terrain/terrain_types.gd")
-
 var _terrain_grid: TerrainGrid
 var _saved_terrain_grid
 var _saved_course_data

@@ -184,7 +184,6 @@ static func _simulate_hole(sim_golfer: SimGolfer, hole_data, hole_index: int,
 	var ball_pos: Vector2i = hole_data.tee_position
 	var ball_precise: Vector2 = Vector2(ball_pos)
 	var hole_pos: Vector2i = hole_data.hole_position
-	var green_pos: Vector2i = hole_data.green_position
 	var max_strokes: int = GolfRules.get_max_strokes(hole_data.par)
 	var strokes: int = 0
 
@@ -393,7 +392,7 @@ static func _calculate_shot_headless(from: Vector2i, target: Vector2i, club: int
 ## Calculate a putt using the probability-based make model.
 ## Returns {landing_position, landing_precise, is_holed}.
 static func _calculate_putt_headless(from_precise: Vector2, hole_pos: Vector2,
-		putting_skill: float, miss_tendency: float) -> Dictionary:
+		putting_skill: float, _miss_tendency: float) -> Dictionary:
 	var distance = from_precise.distance_to(hole_pos)
 	var direction = (hole_pos - from_precise).normalized() if distance > 0.001 else Vector2.ZERO
 	var perpendicular = Vector2(-direction.y, direction.x)

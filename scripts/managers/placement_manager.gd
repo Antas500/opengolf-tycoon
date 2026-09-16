@@ -3,7 +3,6 @@ class_name PlacementManager
 ## PlacementManager - Handles placement of buildings and trees on the course
 
 signal placement_mode_changed(mode: PlacementMode)
-signal placement_preview_updated(grid_pos: Vector2i, valid: bool)
 
 enum PlacementMode {
 	NONE = 0,

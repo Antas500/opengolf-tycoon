@@ -240,9 +240,9 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 		Color(1, 1, 1, 0.9 * alpha_mod)
 	)
 
-func _draw_vertex_marker(vertex: Vector2i, color: Color, scale: float) -> void:
-	var axis_x: Vector2 = terrain_grid.projection.axis_x() * scale
-	var axis_y: Vector2 = terrain_grid.projection.axis_y() * scale
+func _draw_vertex_marker(vertex: Vector2i, color: Color, marker_scale: float) -> void:
+	var axis_x: Vector2 = terrain_grid.projection.axis_x() * marker_scale
+	var axis_y: Vector2 = terrain_grid.projection.axis_y() * marker_scale
 	var center: Vector2 = to_local(terrain_grid.grid_point_to_screen(Vector2(vertex)))
 	draw_colored_polygon(PackedVector2Array([
 		center - axis_x, center - axis_y, center + axis_x, center + axis_y,

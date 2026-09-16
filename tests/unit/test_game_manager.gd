@@ -286,7 +286,7 @@ func test_check_hole_records_best_score_new() -> void:
 	GameManager.reset_course_records()
 	GameManager.current_day = 1
 	# First score for hole 1 - sets the record but doesn't "break" it
-	var records = GameManager.check_hole_records("Alice", 1, 3)
+	GameManager.check_hole_records("Alice", 1, 3)
 	# First score sets the record but only announces "broken" if there was an existing record
 	assert_eq(GameManager.course_records.best_per_hole.has(1), true, "Should have best for hole 1")
 	assert_eq(GameManager.course_records.best_per_hole[1].value, 3, "Best score should be 3")

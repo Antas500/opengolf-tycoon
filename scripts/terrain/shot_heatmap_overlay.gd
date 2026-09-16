@@ -2,8 +2,6 @@ extends Node2D
 class_name ShotHeatmapOverlay
 ## ShotHeatmapOverlay - Renders shot landing heatmap over terrain tiles
 
-const TerrainTypes = preload("res://scripts/terrain/terrain_types.gd")
-
 const ARC_POINTS: int = 12
 const ARC_WIDTH: float = 1.5
 const ARC_ALPHA: float = 0.45

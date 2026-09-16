@@ -243,13 +243,13 @@ func _on_tournament_scheduled(_tier: int, start_day: int) -> void:
 		_refresh_display()
 
 func _on_tournament_started(tier: int) -> void:
-	var name = TournamentSystem.get_tier_name(tier)
-	EventBus.notify("%s has begun!" % name, "success")
+	var tier_name = TournamentSystem.get_tier_name(tier)
+	EventBus.notify("%s has begun!" % tier_name, "success")
 	if visible:
 		_refresh_display()
 
 func _on_tournament_completed(tier: int, results: Dictionary) -> void:
-	var name = TournamentSystem.get_tier_name(tier)
-	EventBus.notify("%s completed! Winner: %s (%d)" % [name, results.winner_name, results.winning_score], "success")
+	var tier_name = TournamentSystem.get_tier_name(tier)
+	EventBus.notify("%s completed! Winner: %s (%d)" % [tier_name, results.winner_name, results.winning_score], "success")
 	if visible:
 		_refresh_display()

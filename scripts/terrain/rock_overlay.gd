@@ -57,11 +57,11 @@ func _generate_rocks_for_tile(pos: Vector2i) -> void:
 
 	_rock_positions[pos] = rocks
 
-func _on_terrain_tile_changed(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if new_type == TerrainTypes.Type.ROCKS:
-		_generate_rocks_for_tile(position)
+		_generate_rocks_for_tile(tile_pos)
 	elif old_type == TerrainTypes.Type.ROCKS:
-		_rock_positions.erase(position)
+		_rock_positions.erase(tile_pos)
 	queue_redraw()
 
 func _draw() -> void:
@@ -91,13 +91,13 @@ func _draw_rock(tile_pos: Vector2, rock: Dictionary) -> void:
 
 	# On web: simplified 2-polygon rocks (skip shadow + specular = 2 fewer draw calls per rock)
 	if _is_web:
-		var base_gray = 0.45 + shade
-		var base_points = _get_rock_shape(center, w, h, rock.rotation)
-		draw_colored_polygon(base_points, Color(base_gray, base_gray - 0.02, base_gray - 0.05))
-		var highlight_center = center + Vector2(-w * 0.1, -h * 0.2)
-		var highlight_points = _get_rock_shape(highlight_center, w * 0.7, h * 0.6, rock.rotation)
-		var light_gray = 0.58 + shade
-		draw_colored_polygon(highlight_points, Color(light_gray, light_gray - 0.02, light_gray - 0.04))
+		var web_base_gray = 0.45 + shade
+		var web_base_points = _get_rock_shape(center, w, h, rock.rotation)
+		draw_colored_polygon(web_base_points, Color(web_base_gray, web_base_gray - 0.02, web_base_gray - 0.05))
+		var web_highlight_center = center + Vector2(-w * 0.1, -h * 0.2)
+		var web_highlight_points = _get_rock_shape(web_highlight_center, w * 0.7, h * 0.6, rock.rotation)
+		var web_light_gray = 0.58 + shade
+		draw_colored_polygon(web_highlight_points, Color(web_light_gray, web_light_gray - 0.02, web_light_gray - 0.04))
 		return
 
 	# Shadow

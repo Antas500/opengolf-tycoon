@@ -6,7 +6,6 @@ signal tool_selected(tool_type: int)
 signal create_hole_pressed
 signal tree_placement_pressed
 signal rock_placement_pressed
-signal flower_bed_pressed
 signal building_placement_pressed
 signal decoration_placement_pressed
 signal raise_elevation_pressed
@@ -260,7 +259,6 @@ func _create_section(section_name: String, section_data: Dictionary, start_colla
 
 	# Section header (clickable to expand/collapse)
 	var header_btn = Button.new()
-	var icon = section_data.get("icon", "")
 	var prefix = "> " if start_collapsed else "v "
 	header_btn.text = "%s %s" % [prefix, section_name]
 	header_btn.flat = true

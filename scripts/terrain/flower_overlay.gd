@@ -98,11 +98,11 @@ func _generate_flowers_for_tile(pos: Vector2i) -> void:
 
 	_flower_positions[pos] = {"flowers": flowers, "foliage": foliage}
 
-func _on_terrain_tile_changed(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if new_type == TerrainTypes.Type.FLOWER_BED:
-		_generate_flowers_for_tile(position)
+		_generate_flowers_for_tile(tile_pos)
 	elif old_type == TerrainTypes.Type.FLOWER_BED:
-		_flower_positions.erase(position)
+		_flower_positions.erase(tile_pos)
 	queue_redraw()
 
 func _draw() -> void:

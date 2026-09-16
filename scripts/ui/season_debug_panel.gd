@@ -128,7 +128,7 @@ func _update_display() -> void:
 
 func _on_season_button(target_season: int) -> void:
 	# Jump to day 1 of the target season by setting current_day directly
-	var current_year_start = ((GameManager.current_day - 1) / SeasonSystem.DAYS_PER_YEAR) * SeasonSystem.DAYS_PER_YEAR
+	var current_year_start = int((GameManager.current_day - 1) / float(SeasonSystem.DAYS_PER_YEAR)) * SeasonSystem.DAYS_PER_YEAR
 	var target_day = current_year_start + (target_season * SeasonSystem.DAYS_PER_SEASON) + 1
 
 	# If target is before or equal to current day, go to next year's season

@@ -48,7 +48,7 @@ func _is_boundary_tile(pos: Vector2i) -> bool:
 			return true
 	return false
 
-func _on_terrain_tile_changed(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed(_tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	# Recalculate if OB tiles changed or neighbors of OB changed
 	if old_type == TerrainTypes.Type.OUT_OF_BOUNDS or new_type == TerrainTypes.Type.OUT_OF_BOUNDS:
 		_calculate_boundaries()

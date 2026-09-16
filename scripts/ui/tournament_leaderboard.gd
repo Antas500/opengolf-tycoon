@@ -318,7 +318,7 @@ func _create_cut_line_separator() -> HBoxContainer:
 	return row
 
 func _make_label(text: String, min_width: int, color: Color,
-		alignment: int = HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+		alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.add_theme_font_size_override("font_size", 11)

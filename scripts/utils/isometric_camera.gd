@@ -26,7 +26,6 @@ var _drag_start_mouse: Vector2
 var _drag_start_camera: Vector2
 
 # Zoom easing state
-var _zoom_velocity: float = 0.0
 var _zoom_tween: Tween = null
 
 # Shake state
@@ -215,10 +214,6 @@ func micro_shake(intensity: float = 2.0) -> void:
 
 func zoom_to_point(world_position: Vector2, new_zoom_level: float, duration: float = 0.3) -> void:
 	var clamped_zoom = clamp(new_zoom_level, min_zoom, max_zoom)
-
-	# Calculate position adjustment to keep world_position centered
-	var viewport_size = get_viewport_rect().size
-	var screen_center = viewport_size / 2.0
 
 	# Focus on the point while zooming
 	var tween = create_tween()

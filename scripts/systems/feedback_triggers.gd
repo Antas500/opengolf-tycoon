@@ -6,6 +6,7 @@ class_name FeedbackTriggers
 ## to appropriate golfer reactions with randomized message selection.
 
 enum TriggerType {
+	NONE = -1,  ## No feedback needed (sentinel returned by trigger checks)
 	HOLE_IN_ONE,
 	EAGLE,
 	BIRDIE,
@@ -158,7 +159,7 @@ static func get_score_trigger(strokes: int, par: int, avg_skill: float = 0.5) ->
 	var expected = par + get_expected_over_par(avg_skill)
 	if strokes >= expected + 2.0:
 		return TriggerType.BOGEY_PLUS
-	return -1  # At or near expected — no trigger
+	return TriggerType.NONE  # At or near expected — no trigger
 
 ## Determine price trigger based on total round cost and reputation
 static func get_price_trigger(total_round_cost: int, reputation: float) -> TriggerType:
@@ -171,7 +172,7 @@ static func get_price_trigger(total_round_cost: int, reputation: float) -> Trigg
 		return TriggerType.OVERPRICED
 	elif total_round_cost < fair_price * 0.6:
 		return TriggerType.GOOD_VALUE
-	return -1  # No trigger for fair pricing
+	return TriggerType.NONE  # No trigger for fair pricing
 
 ## Determine course satisfaction trigger based on final score vs personal expectation.
 ## Golfers are happy if they scored within ~3 strokes of their expected total.
@@ -180,4 +181,4 @@ static func get_course_trigger(total_strokes: int, total_par: int,
 	var expected_total = total_par + hole_count * get_expected_over_par(avg_skill)
 	if total_strokes <= expected_total + 3.0:
 		return TriggerType.NICE_COURSE
-	return -1  # No trigger — scored well below expectation (already complained per-hole)
+	return TriggerType.NONE  # No trigger — scored well below expectation (already complained per-hole)

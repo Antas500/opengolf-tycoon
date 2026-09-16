@@ -77,18 +77,18 @@ func set_building_registry(registry) -> void:
 func set_decoration_registry(registry: Dictionary) -> void:
 	decoration_registry = registry
 
-func place_building(building_type: String, grid_pos: Vector2i, building_registry) -> Building:
+func place_building(building_type: String, grid_pos: Vector2i, registry) -> Building:
 	"""Place a building at the specified grid position"""
-	if building_registry == null or (building_registry is Dictionary and building_registry.is_empty()):
+	if registry == null or (registry is Dictionary and registry.is_empty()):
 		push_error("Building registry not set")
 		return null
 
 	var building_data
-	if building_registry is Dictionary:
-		building_data = building_registry.get(building_type, {})
+	if registry is Dictionary:
+		building_data = registry.get(building_type, {})
 	else:
 		# Support legacy Node-based registry
-		building_data = building_registry.get_building(building_type) if building_registry.has_method("get_building") else {}
+		building_data = registry.get_building(building_type) if registry.has_method("get_building") else {}
 
 	if building_data.is_empty():
 		push_error("Unknown building type: %s" % building_type)
@@ -335,7 +335,6 @@ func get_decorations_in_area(top_left: Vector2i, bottom_right: Vector2i) -> Arra
 	"""Get all decorations within the specified area (checks footprint for multi-tile)"""
 	var result: Array = []
 	for dec in decorations.values():
-		var pos = dec.grid_position
 		# Check if any tile in footprint is within the area
 		var in_area = false
 		for tile_pos in dec.get_footprint():
@@ -533,23 +532,23 @@ func deserialize(data: Dictionary) -> void:
 func _on_building_selected(building: Building) -> void:
 	building_selected.emit(building)
 
-func _on_building_destroyed(building: Building) -> void:
+func _on_building_destroyed(_building: Building) -> void:
 	pass  # Clean up if needed
 
-func _on_tree_selected(tree: TreeEntity) -> void:
+func _on_tree_selected(_tree: TreeEntity) -> void:
 	pass  # Handle tree selection if needed
 
-func _on_tree_destroyed(tree: TreeEntity) -> void:
+func _on_tree_destroyed(_tree: TreeEntity) -> void:
 	pass  # Clean up if needed
 
-func _on_rock_selected(rock: Rock) -> void:
+func _on_rock_selected(_rock: Rock) -> void:
 	pass  # Handle rock selection if needed
 
-func _on_rock_destroyed(rock: Rock) -> void:
+func _on_rock_destroyed(_rock: Rock) -> void:
 	pass  # Clean up if needed
 
-func _on_decoration_selected(decoration: Decoration) -> void:
+func _on_decoration_selected(_decoration: Decoration) -> void:
 	pass  # Handle decoration selection if needed
 
-func _on_decoration_destroyed(decoration: Decoration) -> void:
+func _on_decoration_destroyed(_decoration: Decoration) -> void:
 	pass  # Clean up if needed

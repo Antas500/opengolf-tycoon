@@ -125,7 +125,7 @@ func _ready() -> void:
 
 func _grant_starting_parcels() -> void:
 	# Center 2x2 parcels in the 6x6 grid = parcels (2,2), (2,3), (3,2), (3,3)
-	var center_start = (PARCEL_GRID_COLS / 2) - 1  # = 2
+	var center_start = int(PARCEL_GRID_COLS / 2.0) - 1  # = 2
 	for x in range(center_start, center_start + 2):
 		for y in range(center_start, center_start + 2):
 			owned_parcels[Vector2i(x, y)] = true
@@ -139,8 +139,8 @@ func is_tile_owned(tile_pos: Vector2i) -> bool:
 
 func tile_to_parcel(tile_pos: Vector2i) -> Vector2i:
 	"""Convert a tile position to its parcel coordinate."""
-	var px = (tile_pos.x - GRID_OFFSET) / PARCEL_SIZE
-	var py = (tile_pos.y - GRID_OFFSET) / PARCEL_SIZE
+	var px = int((tile_pos.x - GRID_OFFSET) / float(PARCEL_SIZE))
+	var py = int((tile_pos.y - GRID_OFFSET) / float(PARCEL_SIZE))
 	if px < 0 or px >= PARCEL_GRID_COLS or py < 0 or py >= PARCEL_GRID_ROWS:
 		return Vector2i(-1, -1)
 	return Vector2i(px, py)

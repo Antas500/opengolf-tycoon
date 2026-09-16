@@ -52,11 +52,11 @@ func _generate_pebbles_for_tile(pos: Vector2i) -> void:
 
 	_path_positions[pos] = pebbles
 
-func _on_terrain_tile_changed(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if new_type == TerrainTypes.Type.PATH:
-		_generate_pebbles_for_tile(position)
+		_generate_pebbles_for_tile(tile_pos)
 	elif old_type == TerrainTypes.Type.PATH:
-		_path_positions.erase(position)
+		_path_positions.erase(tile_pos)
 	queue_redraw()
 
 func _draw() -> void:

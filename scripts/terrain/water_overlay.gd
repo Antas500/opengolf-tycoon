@@ -44,12 +44,12 @@ func _scan_water_tiles() -> void:
 			if terrain_grid.get_tile(pos) == TerrainTypes.Type.WATER:
 				_water_positions.append(pos)
 
-func _on_terrain_tile_changed(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if new_type == TerrainTypes.Type.WATER:
-		if position not in _water_positions:
-			_water_positions.append(position)
+		if tile_pos not in _water_positions:
+			_water_positions.append(tile_pos)
 	elif old_type == TerrainTypes.Type.WATER:
-		_water_positions.erase(position)
+		_water_positions.erase(tile_pos)
 	queue_redraw()
 
 func _process(delta: float) -> void:
