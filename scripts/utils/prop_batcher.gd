@@ -127,8 +127,6 @@ func _rebuild_batches() -> void:
 
 		# Drop shadow
 		if config.cast_drop_shadow and shadow_system:
-			var sun_dir = shadow_system.get_sun_direction_vector()
-			var sun_elev = shadow_system.sun_elevation
 			var shadow_offset = shadow_system.calculate_shadow_offset(config.height * scale_mult)
 			var drop_pos = pos + config.base_offset + shadow_offset
 			var drop_size = shadow_system.calculate_shadow_scale(config.height * scale_mult, config.base_width * scale_mult)

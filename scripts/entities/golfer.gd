@@ -1258,7 +1258,7 @@ func finish_round() -> void:
 		var avg_skill = (driving_skill + accuracy_skill + putting_skill + recovery_skill) / 4.0
 		var holes_played = hole_scores.size()
 		var course_trigger = FeedbackTriggers.get_course_trigger(total_strokes, total_par, avg_skill, holes_played)
-		if course_trigger != -1:
+		if course_trigger != FeedbackTriggers.TriggerType.NONE:
 			show_thought(course_trigger)
 
 	# Per-round debug summary
@@ -1332,7 +1332,7 @@ func _get_skill_distance_factor(club: Club) -> float:
 ## green reading, and risk analysis. Returns aim point and stores chosen club.
 func decide_shot_target(hole_position: Vector2i) -> Vector2i:
 	var decision: ShotAI.ShotDecision = ShotAI.decide_shot(self, hole_position)
-	_chosen_club = decision.club
+	_chosen_club = decision.club as Club
 	_shot_strategy = decision.strategy
 	_cached_shot_target = decision.target
 	_cached_shot_target_valid = true
@@ -1677,12 +1677,12 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 							break
 					carry_position = edge_pos
 
-		var distance_yards = terrain_grid.calculate_distance_yards_precise(Vector2(from), carry_position_precise)
+		var putt_distance_yards = terrain_grid.calculate_distance_yards_precise(Vector2(from), carry_position_precise)
 		return {
 			"landing_position": carry_position,
 			"landing_position_precise": carry_position_precise,
 			"carry_position_precise": carry_position_precise,
-			"distance": distance_yards,
+			"distance": putt_distance_yards,
 			"accuracy": total_accuracy,
 			"club": club,
 			"rollout_tiles": 0.0,
@@ -1747,7 +1747,7 @@ func _get_bunker_depth_at_ball() -> int:
 ## rollout_distance (tiles), and is_backspin flag.
 ## Rollout depends on club, landing terrain, slope, and player skill (backspin).
 func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2,
-		shot_origin: Vector2, carry_distance: float, total_accuracy: float) -> Dictionary:
+		shot_origin: Vector2, carry_distance: float, _total_accuracy: float) -> Dictionary:
 	var terrain_grid = GameManager.terrain_grid
 	var no_rollout = {
 		"final_position": carry_precise,
@@ -2480,7 +2480,11 @@ func _create_group_badge() -> void:
 	_group_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
 	_group_badge.visible = false
 	info_container.add_child(_group_badge)
-	_group_badge.layout_mode = 2  # Set after add_child so container applies it
+	# Set after add_child so the container applies its layout. The raw layout
+	# value has no matching enum constant, so silence the enum warnings here.
+	@warning_ignore_start("int_as_enum_without_cast", "int_as_enum_without_match")
+	_group_badge.layout_mode = 2
+	@warning_ignore_restore("int_as_enum_without_cast", "int_as_enum_without_match")
 	info_container.move_child(_group_badge, 0)  # Place above score label
 
 ## Update group badge (no position tracking needed — VBoxContainer handles layout)
@@ -2488,7 +2492,7 @@ func _update_group_badge() -> void:
 	pass
 
 ## Set group badge text and color (called by GolferManager after group assignment)
-func set_group_badge(gid: int, group_size: int) -> void:
+func set_group_badge(gid: int, _group_size: int) -> void:
 	if not _group_badge:
 		return
 	_group_badge.text = "Group %d" % (gid + 1)
@@ -2632,7 +2636,7 @@ func _on_green_fee_paid(paid_golfer_id: int, _paid_golfer_name: String, amount: 
 
 		# Check price sensitivity and show thought
 		var price_trigger = FeedbackTriggers.get_price_trigger(amount, GameManager.reputation)
-		if price_trigger != -1:
+		if price_trigger != FeedbackTriggers.TriggerType.NONE:
 			# Delay price feedback slightly so it doesn't overlap with payment notification
 			await get_tree().create_timer(1.0).timeout
 			if not is_instance_valid(self):
@@ -2642,26 +2646,26 @@ func _on_green_fee_paid(paid_golfer_id: int, _paid_golfer_name: String, amount: 
 ## Show floating payment notification above golfer
 func show_payment_notification(amount: int) -> void:
 	# Create a temporary label for the notification
-	var notification = Label.new()
-	notification.text = "+$%d" % amount
-	notification.modulate = Color(0.2, 1.0, 0.2, 1.0)  # Green color
-	notification.position = Vector2(0, -40)  # Above the golfer's head
+	var notification_label = Label.new()
+	notification_label.text = "+$%d" % amount
+	notification_label.modulate = Color(0.2, 1.0, 0.2, 1.0)  # Green color
+	notification_label.position = Vector2(0, -40)  # Above the golfer's head
 
 	# Set label properties
-	notification.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	notification.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	notification.add_theme_font_size_override("font_size", 14)
+	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notification_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	notification_label.add_theme_font_size_override("font_size", 14)
 
-	add_child(notification)
+	add_child(notification_label)
 
 	# Animate the notification
 	var tween = create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(notification, "position:y", -60, 1.5)  # Float up
-	tween.tween_property(notification, "modulate:a", 0.0, 1.5)  # Fade out
+	tween.tween_property(notification_label, "position:y", -60, 1.5)  # Float up
+	tween.tween_property(notification_label, "modulate:a", 0.0, 1.5)  # Fade out
 
 	# Remove the notification when done
-	tween.finished.connect(func(): notification.queue_free())
+	tween.finished.connect(func(): notification_label.queue_free())
 
 ## Check proximity to buildings and generate revenue/satisfaction effects
 func _check_building_proximity() -> void:
@@ -2719,21 +2723,21 @@ func _check_building_proximity() -> void:
 
 ## Show floating notification for building revenue
 func _show_building_revenue_notification(amount: int, _building_type: String) -> void:
-	var notification = Label.new()
-	notification.text = "+$%d" % amount
-	notification.modulate = Color(0.4, 0.8, 1.0, 1.0)  # Blue for building revenue
-	notification.position = Vector2(15, -30)
+	var notification_label = Label.new()
+	notification_label.text = "+$%d" % amount
+	notification_label.modulate = Color(0.4, 0.8, 1.0, 1.0)  # Blue for building revenue
+	notification_label.position = Vector2(15, -30)
 
-	notification.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	notification.add_theme_font_size_override("font_size", 12)
+	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notification_label.add_theme_font_size_override("font_size", 12)
 
-	add_child(notification)
+	add_child(notification_label)
 
 	var tween = create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(notification, "position:y", -50, 1.2)
-	tween.tween_property(notification, "modulate:a", 0.0, 1.2)
-	tween.finished.connect(func(): notification.queue_free())
+	tween.tween_property(notification_label, "position:y", -50, 1.2)
+	tween.tween_property(notification_label, "modulate:a", 0.0, 1.2)
+	tween.finished.connect(func(): notification_label.queue_free())
 
 ## Apply clubhouse effects when golfer finishes round (visits clubhouse)
 func _apply_clubhouse_effects() -> void:

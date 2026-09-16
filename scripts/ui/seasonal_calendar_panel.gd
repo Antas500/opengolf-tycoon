@@ -101,11 +101,11 @@ func _refresh_display() -> void:
 	mod_header.add_theme_color_override("font_color", UIConstants.COLOR_INFO)
 	_content.add_child(mod_header)
 
-	var theme = GameManager.current_theme
-	var spawn_mod = SeasonSystem.get_blended_spawn_modifier(day, theme)
-	var maint_mod = SeasonSystem.get_blended_maintenance_modifier(day, theme)
-	var fee_tol = SeasonSystem.get_fee_tolerance(day, theme)
-	var prestige = SeasonSystem.get_tournament_prestige(day, theme)
+	var course_theme = GameManager.current_theme
+	var spawn_mod = SeasonSystem.get_blended_spawn_modifier(day, course_theme)
+	var maint_mod = SeasonSystem.get_blended_maintenance_modifier(day, course_theme)
+	var fee_tol = SeasonSystem.get_fee_tolerance(day, course_theme)
+	var prestige = SeasonSystem.get_tournament_prestige(day, course_theme)
 	_add_stat_row(_content, "Golfer Demand", _format_modifier(spawn_mod), _get_modifier_color(spawn_mod))
 	_add_stat_row(_content, "Maintenance Cost", _format_modifier(maint_mod), _get_modifier_color(maint_mod, true))
 	_add_stat_row(_content, "Fee Tolerance", _format_modifier(fee_tol), _get_modifier_color(fee_tol))

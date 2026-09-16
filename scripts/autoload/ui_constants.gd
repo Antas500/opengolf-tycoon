@@ -152,21 +152,21 @@ const WEATHER_NAMES := {
 # HELPER FUNCTIONS
 # =============================================================================
 
-static func get_scale_factor() -> float:
+func get_scale_factor() -> float:
 	var viewport_height := DisplayServer.window_get_size().y
 	var scale := viewport_height / 1080.0
 	return clampf(scale, 0.8, 1.5)
 
-static func get_scaled_size(base_size: Vector2) -> Vector2:
+func get_scaled_size(base_size: Vector2) -> Vector2:
 	return base_size * get_scale_factor()
 
-static func get_scaled_font_size(base_size: int) -> int:
+func get_scaled_font_size(base_size: int) -> int:
 	var scale := get_scale_factor()
 	if scale > 1.1:
 		return base_size + 2
 	return base_size
 
-static func get_tool_icon(tool_type) -> String:
+func get_tool_icon(tool_type) -> String:
 	if tool_type is int:
 		# TerrainTypes enum
 		match tool_type:
@@ -184,15 +184,15 @@ static func get_tool_icon(tool_type) -> String:
 	else:
 		return TOOL_ICONS.get(str(tool_type), "[?]")
 
-static func get_weather_icon(weather_type: int) -> String:
+func get_weather_icon(weather_type: int) -> String:
 	return WEATHER_ICONS.get(weather_type, "???")
 
-static func get_weather_name(weather_type: int) -> String:
+func get_weather_name(weather_type: int) -> String:
 	return WEATHER_NAMES.get(weather_type, "Unknown")
 
 ## Return the appropriate score color for a given score-to-par differential.
 ## Used by scorecards, round summaries, and golfer info popups.
-static func get_score_color(diff: int) -> Color:
+func get_score_color(diff: int) -> Color:
 	if diff < -1: return COLOR_SCORE_EAGLE
 	if diff == -1: return COLOR_SCORE_BIRDIE
 	if diff == 0: return COLOR_SCORE_PAR

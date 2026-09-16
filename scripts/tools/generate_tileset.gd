@@ -43,7 +43,7 @@ func _run() -> void:
 	# Draw isometric diamond tiles
 	for i in range(num_types):
 		var col = i % TILES_PER_ROW
-		var row = i / TILES_PER_ROW
+		var row = int(i / float(TILES_PER_ROW))
 		var base_x = col * TILE_WIDTH
 		var base_y = row * TILE_HEIGHT
 

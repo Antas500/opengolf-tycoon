@@ -2,7 +2,7 @@ extends GutTest
 var grid: TerrainGrid
 var previous_land
 var previous_pause: bool
-var previous_speed: int
+var previous_speed: GameManager.GameSpeed
 
 func before_each() -> void:
 	previous_land = GameManager.land_manager

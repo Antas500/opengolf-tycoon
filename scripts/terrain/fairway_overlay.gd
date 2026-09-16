@@ -40,20 +40,20 @@ func _scan_tiles() -> void:
 			elif tile_type == TerrainTypes.Type.GREEN:
 				_green_positions.append(pos)
 
-func _on_terrain_tile_changed(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	# Remove from old lists
 	if old_type == TerrainTypes.Type.FAIRWAY or old_type == TerrainTypes.Type.TEE_BOX:
-		_fairway_positions.erase(position)
+		_fairway_positions.erase(tile_pos)
 	elif old_type == TerrainTypes.Type.GREEN:
-		_green_positions.erase(position)
+		_green_positions.erase(tile_pos)
 
 	# Add to new lists
 	if new_type == TerrainTypes.Type.FAIRWAY or new_type == TerrainTypes.Type.TEE_BOX:
-		if position not in _fairway_positions:
-			_fairway_positions.append(position)
+		if tile_pos not in _fairway_positions:
+			_fairway_positions.append(tile_pos)
 	elif new_type == TerrainTypes.Type.GREEN:
-		if position not in _green_positions:
-			_green_positions.append(position)
+		if tile_pos not in _green_positions:
+			_green_positions.append(tile_pos)
 
 	queue_redraw()
 
@@ -114,7 +114,6 @@ func _draw_green_pattern(pos: Vector2i, screen_pos: Vector2) -> void:
 	var local_pos = to_local(screen_pos)
 	var tw = terrain_grid.tile_width
 	var th = terrain_grid.tile_height
-	var center = local_pos + Vector2(tw / 2.0, th / 2.0)
 
 	# Greens have a finer, more manicured pattern
 	var stripe_phase = (pos.x + pos.y) % 2

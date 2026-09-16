@@ -3,7 +3,6 @@ class_name GolferManager
 ## GolferManager - Spawns and manages AI golfers on the course
 
 const GOLFER_SCENE = preload("res://scenes/entities/golfer.tscn")
-const TerrainTypes = preload("res://scripts/terrain/terrain_types.gd")
 
 @export var min_spawn_cooldown_seconds: float = 15.0  # Minimum cooldown between group spawns
 
@@ -843,17 +842,17 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 
 	# Tournament golfers don't give reputation or record daily stats — skip to group removal
 	if finished_golfer.is_tournament_golfer:
-		var group_id = finished_golfer.group_id
-		var all_finished = true
-		var group_golfers: Array[Golfer] = []
+		var t_group_id = finished_golfer.group_id
+		var t_all_finished = true
+		var t_group_golfers: Array[Golfer] = []
 		for golfer in active_golfers:
-			if golfer.group_id == group_id:
-				group_golfers.append(golfer)
+			if golfer.group_id == t_group_id:
+				t_group_golfers.append(golfer)
 				if golfer.current_state != Golfer.State.FINISHED:
-					all_finished = false
-		if all_finished:
+					t_all_finished = false
+		if t_all_finished:
 			await get_tree().create_timer(1.0).timeout
-			for golfer in group_golfers:
+			for golfer in t_group_golfers:
 				if is_instance_valid(golfer):
 					remove_golfer(golfer.golfer_id)
 		return

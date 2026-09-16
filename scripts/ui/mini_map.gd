@@ -123,8 +123,8 @@ func set_camera_rect(viewport_rect: Rect2, _grid_width: int, _grid_height: int) 
 	for point in corners:
 		min_g = Vector2(minf(min_g.x, point.x), minf(min_g.y, point.y))
 		max_g = Vector2(maxf(max_g.x, point.x), maxf(max_g.y, point.y))
-	var size := Vector2(float(_terrain_grid.grid_width), float(_terrain_grid.grid_height))
-	_camera_rect = Rect2(min_g / size, (max_g - min_g) / size)
+	var grid_size := Vector2(float(_terrain_grid.grid_width), float(_terrain_grid.grid_height))
+	_camera_rect = Rect2(min_g / grid_size, (max_g - min_g) / grid_size)
 	queue_redraw()
 
 func _process(delta: float) -> void:

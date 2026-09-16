@@ -217,9 +217,9 @@ func _visible_vertices(visible_rect: Rect2) -> Array[Vector2i]:
 	return vertices
 
 ## Draw a small projection-aware diamond on a vertex; returns its local centre.
-func _draw_vertex_marker(vertex: Vector2i, color: Color, scale: float) -> Vector2:
-	var axis_x: Vector2 = terrain_grid.projection.axis_x() * scale
-	var axis_y: Vector2 = terrain_grid.projection.axis_y() * scale
+func _draw_vertex_marker(vertex: Vector2i, color: Color, marker_scale: float) -> Vector2:
+	var axis_x: Vector2 = terrain_grid.projection.axis_x() * marker_scale
+	var axis_y: Vector2 = terrain_grid.projection.axis_y() * marker_scale
 	var center: Vector2 = to_local(terrain_grid.grid_point_to_screen(Vector2(vertex)))
 	draw_colored_polygon(PackedVector2Array([
 		center - axis_x, center - axis_y, center + axis_x, center + axis_y,

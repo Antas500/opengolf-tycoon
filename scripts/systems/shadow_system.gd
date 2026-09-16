@@ -48,7 +48,7 @@ func calculate_shadow_offset(object_height: float) -> Vector2:
 
 ## Calculate shadow scale factor based on height
 ## Taller objects cast larger shadows
-func calculate_shadow_scale(object_height: float, base_width: float) -> Vector2:
+func calculate_shadow_scale(_object_height: float, base_width: float) -> Vector2:
 	var length_factor = 1.0 / tan(deg_to_rad(sun_elevation))
 	length_factor = clamp(length_factor, 0.5, 1.5)
 	# Shadow stretches in sun direction

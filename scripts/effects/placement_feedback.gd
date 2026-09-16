@@ -185,12 +185,12 @@ func _draw() -> void:
 		# Draw as diamond/star shape
 		_draw_particle(pos, size, particle["rotation"], color)
 
-func _draw_particle(pos: Vector2, size: float, rotation: float, color: Color) -> void:
+func _draw_particle(pos: Vector2, size: float, spin: float, color: Color) -> void:
 	var points = PackedVector2Array()
 
 	# Create diamond shape
 	for i in range(4):
-		var angle = rotation + i * PI / 2.0
+		var angle = spin + i * PI / 2.0
 		points.append(pos + Vector2(cos(angle), sin(angle)) * size)
 
 	draw_colored_polygon(points, color)

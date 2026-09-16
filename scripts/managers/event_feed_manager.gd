@@ -311,7 +311,7 @@ func _on_golfer_finished_round(golfer_id: int, total_score: int, total_par: int)
 			"Outstanding round: %d (%s) completed" % [total_score, diff_str],
 			NavigateType.GOLFER, golfer_id)
 
-func _on_golfer_finished_hole(golfer_id: int, hole_number: int, strokes: int, par: int) -> void:
+func _on_golfer_finished_hole(_golfer_id: int, hole_number: int, strokes: int, par: int) -> void:
 	var diff = strokes - par
 	if diff <= -2:
 		var score_name = "Eagle" if diff == -2 else "Albatross"
@@ -324,10 +324,10 @@ func _on_weather_changed(weather_type: int, _intensity: float) -> void:
 		0: "Sunny", 1: "Partly Cloudy", 2: "Overcast",
 		3: "Light Rain", 4: "Rain", 5: "Heavy Rain"
 	}
-	var name = weather_names.get(weather_type, "Unknown")
-	add_event(Category.WEATHER, Priority.INFO, "Weather: %s" % name)
+	var weather_name = weather_names.get(weather_type, "Unknown")
+	add_event(Category.WEATHER, Priority.INFO, "Weather: %s" % weather_name)
 
-func _on_season_changed(old_season: int, new_season: int) -> void:
+func _on_season_changed(_old_season: int, new_season: int) -> void:
 	var season_names := {0: "Spring", 1: "Summer", 2: "Fall", 3: "Winter"}
 	var season_name = season_names.get(new_season, "Unknown")
 	var active_event = SeasonalEvents.get_active_event(GameManager.current_day + 1)
@@ -342,22 +342,22 @@ func _on_seasonal_event_upcoming(event_name: String, days_until: int) -> void:
 
 func _on_tournament_scheduled(tier: int, start_day: int) -> void:
 	var tier_names := {0: "Local", 1: "Regional", 2: "National", 3: "Championship"}
-	var name = tier_names.get(tier, "Tournament")
+	var tier_name = tier_names.get(tier, "Tournament")
 	add_event(Category.TOURNAMENT, Priority.NORMAL,
-		"%s tournament scheduled for Day %d" % [name, start_day])
+		"%s tournament scheduled for Day %d" % [tier_name, start_day])
 
 func _on_tournament_started(tier: int) -> void:
 	var tier_names := {0: "Local", 1: "Regional", 2: "National", 3: "Championship"}
-	var name = tier_names.get(tier, "Tournament")
-	add_event(Category.TOURNAMENT, Priority.HIGH, "%s tournament has begun!" % name)
+	var tier_name = tier_names.get(tier, "Tournament")
+	add_event(Category.TOURNAMENT, Priority.HIGH, "%s tournament has begun!" % tier_name)
 
 func _on_tournament_completed(tier: int, results: Dictionary) -> void:
 	var tier_names := {0: "Local", 1: "Regional", 2: "National", 3: "Championship"}
-	var name = tier_names.get(tier, "Tournament")
+	var tier_name = tier_names.get(tier, "Tournament")
 	var winner = results.get("winner_name", "Unknown")
 	var score = results.get("winning_score", 0)
 	add_event(Category.TOURNAMENT, Priority.HIGH,
-		"%s tournament complete! Winner: %s (%d)" % [name, winner, score])
+		"%s tournament complete! Winner: %s (%d)" % [tier_name, winner, score])
 
 func _on_hole_created(hole_number: int, par: int, distance_yards: int) -> void:
 	add_event(Category.COURSE, Priority.NORMAL,
@@ -413,7 +413,7 @@ func _format_money(amount: int) -> String:
 	if amount >= 1000000:
 		return "%.1fM" % (amount / 1000000.0)
 	if amount >= 1000:
-		return "%d,%03d" % [amount / 1000, amount % 1000]
+		return "%d,%03d" % [int(amount / 1000.0), amount % 1000]
 	return str(amount)
 
 # --- Fast-forward tracking ---
@@ -449,8 +449,8 @@ func _on_game_speed_changed(new_speed: int) -> void:
 			if _ff_records_set > 0:
 				parts.append("%d record%s" % [_ff_records_set, "s" if _ff_records_set > 1 else ""])
 			if revenue_change != 0:
-				var sign = "+" if revenue_change > 0 else ""
-				parts.append("%s$%s" % [sign, _format_money(revenue_change)])
+				var sign_str = "+" if revenue_change > 0 else ""
+				parts.append("%s$%s" % [sign_str, _format_money(revenue_change)])
 			if not parts.is_empty():
 				EventBus.notify("Fast-forward: " + ", ".join(parts), "info")
 		_ff_start_day = -1

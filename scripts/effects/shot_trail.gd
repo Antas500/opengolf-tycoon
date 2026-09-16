@@ -2,8 +2,6 @@ extends Line2D
 class_name ShotTrail
 ## ShotTrail - Visual arc showing shot path, fades and self-destructs.
 
-const TerrainTypes = preload("res://scripts/terrain/terrain_types.gd")
-
 const FADE_DURATION: float = 4.0
 const ARC_POINTS: int = 12
 const TRAIL_WIDTH: float = 2.0

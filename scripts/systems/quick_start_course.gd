@@ -108,7 +108,7 @@ static func _paint_hole(terrain_grid: TerrainGrid, tee: Vector2i, green: Vector2
 
 	for i in range(steps + 1):
 		var center := Vector2(tee) + direction * float(i)
-		var half_w := corridor_width / 2
+		var half_w := int(corridor_width / 2.0)
 		for w in range(-half_w, half_w + 1):
 			var tile_pos := Vector2i(int(round(center.x + perp.x * w)), int(round(center.y + perp.y * w)))
 			if terrain_grid.is_valid_position(tile_pos) and _is_owned(tile_pos):
@@ -120,7 +120,7 @@ static func _paint_hole(terrain_grid: TerrainGrid, tee: Vector2i, green: Vector2
 	# Paint rough border around fairway (1 tile wider on each side)
 	for i in range(steps + 1):
 		var center := Vector2(tee) + direction * float(i)
-		var outer_w := corridor_width / 2 + 1
+		var outer_w := int(corridor_width / 2.0) + 1
 		for w in [-outer_w, outer_w]:
 			var tile_pos := Vector2i(int(round(center.x + perp.x * w)), int(round(center.y + perp.y * w)))
 			if terrain_grid.is_valid_position(tile_pos) and _is_owned(tile_pos):

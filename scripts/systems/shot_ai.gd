@@ -622,7 +622,7 @@ static func _get_candidate_clubs(gd: GolferData, distance_to_hole: float, target
 static func _score_landing_zone(
 	gd: GolferData, ball_pos: Vector2i, landing: Vector2i,
 	hole_position: Vector2i, terrain_grid: TerrainGrid,
-	club: int, shots_remaining: int
+	_club: int, shots_remaining: int
 ) -> float:
 	# --- Tree collision check (ball flight path) ---
 	if _path_crosses_trees(ball_pos, landing, terrain_grid):

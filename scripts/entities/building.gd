@@ -14,7 +14,6 @@ var building_data: Dictionary = {}
 
 ## Shadow references for updates when sun changes
 var _shadow_refs: Dictionary = {}
-var _shadow_config: ShadowRenderer.ShadowConfig = null
 var _custom_shadow: Polygon2D = null  # Building-specific shadow shape
 
 ## Chimney smoke animation
@@ -260,7 +259,7 @@ func _update_visuals() -> void:
 	var shape = RectangleShape2D.new()
 	shape.size = Vector2(size_x, size_y)
 	collision.shape = shape
-	collision.position = Vector2(size_x / 2, size_y / 2)
+	collision.position = Vector2(int(size_x / 2.0), int(size_y / 2.0))
 	click_area.add_child(collision)
 
 	# Connect click detection
@@ -940,7 +939,7 @@ func _draw_snack_bar(visual: Node2D, width_px: int, height_px: int) -> void:
 		var stripe = Polygon2D.new()
 		stripe.color = Color(0.95, 0.95, 0.95)
 		var x1 = i * width_px / 4.5
-		var x2 = x1 + width_px / 9
+		var x2 = x1 + int(width_px / 9.0)
 		stripe.polygon = PackedVector2Array([
 			Vector2(x1, height_px * 0.16), Vector2(x2, height_px * 0.16),
 			Vector2(x2 + 2, height_px * 0.27), Vector2(x1 + 2, height_px * 0.27)

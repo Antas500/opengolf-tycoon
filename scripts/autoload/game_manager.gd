@@ -185,7 +185,7 @@ func _on_golfer_finished_round_for_stats(_golfer_id: int, total_strokes: int, to
 	if current_course:
 		var open_holes = current_course.get_open_holes()
 		if open_holes.size() > 0:
-			var per_hole = green_fee / open_holes.size()
+			var per_hole = int(green_fee / float(open_holes.size()))
 			for hole in open_holes:
 				hole.total_revenue += per_hole
 
@@ -335,10 +335,10 @@ func _log_economic_snapshot() -> void:
 	}
 	var snapshots: Array = []
 	if FileAccess.file_exists(SNAPSHOT_PATH):
-		var file = FileAccess.open(SNAPSHOT_PATH, FileAccess.READ)
-		if file:
-			var existing = JSON.parse_string(file.get_as_text())
-			file.close()
+		var existing_file = FileAccess.open(SNAPSHOT_PATH, FileAccess.READ)
+		if existing_file:
+			var existing = JSON.parse_string(existing_file.get_as_text())
+			existing_file.close()
 			if existing is Array:
 				snapshots = existing
 	snapshots.append(snapshot)

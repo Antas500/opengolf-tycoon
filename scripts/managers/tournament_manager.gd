@@ -285,7 +285,6 @@ func _start_tournament() -> void:
 func _play_round(round_number: int) -> void:
 	current_round = round_number
 
-	var tier_data = TournamentSystem.get_tier_data(current_tournament_tier)
 	var round_label = "Round %d/%d" % [round_number, total_rounds] if total_rounds > 1 else ""
 
 	if _leaderboard:
@@ -748,7 +747,7 @@ func _complete_tournament() -> void:
 	var completed_tier = current_tournament_tier
 
 	if _pre_tournament_speed >= 0:
-		GameManager.current_speed = _pre_tournament_speed
+		GameManager.current_speed = _pre_tournament_speed as GameManager.GameSpeed
 		_pre_tournament_speed = -1
 
 	# Note: simulated round moments are emitted per-round in _simulate_round_headless().

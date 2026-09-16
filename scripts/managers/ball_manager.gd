@@ -212,7 +212,7 @@ func get_all_balls() -> Array:
 	return active_balls.values()
 
 ## EventBus signal handlers
-func _on_shot_taken(golfer_id: int, hole_number: int, stroke_count: int) -> void:
+func _on_shot_taken(_golfer_id: int, _hole_number: int, _stroke_count: int) -> void:
 	# Shot taken signal received
 	# The actual ball movement will be triggered by ball_landed signal
 	# which contains the from/to positions
@@ -241,7 +241,7 @@ func _on_hazard_penalty(golfer_id: int, hazard_type: String, reset_position: Vec
 	ball.visible = true
 	ball_in_hazard.emit(golfer_id, hazard_type)
 
-func _on_ball_state_changed(old_state: Ball.BallState, new_state: Ball.BallState, golfer_id: int) -> void:
+func _on_ball_state_changed(_old_state: Ball.BallState, new_state: Ball.BallState, golfer_id: int) -> void:
 	# Ball state changes are logged here; penalty handling is triggered by golfer logic
 	# via the hazard_penalty EventBus signal
 	match new_state:
@@ -250,12 +250,12 @@ func _on_ball_state_changed(old_state: Ball.BallState, new_state: Ball.BallState
 		Ball.BallState.OUT_OF_BOUNDS:
 			print("Ball %d went out of bounds!" % golfer_id)
 
-func _on_ball_landed_in_bunker(landing_pos: Vector2i, golfer_id: int) -> void:
+func _on_ball_landed_in_bunker(_landing_pos: Vector2i, golfer_id: int) -> void:
 	var ball = get_ball(golfer_id)
 	if ball:
 		SandSprayEffect.create_at(ball.get_parent(), ball.global_position)
 
-func _on_ball_landed_in_water(landing_pos: Vector2i, golfer_id: int) -> void:
+func _on_ball_landed_in_water(_landing_pos: Vector2i, golfer_id: int) -> void:
 	var ball = get_ball(golfer_id)
 	if ball:
 		WaterSplashEffect.create_at(ball.get_parent(), ball.global_position)
@@ -266,7 +266,7 @@ func _on_golfer_started_hole(_golfer_id: int, _hole_number: int) -> void:
 	# Don't show ball here - the shot handlers will make it visible at the correct tee position
 	pass
 
-func _on_golfer_finished_hole(golfer_id: int, hole_number: int, strokes: int, par: int) -> void:
+func _on_golfer_finished_hole(golfer_id: int, _hole_number: int, _strokes: int, _par: int) -> void:
 	# Golfer finished the hole - hide the ball until next hole
 	hide_ball(golfer_id)
 

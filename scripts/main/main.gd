@@ -2661,7 +2661,6 @@ func _is_valid_secondary_tee_position(pos: Vector2i) -> bool:
 
 func _execute_forward_tee_move(new_pos: Vector2i) -> void:
 	var hole_number = _hole_move_data.hole_number
-	var old_pos = _hole_move_data.tee_positions.get("forward", _hole_move_data.tee_position)
 	_hole_move_data.tee_positions["forward"] = new_pos
 	_hole_move_data.recalculate_par_by_tee(terrain_grid)
 
@@ -2675,7 +2674,6 @@ func _execute_forward_tee_move(new_pos: Vector2i) -> void:
 
 func _execute_middle_tee_move(new_pos: Vector2i) -> void:
 	var hole_number = _hole_move_data.hole_number
-	var old_pos = _hole_move_data.tee_positions.get("middle", _hole_move_data.tee_position)
 	_hole_move_data.tee_positions["middle"] = new_pos
 	_hole_move_data.recalculate_par_by_tee(terrain_grid)
 
@@ -2692,10 +2690,10 @@ func _execute_middle_tee_move(new_pos: Vector2i) -> void:
 var _is_undoing: bool = false  # Prevent re-recording changes triggered by undo/redo
 var _suppress_tile_undo: bool = false  # Suppress tile change recording during entity placement/removal
 
-func _on_terrain_tile_changed_for_undo(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed_for_undo(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if _is_undoing or _suppress_tile_undo:
 		return
-	undo_manager.record_tile_change(position, old_type, new_type)
+	undo_manager.record_tile_change(tile_pos, old_type, new_type)
 
 func _perform_undo() -> void:
 	if not undo_manager.can_undo():

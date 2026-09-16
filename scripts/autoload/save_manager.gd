@@ -125,9 +125,9 @@ func get_save_list() -> Array[Dictionary]:
 	var file_name = dir.get_next()
 	while file_name != "":
 		if not dir.current_is_dir() and file_name.ends_with(".save"):
-			var name = file_name.replace(".save", "")
+			var save_name = file_name.replace(".save", "")
 			var metadata = _read_save_metadata(SAVE_DIR + file_name)
-			metadata["name"] = name
+			metadata["name"] = save_name
 			saves.append(metadata)
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -268,8 +268,6 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager._end_of_day_triggered = false
 	GameManager._end_of_day_emitted = false
 
-	var version = data.get("version", 1)
-
 	# Game state (with fallbacks for older save versions)
 	var game = data.get("game_state", data)  # v1 had flat structure
 	GameManager.course_name = game.get("course_name", "Loaded Course")
@@ -341,7 +339,7 @@ func _apply_save_data(data: Dictionary) -> void:
 	# Weather
 	if GameManager.weather_system and data.has("weather"):
 		var weather_data = data["weather"]
-		GameManager.weather_system.weather_type = int(weather_data.get("type", 0))
+		GameManager.weather_system.weather_type = int(weather_data.get("type", 0)) as WeatherSystem.WeatherType
 		GameManager.weather_system.intensity = float(weather_data.get("intensity", 0.0))
 		# Emit signal to update UI and visuals
 		EventBus.weather_changed.emit(GameManager.weather_system.weather_type, GameManager.weather_system.intensity)
