@@ -10,8 +10,10 @@ func before_each() -> void:
 	grid.grid_width = 16
 	grid.grid_height = 16
 	add_child_autofree(grid)
+	await get_tree().process_frame
 
 func after_each() -> void:
+	await get_tree().process_frame
 	GameManager.entity_layer = _previous_entities
 
 func test_habitats_are_bounded_repeatable_and_do_not_modify_course_or_rng() -> void:

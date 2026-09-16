@@ -1,10 +1,9 @@
 extends GutTest
 ## Tests for SaveManager - Save/load data serialization
 ##
-## Note: These tests focus on data serialization logic (hole serialize/deserialize)
-## since full save/load requires filesystem access and scene tree references.
-## The SaveManager's _serialize_holes and _deserialize_holes methods are tested
-## through GameManager's CourseData.
+## Focuses on data serialization logic; filesystem tests are covered by
+## integration (manual) testing. Helpers mirror SaveManager's actual logic
+## so drift is detected early.
 
 
 # --- Hole Serialization Round-trip ---
@@ -42,15 +41,15 @@ func test_hole_serialization_roundtrip() -> void:
 	# Check serialized format
 	assert_eq(serialized[0].hole_number, 1)
 	assert_eq(serialized[0].par, 3)
-	assert_eq(serialized[0].tee_position.x, 10)
-	assert_eq(serialized[0].tee_position.y, 20)
+	assert_eq(int(serialized[0].tee_position.x), 10)
+	assert_eq(int(serialized[0].tee_position.y), 20)
 	assert_eq(serialized[0].is_open, true)
-	assert_eq(serialized[0].difficulty_rating, 3.5)
+	assert_almost_eq(float(serialized[0].difficulty_rating), 3.5, 0.001)
 
 	assert_eq(serialized[1].hole_number, 2)
 	assert_eq(serialized[1].par, 5)
 	assert_eq(serialized[1].is_open, false)
-	assert_eq(serialized[1].difficulty_rating, 7.0)
+	assert_almost_eq(float(serialized[1].difficulty_rating), 7.0, 0.001)
 
 	# Deserialize
 	var loaded_course = GameManager.CourseData.new()
@@ -64,7 +63,7 @@ func test_hole_serialization_roundtrip() -> void:
 	assert_eq(loaded_course.holes[0].hole_position, Vector2i(31, 41))
 	assert_eq(loaded_course.holes[0].distance_yards, 150)
 	assert_eq(loaded_course.holes[0].is_open, true)
-	assert_eq(loaded_course.holes[0].difficulty_rating, 3.5)
+	assert_almost_eq(loaded_course.holes[0].difficulty_rating, 3.5, 0.001)
 
 	assert_eq(loaded_course.holes[1].hole_number, 2)
 	assert_eq(loaded_course.holes[1].par, 5)
@@ -80,7 +79,7 @@ func test_hole_serialization_defaults() -> void:
 	assert_eq(course.holes[0].hole_number, 1)
 	assert_eq(course.holes[0].par, 4, "Default par should be 4")
 	assert_eq(course.holes[0].is_open, true, "Default should be open")
-	assert_eq(course.holes[0].difficulty_rating, 1.0, "Default difficulty should be 1.0")
+	assert_almost_eq(course.holes[0].difficulty_rating, 1.0, 0.001, "Default difficulty should be 1.0")
 
 func test_hole_serialization_empty() -> void:
 	var course = GameManager.CourseData.new()
@@ -112,11 +111,11 @@ func test_game_state_json_roundtrip() -> void:
 	var parsed = JSON.parse_string(json_string)
 
 	assert_not_null(parsed, "JSON should parse successfully")
-	assert_eq(parsed.version, 2)
+	assert_eq(int(parsed.version), 2)
 	assert_eq(parsed.game_state.course_name, "Test Links")
-	assert_eq(parsed.game_state.money, 75000)
+	assert_eq(int(parsed.game_state.money), 75000)
 	assert_almost_eq(float(parsed.game_state.reputation), 65.5, 0.01)
-	assert_eq(parsed.game_state.green_fee, 45)
+	assert_eq(int(parsed.game_state.green_fee), 45)
 
 func test_records_json_roundtrip() -> void:
 	# Test that CourseRecords survive JSON serialization

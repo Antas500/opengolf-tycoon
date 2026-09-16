@@ -12,12 +12,12 @@ func test_reputation_clamped_to_max_on_load() -> void:
 	# Simulate what happens when loading a save with reputation > 100
 	var loaded_rep = 150.0
 	var clamped = clampf(float(loaded_rep), 0.0, 100.0)
-	assert_eq(clamped, 100.0, "Reputation should clamp to 100 max")
+	assert_almost_eq(clamped, 100.0, 0.001, "Reputation should clamp to 100 max")
 
 func test_reputation_clamped_to_min_on_load() -> void:
 	var loaded_rep = -20.0
 	var clamped = clampf(float(loaded_rep), 0.0, 100.0)
-	assert_eq(clamped, 0.0, "Reputation should clamp to 0 min")
+	assert_almost_eq(clamped, 0.0, 0.001, "Reputation should clamp to 0 min")
 
 func test_reputation_preserved_when_valid() -> void:
 	var loaded_rep = 65.5
@@ -43,29 +43,29 @@ func test_negative_day_clamped() -> void:
 func test_hour_clamped_to_valid_range() -> void:
 	var loaded_hour = 25.0
 	var clamped = clampf(float(loaded_hour), 0.0, 24.0)
-	assert_eq(clamped, 24.0, "Hour > 24 should clamp to 24")
+	assert_almost_eq(clamped, 24.0, 0.001, "Hour > 24 should clamp to 24")
 
 func test_negative_hour_clamped() -> void:
 	var loaded_hour = -3.0
 	var clamped = clampf(float(loaded_hour), 0.0, 24.0)
-	assert_eq(clamped, 0.0, "Negative hour should clamp to 0")
+	assert_almost_eq(clamped, 0.0, 0.001, "Negative hour should clamp to 0")
 
 
 # --- Green Fee Validation ---
 
 func test_green_fee_clamped_to_min() -> void:
 	var loaded_fee = 2
-	var clamped = clamp(int(loaded_fee), GameManager.MIN_GREEN_FEE, GameManager.MAX_GREEN_FEE)
+	var clamped = clampi(int(loaded_fee), GameManager.MIN_GREEN_FEE, GameManager.MAX_GREEN_FEE)
 	assert_eq(clamped, GameManager.MIN_GREEN_FEE, "Fee below min should clamp up")
 
 func test_green_fee_clamped_to_max() -> void:
 	var loaded_fee = 999
-	var clamped = clamp(int(loaded_fee), GameManager.MIN_GREEN_FEE, GameManager.MAX_GREEN_FEE)
+	var clamped = clampi(int(loaded_fee), GameManager.MIN_GREEN_FEE, GameManager.MAX_GREEN_FEE)
 	assert_eq(clamped, GameManager.MAX_GREEN_FEE, "Fee above max should clamp down")
 
 func test_green_fee_preserved_when_valid() -> void:
 	var loaded_fee = 50
-	var clamped = clamp(int(loaded_fee), GameManager.MIN_GREEN_FEE, GameManager.MAX_GREEN_FEE)
+	var clamped = clampi(int(loaded_fee), GameManager.MIN_GREEN_FEE, GameManager.MAX_GREEN_FEE)
 	assert_eq(clamped, 50, "Valid fee should pass through")
 
 
@@ -111,11 +111,12 @@ func test_game_state_survives_json_roundtrip() -> void:
 	var restored = JSON.parse_string(json)
 
 	assert_eq(restored.course_name, "Test Links")
-	assert_eq(restored.money, 75000)
+	# JSON numbers decode as float — compare with type-matched expectations
+	assert_eq(int(restored.money), 75000)
 	assert_almost_eq(float(restored.reputation), 65.5, 0.01)
-	assert_eq(restored.current_day, 15)
+	assert_eq(int(restored.current_day), 15)
 	assert_almost_eq(float(restored.current_hour), 14.5, 0.01)
-	assert_eq(restored.green_fee, 45)
+	assert_eq(int(restored.green_fee), 45)
 
 
 # --- Edge Cases ---
