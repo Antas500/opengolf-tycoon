@@ -333,7 +333,7 @@ func _draw_landscaping(visual: Node2D, color: Color) -> void:
 			var flower = Polygon2D.new()
 			var offset = Vector2(
 				(i % 3 - 1) * 10.0,
-				(i / 3 - 0.5) * 8.0 - 6.0
+				(int(i / 3.0) - 0.5) * 8.0 - 6.0
 			)
 			var flower_color = color
 			if i % 2 == 1:

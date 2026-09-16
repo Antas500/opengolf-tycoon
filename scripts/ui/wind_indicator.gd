@@ -4,7 +4,6 @@ class_name WindIndicator
 
 var _wind_direction: float = 0.0
 var _wind_speed: float = 0.0
-var _arrow_node: Node2D = null
 var _speed_label: Label = null
 var _direction_label: Label = null
 

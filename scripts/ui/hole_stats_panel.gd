@@ -125,8 +125,8 @@ func _update_display() -> void:
 
 		var avg_text = "%.2f" % avg_score
 		if avg_to_par != 0:
-			var sign = "+" if avg_to_par > 0 else ""
-			avg_text += " (%s%.2f)" % [sign, avg_to_par]
+			var sign_str = "+" if avg_to_par > 0 else ""
+			avg_text += " (%s%.2f)" % [sign_str, avg_to_par]
 		var avg_row = _create_stat_row("Average Score:", avg_text, avg_color)
 		_content_vbox.add_child(avg_row)
 

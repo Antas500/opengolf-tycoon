@@ -10,7 +10,7 @@ static func delta_for(offset: Vector2i, radius: int, amount: int) -> int:
 	return roundi(float(amount) * falloff)
 
 static func sculpt_radius(brush_size: int) -> int:
-	return maxi(3, brush_size / 2)
+	return maxi(3, int(brush_size / 2.0))
 
 static func affected_vertices(grid: TerrainGrid, center_vertex: Vector2i, radius: int,
 		amount: int) -> Array[Vector2i]:

@@ -164,8 +164,6 @@ func _build_nine_grid(holes: Array, label: String) -> VBoxContainer:
 	var container = VBoxContainer.new()
 	container.add_theme_constant_override("separation", 0)
 
-	var num_holes = holes.size()
-
 	# Row 1: Hole numbers
 	container.add_child(_build_row("Hole", holes.map(func(h): return str(h.hole_number)), label, BG_HEADER_ROW, Color.WHITE, true))
 
@@ -211,7 +209,7 @@ func _build_row(label_text: String, values: Array, total_text: String, bg_color:
 
 	return row
 
-func _build_avg_row(holes: Array, par_sum: int) -> HBoxContainer:
+func _build_avg_row(holes: Array, _par_sum: int) -> HBoxContainer:
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
 
@@ -329,7 +327,7 @@ func _build_records_section() -> VBoxContainer:
 
 	return section
 
-func _make_cell(text: String, width: float, bg_color: Color, text_color: Color, bold := false) -> PanelContainer:
+func _make_cell(text: String, width: float, bg_color: Color, text_color: Color, _bold := false) -> PanelContainer:
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(width, ROW_HEIGHT)
 

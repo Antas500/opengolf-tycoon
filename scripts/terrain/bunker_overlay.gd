@@ -58,15 +58,15 @@ func _generate_dots_for_tile(pos: Vector2i) -> void:
 
 	_dot_offsets[pos] = dots
 
-func _on_terrain_tile_changed(position: Vector2i, old_type: int, new_type: int) -> void:
+func _on_terrain_tile_changed(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if new_type == TerrainTypes.Type.BUNKER:
-		if position not in _bunker_positions:
-			_bunker_positions.append(position)
+		if tile_pos not in _bunker_positions:
+			_bunker_positions.append(tile_pos)
 		# Always regenerate dots (depth may have changed)
-		_generate_dots_for_tile(position)
+		_generate_dots_for_tile(tile_pos)
 	elif old_type == TerrainTypes.Type.BUNKER:
-		_bunker_positions.erase(position)
-		_dot_offsets.erase(position)
+		_bunker_positions.erase(tile_pos)
+		_dot_offsets.erase(tile_pos)
 	queue_redraw()
 
 func _draw() -> void:

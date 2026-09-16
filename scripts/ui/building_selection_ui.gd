@@ -16,12 +16,12 @@ func set_building_registry(registry: Node) -> void:
 	building_registry = registry
 	_populate_buildings()
 
-func show_menu(position: Vector2) -> void:
+func show_menu(menu_position: Vector2) -> void:
 	if building_registry == null:
 		push_error("Building registry not set")
 		return
-	
-	global_position = position
+
+	position = Vector2i(menu_position)
 	show()
 
 func _populate_buildings() -> void:

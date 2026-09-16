@@ -48,7 +48,6 @@ var _rock_overlay: RockOverlay = null
 var _flower_overlay: FlowerOverlay = null
 var _path_overlay: PathOverlay = null
 var _debug_overlay: TerrainDebugOverlay = null
-var _noise_overlay: TerrainNoiseOverlay = null
 var _land_boundary_overlay: LandBoundaryOverlay = null
 var _wind_flag_overlay: WindFlagOverlay = null
 var _shot_heatmap_overlay: ShotHeatmapOverlay = null
@@ -198,12 +197,12 @@ func _apply_variation_shader() -> void:
 	if not shader:
 		return
 
-	var material: ShaderMaterial = ShaderMaterial.new()
-	material.shader = shader
+	var shader_material: ShaderMaterial = ShaderMaterial.new()
+	shader_material.shader = shader
 
 	# Atlas layout for proper tile center sampling
-	material.set_shader_parameter("tile_size", Vector2(tile_width, tile_height))
-	material.set_shader_parameter("atlas_size", Vector2(
+	shader_material.set_shader_parameter("tile_size", Vector2(tile_width, tile_height))
+	shader_material.set_shader_parameter("atlas_size", Vector2(
 		TilesetGenerator.TILE_WIDTH * TilesetGenerator.ATLAS_COLS,
 		TilesetGenerator.TILE_HEIGHT * TilesetGenerator.ATLAS_ROWS
 	))
@@ -215,18 +214,18 @@ func _apply_variation_shader() -> void:
 	var rough = TilesetGenerator.get_color("rough")
 	var heavy_rough = TilesetGenerator.get_color("heavy_rough")
 
-	material.set_shader_parameter("grass_color", Vector3(grass.r, grass.g, grass.b))
-	material.set_shader_parameter("fairway_color", Vector3(fairway.r, fairway.g, fairway.b))
-	material.set_shader_parameter("green_color", Vector3(green.r, green.g, green.b))
-	material.set_shader_parameter("rough_color", Vector3(rough.r, rough.g, rough.b))
-	material.set_shader_parameter("heavy_rough_color", Vector3(heavy_rough.r, heavy_rough.g, heavy_rough.b))
+	shader_material.set_shader_parameter("grass_color", Vector3(grass.r, grass.g, grass.b))
+	shader_material.set_shader_parameter("fairway_color", Vector3(fairway.r, fairway.g, fairway.b))
+	shader_material.set_shader_parameter("green_color", Vector3(green.r, green.g, green.b))
+	shader_material.set_shader_parameter("rough_color", Vector3(rough.r, rough.g, rough.b))
+	shader_material.set_shader_parameter("heavy_rough_color", Vector3(heavy_rough.r, heavy_rough.g, heavy_rough.b))
 
 	# Procedural variation amounts
-	material.set_shader_parameter("hue_variation", 0.04)
-	material.set_shader_parameter("value_variation", 0.18)
-	material.set_shader_parameter("saturation_variation", 0.06)
+	shader_material.set_shader_parameter("hue_variation", 0.04)
+	shader_material.set_shader_parameter("value_variation", 0.18)
+	shader_material.set_shader_parameter("saturation_variation", 0.06)
 
-	tile_map.material = material
+	tile_map.material = shader_material
 
 func _initialize_grid() -> void:
 	_ensure_vertex_storage()
@@ -316,11 +315,11 @@ func tile_world_rect(grid_pos: Vector2i) -> Rect2:
 func world_bounds() -> Rect2:
 	return projection.world_bounds()
 
-static func _apply_projection_uniforms(material: ShaderMaterial, proj: GridProjection) -> void:
-	material.set_shader_parameter("grid_origin", proj.grid_origin())
-	material.set_shader_parameter("grid_axis_x", proj.axis_x())
-	material.set_shader_parameter("grid_axis_y", proj.axis_y())
-	material.set_shader_parameter("surface_origin", proj.world_bounds().position)
+static func _apply_projection_uniforms(shader_material: ShaderMaterial, proj: GridProjection) -> void:
+	shader_material.set_shader_parameter("grid_origin", proj.grid_origin())
+	shader_material.set_shader_parameter("grid_axis_x", proj.axis_x())
+	shader_material.set_shader_parameter("grid_axis_y", proj.axis_y())
+	shader_material.set_shader_parameter("surface_origin", proj.world_bounds().position)
 
 func rotate_view_cw() -> void:
 	_apply_view(projection.orientation + 1, projection.isometric)
@@ -526,7 +525,7 @@ func paint_tiles(positions: Array, terrain_type: int) -> void:
 
 func get_brush_tiles(center: Vector2i, brush_size: int) -> Array:
 	var tiles: Array = []
-	var half = (brush_size - 1) / 2
+	var half = int((brush_size - 1) / 2.0)
 	for x in range(-half, half + 1):
 		for y in range(-half, half + 1):
 			var pos = center + Vector2i(x, y)
@@ -734,19 +733,19 @@ func _setup_elevation_shader() -> void:
 	if not shader:
 		return
 
-	var material: ShaderMaterial = ShaderMaterial.new()
-	material.shader = shader
-	material.set_shader_parameter("heightmap", _heightmap.get_texture())
-	material.set_shader_parameter("heightmap_size", Vector2(grid_width * Heightmap.PIXELS_PER_TILE, grid_height * Heightmap.PIXELS_PER_TILE))
-	material.set_shader_parameter("grid_size", Vector2(grid_width, grid_height))
-	material.set_shader_parameter("tile_size", Vector2(tile_width, tile_height))
-	_apply_projection_uniforms(material, projection)
+	var shader_material: ShaderMaterial = ShaderMaterial.new()
+	shader_material.shader = shader
+	shader_material.set_shader_parameter("heightmap", _heightmap.get_texture())
+	shader_material.set_shader_parameter("heightmap_size", Vector2(grid_width * Heightmap.PIXELS_PER_TILE, grid_height * Heightmap.PIXELS_PER_TILE))
+	shader_material.set_shader_parameter("grid_size", Vector2(grid_width, grid_height))
+	shader_material.set_shader_parameter("tile_size", Vector2(tile_width, tile_height))
+	_apply_projection_uniforms(shader_material, projection)
 
 	# Create full-viewport ColorRect for shader overlay
 	_elevation_shader_rect = ColorRect.new()
 	_elevation_shader_rect.name = "ElevationShaderRect"
 	_elevation_shader_rect.z_index = 0  # Same as terrain; renders above TileMapLayer by tree order, below entities
-	_elevation_shader_rect.material = material
+	_elevation_shader_rect.material = shader_material
 	_elevation_shader_rect.color = Color(1, 1, 1, 0)  # Transparent base — shader controls all output
 	_elevation_shader_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Cover the projected course (a diamond under isometric, sized to its AABB).
@@ -836,7 +835,7 @@ func _ensure_vertex_storage() -> void:
 	_vertex_stride = stride
 	if previous.size() == 0 or previous_stride <= 0:
 		return
-	var rows: int = mini(previous.size() / previous_stride, grid_height + 1)
+	var rows: int = mini(int(previous.size() / float(previous_stride)), grid_height + 1)
 	var cols: int = mini(previous_stride, stride)
 	for y in rows:
 		for x in cols:

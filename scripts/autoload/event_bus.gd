@@ -5,6 +5,8 @@ extends Node
 var transaction_history: Array = []
 const MAX_TRANSACTION_HISTORY: int = 1000
 
+@warning_ignore_start("unused_signal")
+
 # Game State Signals
 signal game_mode_changed(old_mode: int, new_mode: int)
 signal game_speed_changed(new_speed: int)
@@ -98,6 +100,8 @@ signal load_completed(success: bool)
 
 # Records Signals
 signal record_broken(record_type: String, golfer_name: String, value: int, hole_number: int)
+
+@warning_ignore_restore("unused_signal")
 
 func _ready() -> void:
 	print("EventBus initialized")

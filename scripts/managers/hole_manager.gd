@@ -114,7 +114,7 @@ func update_all_visualizations() -> void:
 		visualizer.update_visualization()
 
 ## EventBus signal handlers
-func _on_hole_created(hole_number: int, par: int, distance_yards: int) -> void:
+func _on_hole_created(hole_number: int, _par: int, _distance_yards: int) -> void:
 	# Get the hole data from GameManager
 	if not GameManager.current_course:
 		return

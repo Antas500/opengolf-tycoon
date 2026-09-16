@@ -169,8 +169,8 @@ func _update_info_label() -> void:
 	info_label.add_theme_color_override("font_outline_color", UIConstants.COLOR_BG_DARK)
 	info_label.add_theme_constant_override("outline_size", 3)
 
-func set_visible_state(is_visible: bool) -> void:
-	visible = is_visible
+func set_visible_state(visible_state: bool) -> void:
+	visible = visible_state
 
 func highlight(enabled: bool) -> void:
 	if not line:
@@ -193,10 +193,10 @@ func highlight(enabled: bool) -> void:
 				if inner:
 					inner.color = Color(0.5, 0.85, 1.0, 0.7)  # Normal light blue
 
-func _on_flag_selected(selected_flag: Flag) -> void:
+func _on_flag_selected(_selected_flag: Flag) -> void:
 	hole_selected.emit(hole_data.hole_number)
 
-func _on_flag_moved(old_position: Vector2i, new_position: Vector2i) -> void:
+func _on_flag_moved(_old_position: Vector2i, new_position: Vector2i) -> void:
 	# Update hole data
 	hole_data.hole_position = new_position
 

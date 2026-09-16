@@ -89,55 +89,6 @@ void fragment() {
 		float alpha = 0.0;
 		vec3 out_color = vec3(1.0);
 
-		if (shade < 0.99) {
-			out_color = vec3(0.12, 0.10, 0.20);
-			alpha = (1.0 - shade) * 0.85;
-		} else if (shade > 1.01) {
-			out_color = vec3(1.0, 0.98, 0.93);
-			alpha = (shade - 1.0) * 0.70;
-		}
-
-		// Ambient occlusion from Laplacian curvature
-		float ao = ((h_l + h_r + h_u + h_d) - 4.0 * height) * 40.0;
-		if (ao > 0.03) {
-			float ao_alpha = clamp(ao * 0.25, 0.0, 0.16) * smoothstep(0.03, 0.12, ao);
-			out_color = mix(out_color, vec3(0.10, 0.08, 0.15), ao_alpha);
-			alpha = max(alpha, ao_alpha);
-		} else if (ao < -0.03) {
-			float ao_alpha = clamp(-ao * 0.12, 0.0, 0.08) * smoothstep(0.03, 0.12, -ao);
-			out_color = mix(out_color, vec3(1.0, 0.97, 0.90), ao_alpha);
-			alpha = max(alpha, ao_alpha);
-		}
-
-		// Slope-dependent earth tinting
-		float slope_tint = smoothstep(0.2, 1.2, slope_mag);
-		if (slope_tint > 0.0) {
-			float slope_alpha = slope_tint * 0.25;
-			out_color = mix(out_color, vec3(0.45, 0.38, 0.28), slope_alpha);
-			alpha = max(alpha, slope_alpha);
-		}
-
-		// Height tint
-		float height_tint_alpha = abs(rel_height) * 2.0;
-		height_tint_alpha = clamp(height_tint_alpha, 0.0, 0.12) * smoothstep(0.03, 0.08, abs(rel_height));
-		if (rel_height > 0.03) {
-			out_color = mix(out_color, vec3(1.0, 0.95, 0.88), 0.4);
-			alpha = max(alpha, height_tint_alpha);
-		} else if (rel_height < -0.03) {
-			out_color = mix(out_color, vec3(0.15, 0.18, 0.25), 0.4);
-			alpha = max(alpha, height_tint_alpha);
-		}
-
-		// Simple contour lines
-		if (contour_enabled && abs(rel_height) > 0.02) {
-			float elev_scale = 25.6 / 255.0;
-			float elev_continuous = rel_height / elev_scale;
-			float dist_to_line = abs(fract(elev_continuous + 0.5) - 0.5);
-			float contour_mask = step(dist_to_line, 0.12) * contour_opacity;
-			out_color = mix(out_color, vec3(0.4, 0.35, 0.3), contour_mask);
-			alpha = max(alpha, contour_mask);
-		}
-
 		COLOR = vec4(out_color, clamp(alpha, 0.0, 0.75));
 	}
 }

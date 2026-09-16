@@ -134,7 +134,6 @@ static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerat
 	# Place lagoon in a random area, biased away from dead center
 	var center_x = rng.randi_range(int(width * 0.2), int(width * 0.8))
 	var center_y = rng.randi_range(int(height * 0.2), int(height * 0.8))
-	var center = Vector2(center_x, center_y)
 
 	var base_radius_x = rng.randf_range(depth_range.x, depth_range.y)
 	var base_radius_y = rng.randf_range(depth_range.x * 0.6, depth_range.y * 0.8)
@@ -259,7 +258,6 @@ static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumber
 	for i in range(rough_count):
 		var center_x = rng.randi_range(8, width - 8)
 		var center_y = rng.randi_range(8, height - 8)
-		var center = Vector2(center_x, center_y)
 		var radius_x = rng.randf_range(6, 16)
 		var radius_y = rng.randf_range(6, 16)
 

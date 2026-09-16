@@ -26,10 +26,10 @@ static func calculate(holes: Array) -> Dictionary:
 
 	# For 9 or fewer holes: simple sequential assignment
 	if sorted_holes.size() <= 9:
-		var result: Dictionary = {}
+		var sequential_result: Dictionary = {}
 		for i in sorted_holes.size():
-			result[sorted_holes[i].hole_number] = i + 1
-		return result
+			sequential_result[sorted_holes[i].hole_number] = i + 1
+		return sequential_result
 
 	# For 10+ holes: interleave front/back nine
 	# Front 9 (holes 1-9) get odd stroke indices: 1, 3, 5, 7, ...

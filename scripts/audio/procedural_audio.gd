@@ -756,7 +756,6 @@ static func generate_chime(sample_rate: int, amplitude: float) -> PackedVector2A
 	var note_starts := [0.0, 0.12, 0.24, 0.36]
 
 	for i in sample_count:
-		var t := float(i) / float(sample_count)
 		var time_s := float(i) / sample_rate
 		var sample := 0.0
 

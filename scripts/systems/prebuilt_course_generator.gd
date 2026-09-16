@@ -48,6 +48,7 @@ static func build(
 
 ## Get the approximate center tile of all owned land.
 static func _get_owned_center() -> Vector2i:
+	@warning_ignore_start("integer_division")
 	var lm = GameManager.land_manager
 	if not lm or lm.owned_parcels.is_empty():
 		return Vector2i(64, 64)
@@ -58,6 +59,7 @@ static func _get_owned_center() -> Vector2i:
 		sum += Vector2i(rect.position.x + rect.size.x / 2, rect.position.y + rect.size.y / 2)
 		count += 1
 	return sum / count
+	@warning_ignore_restore("integer_division")
 
 
 ## Clear all existing holes from the course.

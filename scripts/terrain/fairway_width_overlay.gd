@@ -64,12 +64,6 @@ func _recalculate() -> void:
 		var total_dist = tee.distance_to(green)
 		var grid_perp = Vector2(-grid_dir.y, grid_dir.x)
 
-		# Compute screen-space perpendicular (tiles are 64x32, not square)
-		var tee_screen = terrain_grid.grid_to_screen_center(hole.tee_position)
-		var green_screen = terrain_grid.grid_to_screen_center(hole.green_position)
-		var screen_dir = (green_screen - tee_screen).normalized()
-		var screen_perp = Vector2(-screen_dir.y, screen_dir.x)
-
 		for yards in MARKER_DISTANCES_YARDS:
 			var tile_dist = yards / YARDS_PER_TILE
 			if tile_dist >= total_dist:

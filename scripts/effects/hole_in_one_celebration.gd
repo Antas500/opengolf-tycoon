@@ -28,9 +28,9 @@ func _spawn_particles() -> void:
 		var size = randf_range(3.0, 6.0)
 		var points: PackedVector2Array = []
 		for j in range(10):
-			var angle = (j / 10.0) * TAU - PI / 2
+			var star_angle = (j / 10.0) * TAU - PI / 2
 			var r = size if j % 2 == 0 else size * 0.5
-			points.append(Vector2(cos(angle) * r, sin(angle) * r))
+			points.append(Vector2(cos(star_angle) * r, sin(star_angle) * r))
 		particle.polygon = points
 
 		add_child(particle)
