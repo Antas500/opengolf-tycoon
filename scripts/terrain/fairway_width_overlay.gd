@@ -68,6 +68,7 @@ func _recalculate() -> void:
 		var tee_screen = terrain_grid.grid_to_screen_center(hole.tee_position)
 		var green_screen = terrain_grid.grid_to_screen_center(hole.green_position)
 		var screen_dir = (green_screen - tee_screen).normalized()
+		var screen_perp = Vector2(-screen_dir.y, screen_dir.x)
 
 		for yards in MARKER_DISTANCES_YARDS:
 			var tile_dist = yards / YARDS_PER_TILE

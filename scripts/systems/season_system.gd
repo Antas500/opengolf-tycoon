@@ -85,14 +85,18 @@ const THEME_WEATHER_MODIFIERS: Dictionary = {
 }
 
 static func get_season(day: int) -> int:
+	@warning_ignore_start("integer_division")
 	var day_in_year = (day - 1) % DAYS_PER_YEAR
 	return int(day_in_year / DAYS_PER_SEASON)
+	@warning_ignore_restore("integer_division")
 
 static func get_day_in_season(day: int) -> int:
 	return ((day - 1) % DAYS_PER_SEASON) + 1
 
 static func get_year(day: int) -> int:
+	@warning_ignore_start("integer_division")
 	return ((day - 1) / DAYS_PER_YEAR) + 1
+	@warning_ignore_restore("integer_division")
 
 static func get_season_name(season: int) -> String:
 	match season:
