@@ -277,7 +277,6 @@ func _build_gameplay_tab() -> void:
 
 	var tee_desc = Label.new()
 	tee_desc.text = "Auto-generates forward and middle tee boxes for each hole.\nAdds variety but makes course design more complex."
-	tee_desc.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SMALL)
 	tee_desc.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	inner.add_child(tee_desc)
 
