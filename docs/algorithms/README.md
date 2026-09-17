@@ -10,6 +10,7 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 ## Documents
 
 ### Core Golf Simulation
+- [Play the Course](player-rounds.md) — Owner customization, skills, interactive shots, opponents and round lifecycle
 - [Shot Accuracy & Angular Dispersion](shot-accuracy.md) — How shots miss: gaussian angular error, hook/slice tendency, shanks, distance loss
 - [Putting System](putting-system.md) — Make rates (exponential decay), miss characteristics, green reading
 - [Shot AI & Target Finding](shot-ai-target-finding.md) — Club selection, multi-shot planning, wind compensation, recovery mode, risk analysis

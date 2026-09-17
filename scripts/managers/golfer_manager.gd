@@ -291,7 +291,8 @@ func _process(delta: float) -> void:
 		if GameManager.current_hour >= GameManager.COURSE_CLOSE_HOUR + 2.0:
 			var to_remove: Array[int] = []
 			for golfer in active_golfers:
-				to_remove.append(golfer.golfer_id)
+				if not golfer.is_owner_round:
+					to_remove.append(golfer.golfer_id)
 			for gid in to_remove:
 				remove_golfer(gid)
 
@@ -348,7 +349,8 @@ func _update_group(group: Array) -> void:
 				if HoleManager.is_ball_holed(golfer.ball_position_precise, hole_pos) and golfer.current_strokes > 0:
 					# This golfer has holed out - process them to send to next tee
 					_advance_golfer(golfer)
-					return  # Only process one golfer per frame
+					if golfer.current_state != Golfer.State.FINISHED:
+						return  # Only process one golfer per frame
 
 	# Check if anyone on the current hole is walking to their ball
 	# Golfers walking to the NEXT tee (current_hole > min_hole) shouldn't block putting
@@ -807,7 +809,7 @@ func spawn_tournament_golfer(forced_tier: int, group_id: int) -> Golfer:
 func get_tournament_golfers() -> Array[Golfer]:
 	var result: Array[Golfer] = []
 	for golfer in active_golfers:
-		if golfer.is_tournament_golfer:
+		if golfer.is_tournament_golfer and not golfer.is_owner_round:
 			result.append(golfer)
 	return result
 
@@ -815,7 +817,7 @@ func get_tournament_golfers() -> Array[Golfer]:
 func remove_tournament_golfers() -> void:
 	var to_remove: Array[int] = []
 	for golfer in active_golfers:
-		if golfer.is_tournament_golfer:
+		if golfer.is_tournament_golfer and not golfer.is_owner_round:
 			to_remove.append(golfer.golfer_id)
 	for gid in to_remove:
 		remove_golfer(gid)
@@ -841,6 +843,9 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 		return
 
 	# Tournament golfers don't give reputation or record daily stats — skip to group removal
+	if finished_golfer.is_owner_round:
+		return
+
 	if finished_golfer.is_tournament_golfer:
 		var t_group_id = finished_golfer.group_id
 		var t_all_finished = true

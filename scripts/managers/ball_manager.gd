@@ -341,6 +341,20 @@ func _on_ball_shot_precise(golfer_id: int, from_screen: Vector2, to_screen: Vect
 
 	# Flight goes to the carry position (where ball first hits ground)
 	ball.start_flight_screen_with_arc(from_screen, carry_screen, duration, wind_offset)
+	var golfer_manager = get_parent().get_node_or_null("GolferManager")
+	if golfer_manager:
+		var golfer: Golfer = golfer_manager.get_golfer(golfer_id)
+		if golfer and golfer.player_profile:
+			if golfer.player_punch:
+				ball.flight_max_height *= 0.3
+			elif golfer.player_shape == 3:
+				ball.flight_max_height *= 1.4
+			if golfer.player_shape in [1, 2]:
+				# Curved flight starts on the aim line and bends toward its carry.
+				var sign_value := -1.0 if golfer.player_shape == 1 else 1.0
+				var grid_delta := Vector2(terrain_grid.screen_to_grid(carry_screen) - terrain_grid.screen_to_grid(from_screen))
+				var bend := Vector2(-grid_delta.y, grid_delta.x) * sign_value * 0.06
+				ball.wind_visual_offset += terrain_grid.grid_to_screen_precise(bend) - terrain_grid.grid_to_screen_precise(Vector2.ZERO)
 
 func _on_golfer_finished_round(golfer_id: int, _total_strokes: int, _total_par: int) -> void:
 	# Remove ball when golfer finishes their round
