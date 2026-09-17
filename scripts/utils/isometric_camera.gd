@@ -90,6 +90,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_zoom_camera_smooth(zoom_speed * 2)
 
 func _handle_keyboard_input(delta: float) -> void:
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused is LineEdit or focused is TextEdit:
+		return
 	var direction := Vector2.ZERO
 	if Input.is_action_pressed("camera_pan_up"): direction.y -= 1
 	if Input.is_action_pressed("camera_pan_down"): direction.y += 1

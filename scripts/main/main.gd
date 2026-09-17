@@ -17,6 +17,8 @@ var ultra_btn: Button = null
 @onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/SpeedControls
 
 # New UI components
+var player_round: PlayerRoundManager
+
 var top_hud_bar: TopHUDBar = null
 
 # Legacy references (kept for compatibility, now managed by TopHUDBar)
@@ -215,6 +217,16 @@ func _ready() -> void:
 	_setup_analytics_panel()
 	_setup_golfer_info_popup()
 	_setup_round_summary_popup()
+	player_round = PlayerRoundManager.new()
+	add_child(player_round)
+	player_round.setup(golfer_manager, $IsometricCamera, $UI/HUD)
+	player_round.session_opened.connect(func():
+		# Clear both tiers of tool selection before mouse input becomes shot input.
+		_cancel_action()
+		_cancel_action()
+		if _active_panel:
+			_active_panel.hide()
+			_active_panel = null)
 	_setup_milestone_system()
 	_setup_seasonal_calendar()
 	_setup_autosave_indicator()
@@ -268,6 +280,8 @@ func _process(_delta: float) -> void:
 	_update_selection_indicator()
 
 func _input(event: InputEvent) -> void:
+	if player_round and player_round.busy:
+		return
 	# Keyboard shortcuts - handled in _input so UI controls don't swallow them
 	if event is InputEventKey and event.pressed and not event.echo:
 		# Escape key: deselect active tool/panel first, then open pause menu
@@ -397,6 +411,8 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if player_round and player_round.busy:
+		return
 	# Cancel action (ESC/right-click) should always work to deselect tools
 	if event.is_action_pressed("cancel"):
 		_cancel_action()
@@ -3274,7 +3290,7 @@ func _setup_round_summary_popup() -> void:
 
 func _on_golfer_round_for_summary(golfer_id: int, total_strokes: int, _total_par: int) -> void:
 	var golfer = golfer_manager.get_golfer(golfer_id)
-	if not golfer:
+	if not golfer or golfer.is_owner_round:
 		return
 	round_summary_popup.queue_notification({
 		"name": golfer.golfer_name,

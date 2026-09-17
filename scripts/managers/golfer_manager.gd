@@ -841,6 +841,9 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 		return
 
 	# Tournament golfers don't give reputation or record daily stats — skip to group removal
+	if finished_golfer.is_owner_round:
+		return
+
 	if finished_golfer.is_tournament_golfer:
 		var t_group_id = finished_golfer.group_id
 		var t_all_finished = true

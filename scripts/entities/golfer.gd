@@ -63,6 +63,11 @@ var golfer_tier: int = GolferTier.Tier.CASUAL
 
 ## Tournament flag — tournament golfers skip green fees and course-closing checks
 var is_tournament_golfer: bool = false
+var is_owner_round: bool = false
+var player_profile: PlayerGolferProfile = null
+# 0 straight, 1 fade, 2 draw, 3 backspin; punch is independent.
+var player_shape: int = 0
+var player_punch: bool = false
 
 ## Which tee the golfer is playing from this round ("forward", "middle", or "back")
 var current_tee_key: String = "back"
@@ -494,6 +499,18 @@ func _randomize_appearance() -> void:
 	skin_tone = skin_tones[randi() % skin_tones.size()]
 
 ## Apply appearance colors to visual components
+func apply_player_appearance(profile: PlayerGolferProfile) -> void:
+	# Pre-rendered tier sprites cannot represent the five customizable colors.
+	# Use the existing procedural golfer renderer for the owner instead.
+	_use_sprites = false
+	if visual:
+		for child in visual.get_children():
+			if child is CanvasItem:
+				child.visible = child != _animated_sprite
+	for key in PlayerGolferProfile.COLORS:
+		set(key, Color(profile.appearance[key]))
+	_apply_appearance()
+
 func _apply_appearance() -> void:
 	if body:
 		body.color = shirt_color
@@ -517,7 +534,7 @@ func _apply_appearance() -> void:
 	_add_body_shading()
 
 func _add_body_shading() -> void:
-	if not visual:
+	if not visual or visual.has_node("ShirtShadow"):
 		return
 	# Shirt shadow on lower half - subtle darkening
 	var shirt_shadow = Polygon2D.new()
@@ -775,6 +792,8 @@ func _process_walking(delta: float) -> void:
 		hands.rotation = swing_amount
 
 func _process_preparing_shot(delta: float) -> void:
+	if player_profile and awaits_player_shot():
+		return
 	# AI thinks about the shot
 	preparation_time += delta
 
@@ -955,6 +974,33 @@ func start_hole(hole_number: int, tee_position: Vector2i) -> void:
 	EventBus.golfer_started_hole.emit(golfer_id, hole_number)
 	_update_score_display()
 	_change_state(State.PREPARING_SHOT)
+
+func awaits_player_shot() -> bool:
+	return player_profile != null and current_state == State.PREPARING_SHOT and GameManager.terrain_grid != null and GameManager.terrain_grid.get_tile(Vector2i(ball_position_precise.round())) != TerrainTypes.Type.GREEN
+
+static func shape_allowed(shape: int, terrain: int) -> bool:
+	return shape == 0 or (shape in [1, 2, 3] and terrain in [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.FAIRWAY])
+
+func player_aim(target: Vector2i) -> Vector2i:
+	var distance := Vector2(ball_position).distance_to(Vector2(target))
+	_chosen_club = select_club(distance, GameManager.terrain_grid.get_tile(ball_position))
+	if _chosen_club == Club.PUTTER:
+		_chosen_club = Club.WEDGE
+	var maximum := float(CLUB_STATS[_chosen_club].max_distance) * _get_skill_distance_factor(_chosen_club)
+	if player_punch:
+		maximum *= 0.7
+	return Vector2i((Vector2(ball_position) + Vector2(target - ball_position).limit_length(maximum)).round())
+
+func play_shot(target: Vector2i) -> bool:
+	if not awaits_player_shot() or GameManager.is_paused or not GameManager.terrain_grid.is_valid_position(target) or target == ball_position:
+		return false
+	if not shape_allowed(player_shape, GameManager.terrain_grid.get_tile(ball_position)):
+		player_shape = 0
+	var aim := player_aim(target)
+	if aim == ball_position:
+		return false
+	take_shot(aim)
+	return true
 
 ## AI automatically takes shot based on current hole
 func _take_ai_shot() -> void:
@@ -1313,6 +1359,11 @@ func select_club(distance_to_target: float, current_terrain: int) -> Club:
 ##   Serious  (0.70-0.85): Driver 242-267yd, FW 176-198yd, Iron 152-169yd
 ##   Pro      (0.85-0.98): Driver 267-289yd, FW 198-217yd, Iron 169-183yd
 func _get_skill_distance_factor(club: Club) -> float:
+	if player_profile and club != Club.PUTTER:
+		var bonus := player_profile.bonus(0)
+		if club == Club.DRIVER:
+			bonus += player_profile.bonus(1)
+		return 0.7 * (1.0 + bonus)
 	match club:
 		Club.DRIVER:
 			return 0.40 + driving_skill * 0.55
@@ -1480,6 +1531,9 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	# Get terrain modifiers
 	var lie_modifier = _get_lie_modifier(current_terrain, club)
 
+	if player_profile:
+		lie_modifier = 1.0 - (1.0 - lie_modifier) / (1.0 + player_profile.bonus(8))
+
 	# Calculate skill-based accuracy
 	var skill_accuracy = 0.0
 	match club:
@@ -1493,6 +1547,12 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 			skill_accuracy = (accuracy_skill * 0.7 + recovery_skill * 0.3)
 		Club.PUTTER:
 			skill_accuracy = putting_skill
+
+	if player_profile:
+		skill_accuracy = player_profile.normalized_skill(2 if club in [Club.DRIVER, Club.FAIRWAY_WOOD] else 3)
+		if player_shape > 0:
+			skill_accuracy = 1.0 - (1.0 - skill_accuracy) / (1.0 + player_profile.bonus({1: 6, 2: 5, 3: 7}[player_shape]))
+		skill_accuracy = 1.0 - (1.0 - skill_accuracy) / (1.0 + player_profile.bonus(9))
 
 	# Combine all accuracy factors
 	var base_accuracy = club_stats["accuracy_modifier"]
@@ -1577,6 +1637,8 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	#   - Misses scale naturally with distance (same angle = more yards off at range)
 	#   - Each golfer has a consistent miss tendency (slice or hook bias)
 	var direction = Vector2(target - from).normalized()
+	if player_profile and player_shape in [1, 2]:
+		direction = direction.rotated(deg_to_rad(8.0 if player_shape == 1 else -8.0))
 
 	# Max angular spread based on inaccuracy (degrees)
 	# Worst case ~12° = severe slice/hook, pro-level ~1.2° = tight dispersion
@@ -1640,7 +1702,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	# Apply wind displacement
 	if GameManager.wind_system:
 		var wind_displacement = GameManager.wind_system.get_wind_displacement(direction, actual_distance, club)
-		landing_point += wind_displacement
+		landing_point += wind_displacement * (0.35 if player_profile and player_punch else 1.0)
 
 	# Keep sub-tile precision - use round for accurate grid cell
 	# This is the CARRY position (where ball first contacts the ground)
@@ -1696,6 +1758,15 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	# Calculate how far the ball rolls after landing based on club, terrain, slope, and skill
 	var rollout = _calculate_rollout(club, carry_position, carry_position_precise,
 		Vector2(from), actual_distance, total_accuracy)
+
+	if player_profile and player_shape == 3 and terrain_grid.get_tile(carry_position) in [TerrainTypes.Type.GREEN, TerrainTypes.Type.FAIRWAY]:
+		var spin := minf(1.5, 0.25 * (1.0 + player_profile.bonus(7)))
+		rollout.final_position = carry_position_precise - direction * spin
+		rollout.rollout_distance = spin
+		rollout.is_backspin = true
+	elif player_profile and player_punch:
+		rollout.final_position = carry_position_precise + (rollout.final_position - carry_position_precise) * 1.5
+		rollout.rollout_distance *= 1.5
 
 	var final_position_precise = rollout.final_position
 	var final_position = Vector2i(final_position_precise.round())

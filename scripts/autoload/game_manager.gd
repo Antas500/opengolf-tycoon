@@ -4,6 +4,8 @@ extends Node
 enum GameMode { MAIN_MENU, BUILDING, SIMULATING, PLAYING, PAUSED }
 enum GameSpeed { PAUSED = 0, NORMAL = 1, FAST = 3, ULTRA = 8 }
 
+var player_profile: PlayerGolferProfile = PlayerGolferProfile.new()
+
 var current_mode: GameMode = GameMode.MAIN_MENU
 var current_speed: GameSpeed = GameSpeed.NORMAL
 var is_paused: bool = false
@@ -453,6 +455,7 @@ func reset_course_records() -> void:
 	course_records = CourseRecords.create_empty_records()
 
 func new_game(course_name_input: String = "New Course", theme: int = CourseTheme.Type.PARKLAND, difficulty: int = DifficultyPresets.Preset.NORMAL) -> void:
+	player_profile = PlayerGolferProfile.new()
 	course_name = course_name_input
 	current_theme = theme
 	current_difficulty = difficulty
