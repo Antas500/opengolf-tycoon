@@ -30,12 +30,15 @@ var previous_speed: int
 var previous_camera: Vector2
 var round_kind := 0
 var last_state := -1
+var aim_guide: AimGuide
 var _last_focused_golfer: Golfer = null
 
 func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Control) -> void:
 	manager = golfers
 	camera = view
 	hud = management_hud
+	aim_guide = AimGuide.new()
+	add_child(aim_guide)
 	layer = CanvasLayer.new()
 	layer.layer = 15
 	add_child(layer)
@@ -235,7 +238,7 @@ func start_round() -> void:
 	punch.text = "Low punch shot"
 	punch.toggled.connect(func(value: bool): player.player_punch = value)
 	content.add_child(punch)
-	_label("Aim with the mouse · Click to shoot\nLine shows expected carry; wind and skill affect results.\nPutting on the green is automatic.")
+	_label("Aim with the mouse · Click to shoot\nYellow arc = intended carry · dotted trail = roll until it stops\nGuide assumes a clean strike; wind, lie and slope still apply.\nPutting on the green is automatic.")
 	_button("End round / Return to management", leave_round)
 	last_state = -1
 	_last_focused_golfer = null
@@ -254,7 +257,8 @@ func _process(delta: float) -> void:
 	entry.visible = not busy and GameManager.current_mode in [GameManager.GameMode.BUILDING, GameManager.GameMode.SIMULATING]
 	if not active or GameManager.is_paused:
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-		queue_redraw()
+		if is_instance_valid(aim_guide):
+			aim_guide.clear()
 		return
 
 	# Drive group simulation forward via GolferManager
@@ -280,6 +284,7 @@ func _process(delta: float) -> void:
 	shapes.disabled = not ready
 	punch.disabled = not ready
 	Input.set_default_cursor_shape(Input.CURSOR_CROSS if ready else Input.CURSOR_ARROW)
+	update_aim_guide()
 
 	# Track active shooter in the group
 	var active_shooter: Golfer = null
@@ -315,7 +320,21 @@ func _process(delta: float) -> void:
 	for golfer in participants:
 		var g_hole = mini(golfer.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
 		status.text += "\n%s: %d strokes · Hole %d" % [golfer.golfer_name, golfer.total_strokes + golfer.current_strokes, g_hole]
-	queue_redraw()
+
+## Refresh the aim guide for the mouse position, or for an explicit grid target
+## (`target_override`, used by tests). The guide clears whenever the owner is not
+## lining up a shot: walking, opponents' turns, automatic putting, results screen.
+func update_aim_guide(target_override: Vector2i = Vector2i(-1, -1)) -> void:
+	if not is_instance_valid(aim_guide):
+		return
+	var grid: TerrainGrid = GameManager.terrain_grid
+	if not active or GameManager.is_paused or not is_instance_valid(grid) or not is_instance_valid(player) or not player.awaits_player_shot():
+		aim_guide.clear()
+		return
+	var target := target_override
+	if target == Vector2i(-1, -1):
+		target = grid.screen_to_grid(get_global_mouse_position())
+	aim_guide.show_preview(player.preview_shot(target))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not active or GameManager.is_paused:
@@ -326,30 +345,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			if player.play_shot(target):
 				get_viewport().set_input_as_handled()
 
-func _draw() -> void:
-	if not active or GameManager.is_paused or not is_instance_valid(player) or not player.awaits_player_shot():
-		return
-	var grid: TerrainGrid = GameManager.terrain_grid
-	if not grid:
-		return
-	var target := grid.screen_to_grid(get_global_mouse_position())
-	if not grid.is_valid_position(target):
-		return
-	var aim := player.player_aim(target)
-	var direction := Vector2(aim - player.ball_position)
-	var angle := deg_to_rad(8.0 if player.player_shape == 1 else (-8.0 if player.player_shape == 2 else 0.0))
-	var origin := Vector2(player.ball_position)
-	var points := PackedVector2Array()
-	for i in range(25):
-		var t := i / 24.0
-		points.append(to_local(grid.grid_to_screen_precise(origin + direction.rotated(angle * t) * t)))
-	draw_polyline(points, Color(1, 0.92, 0.4, 0.9), 2.5, true)
-	draw_arc(points[-1], 7, 0, TAU, 24, Color.YELLOW, 2, true)
-
 func _show_results() -> void:
 	active = false
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-	queue_redraw()
+	if is_instance_valid(aim_guide):
+		aim_guide.clear()
 	_make_panel(true)
 	_label("ROUND COMPLETE")
 	participants.sort_custom(func(a: Golfer, b: Golfer): return a.total_strokes < b.total_strokes)
@@ -372,6 +372,8 @@ func leave_round(restore_mode: bool = true) -> void:
 	active = false
 	busy = false
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	if is_instance_valid(aim_guide):
+		aim_guide.clear()
 	for golfer in participants:
 		if is_instance_valid(golfer):
 			manager.remove_golfer(golfer.golfer_id)
@@ -386,4 +388,3 @@ func leave_round(restore_mode: bool = true) -> void:
 		if restore_mode and previous_mode == GameManager.GameMode.BUILDING:
 			GameManager.set_mode(previous_mode)
 			GameManager.set_speed(previous_speed)
-	queue_redraw()

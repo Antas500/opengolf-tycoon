@@ -24,6 +24,8 @@ After the carry lands, the ball may roll forward (or backward with backspin on w
 
 The rollout path is walked step-by-step, checking for hazards. If the ball rolls into water, OB, or a bunker, it stops there. Entering rough from fairway triggers a deceleration effect (60% remaining roll reduction).
 
+The walk records its waypoints in `roll_path` (carry point → resting point), so the aim guide can draw the actual roll instead of a straight line. `_calculate_shot()` and `_calculate_rollout()` also take a `deterministic` flag used by `Golfer.preview_shot()`: it replaces the random swing/rollout variance with its expected value and skips the miss, shank and distance-loss terms, producing the *intended* shot for the player's aim guide (see [Play the Course](player-rounds.md)).
+
 ---
 
 ## Algorithm
@@ -210,4 +212,5 @@ if flight_max_height > 10.0:    # Skip for putts and short chips
 | Downhill bonus | `golfer.gd:1577` | +50% max | Higher = more downhill run |
 | Rough deceleration | `golfer.gd:1609` | 0.6x (40% reduction) | Lower = rough stops ball faster |
 | Min rollout threshold | `golfer.gd:1553` | 0.15 tiles | Lower = show shorter rolls |
+| Preview rollout fraction | `golfer.gd _calculate_rollout(deterministic)` | 0.5 (mean) | Higher = aim guide rolls further |
 | Ease-out exponent | `ball.gd:178` | 2.0 | Higher = more dramatic deceleration |
