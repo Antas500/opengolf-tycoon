@@ -29,9 +29,8 @@ var previous_mode: int
 var previous_speed: int
 var previous_camera: Vector2
 var round_kind := 0
-var last_state := -1
 var aim_guide: AimGuide
-var _last_focused_golfer: Golfer = null
+var _was_aiming: bool = false
 
 func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Control) -> void:
 	manager = golfers
@@ -240,8 +239,7 @@ func start_round() -> void:
 	content.add_child(punch)
 	_label("Aim with the mouse · Click to shoot\nYellow arc = intended carry · dotted trail = roll until it stops\nGuide assumes a clean strike; wind, lie and slope still apply.\nPutting on the green is automatic.")
 	_button("End round / Return to management", leave_round)
-	last_state = -1
-	_last_focused_golfer = null
+	_was_aiming = false
 
 func _spawn(golfer_name: String, tier: int, group_id: int) -> Golfer:
 	var golfer := manager.spawn_tournament_golfer(tier, group_id)
@@ -293,14 +291,11 @@ func _process(delta: float) -> void:
 			active_shooter = golfer
 			break
 
-	# Camera follows active shooter or walking player
-	var current_focus = active_shooter if active_shooter else player
-	var focus_state = current_focus.current_state if is_instance_valid(current_focus) else -1
-	if current_focus != _last_focused_golfer or focus_state != last_state or focus_state == Golfer.State.WALKING:
-		if is_instance_valid(current_focus) and is_instance_valid(camera):
-			camera.focus_on(current_focus.global_position)
-	_last_focused_golfer = current_focus
-	last_state = focus_state
+	# Focus camera on the player's character only when the user needs to aim their shot
+	if ready and not _was_aiming:
+		if is_instance_valid(player) and is_instance_valid(camera):
+			camera.focus_on(player.global_position)
+	_was_aiming = ready
 
 	# Status text
 	var hole_num = mini(player.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
@@ -347,6 +342,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _show_results() -> void:
 	active = false
+	_was_aiming = false
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	if is_instance_valid(aim_guide):
 		aim_guide.clear()
@@ -371,6 +367,7 @@ func leave_round(restore_mode: bool = true) -> void:
 	var had_round := busy
 	active = false
 	busy = false
+	_was_aiming = false
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	if is_instance_valid(aim_guide):
 		aim_guide.clear()

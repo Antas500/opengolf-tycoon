@@ -274,3 +274,48 @@ func test_aim_guide_shows_intended_arc_and_roll() -> void:
 
 	rounds.leave_round()
 	assert_true(guide.preview.is_empty(), "Guide clears when the round ends")
+
+func test_camera_focuses_only_when_aiming_shot() -> void:
+	rounds.open_setup()
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.mode_picker.select(1) # Vs Pro
+	rounds.start_round()
+
+	var p := rounds.player
+	var pro := rounds.participants[1]
+	var cam := rounds.camera
+
+	# Reset aiming state and set camera target away from player
+	rounds._was_aiming = false
+	cam._target_position = Vector2(999, 999)
+
+	# When player awaits shot (needs to aim), _process focuses camera on player
+	assert_true(p.awaits_player_shot(), "Player needs to aim shot")
+	rounds._process(0.0)
+	assert_eq(cam._target_position, p.global_position, "Camera moves to focus on player character when aiming")
+
+	# While player continues aiming, camera is not forced every frame
+	cam._target_position = Vector2(500, 500) # User panned camera
+	rounds._process(0.0)
+	assert_eq(cam._target_position, Vector2(500, 500), "Camera allows manual panning while aiming")
+
+	# When player is walking (not aiming), camera does not track player or opponent
+	p._change_state(Golfer.State.WALKING)
+	rounds._process(0.0)
+	assert_eq(cam._target_position, Vector2(500, 500), "Camera does not follow player walking")
+
+	# When opponent is preparing shot, camera does not jump to opponent
+	p._change_state(Golfer.State.IDLE)
+	pro._change_state(Golfer.State.PREPARING_SHOT)
+	rounds._process(0.0)
+	assert_eq(cam._target_position, Vector2(500, 500), "Camera does not focus on opponent")
+
+	# When turn returns to player to aim, camera moves to focus on player character
+	pro._change_state(Golfer.State.IDLE)
+	p._change_state(Golfer.State.PREPARING_SHOT)
+	assert_true(p.awaits_player_shot())
+	rounds._process(0.0)
+	assert_eq(cam._target_position, p.global_position, "Camera focuses on player when turn to aim arrives")
+
+	rounds.leave_round()
