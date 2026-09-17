@@ -4,9 +4,10 @@
 
 The **Play the Course** button is available in building and simulation modes.
 At least one open hole is required; owner rounds cannot overlap a management
-(revenue) tournament. Setup and play suspend the management clock, spawning and
-visitor processing. Returning restores the previous mode, speed and camera.
-Management tools are deselected and locked while the owner round is open.
+(revenue) tournament. Unlike prior implementations, starting a round does not pause
+the management mode or hide the management HUD. The course simulation, clock,
+financials, and visitor golfers continue operating concurrently. Returning restores
+the camera and any prior tool states.
 
 The owner chooses a name and the existing shirt, pants, cap, hair and skin colors.
 Because baked tier sprites cannot display these colors, the owner uses the
@@ -18,17 +19,25 @@ Formats:
 - **Begin Tournament:** owner plus all three pros, playing a single stroke-play
   round. This is separate from the management tournament/prize-money system.
 
-All participants play the open holes from the back tees. Opponents play
-concurrently; their completed-hole scores appear in the HUD. Lowest total wins;
-equal scores are a tie. Results include each golfer's hole-by-hole scorecard.
-The normal hazard penalties, pickup rule, hole detection and walking remain in
-use. Leaving early abandons the round without awarding a result.
+All participants play the open holes from the back tees. The player and any opponents
+are assigned a shared `group_id`, playing together as a single group just like visitor
+groups on the course. They observe standard golf etiquette managed by `GolferManager`:
+- The honor system on tee boxes (lowest score on prior hole, or lowest golfer ID on hole 1).
+- The away rule through the green (furthest golfer from the pin hits next).
+- Clearing etiquette (waiting for groups ahead to clear landing areas or par-3 greens).
+- Group badges identifying their group number.
 
-The owner waits for a mouse click while preparing an off-green shot. The cursor
-becomes a crosshair and a projected carry line shows the selected aim and shape.
-The line is an estimate, not a guaranteed landing point: lie, skill, wind,
+Opponents play in real time alongside the player; their completed-hole scores appear
+in the player HUD scorecard. Lowest total wins; equal scores are a tie. Results include
+each golfer's hole-by-hole scorecard. Normal hazard penalties, pickup rules, hole
+detection, and walking remain in use. Leaving early abandons the round without awarding
+a result.
+
+When it is the owner's turn off the green, the owner waits for mouse input while preparing
+a shot. The cursor becomes a crosshair and a projected carry line shows the selected aim
+and shape. The line is an estimate, not a guaranteed landing point: lie, skill, wind,
 elevation and rollout still apply. Club selection is automatic by aim distance.
-The camera follows the owner while walking and refocuses when their state changes;
+The camera follows the active round participants and refocuses when turns shift;
 normal pan/zoom remains available for long shots. On the green the existing AI
 putting system takes over, with no click required.
 
@@ -94,16 +103,17 @@ adds a lateral mid-flight curve while preserving its computed landing position.
 
 ### State and cleanup
 
-`PlayerRoundManager` advances its participants via the existing
-`GolferManager._advance_golfer` when they are IDLE. PREPARING_SHOT waits only for
-an owner off-green; ordinary AI and green putting retain their preparation timer.
-`play_shot` rejects input while swinging/walking/watching, when paused, off-map,
-or aimed at the ball itself, preventing double-click extra strokes.
+The player round integrates directly with `GolferManager`'s group turn scheduler
+(`_update_group`), assigning the player and their playing partners a shared `group_id`.
+PREPARING_SHOT waits only for an owner off-green; ordinary AI and green putting retain
+their preparation timer. `play_shot` rejects input while swinging/walking/watching, when
+paused, off-map, or aimed at the ball itself, preventing double-click extra strokes.
 
 Owner-round golfers use the tournament spawning path to avoid entrance fees and
-closing-time restrictions, but have their own lifecycle flag to avoid automatic
-manager removal before the results screen. Cleanup removes their balls through
-the normal golfer-left signal and restores suspended visitors.
+closing-time restrictions, with `is_owner_round` set to true so that `PlayerRoundManager`
+manages round completion and results display. Visitors and course simulation remain
+active throughout the round. Cleanup removes the owner group participants and balls
+while leaving normal visitors unperturbed.
 
 ## Tuning Levers
 
@@ -121,5 +131,5 @@ the normal golfer-left signal and restores suspended visitors.
 `test_player_golfer.gd` covers allocation, refunds, locking, persistence, legacy
 saves, bounds, terrain eligibility, input waiting, automatic-green eligibility
 and range modifiers. `test_player_round.gd` exercises the real setup UI, opponent
-selection, results/ties, visitor restoration, cancellation, mode changes, and a
-real round through swings, flight, walking and automatic putts.
+selection, results/ties, concurrent visitor activity, shared group ID and etiquette,
+cancellation, mode changes, and a real round through swings, flight, walking and automatic putts.

@@ -280,8 +280,6 @@ func _process(_delta: float) -> void:
 	_update_selection_indicator()
 
 func _input(event: InputEvent) -> void:
-	if player_round and player_round.busy:
-		return
 	# Keyboard shortcuts - handled in _input so UI controls don't swallow them
 	if event is InputEventKey and event.pressed and not event.echo:
 		# Escape key: deselect active tool/panel first, then open pause menu
@@ -411,8 +409,6 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if player_round and player_round.busy:
-		return
 	# Cancel action (ESC/right-click) should always work to deselect tools
 	if event.is_action_pressed("cancel"):
 		_cancel_action()

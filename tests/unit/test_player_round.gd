@@ -87,7 +87,8 @@ func test_practice_waits_for_input_and_restores_visitors() -> void:
 	assert_eq(rounds.player.golfer_name, "Test Owner")
 	assert_false(rounds.player._use_sprites)
 	assert_eq(rounds.player.body.color, Color(GameManager.player_profile.appearance.shirt_color))
-	assert_eq(visitor.process_mode, Node.PROCESS_MODE_DISABLED)
+	assert_eq(visitor.process_mode, Node.PROCESS_MODE_INHERIT, "Visitors are not disabled during round")
+	assert_true(rounds.hud.visible, "Management HUD remains visible during play")
 	rounds.player._process_preparing_shot(30)
 	assert_eq(rounds.player.current_strokes, 0)
 	rounds.leave_round()
@@ -105,9 +106,14 @@ func test_pro_selection_and_tournament_results() -> void:
 	rounds.start_round()
 	assert_eq(rounds.participants.size(), 2)
 	assert_eq(rounds.participants[1].golfer_name, "Pro Riley")
+	assert_eq(rounds.participants[0].group_id, rounds.participants[1].group_id, "Participants share the same group ID")
+	assert_true(rounds.hud.visible, "Management HUD is visible")
 	rounds.leave_round()
 	_start(2)
 	assert_eq(rounds.participants.size(), 4)
+	assert_eq(rounds.participants[0].group_id, rounds.participants[1].group_id)
+	assert_eq(rounds.participants[1].group_id, rounds.participants[2].group_id)
+	assert_eq(rounds.participants[2].group_id, rounds.participants[3].group_id)
 	for golfer in rounds.participants:
 		golfer.current_strokes = 3
 		golfer.ball_position = Vector2i(16, 10)
@@ -152,3 +158,93 @@ func test_real_shot_rejects_double_click_and_round_can_finish() -> void:
 	Engine.time_scale = 1.0
 	assert_false(rounds.active, "Real round reaches its results screen")
 	assert_eq(owner.hole_scores.size(), 1)
+
+func test_player_round_plays_as_group_with_etiquette() -> void:
+	# Start a round vs a pro
+	rounds.open_setup()
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds.mode_picker.select(1)  # Vs Pro
+	rounds.pro_picker.select(0)   # Pro Alex
+	rounds.start_round()
+	rounds._process(0.0)
+
+	assert_eq(GameManager.current_mode, GameManager.GameMode.SIMULATING, "Game mode is SIMULATING")
+	assert_true(rounds.hud.visible, "Management HUD is visible")
+	assert_eq(rounds.participants.size(), 2)
+
+	var p := rounds.player
+	var pro := rounds.participants[1]
+
+	# Both should have the same group_id
+	assert_eq(p.group_id, pro.group_id, "Player and Pro share group_id")
+	assert_gte(p.group_id, 0, "Group ID is a valid non-negative group ID")
+
+	# Hole 1 tee off order: lowest golfer_id (player spawned first) has honor
+	assert_eq(p.current_state, Golfer.State.PREPARING_SHOT, "Player has honor on Hole 1 tee")
+	assert_true(p.awaits_player_shot(), "Player awaits input")
+	assert_eq(pro.current_state, Golfer.State.IDLE, "Pro waits their turn on the tee")
+
+	# Player takes tee shot
+	assert_true(p.play_shot(Vector2i(14, 10)))
+	assert_eq(p.current_strokes, 1)
+
+	# While player is swinging/watching/walking, pro is next on tee
+	# Advance pro to take tee shot
+	p._change_state(Golfer.State.WALKING)
+	golfers._update_golfers(0.0)
+	assert_eq(pro.current_state, Golfer.State.PREPARING_SHOT, "Pro tees off next in group order")
+
+	rounds.leave_round()
+
+func test_concurrent_visitors_and_player_group() -> void:
+	# Spawn a visitor group before player round
+	var v1 := golfers.spawn_tournament_golfer(GolferTier.Tier.CASUAL, 10)
+	var v2 := golfers.spawn_tournament_golfer(GolferTier.Tier.BEGINNER, 10)
+	assert_eq(golfers.active_golfers.size(), 2)
+
+	# Start owner round vs pro
+	rounds.open_setup()
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.mode_picker.select(1)
+	rounds.start_round()
+	rounds._process(0.0)
+
+	# Both groups should coexist in active_golfers
+	assert_eq(golfers.active_golfers.size(), 4, "4 golfers total (2 visitors + 2 player group)")
+	assert_eq(v1.process_mode, Node.PROCESS_MODE_INHERIT, "Visitor 1 remains active")
+	assert_eq(v2.process_mode, Node.PROCESS_MODE_INHERIT, "Visitor 2 remains active")
+	assert_ne(v1.group_id, rounds.player.group_id, "Visitor group ID is different from player group ID")
+	assert_eq(v1.group_id, v2.group_id, "Visitors share their own group ID")
+	assert_eq(rounds.player.group_id, rounds.participants[1].group_id, "Player and opponent share their own group ID")
+	assert_true(rounds.hud.visible, "Management HUD remains visible")
+	assert_eq(GameManager.current_mode, GameManager.GameMode.SIMULATING, "Simulation mode remains active")
+
+	# Leaving round only removes player group, visitors remain untouched
+	rounds.leave_round()
+	assert_eq(golfers.active_golfers.size(), 2, "Only visitors remain after owner round ends")
+	assert_true(is_instance_valid(v1), "Visitor 1 is still valid")
+	assert_true(is_instance_valid(v2), "Visitor 2 is still valid")
+
+func test_group_badges_on_player_group() -> void:
+	rounds.open_setup()
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.mode_picker.select(1) # Vs Pro (group size 2)
+	rounds.start_round()
+	rounds._process(0.0)
+
+	var p := rounds.player
+	var pro := rounds.participants[1]
+	var badge_p := p.get_node_or_null("InfoContainer/GroupBadge") as Label
+	var badge_pro := pro.get_node_or_null("InfoContainer/GroupBadge") as Label
+	assert_not_null(badge_p, "Player has group badge node")
+	assert_not_null(badge_pro, "Pro has group badge node")
+	assert_true(badge_p.visible, "Player group badge is visible for multi-player group")
+	assert_true(badge_pro.visible, "Pro group badge is visible for multi-player group")
+	assert_eq(badge_p.text, "Group %d" % (p.group_id + 1), "Badge displays correct group number")
+	assert_eq(badge_pro.text, badge_p.text, "Both golfers display the same group badge text")
+
+	rounds.leave_round()
