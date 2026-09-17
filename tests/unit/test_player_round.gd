@@ -248,3 +248,29 @@ func test_group_badges_on_player_group() -> void:
 	assert_eq(badge_pro.text, badge_p.text, "Both golfers display the same group badge text")
 
 	rounds.leave_round()
+
+func test_aim_guide_shows_intended_arc_and_roll() -> void:
+	_start(0)
+	var guide: AimGuide = rounds.aim_guide
+	assert_not_null(guide, "Starting a round creates the aim guide")
+	rounds.update_aim_guide(Vector2i(16, 10))
+	assert_false(guide.preview.is_empty(), "Guide follows the owner's aim")
+	var preview := guide.preview
+	assert_gt(int(preview.carry_yards), 0, "Guide reports the intended carry")
+	assert_gt(int(preview.roll_yards), 0, "Guide reports the roll after landing")
+	assert_gt(int(preview.get("roll_path", PackedVector2Array()).size()), 1, "Guide traces the roll path")
+	var geometry := AimGuide.build_geometry(GameManager.terrain_grid, preview)
+	assert_false(geometry.is_empty(), "Guide geometry projects the preview")
+	assert_almost_eq(Vector2(geometry.arc[geometry.arc.size() - 1]).distance_to(geometry.carry), 0.0, 0.5,
+		"Arc ends on the guide's carry point")
+
+	# The guide disappears whenever it is not the owner's shot to hit.
+	rounds.player.current_state = Golfer.State.WALKING
+	rounds.update_aim_guide(Vector2i(16, 10))
+	assert_true(guide.preview.is_empty(), "Guide clears while the owner walks")
+	rounds.player.current_state = Golfer.State.PREPARING_SHOT
+	rounds.update_aim_guide(Vector2i(16, 10))
+	assert_false(guide.preview.is_empty(), "Guide returns with the owner's turn")
+
+	rounds.leave_round()
+	assert_true(guide.preview.is_empty(), "Guide clears when the round ends")

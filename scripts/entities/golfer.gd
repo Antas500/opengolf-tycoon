@@ -53,6 +53,9 @@ const CLUB_STATS = {
 	}
 }
 
+## Bend (degrees) the owner's fade/draw shapes apply to the shot direction.
+const PLAYER_SHAPE_BEND_DEG: float = 8.0
+
 ## Golfer identification
 @export var golfer_name: String = "Golfer"
 @export var golfer_id: int = -1
@@ -981,15 +984,86 @@ func awaits_player_shot() -> bool:
 static func shape_allowed(shape: int, terrain: int) -> bool:
 	return shape == 0 or (shape in [1, 2, 3] and terrain in [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.FAIRWAY])
 
+## Bend applied to the owner's shot direction for the shape in `player_shape`:
+## 0 = straight, 1 = fade (L→R), 2 = draw (R→L), 3 = high backspin (no bend).
+static func shape_bend_degrees(shape: int) -> float:
+	if shape == 1:
+		return PLAYER_SHAPE_BEND_DEG
+	if shape == 2:
+		return -PLAYER_SHAPE_BEND_DEG
+	return 0.0
+
+## Highest distance (tiles) the owner can aim with this club, after punch and skills.
+func player_max_distance(club: Club) -> float:
+	var maximum := float(CLUB_STATS[club].max_distance) * _get_skill_distance_factor(club)
+	return maximum * 0.7 if player_punch else maximum
+
 func player_aim(target: Vector2i) -> Vector2i:
 	var distance := Vector2(ball_position).distance_to(Vector2(target))
 	_chosen_club = select_club(distance, GameManager.terrain_grid.get_tile(ball_position))
 	if _chosen_club == Club.PUTTER:
 		_chosen_club = Club.WEDGE
-	var maximum := float(CLUB_STATS[_chosen_club].max_distance) * _get_skill_distance_factor(_chosen_club)
-	if player_punch:
-		maximum *= 0.7
+	var maximum := player_max_distance(_chosen_club)
 	return Vector2i((Vector2(ball_position) + Vector2(target - ball_position).limit_length(maximum)).round())
+
+## Deterministic preview of the shot the owner is lining up, used by the aim guide
+## to draw the intended flight arc and the roll that follows it.
+##
+## Runs the real execution math (`_calculate_shot` / `_calculate_rollout`) with the
+## random error terms replaced by their expected values — no gaussian miss, shank,
+## chunked distance loss or hook/slice tendency — so the guide shows the shot the
+## swing is *trying* to hit. Wind, lie, elevation, slope, shape, punch and backspin
+## are all included, because those are intent, not error. Returns an empty
+## dictionary when the owner is not waiting on mouse input or the aim is unusable.
+func preview_shot(target: Vector2i) -> Dictionary:
+	var terrain_grid := GameManager.terrain_grid
+	if not awaits_player_shot() or terrain_grid == null or not terrain_grid.is_valid_position(target):
+		return {}
+	# An illegal shape (left the tee/fairway) falls back to straight, exactly as
+	# play_shot() does, so the arc the guide draws is the shot that will be hit.
+	if not shape_allowed(player_shape, terrain_grid.get_tile(Vector2i(ball_position_precise.round()))):
+		player_shape = 0
+	var aim := player_aim(target)
+	if aim == ball_position:
+		return {}
+
+	var origin := Vector2(ball_position)
+	var shot := _calculate_shot(ball_position, aim, true)
+	var club: Club = shot.get("club", _chosen_club)
+	var carry: Vector2 = shot.get("carry_position_precise", origin)
+	var rest: Vector2 = shot.get("landing_position_precise", carry)
+	var roll_path := PackedVector2Array(shot.get("roll_path", PackedVector2Array()))
+	if roll_path.is_empty():
+		roll_path.append(carry)
+	if roll_path[roll_path.size() - 1].distance_to(rest) > 0.001:
+		roll_path.append(rest)
+
+	var is_backspin: bool = bool(shot.get("is_backspin", false))
+	var rest_terrain: int = terrain_grid.get_tile(Vector2i(rest.round()))
+	var blocked: bool = GolfRules.get_relief_type(rest_terrain) != GolfRules.ReliefType.NONE
+	var max_range := player_max_distance(club)
+	return {
+		"club": club,
+		"club_name": CLUB_STATS[club]["name"],
+		"origin": origin,
+		"aim": Vector2(aim),
+		"raw_target": Vector2(target),
+		"clamped": origin.distance_to(Vector2(target)) > max_range + 0.5,
+		"max_range": max_range,
+		"carry": carry,
+		"rest": rest,
+		"roll_path": roll_path,
+		"carry_yards": terrain_grid.calculate_distance_yards_precise(origin, carry),
+		"roll_yards": terrain_grid.calculate_distance_yards_precise(carry, rest),
+		"rollout_tiles": float(shot.get("rollout_tiles", 0.0)),
+		"is_backspin": is_backspin,
+		"blocked": blocked,
+		"blocked_terrain": TerrainTypes.get_type_name(rest_terrain) if blocked else "",
+		"shape": player_shape,
+		"shape_bend_deg": shape_bend_degrees(player_shape),
+		"punch": player_punch,
+		"arc_scale": 0.3 if player_punch else (1.4 if player_shape == 3 else 1.0),
+	}
 
 func play_shot(target: Vector2i) -> bool:
 	if not awaits_player_shot() or GameManager.is_paused or not GameManager.terrain_grid.is_valid_position(target) or target == ball_position:
@@ -1509,8 +1583,10 @@ func _calculate_putt(from_precise: Vector2) -> Dictionary:
 		"club": Club.PUTTER
 	}
 
-## Calculate shot outcome
-func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
+## Calculate shot outcome.
+## `deterministic` replaces every random error term with its expected value so the
+## shot can be previewed (aim guide) without rolling the dice. Used by preview_shot().
+func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = false) -> Dictionary:
 	var terrain_grid = GameManager.terrain_grid
 	if not terrain_grid:
 		return {"landing_position": target, "distance": 0, "accuracy": 1.0, "club": Club.DRIVER}
@@ -1585,15 +1661,15 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	# small random variance representing natural swing inconsistency.
 	var distance_modifier = 1.0
 	if club == Club.DRIVER:
-		distance_modifier = 0.97 + randf_range(-0.06, 0.04)    # 0.91-1.01
+		distance_modifier = 0.97 + _swing_variance(-0.06, 0.04, deterministic)    # 0.91-1.01
 	elif club == Club.FAIRWAY_WOOD:
-		distance_modifier = 0.97 + randf_range(-0.05, 0.04)    # 0.92-1.01
+		distance_modifier = 0.97 + _swing_variance(-0.05, 0.04, deterministic)    # 0.92-1.01
 	elif club == Club.IRON:
-		distance_modifier = 0.98 + randf_range(-0.04, 0.03)    # 0.94-1.01
+		distance_modifier = 0.98 + _swing_variance(-0.04, 0.03, deterministic)    # 0.94-1.01
 	elif club == Club.WEDGE:
-		distance_modifier = 0.98 + randf_range(-0.03, 0.02)    # 0.95-1.00
+		distance_modifier = 0.98 + _swing_variance(-0.03, 0.02, deterministic)    # 0.95-1.00
 	elif club == Club.PUTTER:
-		distance_modifier = 0.99 + randf_range(-0.02, 0.01)    # 0.97-1.00
+		distance_modifier = 0.99 + _swing_variance(-0.02, 0.01, deterministic)    # 0.97-1.00
 
 	# Apply terrain distance penalty
 	var terrain_distance_modifier = _get_terrain_distance_modifier(current_terrain)
@@ -1638,7 +1714,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	#   - Each golfer has a consistent miss tendency (slice or hook bias)
 	var direction = Vector2(target - from).normalized()
 	if player_profile and player_shape in [1, 2]:
-		direction = direction.rotated(deg_to_rad(8.0 if player_shape == 1 else -8.0))
+		direction = direction.rotated(deg_to_rad(shape_bend_degrees(player_shape)))
 
 	# Max angular spread based on inaccuracy (degrees)
 	# Worst case ~12° = severe slice/hook, pro-level ~1.2° = tight dispersion
@@ -1651,17 +1727,18 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 		spread_std_dev *= lerpf(0.3, 1.0, wedge_distance_ratio)
 
 	# Sample miss angle from gaussian distribution (bell curve, not uniform)
-	var base_angle_deg = _gaussian_random() * spread_std_dev
+	# The intended shot preview skips the miss entirely — it shows the aim, not the error.
+	var base_angle_deg = 0.0 if deterministic else _gaussian_random() * spread_std_dev
 
 	# Apply golfer's natural miss tendency (consistent slice or hook bias)
 	# Lower accuracy amplifies the tendency — skilled players compensate better
 	var tendency_strength = miss_tendency * (1.0 - total_accuracy) * 6.0
-	var miss_angle_deg = base_angle_deg + tendency_strength
+	var miss_angle_deg = 0.0 if deterministic else base_angle_deg + tendency_strength
 
 	# Rare shank: catastrophic sideways miss (only on full swings, not putts/wedges)
 	# ~3% for worst beginners, <0.3% for pros
 	var is_shank = false
-	if club != Club.PUTTER and club != Club.WEDGE:
+	if club != Club.PUTTER and club != Club.WEDGE and not deterministic:
 		var shank_chance = (1.0 - total_accuracy) * 0.04
 		if randf() < shank_chance:
 			is_shank = true
@@ -1686,7 +1763,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	# contact quality, tempo) that spread short iron shots across the target area.
 	# This floor ensures beginners scatter across the green on short par 3s rather
 	# than all landing in a tight cluster.
-	if club != Club.PUTTER:
+	if club != Club.PUTTER and not deterministic:
 		var angular_lateral_std = actual_distance * sin(deg_to_rad(spread_std_dev))
 		var min_lateral_std = (1.0 - total_accuracy) * 0.8
 		if angular_lateral_std < min_lateral_std:
@@ -1696,7 +1773,8 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 
 	# Distance error: topped/fat shots lose distance (never gain)
 	# Bell curve - most shots near full distance, occasional chunk/top
-	var distance_loss = absf(_gaussian_random()) * (1.0 - total_accuracy) * 0.12
+	# A previewed shot assumes a clean strike, so no distance is lost.
+	var distance_loss = 0.0 if deterministic else absf(_gaussian_random()) * (1.0 - total_accuracy) * 0.12
 	landing_point -= miss_direction * (actual_distance * distance_loss)
 
 	# Apply wind displacement
@@ -1748,6 +1826,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 			"accuracy": total_accuracy,
 			"club": club,
 			"rollout_tiles": 0.0,
+			"roll_path": PackedVector2Array([carry_position_precise]),
 			"is_backspin": false,
 			"miss_angle_deg": miss_angle_deg,
 			"is_shank": is_shank,
@@ -1757,16 +1836,21 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 	# --- Rollout calculation ---
 	# Calculate how far the ball rolls after landing based on club, terrain, slope, and skill
 	var rollout = _calculate_rollout(club, carry_position, carry_position_precise,
-		Vector2(from), actual_distance, total_accuracy)
+		Vector2(from), actual_distance, total_accuracy, deterministic)
 
 	if player_profile and player_shape == 3 and terrain_grid.get_tile(carry_position) in [TerrainTypes.Type.GREEN, TerrainTypes.Type.FAIRWAY]:
 		var spin := minf(1.5, 0.25 * (1.0 + player_profile.bonus(7)))
 		rollout.final_position = carry_position_precise - direction * spin
 		rollout.rollout_distance = spin
 		rollout.is_backspin = true
+		# Backspin sends the ball straight back along the shot line.
+		rollout.roll_path = PackedVector2Array([carry_position_precise, rollout.final_position])
 	elif player_profile and player_punch:
 		rollout.final_position = carry_position_precise + (rollout.final_position - carry_position_precise) * 1.5
 		rollout.rollout_distance *= 1.5
+		# Punch scales the whole roll so the traced path stays glued to the ball.
+		for i in rollout.roll_path.size():
+			rollout.roll_path[i] = carry_position_precise + (rollout.roll_path[i] - carry_position_precise) * 1.5
 
 	var final_position_precise = rollout.final_position
 	var final_position = Vector2i(final_position_precise.round())
@@ -1786,11 +1870,17 @@ func _calculate_shot(from: Vector2i, target: Vector2i) -> Dictionary:
 		"accuracy": total_accuracy,
 		"club": club,
 		"rollout_tiles": rollout.rollout_distance,
+		"roll_path": rollout.roll_path,
 		"is_backspin": rollout.is_backspin,
 		"miss_angle_deg": miss_angle_deg,
 		"is_shank": is_shank,
 		"target": target,
 	}
+
+## Swing randomness helper. Real shots sample the range; a deterministic preview
+## (aim guide) uses the middle of the range, i.e. the expected value of the swing.
+func _swing_variance(range_min: float, range_max: float, deterministic: bool) -> float:
+	return lerpf(range_min, range_max, 0.5) if deterministic else randf_range(range_min, range_max)
 
 ## Approximate gaussian random using Central Limit Theorem (sum of uniform randoms).
 ## Returns value with mean ~0 and std dev ~1. Range approximately -3.5 to +3.5.
@@ -1815,15 +1905,19 @@ func _get_bunker_depth_at_ball() -> int:
 	return 0
 
 ## Calculate rollout after ball lands. Returns Dictionary with final_position,
-## rollout_distance (tiles), and is_backspin flag.
+## rollout_distance (tiles), is_backspin flag, and roll_path — the walked
+## waypoints from the carry point to where the ball stops (used by the aim guide).
 ## Rollout depends on club, landing terrain, slope, and player skill (backspin).
+## `deterministic` uses the middle of the rollout range instead of a random sample.
 func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2,
-		shot_origin: Vector2, carry_distance: float, _total_accuracy: float) -> Dictionary:
+		shot_origin: Vector2, carry_distance: float, _total_accuracy: float,
+		deterministic: bool = false) -> Dictionary:
 	var terrain_grid = GameManager.terrain_grid
 	var no_rollout = {
 		"final_position": carry_precise,
 		"rollout_distance": 0.0,
 		"is_backspin": false,
+		"roll_path": PackedVector2Array([carry_precise]),
 	}
 	if not terrain_grid:
 		return no_rollout
@@ -1868,7 +1962,8 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 			return no_rollout
 
 	# Sample rollout fraction with slight variance (gaussian-ish)
-	var roll_t = clampf(randf() * 0.6 + randf() * 0.4, 0.0, 1.0)  # Skewed toward middle
+	# Mean of randf()*0.6 + randf()*0.4 is 0.5, which is what a preview assumes.
+	var roll_t = 0.5 if deterministic else clampf(randf() * 0.6 + randf() * 0.4, 0.0, 1.0)
 	var base_rollout_fraction = lerpf(rollout_min, rollout_max, roll_t)
 
 	# --- Backspin for full wedge shots ---
@@ -1952,6 +2047,7 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 
 	# --- Walk rollout path checking for hazards ---
 	var final_position = carry_precise
+	var roll_path := PackedVector2Array([carry_precise])
 	var steps = int(ceilf(rollout_distance * 4.0))  # Check every quarter-tile
 	var step_size = rollout_distance / maxf(steps, 1)
 
@@ -1967,12 +2063,15 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 		# Ball stops if it rolls into certain terrain
 		if check_terrain == TerrainTypes.Type.WATER:
 			final_position = check_point  # Ball goes in the water
+			roll_path.append(check_point)
 			break
 		if check_terrain == TerrainTypes.Type.OUT_OF_BOUNDS or check_terrain == TerrainTypes.Type.EMPTY:
 			final_position = check_point  # Ball goes OB (EMPTY = outside property)
+			roll_path.append(check_point)
 			break
 		if check_terrain == TerrainTypes.Type.BUNKER:
 			final_position = check_point  # Ball plugs into bunker
+			roll_path.append(check_point)
 			break
 
 		# Rough slows progressively — reduce remaining roll
@@ -1982,11 +2081,13 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 			steps = int(ceilf(rollout_distance * 4.0))
 
 		final_position = check_point
+		roll_path.append(check_point)
 
 	return {
 		"final_position": final_position,
 		"rollout_distance": carry_precise.distance_to(final_position),
 		"is_backspin": is_backspin,
+		"roll_path": roll_path,
 	}
 
 ## Estimate ball flight duration (mirrors BallManager calculation)

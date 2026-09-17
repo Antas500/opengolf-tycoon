@@ -53,6 +53,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Personality traits** — Aggression (0.0–1.0) affects risk/reward club selection and target choice
 - **Green reading** — Putts account for slope break with skill-based accuracy
 - **Score tracking** — Per-hole scores, running total, displayed on course
+- **Play the Course** — Play your own round alongside the management sim, in a group with AI pros, with persistent skills, shot shapes (fade/draw/backspin/punch) and an aim guide that draws the intended flight arc and the roll that follows it
 
 ### Economy & Management
 
