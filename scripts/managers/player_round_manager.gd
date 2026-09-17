@@ -1,6 +1,6 @@
 extends Node2D
 class_name PlayerRoundManager
-## Owner rounds run beside, not inside, the revenue tournament system.
+## Owner rounds run alongside the management simulation as a normal group.
 signal session_opened
 
 const PROS = ["Pro Alex", "Pro Morgan", "Pro Riley"]
@@ -8,7 +8,6 @@ var busy := false
 var active := false
 var player: Golfer
 var participants: Array[Golfer] = []
-var visitors: Dictionary = {}
 var manager: GolferManager
 var camera: IsometricCamera
 var hud: Control
@@ -29,9 +28,9 @@ var start_button: Button
 var previous_mode: int
 var previous_speed: int
 var previous_camera: Vector2
-var previous_hud_visible := true
 var round_kind := 0
 var last_state := -1
+var _last_focused_golfer: Golfer = null
 
 func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Control) -> void:
 	manager = golfers
@@ -46,9 +45,20 @@ func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Contro
 	entry.pressed.connect(open_setup)
 	layer.add_child(entry)
 	EventBus.game_mode_changed.connect(_on_mode_changed)
+	EventBus.load_completed.connect(_on_load_completed)
+
+func _exit_tree() -> void:
+	if EventBus.game_mode_changed.is_connected(_on_mode_changed):
+		EventBus.game_mode_changed.disconnect(_on_mode_changed)
+	if EventBus.load_completed.is_connected(_on_load_completed):
+		EventBus.load_completed.disconnect(_on_load_completed)
 
 func _on_mode_changed(_old: int, mode: int) -> void:
-	if busy and mode != GameManager.GameMode.PLAYING:
+	if busy and mode == GameManager.GameMode.MAIN_MENU:
+		leave_round(false)
+
+func _on_load_completed(_success: bool) -> void:
+	if busy:
 		leave_round(false)
 
 func _make_panel(full_screen: bool) -> void:
@@ -60,9 +70,9 @@ func _make_panel(full_screen: bool) -> void:
 	layer.add_child(overlay)
 	var panel := PanelContainer.new()
 	overlay.add_child(panel)
-	panel.position = Vector2(24, 110) if not full_screen else Vector2(40, 40)
+	panel.position = Vector2(20, 56) if not full_screen else Vector2(40, 40)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(480, minf(760, get_viewport_rect().size.y - 100)) if full_screen else Vector2(390, 280)
+	scroll.custom_minimum_size = Vector2(480, minf(760, get_viewport_rect().size.y - 100)) if full_screen else Vector2(340, 240)
 	panel.add_child(scroll)
 	content = VBoxContainer.new()
 	content.add_theme_constant_override("separation", 8)
@@ -94,15 +104,8 @@ func open_setup() -> void:
 	busy = true
 	previous_mode = GameManager.current_mode
 	previous_speed = GameManager.current_speed
-	previous_camera = camera.global_position
-	for golfer in manager.get_active_golfers():
-		visitors[golfer] = golfer.process_mode
-		golfer.process_mode = Node.PROCESS_MODE_DISABLED
-	GameManager.set_mode(GameManager.GameMode.PLAYING)
-	GameManager.set_speed(GameManager.GameSpeed.NORMAL)
+	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
 	session_opened.emit()
-	previous_hud_visible = hud.visible
-	hud.hide()
 	entry.hide()
 	draft = PlayerGolferProfile.from_data(GameManager.player_profile.serialize())
 	_make_panel(true)
@@ -177,7 +180,18 @@ func start_round() -> void:
 	round_kind = mode_picker.selected
 	var opponent := pro_picker.selected
 	active = true
-	player = _spawn(draft.golfer_name, GolferTier.Tier.CASUAL)
+
+	# Ensure simulation is active so all golfers can play
+	if GameManager.current_mode == GameManager.GameMode.BUILDING:
+		GameManager.start_simulation()
+	elif GameManager.current_mode != GameManager.GameMode.SIMULATING:
+		GameManager.set_mode(GameManager.GameMode.SIMULATING)
+
+	# Assign a shared group ID so the player and opponents play as a single group
+	var group_id: int = manager.next_group_id
+	manager.next_group_id += 1
+
+	player = _spawn(draft.golfer_name, GolferTier.Tier.CASUAL, group_id)
 	player.player_profile = draft
 	player.driving_skill = draft.normalized_skill(1)
 	player.accuracy_skill = draft.normalized_skill(3)
@@ -185,11 +199,30 @@ func start_round() -> void:
 	player.recovery_skill = draft.normalized_skill(8)
 	player.miss_tendency = 0.0
 	player.apply_player_appearance(draft)
+
 	if round_kind == 1:
-		_spawn(PROS[opponent], GolferTier.Tier.PRO)
+		_spawn(PROS[opponent], GolferTier.Tier.PRO, group_id)
 	elif round_kind == 2:
 		for pro in PROS:
-			_spawn(pro, GolferTier.Tier.PRO)
+			_spawn(pro, GolferTier.Tier.PRO, group_id)
+
+	# Position all participants at the tee of the first open hole
+	var course_data = GameManager.course_data
+	if course_data and not course_data.holes.is_empty():
+		var first_open_idx = manager._find_next_open_hole(0, course_data)
+		if first_open_idx < course_data.holes.size():
+			var first_hole = course_data.holes[first_open_idx]
+			var tee_pos = first_hole.tee_position
+			var tee_screen = GameManager.terrain_grid.grid_to_screen_center(tee_pos) if GameManager.terrain_grid else Vector2.ZERO
+			for golfer in participants:
+				golfer.ball_position = tee_pos
+				golfer.ball_position_precise = Vector2(tee_pos)
+				golfer.global_position = tee_screen
+
+	# Immediately trigger group update to determine tee honor and advance first shooter
+	if is_instance_valid(manager):
+		manager._update_golfers(0.0)
+
 	_make_panel(false)
 	_label("PLAY THE COURSE · " + ["Practice", "Vs Pro", "Tournament"][round_kind])
 	status = _label("")
@@ -205,16 +238,17 @@ func start_round() -> void:
 	_label("Aim with the mouse · Click to shoot\nLine shows expected carry; wind and skill affect results.\nPutting on the green is automatic.")
 	_button("End round / Return to management", leave_round)
 	last_state = -1
+	_last_focused_golfer = null
 
-func _spawn(golfer_name: String, tier: int) -> Golfer:
-	var golfer := manager.spawn_tournament_golfer(tier, -1000 - participants.size())
+func _spawn(golfer_name: String, tier: int, group_id: int) -> Golfer:
+	var golfer := manager.spawn_tournament_golfer(tier, group_id)
 	golfer.is_owner_round = true
 	golfer.golfer_name = golfer_name
 	golfer._update_visual()
 	participants.append(golfer)
 	return golfer
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not is_instance_valid(entry):
 		return
 	entry.visible = not busy and GameManager.current_mode in [GameManager.GameMode.BUILDING, GameManager.GameMode.SIMULATING]
@@ -222,17 +256,22 @@ func _process(_delta: float) -> void:
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		queue_redraw()
 		return
+
+	# Drive group simulation forward via GolferManager
+	if is_instance_valid(manager):
+		manager._update_golfers(delta)
+
 	var finished := true
 	for golfer in participants:
-		if golfer.current_state == Golfer.State.IDLE:
-			manager._advance_golfer(golfer)
 		if golfer.current_state != Golfer.State.FINISHED:
 			finished = false
+			break
 	if finished:
 		_show_results()
 		return
+
 	var ready := player.awaits_player_shot()
-	var terrain: int = GameManager.terrain_grid.get_tile(Vector2i(player.ball_position_precise.round()))
+	var terrain: int = GameManager.terrain_grid.get_tile(Vector2i(player.ball_position_precise.round())) if GameManager.terrain_grid else -1
 	for i in range(1, 4):
 		shapes.set_item_disabled(i, not Golfer.shape_allowed(i, terrain))
 	if not Golfer.shape_allowed(player.player_shape, terrain):
@@ -241,27 +280,58 @@ func _process(_delta: float) -> void:
 	shapes.disabled = not ready
 	punch.disabled = not ready
 	Input.set_default_cursor_shape(Input.CURSOR_CROSS if ready else Input.CURSOR_ARROW)
-	if player.current_state != last_state or player.current_state == Golfer.State.WALKING:
-		camera.focus_on(player.global_position)
-	last_state = player.current_state
-	status.text = "%s · Hole %d · Stroke %d\n%s" % [player.golfer_name, mini(player.current_hole + 1, GameManager.course_data.holes.size()), player.current_strokes + 1,
-		"Aim and click to shoot" if ready else ("Automatic putting" if terrain == TerrainTypes.Type.GREEN else "Walking / watching the shot")]
+
+	# Track active shooter in the group
+	var active_shooter: Golfer = null
 	for golfer in participants:
-		status.text += "\n%s: %d strokes · %d holes finished" % [golfer.golfer_name, golfer.total_strokes + golfer.current_strokes, golfer.hole_scores.size()]
+		if golfer.current_state in [Golfer.State.PREPARING_SHOT, Golfer.State.SWINGING, Golfer.State.WATCHING]:
+			active_shooter = golfer
+			break
+
+	# Camera follows active shooter or walking player
+	var current_focus = active_shooter if active_shooter else player
+	var focus_state = current_focus.current_state if is_instance_valid(current_focus) else -1
+	if current_focus != _last_focused_golfer or focus_state != last_state or focus_state == Golfer.State.WALKING:
+		if is_instance_valid(current_focus) and is_instance_valid(camera):
+			camera.focus_on(current_focus.global_position)
+	_last_focused_golfer = current_focus
+	last_state = focus_state
+
+	# Status text
+	var hole_num = mini(player.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
+	var action_text = ""
+	if ready:
+		action_text = "Your turn — Aim and click to shoot"
+	elif active_shooter == player:
+		action_text = "Automatic putting..." if terrain == TerrainTypes.Type.GREEN else "Taking shot..."
+	elif active_shooter != null:
+		action_text = "%s is shooting..." % active_shooter.golfer_name
+	elif player.current_state == Golfer.State.WALKING:
+		action_text = "Walking to ball..."
+	else:
+		action_text = "Waiting for turn..."
+
+	status.text = "%s · Hole %d · Stroke %d\n%s" % [player.golfer_name, hole_num, player.current_strokes + 1, action_text]
+	for golfer in participants:
+		var g_hole = mini(golfer.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
+		status.text += "\n%s: %d strokes · Hole %d" % [golfer.golfer_name, golfer.total_strokes + golfer.current_strokes, g_hole]
 	queue_redraw()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not active or GameManager.is_paused:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		var target: Vector2i = GameManager.terrain_grid.screen_to_grid(get_global_mouse_position())
-		player.play_shot(target)
-		get_viewport().set_input_as_handled()
+		if is_instance_valid(player) and player.awaits_player_shot():
+			var target: Vector2i = GameManager.terrain_grid.screen_to_grid(get_global_mouse_position())
+			if player.play_shot(target):
+				get_viewport().set_input_as_handled()
 
 func _draw() -> void:
 	if not active or GameManager.is_paused or not is_instance_valid(player) or not player.awaits_player_shot():
 		return
 	var grid: TerrainGrid = GameManager.terrain_grid
+	if not grid:
+		return
 	var target := grid.screen_to_grid(get_global_mouse_position())
 	if not grid.is_valid_position(target):
 		return
@@ -307,17 +377,13 @@ func leave_round(restore_mode: bool = true) -> void:
 			manager.remove_golfer(golfer.golfer_id)
 	participants.clear()
 	player = null
-	for golfer in visitors:
-		if is_instance_valid(golfer):
-			golfer.process_mode = visitors[golfer]
-	visitors.clear()
 	if is_instance_valid(overlay):
 		overlay.queue_free()
 		overlay = null
-	hud.visible = previous_hud_visible
 	if had_round:
-		camera.focus_on(previous_camera)
-		if restore_mode:
+		if is_instance_valid(camera):
+			camera.focus_on(previous_camera)
+		if restore_mode and previous_mode == GameManager.GameMode.BUILDING:
 			GameManager.set_mode(previous_mode)
 			GameManager.set_speed(previous_speed)
 	queue_redraw()
