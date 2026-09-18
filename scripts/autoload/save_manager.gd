@@ -141,6 +141,7 @@ func _build_save_data() -> Dictionary:
 	var data: Dictionary = {
 		"version": SAVE_VERSION,
 		"timestamp": Time.get_datetime_string_from_system(),
+		"player_golfer": GameManager.player_profile.serialize(),
 		"game_state": {
 			"course_name": GameManager.course_name,
 			"money": GameManager.money,
@@ -267,6 +268,9 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager._closing_announced = false
 	GameManager._end_of_day_triggered = false
 	GameManager._end_of_day_emitted = false
+
+	# Active owner rounds are transient, like visitor rounds.
+	GameManager.player_profile = PlayerGolferProfile.from_data(data.get("player_golfer", {}))
 
 	# Game state (with fallbacks for older save versions)
 	var game = data.get("game_state", data)  # v1 had flat structure
