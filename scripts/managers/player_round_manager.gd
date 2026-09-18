@@ -183,11 +183,10 @@ func start_round() -> void:
 	var opponent := pro_picker.selected
 	active = true
 
-	# Ensure simulation is active so all golfers can play
-	if GameManager.current_mode == GameManager.GameMode.BUILDING:
-		GameManager.start_simulation()
-	elif GameManager.current_mode != GameManager.GameMode.SIMULATING:
+	# Ensure simulation is active so all golfers can play (day always runs)
+	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
 		GameManager.set_mode(GameManager.GameMode.SIMULATING)
+		GameManager.set_speed(GameManager.GameSpeed.NORMAL)
 
 	# Assign a shared group ID so the player and opponents play as a single group
 	var group_id: int = manager.next_group_id
@@ -252,7 +251,7 @@ func _spawn(golfer_name: String, tier: int, group_id: int) -> Golfer:
 func _process(delta: float) -> void:
 	if not is_instance_valid(entry):
 		return
-	entry.visible = not busy and GameManager.current_mode in [GameManager.GameMode.BUILDING, GameManager.GameMode.SIMULATING]
+	entry.visible = not busy and GameManager.current_mode == GameManager.GameMode.SIMULATING
 	if not active or GameManager.is_paused:
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		if is_instance_valid(aim_guide):
@@ -382,6 +381,7 @@ func leave_round(restore_mode: bool = true) -> void:
 	if had_round:
 		if is_instance_valid(camera):
 			camera.focus_on(previous_camera)
-		if restore_mode and previous_mode == GameManager.GameMode.BUILDING:
-			GameManager.set_mode(previous_mode)
-			GameManager.set_speed(previous_speed)
+		# Day always runs in SIMULATING — keep simulation active after owner round
+		if GameManager.current_mode != GameManager.GameMode.SIMULATING:
+			GameManager.set_mode(GameManager.GameMode.SIMULATING)
+		GameManager.set_speed(previous_speed if GameManager.current_mode == GameManager.GameMode.SIMULATING else GameManager.GameSpeed.NORMAL)

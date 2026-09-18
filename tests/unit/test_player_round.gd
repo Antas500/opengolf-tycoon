@@ -26,7 +26,8 @@ func before_each() -> void:
 	grid._grid[hole.tee_position] = TerrainTypes.Type.TEE_BOX
 	grid._grid[hole.hole_position] = TerrainTypes.Type.GREEN
 	GameManager.terrain_grid = grid
-	GameManager.set_mode(GameManager.GameMode.BUILDING)
+	GameManager.set_mode(GameManager.GameMode.SIMULATING)
+	GameManager.set_speed(GameManager.GameSpeed.NORMAL)
 	fixture = Node2D.new()
 	add_child_autofree(fixture)
 	var entities := Node2D.new()
@@ -92,7 +93,7 @@ func test_practice_waits_for_input_and_restores_visitors() -> void:
 	rounds.player._process_preparing_shot(30)
 	assert_eq(rounds.player.current_strokes, 0)
 	rounds.leave_round()
-	assert_eq(GameManager.current_mode, GameManager.GameMode.BUILDING)
+	assert_eq(GameManager.current_mode, GameManager.GameMode.SIMULATING)
 	assert_eq(visitor.process_mode, Node.PROCESS_MODE_INHERIT)
 	assert_eq(golfers.active_golfers.size(), 1)
 	assert_true(GameManager.player_profile.initialized)

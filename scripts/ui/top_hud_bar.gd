@@ -212,14 +212,10 @@ func _update_game_mode() -> void:
 	if mode == null:
 		mode = 0
 
-	# GameManager.GameMode enum: MAIN_MENU=0, BUILDING=1, SIMULATING=2, PLAYING=3, PAUSED=4
+	# GameManager.GameMode enum: MAIN_MENU=0, BUILDING=1 (legacy), SIMULATING=2, PLAYING=3, PAUSED=4
+	# Day always runs — BUILDING is kept for save compatibility but maps to PLAYING.
 	match mode:
-		1:  # BUILDING
-			_game_mode_icon.text = "#"
-			_game_mode_label.text = "BUILD MODE"
-			_game_mode_icon.add_theme_color_override("font_color", UIConstants.COLOR_WARNING)
-			_game_mode_label.add_theme_color_override("font_color", UIConstants.COLOR_WARNING)
-		2, 3:  # SIMULATING, PLAYING
+		1, 2, 3:  # BUILDING (legacy), SIMULATING, PLAYING
 			_game_mode_icon.text = ">"
 			_game_mode_label.text = "PLAYING"
 			_game_mode_icon.add_theme_color_override("font_color", UIConstants.COLOR_SUCCESS)
