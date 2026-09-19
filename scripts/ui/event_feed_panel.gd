@@ -14,7 +14,7 @@ signal close_requested
 
 const PANEL_WIDTH: float = 340.0
 const TOP_MARGIN: float = 56.0  # Below TopHUDBar
-const BOTTOM_MARGIN: float = 58.0  # Above BottomBar
+const BOTTOM_MARGIN: float = 98.0  # Tracks BottomBar (now 125px tall)
 const RIGHT_MARGIN: float = 4.0
 
 var _scroll: ScrollContainer = null

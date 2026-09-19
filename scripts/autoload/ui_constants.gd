@@ -98,7 +98,8 @@ const SEPARATION_LG := 8
 # =============================================================================
 
 const TOP_HUD_HEIGHT := 48
-const BOTTOM_BAR_HEIGHT := 50
+# Bottom bar height: Menu + RotateView + Speed rows (keep in sync with main.tscn BottomBar offset_top)
+const BOTTOM_BAR_HEIGHT := 125
 const BUILD_TOOLS_WIDTH := 260
 const TOOL_BUTTON_HEIGHT := 36
 

@@ -6,7 +6,7 @@ class_name RoundSummaryPopup
 const DISPLAY_DURATION: float = 5.0
 const FADE_DURATION: float = 0.5
 const PANEL_WIDTH: float = 260.0
-const BOTTOM_MARGIN: float = 65.0  # Above BottomBar
+const BOTTOM_MARGIN: float = 105.0  # Tracks BottomBar (now 125px tall)
 const RIGHT_MARGIN: float = 20.0
 
 var _queue: Array = []

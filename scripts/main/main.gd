@@ -209,7 +209,7 @@ func _ready() -> void:
 	_setup_rain_overlay()
 	_setup_placement_preview()
 	_create_selection_indicator()
-	_create_save_load_button()
+	_create_menu_button()
 	_setup_building_info_panel()
 	_setup_financial_panel()
 	_setup_mini_map()
@@ -743,9 +743,9 @@ func _setup_bottom_bar() -> void:
 	style.border_width_top = 1
 	style.border_color = UIConstants.COLOR_BORDER
 	bg.add_theme_stylebox_override("panel", style)
-	# Position it exactly behind the BottomBar (BottomBar now 85px tall: RotateView + Speed)
+	# Position it exactly behind the BottomBar (BottomBar is 125px tall: Menu + RotateView + Speed)
 	bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bg.offset_top = -85.0
+	bg.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Insert as sibling just before the bottom bar
 	var hud = $UI/HUD
@@ -755,7 +755,7 @@ func _setup_bottom_bar() -> void:
 	# Add padding to the bottom bar itself
 	bottom_bar.add_theme_constant_override("separation", 6)
 
-	# Style LeftControls (VBox containing RotateView above Speed) for tight stacking
+	# Style LeftControls (VBox containing Menu above RotateView above Speed) for tight stacking
 	if left_controls:
 		left_controls.add_theme_constant_override("separation", 4)
 		left_controls.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -782,8 +782,8 @@ func _setup_bottom_bar() -> void:
 	var sep_index = left_controls.get_index() + 1 if left_controls else speed_controls.get_index() + 1
 	bottom_bar.move_child(sep, sep_index)
 
-	# Ensure BottomBar anchors match the new taller height
-	bottom_bar.offset_top = -85.0
+	# Ensure BottomBar anchors match the taller height (Menu + RotateView + Speed)
+	bottom_bar.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
 
 func _create_selection_indicator() -> void:
 	"""Create a label showing the currently selected tool/placement mode."""
@@ -2283,25 +2283,23 @@ func _on_summary_continue() -> void:
 	GameManager.is_paused = false
 	GameManager.advance_to_next_day()
 
-# --- Save/Load ---
+# --- Menu / Save/Load ---
 
-func _create_save_load_button() -> void:
-	var bottom_bar = $UI/HUD/BottomBar
-
-	# Add separator before navigation buttons
-	var sep = VSeparator.new()
-	sep.custom_minimum_size = Vector2(1, 28)
-	sep.modulate = Color(1, 1, 1, 0.3)
-	bottom_bar.add_child(sep)
-
+func _create_menu_button() -> void:
+	# Menu button sits in the left control stack, above the Rotate View row
 	var menu_btn = Button.new()
 	menu_btn.name = "MenuBtn"
 	menu_btn.text = "Menu"
 	menu_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
 	menu_btn.pressed.connect(_on_menu_pressed)
-	bottom_bar.add_child(menu_btn)
+	left_controls.add_child(menu_btn)
+	left_controls.move_child(menu_btn, 0)
 
 func _on_menu_pressed() -> void:
+	# Open the game menu (pause menu) overlay
+	_toggle_pause_menu()
+
+func _show_save_load_panel() -> void:
 	# Toggle save/load panel
 	var hud = $UI/HUD
 	var existing = hud.get_node_or_null("SaveLoadPanel")
@@ -2964,9 +2962,9 @@ func _setup_mini_map() -> void:
 	mini_map.anchor_right = 0
 	mini_map.anchor_bottom = 1
 	mini_map.offset_left = 10
-	mini_map.offset_top = -270  # Height + margin + space for taller bottom bar (RotateView + Speed)
+	mini_map.offset_top = -310  # Height + margin + space for taller bottom bar (Menu + RotateView + Speed)
 	mini_map.offset_right = 200  # Approximate width
-	mini_map.offset_bottom = -90  # Stay above enlarged bottom bar
+	mini_map.offset_bottom = -130  # Stay above enlarged bottom bar
 
 	hud.add_child(mini_map)
 
@@ -3608,11 +3606,11 @@ func _on_pause_resume() -> void:
 
 func _on_pause_save() -> void:
 	_close_pause_menu()
-	_on_menu_pressed()
+	_show_save_load_panel()
 
 func _on_pause_load() -> void:
 	_close_pause_menu()
-	_on_menu_pressed()
+	_show_save_load_panel()
 
 func _on_pause_settings() -> void:
 	_close_pause_menu()
@@ -3673,7 +3671,7 @@ func _show_game_over() -> void:
 		game_over.queue_free()
 		_game_over_shown = false
 		GameManager.is_paused = false
-		_on_menu_pressed()
+		_show_save_load_panel()
 	)
 	game_over.quit_to_menu_requested.connect(func():
 		game_over.queue_free()
