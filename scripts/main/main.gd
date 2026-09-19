@@ -33,7 +33,6 @@ var money_label: Label = null
 var day_label: Label = null
 var reputation_label: Label = null
 var game_mode_label: Label = null
-var selection_label: Label = null
 
 var current_tool: int = -1  # Start with no tool selected
 var brush_size: int = 1
@@ -209,7 +208,6 @@ func _ready() -> void:
 	_setup_top_hud_bar()
 	_setup_rain_overlay()
 	_setup_placement_preview()
-	_create_selection_indicator()
 	_create_menu_buttons()
 	_setup_building_info_panel()
 	_setup_financial_panel()
@@ -244,7 +242,6 @@ func _ready() -> void:
 	_setup_floating_text()
 	_setup_shot_trails()
 	_setup_shot_heatmap()
-	_setup_audio_controls()
 	_initialize_game()
 	print("Main scene ready")
 
@@ -284,7 +281,6 @@ func _process(_delta: float) -> void:
 	_update_ui()
 	_handle_mouse_hover()
 	_update_mini_map_camera()
-	_update_selection_indicator()
 
 func _input(event: InputEvent) -> void:
 	# Keyboard shortcuts - handled in _input so UI controls don't swallow them
@@ -785,118 +781,6 @@ func _setup_bottom_bar() -> void:
 
 	# Ensure BottomBar anchors match the taller height (Menu + RotateView + Speed)
 	bottom_bar.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
-
-func _create_selection_indicator() -> void:
-	"""Create a label showing the currently selected tool/placement mode."""
-	var bottom_bar = $UI/HUD/BottomBar
-
-	# Create container with background
-	var container = PanelContainer.new()
-	container.name = "SelectionIndicator"
-
-	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_top", 2)
-	margin.add_theme_constant_override("margin_bottom", 2)
-	container.add_child(margin)
-
-	selection_label = Label.new()
-	selection_label.name = "SelectionLabel"
-	selection_label.text = "Selected: Fairway"
-	selection_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD_DIM)
-	margin.add_child(selection_label)
-
-	# Insert before the coordinate label (which is at the end)
-	bottom_bar.add_child(container)
-	var coord_index = coordinate_label.get_index()
-	bottom_bar.move_child(container, coord_index)
-
-func _update_selection_indicator() -> void:
-	"""Update the selection indicator based on current mode."""
-	if not selection_label:
-		return
-
-	var text = "Selected: "
-	var color = UIConstants.COLOR_GOLD_DIM
-
-	# Check null selector state first
-	if not _has_active_tool():
-		text += "None (press a tool key to select)"
-		color = UIConstants.COLOR_TEXT_DIM
-		selection_label.text = text
-		selection_label.add_theme_color_override("font_color", color)
-		return
-
-	# Check hole move modes first
-	if _hole_move_mode == HoleMoveMode.MOVING_PIN:
-		text += "Move Pin — Click green tile | ESC to cancel"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif _hole_move_mode == HoleMoveMode.MOVING_TEE:
-		text += "Move Tee — Click to place | ESC to cancel"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif _hole_move_mode == HoleMoveMode.MOVING_GREEN:
-		text += "Move Green — Click to place | ESC to cancel"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif _hole_move_mode == HoleMoveMode.MOVING_FORWARD_TEE:
-		text += "Move Forward Tee — Click to place | ESC to cancel"
-		color = Color(0.9, 0.3, 0.3)  # Red (forward tee color)
-	elif _hole_move_mode == HoleMoveMode.MOVING_MIDDLE_TEE:
-		text += "Move Middle Tee — Click to place | ESC to cancel"
-		color = Color(0.85, 0.85, 0.85)  # White (middle tee color)
-	# Check placement modes (they take priority)
-	elif hole_tool.placement_mode == HoleCreationTool.PlacementMode.PLACING_TEE:
-		text += "Place Tee Box"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif hole_tool.placement_mode == HoleCreationTool.PlacementMode.PLACING_GREEN:
-		text += "Place Green"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.TREE:
-		text += "Tree (%s)" % selected_tree_type.capitalize()
-		color = Color(0.4, 0.8, 0.4)  # Forest green
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.ROCK:
-		text += "Rock (%s)" % selected_rock_size.capitalize()
-		color = Color(0.7, 0.7, 0.7)  # Gray
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.BUILDING:
-		var building_name = placement_manager.selected_building_type.capitalize().replace("_", " ")
-		text += "Building (%s)" % building_name
-		color = Color(0.8, 0.6, 0.4)  # Brown
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.DECORATION:
-		var dec_name = placement_manager.selected_decoration_data.get("name", placement_manager.selected_decoration_type.capitalize())
-		text += "Decoration (%s)" % dec_name
-		color = Color(0.9, 0.7, 0.5)  # Gold
-	elif bulldozer_mode:
-		text += "Bulldozer"
-		color = Color(1.0, 0.5, 0.3)  # Orange
-	elif elevation_tool.is_active():
-		if elevation_tool.elevation_mode == ElevationTool.ElevationMode.RAISING:
-			text += "Rolling hill" if elevation_tool.sculpted else "Raise Elevation"
-			color = Color(0.6, 0.8, 1.0)  # Light blue
-		else:
-			text += "Hollow" if elevation_tool.sculpted else "Lower Elevation"
-			color = Color(1.0, 0.6, 0.6)  # Light red
-	else:
-		# Default to terrain tool
-		text += TerrainTypes.get_type_name(current_tool)
-		# Color based on terrain type
-		match current_tool:
-			TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX:
-				color = Color(0.5, 0.9, 0.5)  # Green
-			TerrainTypes.Type.ROUGH:
-				color = Color(0.6, 0.8, 0.4)  # Darker green
-			TerrainTypes.Type.BUNKER:
-				color = Color(0.9, 0.85, 0.6)  # Sand
-			TerrainTypes.Type.WATER:
-				color = Color(0.4, 0.6, 1.0)  # Blue
-			TerrainTypes.Type.PATH:
-				color = Color(0.7, 0.7, 0.7)  # Gray
-			TerrainTypes.Type.OUT_OF_BOUNDS:
-				color = Color(0.9, 0.4, 0.4)  # Red
-			TerrainTypes.Type.FLOWER_BED:
-				color = Color(0.9, 0.5, 0.7)  # Pink
-
-	selection_label.text = text
-	selection_label.add_theme_color_override("font_color", color)
 
 func _toggle_panel(panel: CenteredPanel) -> void:
 	"""Toggle a panel with mutual exclusion — opening one closes the previous."""
@@ -2474,7 +2358,6 @@ func _enter_hole_move_mode(mode: int, hole_data: GameManager.HoleData) -> void:
 	_hole_move_mode = mode
 	_hole_move_data = hole_data
 	hole_manager.highlight_hole(hole_data.hole_number, true)
-	_update_selection_indicator()
 	if placement_preview:
 		placement_preview.set_hole_move_mode(mode)
 
@@ -2485,7 +2368,6 @@ func _cancel_hole_move_mode() -> void:
 		hole_manager.highlight_hole(_hole_move_data.hole_number, false)
 	_hole_move_mode = HoleMoveMode.NONE
 	_hole_move_data = null
-	_update_selection_indicator()
 	if placement_preview:
 		placement_preview.set_hole_move_mode(HoleMoveMode.NONE)
 
@@ -3272,15 +3154,6 @@ func _toggle_analytics_panel() -> void:
 	"""Toggle the analytics panel visibility."""
 	if analytics_panel_ui:
 		_toggle_panel(analytics_panel_ui)
-
-# --- Audio Controls ---
-
-func _setup_audio_controls() -> void:
-	"""Add audio volume controls to the bottom bar."""
-	var bottom_bar = $UI/HUD/BottomBar
-	var audio_controls = AudioControls.new()
-	audio_controls.name = "AudioControls"
-	bottom_bar.add_child(audio_controls)
 
 # --- Golfer Info Popup ---
 
