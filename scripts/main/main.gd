@@ -10,11 +10,18 @@ extends Node2D
 @onready var tool_panel_container: Control = $UI/HUD/ToolPanel
 var terrain_toolbar: TerrainToolbar = null
 @onready var hole_list: VBoxContainer = $UI/HUD/HoleInfoPanel/VBoxContainer/ScrollContainer/HoleList
-@onready var pause_btn: Button = $UI/HUD/BottomBar/SpeedControls/PauseBtn
-@onready var play_btn: Button = $UI/HUD/BottomBar/SpeedControls/PlayBtn
-@onready var fast_btn: Button = $UI/HUD/BottomBar/SpeedControls/FastBtn
+@onready var left_controls: VBoxContainer = $UI/HUD/BottomBar/LeftControls
+@onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
+@onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
+@onready var rotate_cw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCWBtn
+@onready var iso_toggle_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/IsoBtn
+@onready var orientation_label: Label = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationLabel
+@onready var pause_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn
+@onready var play_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn
+@onready var fast_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn
 var ultra_btn: Button = null
-@onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/SpeedControls
+@onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/SpeedControls
+const VIEW_ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
 
 # New UI components
 var player_round: PlayerRoundManager
@@ -479,9 +486,14 @@ func _connect_ui_buttons() -> void:
 	# Replace old tool panel with new terrain toolbar
 	_setup_terrain_toolbar()
 
-	$UI/HUD/BottomBar/SpeedControls/PauseBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.PAUSED))
-	$UI/HUD/BottomBar/SpeedControls/PlayBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.NORMAL))
-	$UI/HUD/BottomBar/SpeedControls/FastBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.FAST))
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.PAUSED))
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.NORMAL))
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.FAST))
+
+	# Rotate view controls (now above speed controls in BottomBar)
+	rotate_ccw_btn.pressed.connect(_on_view_rotate_ccw)
+	rotate_cw_btn.pressed.connect(_on_view_rotate_cw)
+	iso_toggle_btn.toggled.connect(_on_view_isometric_toggled)
 
 	# Create dedicated ultra speed button
 	ultra_btn = Button.new()
@@ -521,9 +533,6 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.staff_pressed.connect(_on_staff_pressed)
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
 	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
-	terrain_toolbar.view_rotate_cw_pressed.connect(_on_view_rotate_cw)
-	terrain_toolbar.view_rotate_ccw_pressed.connect(_on_view_rotate_ccw)
-	terrain_toolbar.view_isometric_toggled.connect(_on_view_isometric_toggled)
 	_sync_view_controls()
 
 func _initialize_game() -> void:
@@ -726,7 +735,7 @@ func _setup_bottom_bar() -> void:
 	"""Style the bottom bar with a dark background and visual separators."""
 	var bottom_bar = $UI/HUD/BottomBar
 
-	# Add a dark background panel behind the bottom bar
+	# Add a dark background panel behind the bottom bar (taller to fit RotateView above Speed)
 	var bg = Panel.new()
 	bg.name = "BottomBarBG"
 	var style = StyleBoxFlat.new()
@@ -734,9 +743,9 @@ func _setup_bottom_bar() -> void:
 	style.border_width_top = 1
 	style.border_color = UIConstants.COLOR_BORDER
 	bg.add_theme_stylebox_override("panel", style)
-	# Position it exactly behind the BottomBar
+	# Position it exactly behind the BottomBar (BottomBar now 85px tall: RotateView + Speed)
 	bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bg.offset_top = -60.0
+	bg.offset_top = -85.0
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Insert as sibling just before the bottom bar
 	var hud = $UI/HUD
@@ -746,12 +755,35 @@ func _setup_bottom_bar() -> void:
 	# Add padding to the bottom bar itself
 	bottom_bar.add_theme_constant_override("separation", 6)
 
-	# Add a separator after SpeedControls
+	# Style LeftControls (VBox containing RotateView above Speed) for tight stacking
+	if left_controls:
+		left_controls.add_theme_constant_override("separation", 4)
+		left_controls.alignment = BoxContainer.ALIGNMENT_CENTER
+	if rotate_view_controls:
+		rotate_view_controls.alignment = BoxContainer.ALIGNMENT_CENTER
+		rotate_view_controls.add_theme_constant_override("separation", 6)
+	if speed_controls:
+		speed_controls.alignment = BoxContainer.ALIGNMENT_CENTER
+	if orientation_label:
+		orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+		orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+		orientation_label.add_theme_color_override("font_outline_color", Color.TRANSPARENT)
+	var view_lbl = rotate_view_controls.get_node_or_null("ViewLabel") as Label
+	if view_lbl:
+		view_lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+		view_lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+
+	# Add a separator after LeftControls (which now contains both RotateView and Speed)
 	var sep = VSeparator.new()
-	sep.custom_minimum_size = Vector2(1, 28)
+	sep.custom_minimum_size = Vector2(1, 36)
 	sep.modulate = Color(1, 1, 1, 0.3)
 	bottom_bar.add_child(sep)
-	bottom_bar.move_child(sep, speed_controls.get_index() + 1)
+	# left_controls index determines separator position; fall back to speed_controls if missing
+	var sep_index = left_controls.get_index() + 1 if left_controls else speed_controls.get_index() + 1
+	bottom_bar.move_child(sep, sep_index)
+
+	# Ensure BottomBar anchors match the new taller height
+	bottom_bar.offset_top = -85.0
 
 func _create_selection_indicator() -> void:
 	"""Create a label showing the currently selected tool/placement mode."""
@@ -1303,9 +1335,14 @@ func _sync_camera_bounds_to_view() -> void:
 	camera.bounds_max = bounds.end
 
 func _sync_view_controls() -> void:
-	if terrain_toolbar and terrain_grid:
-		terrain_toolbar.set_view_state(
-				terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
+	# Rotate view controls now live above SpeedControls in BottomBar; keep toolbar stub for compat.
+	if terrain_grid and orientation_label and iso_toggle_btn:
+		var orientation: int = terrain_grid.get_view_orientation()
+		orientation_label.text = VIEW_ORIENTATION_LABELS[wrapi(orientation, 0, VIEW_ORIENTATION_LABELS.size())]
+		iso_toggle_btn.set_pressed_no_signal(terrain_grid.is_view_isometric())
+	# Keep toolbar in sync if it still has the deprecated method
+	if terrain_toolbar and terrain_grid and terrain_toolbar.has_method("set_view_state"):
+		terrain_toolbar.set_view_state(terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
 
 func _on_create_hole_pressed() -> void:
 	# Cancel any building/tree placement, elevation, bulldozer, or terrain painting
@@ -2927,9 +2964,9 @@ func _setup_mini_map() -> void:
 	mini_map.anchor_right = 0
 	mini_map.anchor_bottom = 1
 	mini_map.offset_left = 10
-	mini_map.offset_top = -240  # Height + margin + space for bottom bar
+	mini_map.offset_top = -270  # Height + margin + space for taller bottom bar (RotateView + Speed)
 	mini_map.offset_right = 200  # Approximate width
-	mini_map.offset_bottom = -50  # Stay above bottom bar
+	mini_map.offset_bottom = -90  # Stay above enlarged bottom bar
 
 	hud.add_child(mini_map)
 
