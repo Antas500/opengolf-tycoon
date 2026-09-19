@@ -100,7 +100,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Settings menu** — Display, audio, and gameplay options
 - **Tool palette** — Terrain tools, object placement, hole creation, elevation tools
 - **Speed controls** — Play / Pause / Fast / Ultra with keyboard shortcuts
-- **Mini-map** — Course overview with terrain colors, hole markers, buildings, golfers; click to navigate (toggle with M)
+- **Mini-map** — Course overview with terrain colors, hole markers, buildings, golfers; click to navigate (toggle with the **Map** button next to **Menu**, or Tab)
 - **Financial dashboard** — Click money display to open; shows daily and yesterday income/expense breakdown
 - **Hole stats panel** — Per-hole averages, best scores, score distributions
 - **Building info panel** — Stats, upgrade options, costs
