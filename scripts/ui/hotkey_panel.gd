@@ -64,6 +64,12 @@ func _build_ui() -> void:
 		["X", "Bulldozer"],
 	])
 
+	_add_section(vbox, "Toolbar Tabs", [
+		["=", "Course Terrain tab"],
+		[".", "Improvements tab"],
+		["E", "Elevation tab"],
+	])
+
 	_add_section(vbox, "Elevation", [
 		["Shift+=", "Raise terrain"],
 		["Shift+-", "Lower terrain"],

@@ -12,7 +12,7 @@ const TOAST_WIDTH: float = 320.0
 const DISPLAY_DURATION: float = 3.5
 const DISPLAY_DURATION_HIGH: float = 5.0
 const FADE_DURATION: float = 0.4
-const BOTTOM_MARGIN: float = 105.0  # Tracks BottomBar (now 125px tall)
+const BOTTOM_MARGIN: float = 262.0  # Tracks BottomBar (now 256px tall with the tabbed toolbar)
 const RIGHT_MARGIN: float = 20.0
 const TOAST_SPACING: float = 6.0
 

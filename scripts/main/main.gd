@@ -7,9 +7,9 @@ extends Node2D
 @onready var hole_manager: HoleManager = $HoleManager
 @onready var golfer_manager: GolferManager = $GolferManager
 @onready var coordinate_label: Label = $UI/HUD/BottomBar/CoordinateLabel
-@onready var tool_panel_container: Control = $UI/HUD/ToolPanel
+@onready var bottom_bar: HBoxContainer = $UI/HUD/BottomBar
 var terrain_toolbar: TerrainToolbar = null
-@onready var hole_list: VBoxContainer = $UI/HUD/HoleInfoPanel/VBoxContainer/ScrollContainer/HoleList
+var hole_list: VBoxContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
 @onready var left_controls: VBoxContainer = $UI/HUD/BottomBar/LeftControls
 @onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
 @onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
@@ -501,22 +501,19 @@ func _connect_ui_buttons() -> void:
 	speed_controls.move_child(ultra_btn, fast_btn.get_index() + 1)
 
 func _setup_terrain_toolbar() -> void:
-	"""Replace old tool panel with organized terrain toolbar"""
-	# Hide old tool panel children (keep container for positioning)
-	for child in tool_panel_container.get_children():
-		child.queue_free()
-
-	# Ensure tool panel container expands
-	tool_panel_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	# Create and add new toolbar
+	"""Dock the tabbed toolbar into the right end of the bottom bar"""
 	terrain_toolbar = TerrainToolbar.new()
 	terrain_toolbar.name = "TerrainToolbar"
 	terrain_toolbar.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	terrain_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tool_panel_container.add_child(terrain_toolbar)
+	terrain_toolbar.size_flags_horizontal = Control.SIZE_FILL
+	bottom_bar.add_child(terrain_toolbar)
+	# Keep the toolbar as the last child so it sits at the far right of the bar
+	bottom_bar.move_child(terrain_toolbar, bottom_bar.get_child_count() - 1)
 
-	# Connect toolbar signals
+	# The course holes list now lives in the toolbar's Holes tab
+	hole_list = terrain_toolbar.hole_list
+
+	# Build tool signals
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
 	terrain_toolbar.create_hole_pressed.connect(_on_create_hole_pressed)
 	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
@@ -530,7 +527,46 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.staff_pressed.connect(_on_staff_pressed)
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
 	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
+
+	# Club / Player / Staff tab signals
+	terrain_toolbar.play_course_pressed.connect(_on_play_course_pressed)
+	terrain_toolbar.tournaments_pressed.connect(_toggle_tournament_panel)
+	terrain_toolbar.land_pressed.connect(_toggle_land_panel)
+	terrain_toolbar.marketing_pressed.connect(_toggle_marketing_panel)
+	terrain_toolbar.milestones_pressed.connect(_toggle_milestones_panel)
+	terrain_toolbar.feed_pressed.connect(_toggle_event_feed)
+	terrain_toolbar.scorecard_pressed.connect(_toggle_course_scorecard_panel)
+	terrain_toolbar.golfer_row_clicked.connect(_on_toolbar_golfer_clicked)
+	terrain_toolbar.golfer_data_provider = _collect_golfer_rows
+
 	_sync_view_controls()
+
+func _collect_golfer_rows() -> Array:
+	"""Snapshot of golfers currently on the course, for the toolbar's Golfers tab."""
+	var rows: Array = []
+	for golfer in golfer_manager.get_active_golfers():
+		rows.append({
+			"id": golfer.golfer_id,
+			"name": golfer.golfer_name,
+			"tier": golfer.golfer_tier,
+			"hole": golfer.current_hole + 1,
+			"strokes": golfer.total_strokes + golfer.current_strokes,
+			"mood": golfer.current_mood,
+		})
+	return rows
+
+func _on_toolbar_golfer_clicked(golfer_id: int) -> void:
+	"""Follow a golfer from the toolbar's Golfers tab."""
+	var golfer = golfer_manager.get_golfer(golfer_id)
+	if golfer:
+		camera.focus_on(golfer.global_position, false)
+		_on_golfer_clicked(golfer)
+
+func _on_play_course_pressed() -> void:
+	if player_round.busy:
+		EventBus.notify("Finish your current round first.", "info")
+		return
+	player_round.open_setup()
 
 func _initialize_game() -> void:
 	# Show main menu instead of auto-starting
@@ -730,9 +766,7 @@ func _setup_placement_preview() -> void:
 
 func _setup_bottom_bar() -> void:
 	"""Style the bottom bar with a dark background and visual separators."""
-	var bottom_bar = $UI/HUD/BottomBar
-
-	# Add a dark background panel behind the bottom bar (taller to fit RotateView above Speed)
+	# Add a dark background panel behind the bottom bar (tall enough for the tabbed toolbar)
 	var bg = Panel.new()
 	bg.name = "BottomBarBG"
 	var style = StyleBoxFlat.new()
@@ -740,7 +774,7 @@ func _setup_bottom_bar() -> void:
 	style.border_width_top = 1
 	style.border_color = UIConstants.COLOR_BORDER
 	bg.add_theme_stylebox_override("panel", style)
-	# Position it exactly behind the BottomBar (BottomBar is 125px tall: Menu + RotateView + Speed)
+	# Position it exactly behind the BottomBar (view/speed controls + tabbed toolbar)
 	bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	bg.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -752,7 +786,7 @@ func _setup_bottom_bar() -> void:
 	# Add padding to the bottom bar itself
 	bottom_bar.add_theme_constant_override("separation", 6)
 
-	# Style LeftControls (VBox containing Menu above RotateView above Speed) for tight stacking
+	# Style LeftControls (VBox containing RotateView above Speed) for tight stacking
 	if left_controls:
 		left_controls.add_theme_constant_override("separation", 4)
 		left_controls.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2877,9 +2911,9 @@ func _setup_mini_map() -> void:
 	mini_map.anchor_right = 0
 	mini_map.anchor_bottom = 1
 	mini_map.offset_left = 10
-	mini_map.offset_top = -310  # Height + margin + space for taller bottom bar (Menu + RotateView + Speed)
+	mini_map.offset_top = -445  # Height + margin + space for taller bottom bar (tabbed toolbar)
 	mini_map.offset_right = 200  # Approximate width
-	mini_map.offset_bottom = -130  # Stay above enlarged bottom bar
+	mini_map.offset_bottom = -261  # Stay above enlarged bottom bar
 
 	# Mirror visibility into the Map button, whatever changed it (button, Tab hotkey,
 	# or the HUD being hidden/shown around the main menu).
@@ -2968,15 +3002,6 @@ func _setup_tournament_panel() -> void:
 	hud.add_child(tournament_panel)
 	tournament_panel.setup(tournament_manager)
 
-	# Add tournament button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var tournament_btn = Button.new()
-	tournament_btn.name = "TournamentBtn"
-	tournament_btn.text = "Tournament"
-	tournament_btn.tooltip_text = "Host tournaments (U)"
-	tournament_btn.pressed.connect(_toggle_tournament_panel)
-	bottom_bar.add_child(tournament_btn)
-
 func _on_tournament_panel_closed() -> void:
 	"""Hide the tournament panel."""
 	tournament_panel.hide()
@@ -3009,15 +3034,6 @@ func _setup_land_panel() -> void:
 	land_panel.close_requested.connect(_on_land_panel_closed)
 	hud.add_child(land_panel)
 	land_panel.hide()
-
-	# Add land button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var land_btn = Button.new()
-	land_btn.name = "LandBtn"
-	land_btn.text = "Land"
-	land_btn.tooltip_text = "Buy land parcels (L)"
-	land_btn.pressed.connect(_toggle_land_panel)
-	bottom_bar.add_child(land_btn)
 
 func _on_land_panel_closed() -> void:
 	"""Hide the land panel."""
@@ -3057,15 +3073,6 @@ func _setup_marketing_panel() -> void:
 	marketing_panel.close_requested.connect(_on_marketing_panel_closed)
 	hud.add_child(marketing_panel)
 	marketing_panel.hide()
-
-	# Add marketing button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var marketing_btn = Button.new()
-	marketing_btn.name = "MarketingBtn"
-	marketing_btn.text = "Marketing"
-	marketing_btn.tooltip_text = "Marketing campaigns (M)"
-	marketing_btn.pressed.connect(_toggle_marketing_panel)
-	bottom_bar.add_child(marketing_btn)
 
 func _on_marketing_panel_closed() -> void:
 	"""Hide the marketing panel."""
@@ -3188,7 +3195,19 @@ func _setup_round_summary_popup() -> void:
 
 func _on_golfer_round_for_summary(golfer_id: int, total_strokes: int, _total_par: int) -> void:
 	var golfer = golfer_manager.get_golfer(golfer_id)
-	if not golfer or golfer.is_owner_round:
+	if not golfer:
+		return
+	# Every completed round (owner included) feeds the toolbar's Golfers tab history
+	if terrain_toolbar:
+		terrain_toolbar.record_completed_round({
+			"name": golfer.golfer_name,
+			"strokes": total_strokes,
+			"par": golfer.total_par,
+			"day": GameManager.current_day,
+			"tier": golfer.golfer_tier,
+			"owner": golfer.is_owner_round,
+		})
+	if golfer.is_owner_round:
 		return
 	round_summary_popup.queue_notification({
 		"name": golfer.golfer_name,
@@ -3216,15 +3235,6 @@ func _setup_milestone_system() -> void:
 		_active_panel = null
 	)
 	$UI/HUD.add_child(milestones_panel)
-
-	# Add milestones button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var milestones_btn = Button.new()
-	milestones_btn.name = "MilestonesBtn"
-	milestones_btn.text = "Milestones"
-	milestones_btn.tooltip_text = "Goals & achievements (G)"
-	milestones_btn.pressed.connect(_toggle_milestones_panel)
-	bottom_bar.add_child(milestones_btn)
 
 	# Update SaveManager reference to include milestone manager
 	SaveManager.milestone_manager = milestone_manager
@@ -3260,15 +3270,6 @@ func _setup_course_scorecard_panel() -> void:
 		_active_panel = null
 	)
 	$UI/HUD.add_child(course_scorecard_panel)
-
-	# Add scorecard button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var scorecard_btn = Button.new()
-	scorecard_btn.name = "ScorecardBtn"
-	scorecard_btn.text = "Scorecard"
-	scorecard_btn.tooltip_text = "Course scorecard (K)"
-	scorecard_btn.pressed.connect(_toggle_course_scorecard_panel)
-	bottom_bar.add_child(scorecard_btn)
 
 	# Refresh scorecard when holes, scores, or records change
 	EventBus.hole_created.connect(func(_num, _par, _dist):
@@ -3352,18 +3353,10 @@ func _setup_event_feed() -> void:
 			event_feed_panel.append_event(entry)
 	)
 
-	# Add feed button with inline unread badge to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var feed_btn = Button.new()
-	feed_btn.name = "EventFeedBtn"
-	feed_btn.text = "Feed"
-	feed_btn.tooltip_text = "Event feed (N)"
-	feed_btn.pressed.connect(_toggle_event_feed)
-	bottom_bar.add_child(feed_btn)
-
+	# Surface the unread badge on the toolbar's Club tab Feed button
 	EventFeedManager.unread_count_changed.connect(func(count: int):
-		if feed_btn:
-			feed_btn.text = "Feed (%d)" % count if count > 0 else "Feed"
+		if terrain_toolbar:
+			terrain_toolbar.set_feed_unread(count)
 	)
 
 func _toggle_event_feed() -> void:

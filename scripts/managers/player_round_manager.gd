@@ -12,7 +12,7 @@ var manager: GolferManager
 var camera: IsometricCamera
 var hud: Control
 var layer: CanvasLayer
-var entry: Button
+var entry: Button = null  # Legacy floating button; replaced by the toolbar's Player tab
 var overlay: Control
 var content: VBoxContainer
 var status: Label
@@ -41,11 +41,6 @@ func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Contro
 	layer = CanvasLayer.new()
 	layer.layer = 15
 	add_child(layer)
-	entry = Button.new()
-	entry.text = "Play the Course"
-	entry.position = Vector2(20, 76)
-	entry.pressed.connect(open_setup)
-	layer.add_child(entry)
 	EventBus.game_mode_changed.connect(_on_mode_changed)
 	EventBus.load_completed.connect(_on_load_completed)
 
@@ -108,7 +103,6 @@ func open_setup() -> void:
 	previous_speed = GameManager.current_speed
 	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
 	session_opened.emit()
-	entry.hide()
 	draft = PlayerGolferProfile.from_data(GameManager.player_profile.serialize())
 	_make_panel(true)
 	_label("PLAY YOUR COURSE")
@@ -249,9 +243,8 @@ func _spawn(golfer_name: String, tier: int, group_id: int) -> Golfer:
 	return golfer
 
 func _process(delta: float) -> void:
-	if not is_instance_valid(entry):
-		return
-	entry.visible = not busy and GameManager.current_mode == GameManager.GameMode.SIMULATING
+	if is_instance_valid(entry):
+		entry.visible = not busy and GameManager.current_mode == GameManager.GameMode.SIMULATING
 	if not active or GameManager.is_paused:
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		if is_instance_valid(aim_guide):
