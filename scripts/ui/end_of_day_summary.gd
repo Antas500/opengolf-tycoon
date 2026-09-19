@@ -3,7 +3,6 @@ class_name EndOfDaySummaryPanel
 ## EndOfDaySummaryPanel - Shows daily statistics at end of each day
 
 signal continue_pressed
-signal build_mode_pressed
 
 var _day_number: int = 1
 
@@ -326,12 +325,6 @@ func _build_ui() -> void:
 	continue_btn.pressed.connect(_on_continue_pressed)
 	btn_row.add_child(continue_btn)
 
-	var build_btn = Button.new()
-	build_btn.text = "Return to Build Mode"
-	build_btn.custom_minimum_size = Vector2(200, 38)
-	build_btn.pressed.connect(_on_build_mode_pressed)
-	btn_row.add_child(build_btn)
-
 func _create_stat_row(label_text: String, value_text: String, value_color: Color = Color.WHITE) -> HBoxContainer:
 	var row = HBoxContainer.new()
 
@@ -369,10 +362,6 @@ func _create_notable_badge(label_text: String, count: int, color: Color) -> VBox
 
 func _on_continue_pressed() -> void:
 	continue_pressed.emit()
-	queue_free()
-
-func _on_build_mode_pressed() -> void:
-	build_mode_pressed.emit()
 	queue_free()
 
 static func _trend_arrow(current: float, previous: float) -> String:

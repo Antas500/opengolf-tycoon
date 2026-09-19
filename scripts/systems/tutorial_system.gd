@@ -49,11 +49,10 @@ const STEP_DATA = {
 		"skippable": true,
 	},
 	Step.START_SIMULATION: {
-		"title": "Step 4: Open Your Course",
-		"message": "Click the Play button at the bottom to start the simulation.\n\nGolfers will begin arriving to play your course!",
-		"action": "Press Play to start the simulation",
-		"requires_action": true,
-		"signal": "game_mode_changed",
+		"title": "Step 4: Your Course is Open!",
+		"message": "Your course is already open — golfers are arriving automatically!\\n\\nUse the speed controls at the bottom (||  >  >> >>>) to pause, play, or fast-forward time while you build.",
+		"action": "Try the speed controls, then click Next",
+		"requires_action": false,
 	},
 	Step.ADJUST_FEES: {
 		"title": "Step 5: Manage Your Business",

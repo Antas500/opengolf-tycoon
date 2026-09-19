@@ -153,9 +153,6 @@ func _on_season_button(target_season: int) -> void:
 	_update_display()
 
 func _on_end_day() -> void:
-	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
-		EventBus.notify("Must be in simulation mode to end day", "error")
-		return
 	GameManager.force_end_day()
 	hide()
 

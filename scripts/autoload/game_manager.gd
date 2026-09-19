@@ -497,7 +497,8 @@ func new_game(course_name_input: String = "New Course", theme: int = CourseTheme
 	EventBus.theme_changed.emit(theme)
 
 	SaveManager.current_save_name = ""
-	set_mode(GameMode.BUILDING)
+	set_mode(GameMode.SIMULATING)
+	set_speed(GameSpeed.NORMAL)
 	EventBus.new_game_started.emit()
 
 func is_course_open() -> bool:
@@ -505,10 +506,6 @@ func is_course_open() -> bool:
 
 func force_end_day() -> void:
 	"""Force advance to closing time - useful for testing."""
-	if current_mode != GameMode.SIMULATING:
-		EventBus.notify("Must be in simulation mode to end day", "error")
-		return
-
 	if _end_of_day_triggered:
 		EventBus.notify("Day already ending", "info")
 		return
@@ -652,10 +649,10 @@ func start_simulation() -> bool:
 	return true
 
 func stop_simulation() -> void:
-	"""Stop the simulation and return to building mode"""
-	set_mode(GameMode.BUILDING)
-	set_speed(GameSpeed.PAUSED)
-	EventBus.notify("Returned to building mode", "info")
+	"""Legacy: kept for save compat. Day always runs — resumes instead of pausing."""
+	set_mode(GameMode.SIMULATING)
+	set_speed(GameSpeed.NORMAL)
+	EventBus.notify("Tycoon mode — build while you play!", "info")
 
 func get_maintenance_multiplier() -> float:
 	"""Get the combined maintenance cost multiplier from theme and difficulty."""

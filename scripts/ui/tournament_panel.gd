@@ -184,7 +184,7 @@ func _show_current_tournament(info: Dictionary) -> void:
 	info_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
 
 	if info.state == TournamentSystem.TournamentState.IN_PROGRESS:
-		info_label.text = "Professional golfers are competing on your course. Watch the tournament or press End Day to skip ahead."
+		info_label.text = "Professional golfers are competing on your course. Watch the tournament — use >> / >>> to speed up time."
 		_content_vbox.add_child(info_label)
 
 		var hint_label = Label.new()

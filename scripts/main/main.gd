@@ -26,7 +26,6 @@ var money_label: Label = null
 var day_label: Label = null
 var reputation_label: Label = null
 var game_mode_label: Label = null
-var build_mode_btn: Button = null
 var selection_label: Label = null
 
 var current_tool: int = -1  # Start with no tool selected
@@ -414,7 +413,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_cancel_action()
 		return
 
-	# All tools work in both BUILDING and SIMULATING modes (tycoon-style)
+	# Tycoon-style: build while golfers play (day always runs in SIMULATING)
 	if GameManager.current_mode == GameManager.GameMode.MAIN_MENU:
 		return
 
@@ -693,15 +692,6 @@ func _setup_top_hud_bar() -> void:
 	hud.add_child(top_hud_bar)
 	hud.move_child(top_hud_bar, 0)
 
-	# Create mode toggle button (Start Day / Stop & Edit)
-	build_mode_btn = Button.new()
-	build_mode_btn.name = "ModeToggleBtn"
-	build_mode_btn.text = "Start Day"
-	build_mode_btn.custom_minimum_size = Vector2(120, 34)
-	build_mode_btn.pressed.connect(_on_mode_toggle_pressed)
-	speed_controls.add_child(build_mode_btn)
-	speed_controls.move_child(build_mode_btn, 0)
-
 func _setup_rain_overlay() -> void:
 	rain_overlay = RainOverlay.new()
 	rain_overlay.name = "RainOverlay"
@@ -887,20 +877,6 @@ func _toggle_panel(panel: CenteredPanel) -> void:
 	_active_panel = panel
 	panel.toggle()
 
-func _on_mode_toggle_pressed() -> void:
-	"""Start the day or end it early."""
-	if GameManager.current_mode == GameManager.GameMode.BUILDING:
-		# Start simulation
-		if GameManager.start_simulation():
-			# Don't spawn regular golfers during a tournament
-			if not tournament_manager.is_tournament_in_progress():
-				golfer_manager.spawn_initial_group()
-	elif GameManager.current_mode == GameManager.GameMode.SIMULATING:
-		# End the day early
-		if tournament_manager.is_tournament_in_progress():
-			tournament_manager.simulate_remaining_and_complete()
-		GameManager.force_end_day()
-
 func _update_ui() -> void:
 	# TopHUDBar now handles money/day/reputation/weather/wind updates via signals
 	# Only update button states here
@@ -922,15 +898,6 @@ func _update_button_states() -> void:
 	play_btn.text = ">"
 	pause_btn.text = "||"
 	fast_btn.text = ">>"
-
-	if build_mode_btn:
-		build_mode_btn.visible = true
-		if GameManager.current_mode == GameManager.GameMode.BUILDING:
-			build_mode_btn.text = "Start Day"
-			build_mode_btn.modulate = Color(0.5, 1.0, 0.5)  # Green tint
-		else:
-			build_mode_btn.text = "End Day"
-			build_mode_btn.modulate = Color(1.0, 0.8, 0.4)  # Orange tint
 
 	# Highlight active speed button
 	pause_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.PAUSED else Color(1, 1, 1, 1)
@@ -1354,10 +1321,6 @@ func _on_create_hole_pressed() -> void:
 	hole_tool.start_tee_placement()
 
 func _on_speed_selected(speed: int) -> void:
-	# Speed buttons only work during simulation
-	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
-		return
-
 	GameManager.set_speed(speed)
 
 var _game_over_shown: bool = false
@@ -1413,10 +1376,6 @@ func _on_hole_toggle_pressed(hole_number: int) -> void:
 	EventBus.notify("Hole %d %s" % [hole_number, status], "info")
 
 func _on_hole_delete_pressed(hole_number: int) -> void:
-	# Don't allow deletion during simulation
-	if GameManager.current_mode == GameManager.GameMode.SIMULATING:
-		EventBus.notify("Cannot delete holes while playing!", "error")
-		return
 	hole_tool.delete_hole(hole_number)
 
 func _on_hole_deleted(hole_number: int) -> void:
@@ -1884,6 +1843,20 @@ func _on_new_game_started() -> void:
 	# Remove loading screen
 	loading_overlay.queue_free()
 
+	# Day always starts automatically — ensure simulation is active even if a
+	# subclass previously cleared mode during generation.
+	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
+		GameManager.set_mode(GameManager.GameMode.SIMULATING)
+		GameManager.set_speed(GameManager.GameSpeed.NORMAL)
+
+	# Spawn initial golfers if the course already has playable holes (e.g. Quick
+	# Start / Prebuilt). Empty courses spawn naturally once the player builds.
+	if GameManager.get_open_hole_count() > 0 and not tournament_manager.is_tournament_in_progress():
+		# One frame so hole visualizations finish spawning before golfers query them.
+		await get_tree().process_frame
+		if is_inside_tree() and GameManager.current_mode == GameManager.GameMode.SIMULATING:
+			golfer_manager.spawn_initial_group()
+
 	# Start tutorial for first-time players (skip for Quick Start/Prebuilt — they already have a course)
 	if not is_quick_start and not is_prebuilt and not TutorialSystem.is_tutorial_completed():
 		_start_tutorial()
@@ -2259,7 +2232,6 @@ func _on_end_of_day(day_number: int) -> void:
 
 	# Connect signals BEFORE add_child (ready signal fires during add_child)
 	summary.continue_pressed.connect(_on_summary_continue)
-	summary.build_mode_pressed.connect(_on_summary_build_mode)
 
 	hud.add_child(summary)
 
@@ -2273,15 +2245,6 @@ func _on_summary_continue() -> void:
 		tournament_leaderboard.hide()
 	GameManager.is_paused = false
 	GameManager.advance_to_next_day()
-
-func _on_summary_build_mode() -> void:
-	"""Called when player clicks Return to Build Mode on the end of day summary."""
-	if tournament_leaderboard:
-		tournament_leaderboard.hide()
-	GameManager.is_paused = false
-	# Advance to next day first to reset day-cycle flags, then stop simulation
-	GameManager.advance_to_next_day()
-	GameManager.stop_simulation()
 
 # --- Save/Load ---
 
@@ -2300,13 +2263,6 @@ func _create_save_load_button() -> void:
 	menu_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
 	menu_btn.pressed.connect(_on_menu_pressed)
 	bottom_bar.add_child(menu_btn)
-
-	# End Day functionality handled by ModeToggleBtn in SpeedControls
-
-func _on_end_day_pressed() -> void:
-	if tournament_manager.is_tournament_in_progress():
-		tournament_manager.simulate_remaining_and_complete()
-	GameManager.force_end_day()
 
 func _on_menu_pressed() -> void:
 	# Toggle save/load panel
