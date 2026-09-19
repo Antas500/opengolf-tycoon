@@ -66,6 +66,7 @@ var building_info_panel: BuildingInfoPanel = null
 var financial_panel: FinancialPanel = null
 var staff_panel: StaffPanel = null
 var mini_map: MiniMap = null
+var map_btn: Button = null  # Toggles the minimap; kept in sync with MiniMap visibility
 var hole_stats_panel: HoleStatsPanel = null
 var tournament_manager: TournamentManager = null
 var tournament_panel: TournamentPanel = null
@@ -209,7 +210,7 @@ func _ready() -> void:
 	_setup_rain_overlay()
 	_setup_placement_preview()
 	_create_selection_indicator()
-	_create_menu_button()
+	_create_menu_buttons()
 	_setup_building_info_panel()
 	_setup_financial_panel()
 	_setup_mini_map()
@@ -2285,19 +2286,51 @@ func _on_summary_continue() -> void:
 
 # --- Menu / Save/Load ---
 
-func _create_menu_button() -> void:
-	# Menu button sits in the left control stack, above the Rotate View row
+func _create_menu_buttons() -> void:
+	"""Top row of the left control stack (above Rotate View): Menu button with a Map toggle beside it."""
+	var menu_row = HBoxContainer.new()
+	menu_row.name = "MenuControls"
+	menu_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	menu_row.add_theme_constant_override("separation", UIConstants.SEPARATION_MD)
+
 	var menu_btn = Button.new()
 	menu_btn.name = "MenuBtn"
 	menu_btn.text = "Menu"
+	menu_btn.tooltip_text = "Game menu (Esc)"
 	menu_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
+	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	menu_btn.pressed.connect(_on_menu_pressed)
-	left_controls.add_child(menu_btn)
-	left_controls.move_child(menu_btn, 0)
+	menu_row.add_child(menu_btn)
+
+	# Map toggle: stays pressed while the minimap is visible. Its state is synced from the
+	# minimap itself (see _setup_mini_map) so the Tab hotkey and menu transitions keep it accurate.
+	map_btn = Button.new()
+	map_btn.name = "MapBtn"
+	map_btn.text = "Map"
+	map_btn.tooltip_text = "Show / hide the minimap (Tab)"
+	map_btn.toggle_mode = true
+	map_btn.set_pressed_no_signal(true)  # Minimap starts visible
+	map_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
+	map_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_btn.toggled.connect(_on_map_toggled)
+	menu_row.add_child(map_btn)
+
+	left_controls.add_child(menu_row)
+	left_controls.move_child(menu_row, 0)
 
 func _on_menu_pressed() -> void:
 	# Open the game menu (pause menu) overlay
 	_toggle_pause_menu()
+
+func _on_map_toggled(pressed: bool) -> void:
+	"""Map button: show or hide the minimap."""
+	if mini_map:
+		mini_map.visible = pressed
+
+func _sync_map_button() -> void:
+	"""Keep the Map button's pressed state matching the minimap's visibility."""
+	if map_btn and mini_map:
+		map_btn.set_pressed_no_signal(mini_map.visible)
 
 func _show_save_load_panel() -> void:
 	# Toggle save/load panel
@@ -2966,7 +2999,12 @@ func _setup_mini_map() -> void:
 	mini_map.offset_right = 200  # Approximate width
 	mini_map.offset_bottom = -130  # Stay above enlarged bottom bar
 
+	# Mirror visibility into the Map button, whatever changed it (button, Tab hotkey,
+	# or the HUD being hidden/shown around the main menu).
+	mini_map.visibility_changed.connect(_sync_map_button)
+
 	hud.add_child(mini_map)
+	_sync_map_button()
 
 func _on_mini_map_camera_move(world_position: Vector2) -> void:
 	"""Move camera to the position clicked on mini-map."""
