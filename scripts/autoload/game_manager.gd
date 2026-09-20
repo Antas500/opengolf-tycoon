@@ -8,7 +8,12 @@ var player_profile: PlayerGolferProfile = PlayerGolferProfile.new()
 
 var current_mode: GameMode = GameMode.MAIN_MENU
 var current_speed: GameSpeed = GameSpeed.NORMAL
-var is_paused: bool = false
+var is_paused: bool = false:
+	set(value):
+		if is_paused == value:
+			return
+		is_paused = value
+		_sync_time_scale()
 
 var current_course: CourseData = null
 var course_name: String = "New Course"
@@ -148,7 +153,7 @@ var game_mode: GameMode:
 		return current_mode
 
 func get_game_speed_multiplier() -> float:
-	if is_paused:
+	if is_paused or current_speed == GameSpeed.PAUSED:
 		return 0.0
 	return float(current_speed)
 
@@ -232,21 +237,37 @@ func _advance_time(delta: float) -> void:
 func set_mode(new_mode: GameMode) -> void:
 	var old_mode = current_mode
 	current_mode = new_mode
-	# Reset time scale when not simulating (build mode, menus, etc.)
-	if new_mode != GameMode.SIMULATING and new_mode != GameMode.PLAYING:
-		Engine.time_scale = 1.0
+	# Keep the engine clock in sync (menus and build mode run at real-time speed)
+	_sync_time_scale()
 	EventBus.game_mode_changed.emit(old_mode, new_mode)
 
 func set_speed(new_speed: GameSpeed) -> void:
 	current_speed = new_speed
 	# Use Engine.time_scale so ALL game systems (golfer movement, ball flight,
-	# tweens, timers) speed up uniformly — not just the clock.
-	Engine.time_scale = float(maxi(int(new_speed), 1))
+	# tweens, timers) scale uniformly — not just the clock.
+	# PAUSED drops the scale to 0 so the whole simulation actually stops.
+	_sync_time_scale()
 	EventBus.game_speed_changed.emit(new_speed)
 
 func toggle_pause() -> void:
 	is_paused = not is_paused
 	EventBus.pause_toggled.emit(is_paused)
+
+func _sync_time_scale() -> void:
+	"""Keep Engine.time_scale in sync with game mode, speed, and pause state.
+
+	While simulating, the scale is the speed multiplier. When the game is
+	paused (pause menu, end-of-day summary, game over, or the speed
+	controls' pause button), the scale is 0 so the entire simulation —
+	golfers, balls, shots, tweens, spawn timers — freezes.
+	"""
+	if current_mode != GameMode.SIMULATING and current_mode != GameMode.PLAYING:
+		Engine.time_scale = 1.0
+		return
+	if is_paused or current_speed == GameSpeed.PAUSED:
+		Engine.time_scale = 0.0
+	else:
+		Engine.time_scale = float(current_speed)
 
 func modify_money(amount: int) -> void:
 	var old_money = money
@@ -468,6 +489,8 @@ func new_game(course_name_input: String = "New Course", theme: int = CourseTheme
 	reputation = DEFAULT_STARTING_REPUTATION
 	current_day = 1
 	current_hour = COURSE_OPEN_HOUR
+	# A new game always starts unpaused (stale pause state from a previous session)
+	is_paused = false
 
 	# Apply theme gameplay modifiers
 	var modifiers = CourseTheme.get_gameplay_modifiers(theme)

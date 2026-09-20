@@ -268,6 +268,8 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager._closing_announced = false
 	GameManager._end_of_day_triggered = false
 	GameManager._end_of_day_emitted = false
+	# A fresh load always starts unpaused (stale pause state from the previous session)
+	GameManager.is_paused = false
 
 	# Active owner rounds are transient, like visitor rounds.
 	GameManager.player_profile = PlayerGolferProfile.from_data(data.get("player_golfer", {}))
