@@ -6,7 +6,6 @@ extends Node2D
 @onready var ball_manager: BallManager = $BallManager
 @onready var hole_manager: HoleManager = $HoleManager
 @onready var golfer_manager: GolferManager = $GolferManager
-@onready var coordinate_label: Label = $UI/HUD/BottomBar/CoordinateLabel
 @onready var bottom_bar: HBoxContainer = $UI/HUD/BottomBar
 var terrain_toolbar: TerrainToolbar = null
 var hole_list: VBoxContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
@@ -279,7 +278,6 @@ func _load_decorations_data() -> void:
 
 func _process(_delta: float) -> void:
 	_update_ui()
-	_handle_mouse_hover()
 	_update_mini_map_camera()
 
 func _input(event: InputEvent) -> void:
@@ -501,13 +499,15 @@ func _connect_ui_buttons() -> void:
 	speed_controls.move_child(ultra_btn, fast_btn.get_index() + 1)
 
 func _setup_terrain_toolbar() -> void:
-	"""Dock the tabbed toolbar into the right end of the bottom bar"""
+	"""Dock the tabbed toolbar into the bottom bar (right section, flush after left controls)"""
 	terrain_toolbar = TerrainToolbar.new()
 	terrain_toolbar.name = "TerrainToolbar"
 	terrain_toolbar.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	terrain_toolbar.size_flags_horizontal = Control.SIZE_FILL
+	# EXPAND_FILL so the toolbar consumes whatever horizontal room is left,
+	# removing the empty gap that previously existed between LeftControls and toolbar.
+	terrain_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom_bar.add_child(terrain_toolbar)
-	# Keep the toolbar as the last child so it sits at the far right of the bar
+	# Keep the toolbar as the last child so it sits immediately after the separator
 	bottom_bar.move_child(terrain_toolbar, bottom_bar.get_child_count() - 1)
 
 	# The course holes list now lives in the toolbar's Holes tab
@@ -856,35 +856,6 @@ func _update_button_states() -> void:
 	fast_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.FAST else Color(1, 1, 1, 1)
 	if ultra_btn:
 		ultra_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.ULTRA else Color(1, 1, 1, 1)
-
-func _handle_mouse_hover() -> void:
-	# Only show coordinates when a tool is active (reduces clutter)
-	if not _has_active_tool():
-		coordinate_label.text = ""
-		return
-
-	var mouse_world = camera.get_mouse_world_position()
-	var grid_pos = terrain_grid.screen_to_grid(mouse_world)
-	if terrain_grid.is_valid_position(grid_pos):
-		var terrain_name = TerrainTypes.get_type_name(terrain_grid.get_tile(grid_pos))
-		var tile_type = terrain_grid.get_tile(grid_pos)
-		if tile_type == TerrainTypes.Type.BUNKER:
-			var depth_name = "Deep" if terrain_grid.get_bunker_depth(grid_pos) == 1 else "Shallow"
-			terrain_name += " (%s)" % depth_name
-		var elevation = terrain_grid.get_elevation(grid_pos)
-		if elevation != 0:
-			var sign_str = "+" if elevation > 0 else ""
-			coordinate_label.text = "(%d, %d) %s [Elev: %s%d]" % [grid_pos.x, grid_pos.y, terrain_name, sign_str, elevation]
-		else:
-			coordinate_label.text = "(%d, %d) %s" % [grid_pos.x, grid_pos.y, terrain_name]
-		if elevation_tool.is_active():
-			# Sculpting edits corners, so report the vertex the brush is on.
-			var vertex = terrain_grid.nearest_vertex(terrain_grid.screen_to_grid_point(mouse_world))
-			var vertex_elev = terrain_grid.get_vertex_elevation(vertex)
-			var vertex_sign = "+" if vertex_elev > 0 else ""
-			coordinate_label.text += "  [Vertex (%d, %d): %s%d]" % [vertex.x, vertex.y, vertex_sign, vertex_elev]
-	else:
-		coordinate_label.text = ""
 
 func _start_painting() -> void:
 	# Handle hole move mode clicks first

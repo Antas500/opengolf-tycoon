@@ -213,8 +213,10 @@ func _build_ui() -> void:
 	add_theme_stylebox_override("panel", panel_style)
 
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
-	size_flags_horizontal = Control.SIZE_FILL
-	custom_minimum_size = Vector2(500, 0)
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Modest minimum width so the tab bar still fits; the toolbar now fills the
+	# entire rest of the bottom bar instead of being pushed right by a spacer.
+	custom_minimum_size = Vector2(360, 0)
 
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 4)
