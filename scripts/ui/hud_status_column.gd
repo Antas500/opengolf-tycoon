@@ -1,17 +1,29 @@
 extends PanelContainer
-class_name TopHUDBar
-## TopHUDBar - Redesigned top status bar with icons and improved typography
+class_name HUDStatusColumn
+## HUDStatusColumn - Vertical status readout docked to the top-right corner.
+##
+## Replaces the old full-width top bar. Every stat that used to be spread
+## across the top of the screen (game mode, money, date/time, reputation,
+## course rating, weather, wind) is now stacked as a compact label/value
+## column, freeing the whole top edge of the viewport for the course view.
+##
+## The column sizes itself to its content and can be collapsed to a single
+## summary row via the header button (or `set_collapsed()`).
 
 signal money_clicked()
 signal reputation_clicked()
 signal rating_clicked()
+signal collapsed_changed(is_collapsed: bool)
 
 # UI References
 var _game_mode_icon: Label
 var _game_mode_label: Label
+var _collapse_button: Button
+var _details: VBoxContainer
 var _money_button: Button
 var _money_trend: Label
-var _day_time_label: Label
+var _date_label: Label
+var _time_label: Label
 var _reputation_button: Button
 var _weather_icon: Label
 var _weather_label: Label
@@ -21,168 +33,215 @@ var _rating_button: Button
 # State
 var _last_money: int = 0
 var _money_trend_value: int = 0
+var _collapsed: bool = false
 
 func _ready() -> void:
+	add_to_group(UIConstants.HUD_COLUMN_GROUP)
 	_build_ui()
 	_connect_signals()
 	_update_all()
+	_apply_anchors()
+	minimum_size_changed.connect(_refresh_height)
+	_refresh_height()
 
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(0, UIConstants.TOP_HUD_HEIGHT)
+	custom_minimum_size = Vector2(UIConstants.HUD_COLUMN_WIDTH, 0)
+	size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 
-	# Apply top bar style
+	# Column panel style — rounded card instead of an edge-to-edge bar
 	var style = StyleBoxFlat.new()
-	style.bg_color = UIConstants.COLOR_BG_DARK
-	style.border_width_bottom = 1
+	style.bg_color = UIConstants.COLOR_BG_PANEL
+	style.set_border_width_all(1)
 	style.border_color = UIConstants.COLOR_BORDER
-	style.content_margin_left = 16
-	style.content_margin_top = 8
-	style.content_margin_right = 16
-	style.content_margin_bottom = 8
+	style.set_corner_radius_all(6)
+	style.content_margin_left = UIConstants.MARGIN_MD
+	style.content_margin_top = UIConstants.MARGIN_SM
+	style.content_margin_right = UIConstants.MARGIN_MD
+	style.content_margin_bottom = UIConstants.MARGIN_SM
 	add_theme_stylebox_override("panel", style)
 
-	var hbox = HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 8)
-	add_child(hbox)
+	var column = VBoxContainer.new()
+	column.name = "Column"
+	column.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
+	add_child(column)
 
-	# Game Mode Indicator
-	var mode_container = HBoxContainer.new()
-	mode_container.add_theme_constant_override("separation", 6)
-	hbox.add_child(mode_container)
+	# --- Header: game mode badge + collapse toggle ---
+	var header = HBoxContainer.new()
+	header.name = "Header"
+	header.add_theme_constant_override("separation", UIConstants.SEPARATION_MD)
+	column.add_child(header)
 
 	_game_mode_icon = Label.new()
-	_game_mode_icon.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_LG)
-	mode_container.add_child(_game_mode_icon)
+	_game_mode_icon.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_MD)
+	header.add_child(_game_mode_icon)
 
 	_game_mode_label = Label.new()
-	_game_mode_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	mode_container.add_child(_game_mode_label)
+	_game_mode_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	_game_mode_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(_game_mode_label)
 
-	# Left spacer
-	var spacer_left = Control.new()
-	spacer_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox.add_child(spacer_left)
+	_collapse_button = Button.new()
+	_collapse_button.flat = true
+	_collapse_button.text = "-"
+	_collapse_button.focus_mode = Control.FOCUS_NONE
+	_collapse_button.custom_minimum_size = Vector2(20, 18)
+	_collapse_button.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	_collapse_button.tooltip_text = "Collapse / expand the status column"
+	_collapse_button.pressed.connect(func(): set_collapsed(not _collapsed))
+	header.add_child(_collapse_button)
 
-	# Stats Container
-	var stats_container = HBoxContainer.new()
-	stats_container.add_theme_constant_override("separation", 16)
-	hbox.add_child(stats_container)
+	column.add_child(_create_separator())
 
-	# Money Display (clickable)
-	var money_container = HBoxContainer.new()
-	money_container.add_theme_constant_override("separation", 4)
-	stats_container.add_child(money_container)
+	# --- Money (always visible, even when collapsed) ---
+	var money_value = HBoxContainer.new()
+	money_value.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
+	money_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	money_value.alignment = BoxContainer.ALIGNMENT_END
 
 	_money_button = Button.new()
 	_money_button.flat = true
+	_money_button.focus_mode = Control.FOCUS_NONE
 	_money_button.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_MD)
 	_money_button.pressed.connect(_on_money_pressed)
 	_money_button.tooltip_text = "Click to view financial details"
-	money_container.add_child(_money_button)
+	money_value.add_child(_money_button)
 
 	_money_trend = Label.new()
 	_money_trend.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	money_container.add_child(_money_trend)
+	_money_trend.custom_minimum_size = Vector2(10, 0)
+	money_value.add_child(_money_trend)
 
-	# Vertical separator
-	stats_container.add_child(_create_vseparator())
+	column.add_child(_create_row("Funds", money_value))
 
-	# Day/Time Display
-	var day_container = HBoxContainer.new()
-	day_container.add_theme_constant_override("separation", 6)
-	stats_container.add_child(day_container)
+	# --- Collapsible details ---
+	_details = VBoxContainer.new()
+	_details.name = "Details"
+	_details.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
+	column.add_child(_details)
 
-	var day_icon = Label.new()
-	day_icon.text = "D"
-	day_icon.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	day_icon.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-	day_container.add_child(day_icon)
+	# Date / time
+	_date_label = _create_value_label(UIConstants.FONT_SIZE_BASE)
+	_details.add_child(_create_row("Date", _date_label))
 
-	_day_time_label = Label.new()
-	_day_time_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	day_container.add_child(_day_time_label)
+	_time_label = _create_value_label(UIConstants.FONT_SIZE_BASE)
+	_details.add_child(_create_row("Time", _time_label))
 
-	# Vertical separator
-	stats_container.add_child(_create_vseparator())
+	_details.add_child(_create_separator())
 
-	# Reputation Display
-	var rep_container = HBoxContainer.new()
-	rep_container.add_theme_constant_override("separation", 6)
-	stats_container.add_child(rep_container)
-
-	var rep_label = Label.new()
-	rep_label.text = "Rep:"
-	rep_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	rep_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-	rep_container.add_child(rep_label)
-
+	# Reputation
 	_reputation_button = Button.new()
 	_reputation_button.flat = true
+	_reputation_button.focus_mode = Control.FOCUS_NONE
 	_reputation_button.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
+	_reputation_button.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_reputation_button.pressed.connect(_on_reputation_pressed)
 	_reputation_button.tooltip_text = "Course reputation (click for rating details)"
-	rep_container.add_child(_reputation_button)
+	_details.add_child(_create_row("Reputation", _reputation_button))
 
-	# Vertical separator
-	stats_container.add_child(_create_vseparator())
-
-	# Course Rating Display (clickable)
-	var rating_container = HBoxContainer.new()
-	rating_container.add_theme_constant_override("separation", 4)
-	stats_container.add_child(rating_container)
-
+	# Course rating
 	_rating_button = Button.new()
 	_rating_button.flat = true
+	_rating_button.focus_mode = Control.FOCUS_NONE
 	_rating_button.text = "-- (-.--)"
 	_rating_button.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
 	_rating_button.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+	_rating_button.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_rating_button.pressed.connect(_on_rating_pressed)
 	_rating_button.tooltip_text = "Course rating (click for details)"
-	rating_container.add_child(_rating_button)
+	_details.add_child(_create_row("Rating", _rating_button))
 
-	# Vertical separator
-	stats_container.add_child(_create_vseparator())
+	_details.add_child(_create_separator())
 
-	# Weather Display
-	var weather_container = HBoxContainer.new()
-	weather_container.add_theme_constant_override("separation", 6)
-	stats_container.add_child(weather_container)
+	# Weather
+	var weather_value = HBoxContainer.new()
+	weather_value.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
+	weather_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	weather_value.alignment = BoxContainer.ALIGNMENT_END
 
 	_weather_icon = Label.new()
-	_weather_icon.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	weather_container.add_child(_weather_icon)
+	_weather_icon.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	weather_value.add_child(_weather_icon)
 
-	_weather_label = Label.new()
-	_weather_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	weather_container.add_child(_weather_label)
+	_weather_label = _create_value_label(UIConstants.FONT_SIZE_BASE)
+	_weather_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	weather_value.add_child(_weather_label)
 
-	# Vertical separator
-	stats_container.add_child(_create_vseparator())
+	_details.add_child(_create_row("Weather", weather_value))
 
-	# Wind Display
-	var wind_container = HBoxContainer.new()
-	wind_container.add_theme_constant_override("separation", 6)
-	stats_container.add_child(wind_container)
+	# Wind
+	_wind_label = _create_value_label(UIConstants.FONT_SIZE_BASE)
+	_details.add_child(_create_row("Wind", _wind_label))
 
-	var wind_icon = Label.new()
-	wind_icon.text = "~"
-	wind_icon.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	wind_icon.add_theme_color_override("font_color", UIConstants.COLOR_INFO)
-	wind_container.add_child(wind_icon)
+## Build a "label ....... value" row. `value` may be any Control.
+func _create_row(title: String, value: Control) -> HBoxContainer:
+	var row = HBoxContainer.new()
+	row.add_theme_constant_override("separation", UIConstants.SEPARATION_LG)
 
-	_wind_label = Label.new()
-	_wind_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-	wind_container.add_child(_wind_label)
+	var title_label = Label.new()
+	title_label.text = title
+	title_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	title_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(title_label)
 
-	# Right spacer
-	var spacer_right = Control.new()
-	spacer_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox.add_child(spacer_right)
+	if not (value is BoxContainer):
+		value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(value)
+	return row
 
-func _create_vseparator() -> VSeparator:
-	var sep = VSeparator.new()
-	sep.custom_minimum_size = Vector2(1, 20)
+func _create_value_label(font_size: int) -> Label:
+	var label = Label.new()
+	label.add_theme_font_size_override("font_size", font_size)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return label
+
+func _create_separator() -> HSeparator:
+	var sep = HSeparator.new()
+	sep.custom_minimum_size = Vector2(0, 1)
+	sep.modulate = Color(1, 1, 1, 0.25)
 	return sep
+
+# =============================================================================
+# LAYOUT
+# =============================================================================
+
+## Pin the column to the top-right corner of its parent.
+func _apply_anchors() -> void:
+	anchor_left = 1.0
+	anchor_right = 1.0
+	anchor_top = 0.0
+	anchor_bottom = 0.0
+	grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	grow_vertical = Control.GROW_DIRECTION_END
+	offset_left = -(UIConstants.HUD_COLUMN_WIDTH + UIConstants.HUD_COLUMN_MARGIN)
+	offset_right = -UIConstants.HUD_COLUMN_MARGIN
+	offset_top = UIConstants.HUD_COLUMN_MARGIN
+	_refresh_height()
+
+## Keep the panel exactly as tall as its content (anchored controls need an
+## explicit bottom offset).
+func _refresh_height() -> void:
+	offset_bottom = offset_top + get_combined_minimum_size().y
+
+## Height the column currently occupies, including its top margin. Other HUD
+## elements use this to avoid overlapping it.
+func get_occupied_height() -> float:
+	return offset_bottom
+
+func is_collapsed() -> bool:
+	return _collapsed
+
+func set_collapsed(collapsed: bool) -> void:
+	if _collapsed == collapsed:
+		return
+	_collapsed = collapsed
+	if _details:
+		_details.visible = not collapsed
+	if _collapse_button:
+		_collapse_button.text = "+" if collapsed else "-"
+	_refresh_height()
+	collapsed_changed.emit(_collapsed)
 
 func _connect_signals() -> void:
 	# Connect to EventBus signals
@@ -283,7 +342,8 @@ func _update_day_time() -> void:
 	var season_name = SeasonSystem.get_season_name(season)
 	var day_in_season = SeasonSystem.get_day_in_season(day)
 	var year = SeasonSystem.get_year(day)
-	_day_time_label.text = "%s D%d Y%d - %d:%02d %s" % [season_name, day_in_season, year, display_hour, minute, am_pm]
+	_date_label.text = "%s D%d Y%d" % [season_name, day_in_season, year]
+	_time_label.text = "%d:%02d %s" % [display_hour, minute, am_pm]
 
 func _update_reputation() -> void:
 	if not has_node("/root/GameManager"):

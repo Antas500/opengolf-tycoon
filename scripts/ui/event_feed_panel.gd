@@ -13,7 +13,7 @@ signal navigate_to_panel(panel_name: String)
 signal close_requested
 
 const PANEL_WIDTH: float = 340.0
-const TOP_MARGIN: float = 56.0  # Below TopHUDBar
+# Top margin is measured at runtime so the panel clears the status column.
 const BOTTOM_MARGIN: float = 102.0  # Tracks BottomBar (UIConstants.BOTTOM_BAR_HEIGHT + 6px)
 const RIGHT_MARGIN: float = 4.0
 
@@ -99,9 +99,10 @@ func _build_ui() -> void:
 
 func _position_panel() -> void:
 	var vp_size = get_viewport().get_visible_rect().size
-	var panel_height = vp_size.y - TOP_MARGIN - BOTTOM_MARGIN
+	var top_margin := UIConstants.get_hud_column_clearance(self)
+	var panel_height = maxf(120.0, vp_size.y - top_margin - BOTTOM_MARGIN)
 	size = Vector2(PANEL_WIDTH, panel_height)
-	position = Vector2(vp_size.x - PANEL_WIDTH - RIGHT_MARGIN, TOP_MARGIN)
+	position = Vector2(vp_size.x - PANEL_WIDTH - RIGHT_MARGIN, top_margin)
 
 func toggle() -> void:
 	if visible:

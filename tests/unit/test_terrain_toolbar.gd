@@ -7,7 +7,7 @@ func before_each() -> void:
 	add_child_autofree(toolbar)
 
 func test_bottom_bar_height_is_reduced() -> void:
-	assert_eq(UIConstants.BOTTOM_BAR_HEIGHT, 96, "Bottom bar height should be reduced to 96px")
+	assert_eq(UIConstants.BOTTOM_BAR_HEIGHT, 120, "Bottom bar height should be reduced to 120px")
 
 func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.tab_count, 9, "Toolbar should have 9 tabs")

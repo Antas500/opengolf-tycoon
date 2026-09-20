@@ -9,7 +9,7 @@ const FADE_IN_DURATION: float = 0.15
 const DISPLAY_DURATION: float = 1.5
 const FADE_OUT_DURATION: float = 0.5
 const RIGHT_MARGIN: float = 20.0
-const TOP_MARGIN: float = 56.0  # Below TopHUDBar
+# Top margin is measured at runtime so the indicator clears the status column.
 
 var _label: Label = null
 var _panel: PanelContainer = null
@@ -55,7 +55,8 @@ func _show_indicator() -> void:
 	_panel.show()
 	await get_tree().process_frame
 	var vp_size = get_viewport().get_visible_rect().size
-	_panel.position = Vector2(vp_size.x - _panel.size.x - RIGHT_MARGIN, TOP_MARGIN)
+	var top_margin := UIConstants.get_hud_column_clearance(self)
+	_panel.position = Vector2(vp_size.x - _panel.size.x - RIGHT_MARGIN, top_margin)
 
 	# Fade in
 	var tween = create_tween()
