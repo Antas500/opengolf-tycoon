@@ -4,6 +4,11 @@ class_name PauseMenu
 ##
 ## Triggered by Escape key. Provides Resume, Save, Load, Quit to Menu, and
 ## Quit to Desktop options. Dims the game behind it.
+##
+## The simulation is frozen while this menu is open, but the player can still
+## look around the course: pointer events that land on the dimmed backdrop
+## (not on the menu panel) are forwarded to the isometric camera, which runs
+## on wall-clock time.
 
 signal resume_requested
 signal save_requested
@@ -11,6 +16,13 @@ signal load_requested
 signal settings_requested
 signal quit_to_menu_requested
 signal quit_to_desktop_requested
+
+## Set by Main so camera controls work while the game is paused behind the
+## menu. Null when the camera is unavailable (forwarding is then skipped).
+var camera: IsometricCamera = null
+
+var _bg: ColorRect = null
+var _panel: PanelContainer = null
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -23,6 +35,7 @@ func _build_ui() -> void:
 	bg.color = Color(0.0, 0.0, 0.0, 0.6)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_bg = bg
 	add_child(bg)
 
 	# Center container for the menu panel
@@ -43,6 +56,7 @@ func _build_ui() -> void:
 	style.content_margin_bottom = 24
 	panel.add_theme_stylebox_override("panel", style)
 	panel.custom_minimum_size = Vector2(320, 0)
+	_panel = panel
 	center.add_child(panel)
 
 	var vbox = VBoxContainer.new()
@@ -87,7 +101,7 @@ func _build_ui() -> void:
 
 	# Hint at bottom
 	var hint = Label.new()
-	hint.text = "Press Escape to resume"
+	hint.text = "Look around while paused: middle-mouse drag or WASD to pan, scroll to zoom\nPress Escape to resume"
 	hint.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	hint.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -108,6 +122,54 @@ func _input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE:
 			_on_resume_pressed()
 			get_viewport().set_input_as_handled()
+		return
+
+	# The game is paused behind this menu, but the player should still be
+	# able to look around the course. This overlay is full-screen with
+	# MOUSE_FILTER_STOP, so pointer events never reach the camera's
+	# _unhandled_input — forward the ones that are over the dimmed backdrop
+	# (not over the menu panel) to the camera instead.
+	if camera != null and _is_camera_event(event):
+		camera.handle_input_event(event, true)
+
+## True when a pointer event should be forwarded to the camera: the pointer
+## is over the dimmed backdrop rather than an interactive part of the menu,
+## or the camera is already mid-drag (so the drag keeps flowing — including
+## the release — even if the pointer moves over the panel).
+func _is_camera_event(event: InputEvent) -> bool:
+	if event is InputEventMagnifyGesture:
+		return _hover_is_backdrop()
+	if event is InputEventMouseMotion:
+		return camera.is_dragging() or _hover_is_backdrop()
+	if event is InputEventMouseButton:
+		if camera.is_dragging():
+			return true
+		if not _hover_is_backdrop():
+			return false
+		return event.button_index == MOUSE_BUTTON_MIDDLE \
+			or event.button_index == MOUSE_BUTTON_WHEEL_UP \
+			or event.button_index == MOUSE_BUTTON_WHEEL_DOWN
+	return false
+
+func _hover_is_backdrop() -> bool:
+	var hovered := _get_hovered_control()
+	if hovered == null:
+		return false
+	return not _is_inside_panel(hovered)
+
+## The control under the pointer. Split out so tests can simulate hover
+## state (headless runs have no real mouse, so the viewport never reports a
+## hovered control).
+func _get_hovered_control() -> Control:
+	return get_viewport().gui_get_hovered_control()
+
+func _is_inside_panel(control: Control) -> bool:
+	var node: Node = control
+	while node != null and node != self:
+		if node == _panel:
+			return true
+		node = node.get_parent()
+	return false
 
 func _on_resume_pressed() -> void:
 	resume_requested.emit()

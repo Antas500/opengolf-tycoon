@@ -1,6 +1,11 @@
 extends Camera2D
 class_name IsometricCamera
 ## IsometricCamera - Enhanced camera controller with smooth zoom and subtle follow
+##
+## The camera is player-controlled UI, not part of the simulation: it always
+## runs on wall-clock time, so it keeps panning/zooming while the game is
+## paused (Engine.time_scale == 0) and stays at a constant real-world speed
+## at any game speed.
 
 @export var pan_speed: float = 800.0
 @export var zoom_speed: float = 0.1
@@ -25,8 +30,8 @@ var _is_dragging: bool = false
 var _drag_start_mouse: Vector2
 var _drag_start_camera: Vector2
 
-# Zoom easing state
-var _zoom_tween: Tween = null
+# Wall-clock bookkeeping (milliseconds, Time.get_ticks_msec)
+var _last_wall_ms: int = -1
 
 # Shake state
 var _shake_offset: Vector2 = Vector2.ZERO
@@ -36,23 +41,45 @@ func _ready() -> void:
 	_target_position = global_position
 	_smoothed_position = global_position
 	_target_zoom = zoom.x
+	_last_wall_ms = Time.get_ticks_msec()
 	# Disable Godot's built-in smoothing — we handle it manually in _apply_movement
 	# to avoid the one-frame lag that causes bouncing on rapid direction changes.
 	position_smoothing_enabled = false
 
-func _process(delta: float) -> void:
-	# Use unscaled delta so camera panning isn't affected by game speed
-	var real_delta = delta / maxf(Engine.time_scale, 0.001)
+func _process(_delta: float) -> void:
+	# Use wall-clock time instead of the frame delta: pausing the game drops
+	# Engine.time_scale to 0, which makes the scaled delta 0 and would freeze
+	# the camera along with the simulation. Measuring real time keeps the
+	# camera fully controllable while paused (and at a constant speed at any
+	# game speed).
+	var now_ms := Time.get_ticks_msec()
+	if _last_wall_ms < 0:
+		_last_wall_ms = now_ms
+	var real_delta := float(now_ms - _last_wall_ms) / 1000.0
+	_last_wall_ms = now_ms
+	# Guard against huge jumps (window minimized, OS sleep, debugger pause).
+	real_delta = minf(real_delta, 0.1)
 	_handle_keyboard_input(real_delta)
 	_handle_subtle_follow(real_delta)
 	_apply_movement(real_delta)
 
 func _unhandled_input(event: InputEvent) -> void:
+	handle_input_event(event, false)
+
+## Processes a camera input event (middle-drag pan, wheel/pinch zoom,
+## bracket-key zoom).
+##
+## Full-screen overlays (pause menu, settings, ...) swallow every pointer
+## event before it can reach _unhandled_input. Such overlays may call this
+## directly so the player can keep looking around while the game is paused —
+## after verifying the pointer is over their non-interactive backdrop, in
+## which case they must pass `bypass_ui_hover_check = true`.
+func handle_input_event(event: InputEvent, bypass_ui_hover_check: bool = false) -> void:
 	if event is InputEventMouseButton:
 		# Skip camera input when mouse is over a UI control.
 		# On web exports, wheel events may not be consumed by the GUI system
 		# even when hovering over panels/menus, causing unwanted zoom.
-		if get_viewport().gui_get_hovered_control() != null:
+		if not bypass_ui_hover_check and get_viewport().gui_get_hovered_control() != null:
 			return
 		var scroll_direction := 1.0 if GameManager.invert_zoom_scroll else -1.0
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -125,17 +152,11 @@ func _handle_subtle_follow(delta: float) -> void:
 		_target_position += follow_direction * subtle_follow_strength * follow_strength * pan_speed * delta / zoom.x
 
 func _zoom_camera_smooth(zoom_delta: float) -> void:
-	var new_target = clamp(_target_zoom + zoom_delta, min_zoom, max_zoom)
-
-	# Kill existing zoom tween
-	if _zoom_tween and _zoom_tween.is_valid():
-		_zoom_tween.kill()
-
-	# Create smooth zoom tween
-	_zoom_tween = create_tween()
-	_zoom_tween.set_ease(Tween.EASE_OUT)
-	_zoom_tween.set_trans(Tween.TRANS_QUINT)
-	_zoom_tween.tween_property(self, "_target_zoom", new_target, 0.25)
+	# Update the target directly: _apply_movement() eases the actual zoom
+	# toward it every frame using wall-clock time, so zooming keeps working
+	# while the engine is frozen (tweens would not — they scale with
+	# Engine.time_scale).
+	_target_zoom = clamp(_target_zoom + zoom_delta, min_zoom, max_zoom)
 
 func _apply_movement(delta: float) -> void:
 	if bounds_enabled:
@@ -157,6 +178,9 @@ func _apply_movement(delta: float) -> void:
 # =============================================================================
 # PUBLIC API
 # =============================================================================
+
+func is_dragging() -> bool:
+	return _is_dragging
 
 func focus_on(world_position: Vector2, instant: bool = false) -> void:
 	_target_position = world_position
