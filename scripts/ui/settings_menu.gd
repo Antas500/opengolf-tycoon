@@ -7,7 +7,14 @@ class_name SettingsMenu
 
 signal close_requested
 
+## Set by Main when the menu is opened from the pause session so the player
+## can keep looking around the (paused) course behind it. Null otherwise —
+## e.g. when opened from the main menu.
+var camera: IsometricCamera = null
+
 var _tab_container: TabContainer = null
+var _bg: ColorRect = null
+var _panel: PanelContainer = null
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -20,6 +27,7 @@ func _build_ui() -> void:
 	bg.color = Color(0.0, 0.0, 0.0, 0.5)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_bg = bg
 	add_child(bg)
 
 	var center = CenterContainer.new()
@@ -38,6 +46,7 @@ func _build_ui() -> void:
 	style.content_margin_bottom = 16
 	panel.add_theme_stylebox_override("panel", style)
 	panel.custom_minimum_size = Vector2(500, 400)
+	_panel = panel
 	center.add_child(panel)
 
 	var vbox = VBoxContainer.new()
@@ -456,6 +465,46 @@ func _input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE:
 			_on_close()
 			get_viewport().set_input_as_handled()
+		return
+
+	# When opened from the pause session the game is paused behind this
+	# overlay; forward backdrop pointer events to the camera so the player
+	# can keep looking around (see PauseMenu for the full rationale).
+	if camera != null and _is_camera_event(event):
+		camera.handle_input_event(event, true)
+
+func _is_camera_event(event: InputEvent) -> bool:
+	if event is InputEventMagnifyGesture:
+		return _hover_is_backdrop()
+	if event is InputEventMouseMotion:
+		return camera.is_dragging() or _hover_is_backdrop()
+	if event is InputEventMouseButton:
+		if camera.is_dragging():
+			return true
+		if not _hover_is_backdrop():
+			return false
+		return event.button_index == MOUSE_BUTTON_MIDDLE \
+			or event.button_index == MOUSE_BUTTON_WHEEL_UP \
+			or event.button_index == MOUSE_BUTTON_WHEEL_DOWN
+	return false
+
+func _hover_is_backdrop() -> bool:
+	var hovered := _get_hovered_control()
+	if hovered == null:
+		return false
+	return not _is_inside_panel(hovered)
+
+## Test seam (headless runs never report a hovered control).
+func _get_hovered_control() -> Control:
+	return get_viewport().gui_get_hovered_control()
+
+func _is_inside_panel(control: Control) -> bool:
+	var node: Node = control
+	while node != null and node != self:
+		if node == _panel:
+			return true
+		node = node.get_parent()
+	return false
 
 func _on_close() -> void:
 	close_requested.emit()

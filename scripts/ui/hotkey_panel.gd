@@ -64,6 +64,12 @@ func _build_ui() -> void:
 		["X", "Bulldozer"],
 	])
 
+	_add_section(vbox, "Toolbar Tabs", [
+		["=", "Course Terrain tab"],
+		[".", "Improvements tab"],
+		["E", "Elevation tab"],
+	])
+
 	_add_section(vbox, "Elevation", [
 		["Shift+=", "Raise terrain"],
 		["Shift+-", "Lower terrain"],
@@ -84,7 +90,9 @@ func _build_ui() -> void:
 
 	_add_section(vbox, "Camera & View", [
 		["WASD", "Pan camera"],
+		["Middle Mouse Drag", "Pan camera"],
 		["Scroll / [ ]", "Zoom in/out"],
+		["While paused", "Camera can still pan & zoom"],
 		["Q", "Rotate course counter-clockwise"],
 		["Shift+Q", "Rotate course clockwise"],
 		["I", "Isometric / top-down view"],

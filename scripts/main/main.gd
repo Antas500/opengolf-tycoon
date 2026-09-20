@@ -6,28 +6,32 @@ extends Node2D
 @onready var ball_manager: BallManager = $BallManager
 @onready var hole_manager: HoleManager = $HoleManager
 @onready var golfer_manager: GolferManager = $GolferManager
-@onready var coordinate_label: Label = $UI/HUD/BottomBar/CoordinateLabel
-@onready var tool_panel_container: Control = $UI/HUD/ToolPanel
+@onready var bottom_bar: HBoxContainer = $UI/HUD/BottomBar
 var terrain_toolbar: TerrainToolbar = null
-@onready var hole_list: VBoxContainer = $UI/HUD/HoleInfoPanel/VBoxContainer/ScrollContainer/HoleList
-@onready var pause_btn: Button = $UI/HUD/BottomBar/SpeedControls/PauseBtn
-@onready var play_btn: Button = $UI/HUD/BottomBar/SpeedControls/PlayBtn
-@onready var fast_btn: Button = $UI/HUD/BottomBar/SpeedControls/FastBtn
+var hole_list: HBoxContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
+@onready var left_controls: VBoxContainer = $UI/HUD/BottomBar/LeftControls
+@onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
+@onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
+@onready var rotate_cw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCWBtn
+@onready var iso_toggle_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/IsoBtn
+@onready var orientation_label: Label = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationLabel
+@onready var pause_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn
+@onready var play_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn
+@onready var fast_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn
 var ultra_btn: Button = null
-@onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/SpeedControls
+@onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/SpeedControls
+const VIEW_ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
 
 # New UI components
 var player_round: PlayerRoundManager
 
-var top_hud_bar: TopHUDBar = null
+var hud_status_column: HUDStatusColumn = null
 
-# Legacy references (kept for compatibility, now managed by TopHUDBar)
+# Legacy references (kept for compatibility, now managed by HUDStatusColumn)
 var money_label: Label = null
 var day_label: Label = null
 var reputation_label: Label = null
 var game_mode_label: Label = null
-var build_mode_btn: Button = null
-var selection_label: Label = null
 
 var current_tool: int = -1  # Start with no tool selected
 var brush_size: int = 1
@@ -60,6 +64,7 @@ var building_info_panel: BuildingInfoPanel = null
 var financial_panel: FinancialPanel = null
 var staff_panel: StaffPanel = null
 var mini_map: MiniMap = null
+var map_btn: Button = null  # Toggles the minimap; kept in sync with MiniMap visibility
 var hole_stats_panel: HoleStatsPanel = null
 var tournament_manager: TournamentManager = null
 var tournament_panel: TournamentPanel = null
@@ -75,6 +80,8 @@ var tournament_leaderboard: TournamentLeaderboard = null
 var tournament_results_popup: TournamentResultsPopup = null
 var pause_menu: PauseMenu = null
 var _was_paused_before_pause_menu: bool = false
+var _pause_session_active: bool = false  # True while the pause menu (or its Save/Load/Settings sub-panels) is open
+var _just_loaded_game: bool = false  # Set when a save just loaded successfully, consumed by the save/load panel
 var milestone_manager: MilestoneManager = null
 var milestones_panel: MilestonesPanel = null
 var seasonal_calendar_panel: SeasonalCalendarPanel = null
@@ -199,11 +206,10 @@ func _ready() -> void:
 	_connect_signals()
 	_connect_ui_buttons()
 	_setup_bottom_bar()
-	_setup_top_hud_bar()
+	_setup_hud_status_column()
 	_setup_rain_overlay()
 	_setup_placement_preview()
-	_create_selection_indicator()
-	_create_save_load_button()
+	_create_menu_buttons()
 	_setup_building_info_panel()
 	_setup_financial_panel()
 	_setup_mini_map()
@@ -237,7 +243,6 @@ func _ready() -> void:
 	_setup_floating_text()
 	_setup_shot_trails()
 	_setup_shot_heatmap()
-	_setup_audio_controls()
 	_initialize_game()
 	print("Main scene ready")
 
@@ -275,9 +280,7 @@ func _load_decorations_data() -> void:
 
 func _process(_delta: float) -> void:
 	_update_ui()
-	_handle_mouse_hover()
 	_update_mini_map_camera()
-	_update_selection_indicator()
 
 func _input(event: InputEvent) -> void:
 	# Keyboard shortcuts - handled in _input so UI controls don't swallow them
@@ -414,7 +417,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_cancel_action()
 		return
 
-	# All tools work in both BUILDING and SIMULATING modes (tycoon-style)
+	# Tycoon-style: build while golfers play (day always runs in SIMULATING)
 	if GameManager.current_mode == GameManager.GameMode.MAIN_MENU:
 		return
 
@@ -480,9 +483,14 @@ func _connect_ui_buttons() -> void:
 	# Replace old tool panel with new terrain toolbar
 	_setup_terrain_toolbar()
 
-	$UI/HUD/BottomBar/SpeedControls/PauseBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.PAUSED))
-	$UI/HUD/BottomBar/SpeedControls/PlayBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.NORMAL))
-	$UI/HUD/BottomBar/SpeedControls/FastBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.FAST))
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.PAUSED))
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.NORMAL))
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.FAST))
+
+	# Rotate view controls (now above speed controls in BottomBar)
+	rotate_ccw_btn.pressed.connect(_on_view_rotate_ccw)
+	rotate_cw_btn.pressed.connect(_on_view_rotate_cw)
+	iso_toggle_btn.toggled.connect(_on_view_isometric_toggled)
 
 	# Create dedicated ultra speed button
 	ultra_btn = Button.new()
@@ -493,22 +501,21 @@ func _connect_ui_buttons() -> void:
 	speed_controls.move_child(ultra_btn, fast_btn.get_index() + 1)
 
 func _setup_terrain_toolbar() -> void:
-	"""Replace old tool panel with organized terrain toolbar"""
-	# Hide old tool panel children (keep container for positioning)
-	for child in tool_panel_container.get_children():
-		child.queue_free()
-
-	# Ensure tool panel container expands
-	tool_panel_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	# Create and add new toolbar
+	"""Dock the tabbed toolbar into the bottom bar (right section, flush after left controls)"""
 	terrain_toolbar = TerrainToolbar.new()
 	terrain_toolbar.name = "TerrainToolbar"
 	terrain_toolbar.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# EXPAND_FILL so the toolbar consumes whatever horizontal room is left,
+	# removing the empty gap that previously existed between LeftControls and toolbar.
 	terrain_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tool_panel_container.add_child(terrain_toolbar)
+	bottom_bar.add_child(terrain_toolbar)
+	# Keep the toolbar as the last child so it sits immediately after the separator
+	bottom_bar.move_child(terrain_toolbar, bottom_bar.get_child_count() - 1)
 
-	# Connect toolbar signals
+	# The course holes list now lives in the toolbar's Holes tab
+	hole_list = terrain_toolbar.hole_list
+
+	# Build tool signals
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
 	terrain_toolbar.create_hole_pressed.connect(_on_create_hole_pressed)
 	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
@@ -522,10 +529,46 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.staff_pressed.connect(_on_staff_pressed)
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
 	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
-	terrain_toolbar.view_rotate_cw_pressed.connect(_on_view_rotate_cw)
-	terrain_toolbar.view_rotate_ccw_pressed.connect(_on_view_rotate_ccw)
-	terrain_toolbar.view_isometric_toggled.connect(_on_view_isometric_toggled)
+
+	# Club / Player / Staff tab signals
+	terrain_toolbar.play_course_pressed.connect(_on_play_course_pressed)
+	terrain_toolbar.tournaments_pressed.connect(_toggle_tournament_panel)
+	terrain_toolbar.land_pressed.connect(_toggle_land_panel)
+	terrain_toolbar.marketing_pressed.connect(_toggle_marketing_panel)
+	terrain_toolbar.milestones_pressed.connect(_toggle_milestones_panel)
+	terrain_toolbar.feed_pressed.connect(_toggle_event_feed)
+	terrain_toolbar.scorecard_pressed.connect(_toggle_course_scorecard_panel)
+	terrain_toolbar.golfer_row_clicked.connect(_on_toolbar_golfer_clicked)
+	terrain_toolbar.golfer_data_provider = _collect_golfer_rows
+
 	_sync_view_controls()
+
+func _collect_golfer_rows() -> Array:
+	"""Snapshot of golfers currently on the course, for the toolbar's Golfers tab."""
+	var rows: Array = []
+	for golfer in golfer_manager.get_active_golfers():
+		rows.append({
+			"id": golfer.golfer_id,
+			"name": golfer.golfer_name,
+			"tier": golfer.golfer_tier,
+			"hole": golfer.current_hole + 1,
+			"strokes": golfer.total_strokes + golfer.current_strokes,
+			"mood": golfer.current_mood,
+		})
+	return rows
+
+func _on_toolbar_golfer_clicked(golfer_id: int) -> void:
+	"""Follow a golfer from the toolbar's Golfers tab."""
+	var golfer = golfer_manager.get_golfer(golfer_id)
+	if golfer:
+		camera.focus_on(golfer.global_position, false)
+		_on_golfer_clicked(golfer)
+
+func _on_play_course_pressed() -> void:
+	if player_round.busy:
+		EventBus.notify("Finish your current round first.", "info")
+		return
+	player_round.open_setup()
 
 func _initialize_game() -> void:
 	# Show main menu instead of auto-starting
@@ -667,40 +710,28 @@ func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 		if child.name not in popup_panels:
 			child.visible = visible_flag
 
-func _setup_top_hud_bar() -> void:
-	"""Replace old TopBar with new TopHUDBar component"""
-	var old_top_bar = $UI/HUD/TopBar
+func _setup_hud_status_column() -> void:
+	"""Replace the legacy full-width TopBar with the top-right status column."""
+	var old_top_bar = $UI/HUD/StatusColumnPlaceholder
 	var hud = $UI/HUD
 
-	# Remove old top bar children
-	for child in old_top_bar.get_children():
-		child.queue_free()
-	old_top_bar.queue_free()
+	# Remove the placeholder node the scene ships with
+	if old_top_bar:
+		for child in old_top_bar.get_children():
+			child.queue_free()
+		old_top_bar.queue_free()
 
-	# Create new TopHUDBar
-	top_hud_bar = TopHUDBar.new()
-	top_hud_bar.name = "TopHUDBar"
+	# Create the status column (anchors itself to the top-right corner)
+	hud_status_column = HUDStatusColumn.new()
+	hud_status_column.name = "HUDStatusColumn"
 
-	# Set anchors to top, full width
-	top_hud_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_hud_bar.offset_bottom = UIConstants.TOP_HUD_HEIGHT
-
-	# Connect top bar clicks to panels
-	top_hud_bar.money_clicked.connect(_on_money_clicked)
-	top_hud_bar.rating_clicked.connect(_toggle_course_rating_panel)
+	# Connect status clicks to panels
+	hud_status_column.money_clicked.connect(_on_money_clicked)
+	hud_status_column.rating_clicked.connect(_toggle_course_rating_panel)
 
 	# Add to HUD as first child
-	hud.add_child(top_hud_bar)
-	hud.move_child(top_hud_bar, 0)
-
-	# Create mode toggle button (Start Day / Stop & Edit)
-	build_mode_btn = Button.new()
-	build_mode_btn.name = "ModeToggleBtn"
-	build_mode_btn.text = "Start Day"
-	build_mode_btn.custom_minimum_size = Vector2(120, 34)
-	build_mode_btn.pressed.connect(_on_mode_toggle_pressed)
-	speed_controls.add_child(build_mode_btn)
-	speed_controls.move_child(build_mode_btn, 0)
+	hud.add_child(hud_status_column)
+	hud.move_child(hud_status_column, 0)
 
 func _setup_rain_overlay() -> void:
 	rain_overlay = RainOverlay.new()
@@ -734,9 +765,7 @@ func _setup_placement_preview() -> void:
 
 func _setup_bottom_bar() -> void:
 	"""Style the bottom bar with a dark background and visual separators."""
-	var bottom_bar = $UI/HUD/BottomBar
-
-	# Add a dark background panel behind the bottom bar
+	# Add a dark background panel behind the bottom bar (tall enough for the tabbed toolbar)
 	var bg = Panel.new()
 	bg.name = "BottomBarBG"
 	var style = StyleBoxFlat.new()
@@ -744,9 +773,9 @@ func _setup_bottom_bar() -> void:
 	style.border_width_top = 1
 	style.border_color = UIConstants.COLOR_BORDER
 	bg.add_theme_stylebox_override("panel", style)
-	# Position it exactly behind the BottomBar
+	# Position it exactly behind the BottomBar (view/speed controls + tabbed toolbar)
 	bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bg.offset_top = -60.0
+	bg.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Insert as sibling just before the bottom bar
 	var hud = $UI/HUD
@@ -756,124 +785,32 @@ func _setup_bottom_bar() -> void:
 	# Add padding to the bottom bar itself
 	bottom_bar.add_theme_constant_override("separation", 6)
 
-	# Add a separator after SpeedControls
+	# Style LeftControls (VBox containing RotateView above Speed) for tight stacking
+	if left_controls:
+		left_controls.add_theme_constant_override("separation", 2)
+		left_controls.alignment = BoxContainer.ALIGNMENT_CENTER
+	if rotate_view_controls:
+		rotate_view_controls.alignment = BoxContainer.ALIGNMENT_CENTER
+		rotate_view_controls.add_theme_constant_override("separation", 4)
+	if speed_controls:
+		speed_controls.alignment = BoxContainer.ALIGNMENT_CENTER
+		speed_controls.add_theme_constant_override("separation", 4)
+	if orientation_label:
+		orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+		orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+		orientation_label.add_theme_color_override("font_outline_color", Color.TRANSPARENT)
+
+	# Add a separator after LeftControls (which now contains both RotateView and Speed)
 	var sep = VSeparator.new()
-	sep.custom_minimum_size = Vector2(1, 28)
+	sep.custom_minimum_size = Vector2(1, 40)
 	sep.modulate = Color(1, 1, 1, 0.3)
 	bottom_bar.add_child(sep)
-	bottom_bar.move_child(sep, speed_controls.get_index() + 1)
+	# left_controls index determines separator position; fall back to speed_controls if missing
+	var sep_index = left_controls.get_index() + 1 if left_controls else speed_controls.get_index() + 1
+	bottom_bar.move_child(sep, sep_index)
 
-func _create_selection_indicator() -> void:
-	"""Create a label showing the currently selected tool/placement mode."""
-	var bottom_bar = $UI/HUD/BottomBar
-
-	# Create container with background
-	var container = PanelContainer.new()
-	container.name = "SelectionIndicator"
-
-	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_top", 2)
-	margin.add_theme_constant_override("margin_bottom", 2)
-	container.add_child(margin)
-
-	selection_label = Label.new()
-	selection_label.name = "SelectionLabel"
-	selection_label.text = "Selected: Fairway"
-	selection_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD_DIM)
-	margin.add_child(selection_label)
-
-	# Insert before the coordinate label (which is at the end)
-	bottom_bar.add_child(container)
-	var coord_index = coordinate_label.get_index()
-	bottom_bar.move_child(container, coord_index)
-
-func _update_selection_indicator() -> void:
-	"""Update the selection indicator based on current mode."""
-	if not selection_label:
-		return
-
-	var text = "Selected: "
-	var color = UIConstants.COLOR_GOLD_DIM
-
-	# Check null selector state first
-	if not _has_active_tool():
-		text += "None (press a tool key to select)"
-		color = UIConstants.COLOR_TEXT_DIM
-		selection_label.text = text
-		selection_label.add_theme_color_override("font_color", color)
-		return
-
-	# Check hole move modes first
-	if _hole_move_mode == HoleMoveMode.MOVING_PIN:
-		text += "Move Pin — Click green tile | ESC to cancel"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif _hole_move_mode == HoleMoveMode.MOVING_TEE:
-		text += "Move Tee — Click to place | ESC to cancel"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif _hole_move_mode == HoleMoveMode.MOVING_GREEN:
-		text += "Move Green — Click to place | ESC to cancel"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif _hole_move_mode == HoleMoveMode.MOVING_FORWARD_TEE:
-		text += "Move Forward Tee — Click to place | ESC to cancel"
-		color = Color(0.9, 0.3, 0.3)  # Red (forward tee color)
-	elif _hole_move_mode == HoleMoveMode.MOVING_MIDDLE_TEE:
-		text += "Move Middle Tee — Click to place | ESC to cancel"
-		color = Color(0.85, 0.85, 0.85)  # White (middle tee color)
-	# Check placement modes (they take priority)
-	elif hole_tool.placement_mode == HoleCreationTool.PlacementMode.PLACING_TEE:
-		text += "Place Tee Box"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif hole_tool.placement_mode == HoleCreationTool.PlacementMode.PLACING_GREEN:
-		text += "Place Green"
-		color = Color(0.5, 1.0, 0.5)  # Green
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.TREE:
-		text += "Tree (%s)" % selected_tree_type.capitalize()
-		color = Color(0.4, 0.8, 0.4)  # Forest green
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.ROCK:
-		text += "Rock (%s)" % selected_rock_size.capitalize()
-		color = Color(0.7, 0.7, 0.7)  # Gray
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.BUILDING:
-		var building_name = placement_manager.selected_building_type.capitalize().replace("_", " ")
-		text += "Building (%s)" % building_name
-		color = Color(0.8, 0.6, 0.4)  # Brown
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.DECORATION:
-		var dec_name = placement_manager.selected_decoration_data.get("name", placement_manager.selected_decoration_type.capitalize())
-		text += "Decoration (%s)" % dec_name
-		color = Color(0.9, 0.7, 0.5)  # Gold
-	elif bulldozer_mode:
-		text += "Bulldozer"
-		color = Color(1.0, 0.5, 0.3)  # Orange
-	elif elevation_tool.is_active():
-		if elevation_tool.elevation_mode == ElevationTool.ElevationMode.RAISING:
-			text += "Rolling hill" if elevation_tool.sculpted else "Raise Elevation"
-			color = Color(0.6, 0.8, 1.0)  # Light blue
-		else:
-			text += "Hollow" if elevation_tool.sculpted else "Lower Elevation"
-			color = Color(1.0, 0.6, 0.6)  # Light red
-	else:
-		# Default to terrain tool
-		text += TerrainTypes.get_type_name(current_tool)
-		# Color based on terrain type
-		match current_tool:
-			TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX:
-				color = Color(0.5, 0.9, 0.5)  # Green
-			TerrainTypes.Type.ROUGH:
-				color = Color(0.6, 0.8, 0.4)  # Darker green
-			TerrainTypes.Type.BUNKER:
-				color = Color(0.9, 0.85, 0.6)  # Sand
-			TerrainTypes.Type.WATER:
-				color = Color(0.4, 0.6, 1.0)  # Blue
-			TerrainTypes.Type.PATH:
-				color = Color(0.7, 0.7, 0.7)  # Gray
-			TerrainTypes.Type.OUT_OF_BOUNDS:
-				color = Color(0.9, 0.4, 0.4)  # Red
-			TerrainTypes.Type.FLOWER_BED:
-				color = Color(0.9, 0.5, 0.7)  # Pink
-
-	selection_label.text = text
-	selection_label.add_theme_color_override("font_color", color)
+	# Ensure BottomBar anchors match the configured height
+	bottom_bar.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
 
 func _toggle_panel(panel: CenteredPanel) -> void:
 	"""Toggle a panel with mutual exclusion — opening one closes the previous."""
@@ -887,22 +824,8 @@ func _toggle_panel(panel: CenteredPanel) -> void:
 	_active_panel = panel
 	panel.toggle()
 
-func _on_mode_toggle_pressed() -> void:
-	"""Start the day or end it early."""
-	if GameManager.current_mode == GameManager.GameMode.BUILDING:
-		# Start simulation
-		if GameManager.start_simulation():
-			# Don't spawn regular golfers during a tournament
-			if not tournament_manager.is_tournament_in_progress():
-				golfer_manager.spawn_initial_group()
-	elif GameManager.current_mode == GameManager.GameMode.SIMULATING:
-		# End the day early
-		if tournament_manager.is_tournament_in_progress():
-			tournament_manager.simulate_remaining_and_complete()
-		GameManager.force_end_day()
-
 func _update_ui() -> void:
-	# TopHUDBar now handles money/day/reputation/weather/wind updates via signals
+	# HUDStatusColumn now handles money/day/reputation/weather/wind updates via signals
 	# Only update button states here
 	_update_button_states()
 
@@ -923,50 +846,12 @@ func _update_button_states() -> void:
 	pause_btn.text = "||"
 	fast_btn.text = ">>"
 
-	if build_mode_btn:
-		build_mode_btn.visible = true
-		if GameManager.current_mode == GameManager.GameMode.BUILDING:
-			build_mode_btn.text = "Start Day"
-			build_mode_btn.modulate = Color(0.5, 1.0, 0.5)  # Green tint
-		else:
-			build_mode_btn.text = "End Day"
-			build_mode_btn.modulate = Color(1.0, 0.8, 0.4)  # Orange tint
-
 	# Highlight active speed button
 	pause_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.PAUSED else Color(1, 1, 1, 1)
 	play_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.NORMAL else Color(1, 1, 1, 1)
 	fast_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.FAST else Color(1, 1, 1, 1)
 	if ultra_btn:
 		ultra_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.ULTRA else Color(1, 1, 1, 1)
-
-func _handle_mouse_hover() -> void:
-	# Only show coordinates when a tool is active (reduces clutter)
-	if not _has_active_tool():
-		coordinate_label.text = ""
-		return
-
-	var mouse_world = camera.get_mouse_world_position()
-	var grid_pos = terrain_grid.screen_to_grid(mouse_world)
-	if terrain_grid.is_valid_position(grid_pos):
-		var terrain_name = TerrainTypes.get_type_name(terrain_grid.get_tile(grid_pos))
-		var tile_type = terrain_grid.get_tile(grid_pos)
-		if tile_type == TerrainTypes.Type.BUNKER:
-			var depth_name = "Deep" if terrain_grid.get_bunker_depth(grid_pos) == 1 else "Shallow"
-			terrain_name += " (%s)" % depth_name
-		var elevation = terrain_grid.get_elevation(grid_pos)
-		if elevation != 0:
-			var sign_str = "+" if elevation > 0 else ""
-			coordinate_label.text = "(%d, %d) %s [Elev: %s%d]" % [grid_pos.x, grid_pos.y, terrain_name, sign_str, elevation]
-		else:
-			coordinate_label.text = "(%d, %d) %s" % [grid_pos.x, grid_pos.y, terrain_name]
-		if elevation_tool.is_active():
-			# Sculpting edits corners, so report the vertex the brush is on.
-			var vertex = terrain_grid.nearest_vertex(terrain_grid.screen_to_grid_point(mouse_world))
-			var vertex_elev = terrain_grid.get_vertex_elevation(vertex)
-			var vertex_sign = "+" if vertex_elev > 0 else ""
-			coordinate_label.text += "  [Vertex (%d, %d): %s%d]" % [vertex.x, vertex.y, vertex_sign, vertex_elev]
-	else:
-		coordinate_label.text = ""
 
 func _start_painting() -> void:
 	# Handle hole move mode clicks first
@@ -1336,9 +1221,14 @@ func _sync_camera_bounds_to_view() -> void:
 	camera.bounds_max = bounds.end
 
 func _sync_view_controls() -> void:
-	if terrain_toolbar and terrain_grid:
-		terrain_toolbar.set_view_state(
-				terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
+	# Rotate view controls now live above SpeedControls in BottomBar; keep toolbar stub for compat.
+	if terrain_grid and orientation_label and iso_toggle_btn:
+		var orientation: int = terrain_grid.get_view_orientation()
+		orientation_label.text = VIEW_ORIENTATION_LABELS[wrapi(orientation, 0, VIEW_ORIENTATION_LABELS.size())]
+		iso_toggle_btn.set_pressed_no_signal(terrain_grid.is_view_isometric())
+	# Keep toolbar in sync if it still has the deprecated method
+	if terrain_toolbar and terrain_grid and terrain_toolbar.has_method("set_view_state"):
+		terrain_toolbar.set_view_state(terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
 
 func _on_create_hole_pressed() -> void:
 	# Cancel any building/tree placement, elevation, bulldozer, or terrain painting
@@ -1354,10 +1244,6 @@ func _on_create_hole_pressed() -> void:
 	hole_tool.start_tee_placement()
 
 func _on_speed_selected(speed: int) -> void:
-	# Speed buttons only work during simulation
-	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
-		return
-
 	GameManager.set_speed(speed)
 
 var _game_over_shown: bool = false
@@ -1375,35 +1261,40 @@ func _on_hole_created(hole_number: int, par: int, distance_yards: int) -> void:
 	StrokeIndexCalculator.recalculate_for_course()
 	var row = HBoxContainer.new()
 	row.name = "HoleRow%d" % hole_number
+	row.add_theme_constant_override("separation", 3)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 
 	# Make hole label a clickable button
 	var hole_btn = Button.new()
 	hole_btn.name = "HoleBtn"
-	hole_btn.text = "Hole %d: Par %d (%d yds)" % [hole_number, par, distance_yards]
-	hole_btn.flat = true
-	hole_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	hole_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hole_btn.text = "H%d: P%d (%d yds)" % [hole_number, par, distance_yards]
+	hole_btn.flat = false
+	hole_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hole_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	hole_btn.tooltip_text = "Click to view statistics"
+	hole_btn.tooltip_text = "Hole %d (Par %d, %d yds) - Click to view statistics" % [hole_number, par, distance_yards]
+	hole_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	hole_btn.custom_minimum_size = Vector2(0, 26)
 	hole_btn.pressed.connect(_show_hole_stats.bind(hole_number))
 	row.add_child(hole_btn)
 
 	var toggle_btn = Button.new()
 	toggle_btn.name = "ToggleBtn"
 	toggle_btn.text = "Open"
-	toggle_btn.custom_minimum_size = Vector2(55, 0)
+	toggle_btn.custom_minimum_size = Vector2(44, 26)
+	toggle_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	toggle_btn.pressed.connect(_on_hole_toggle_pressed.bind(hole_number))
 	row.add_child(toggle_btn)
 
 	var delete_btn = Button.new()
 	delete_btn.name = "DeleteBtn"
 	delete_btn.text = "X"
-	delete_btn.custom_minimum_size = Vector2(30, 0)
+	delete_btn.custom_minimum_size = Vector2(24, 26)
+	delete_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	delete_btn.pressed.connect(_on_hole_delete_pressed.bind(hole_number))
 	row.add_child(delete_btn)
 
 	hole_list.add_child(row)
-	_update_top_bar_rating()
+	_update_status_rating()
 
 func _on_hole_toggle_pressed(hole_number: int) -> void:
 	if not GameManager.current_course:
@@ -1413,10 +1304,6 @@ func _on_hole_toggle_pressed(hole_number: int) -> void:
 	EventBus.notify("Hole %d %s" % [hole_number, status], "info")
 
 func _on_hole_delete_pressed(hole_number: int) -> void:
-	# Don't allow deletion during simulation
-	if GameManager.current_mode == GameManager.GameMode.SIMULATING:
-		EventBus.notify("Cannot delete holes while playing!", "error")
-		return
 	hole_tool.delete_hole(hole_number)
 
 func _on_hole_deleted(hole_number: int) -> void:
@@ -1426,7 +1313,7 @@ func _on_hole_deleted(hole_number: int) -> void:
 		hole_list.get_node(row_name).queue_free()
 	# Rebuild the hole list to reflect renumbered holes
 	_rebuild_hole_list()
-	_update_top_bar_rating()
+	_update_status_rating()
 	StrokeIndexCalculator.recalculate_for_course()
 
 func _on_hole_toggled(hole_number: int, is_open: bool) -> void:
@@ -1884,6 +1771,20 @@ func _on_new_game_started() -> void:
 	# Remove loading screen
 	loading_overlay.queue_free()
 
+	# Day always starts automatically — ensure simulation is active even if a
+	# subclass previously cleared mode during generation.
+	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
+		GameManager.set_mode(GameManager.GameMode.SIMULATING)
+		GameManager.set_speed(GameManager.GameSpeed.NORMAL)
+
+	# Spawn initial golfers if the course already has playable holes (e.g. Quick
+	# Start / Prebuilt). Empty courses spawn naturally once the player builds.
+	if GameManager.get_open_hole_count() > 0 and not tournament_manager.is_tournament_in_progress():
+		# One frame so hole visualizations finish spawning before golfers query them.
+		await get_tree().process_frame
+		if is_inside_tree() and GameManager.current_mode == GameManager.GameMode.SIMULATING:
+			golfer_manager.spawn_initial_group()
+
 	# Start tutorial for first-time players (skip for Quick Start/Prebuilt — they already have a course)
 	if not is_quick_start and not is_prebuilt and not TutorialSystem.is_tutorial_completed():
 		_start_tutorial()
@@ -2259,7 +2160,6 @@ func _on_end_of_day(day_number: int) -> void:
 
 	# Connect signals BEFORE add_child (ready signal fires during add_child)
 	summary.continue_pressed.connect(_on_summary_continue)
-	summary.build_mode_pressed.connect(_on_summary_build_mode)
 
 	hud.add_child(summary)
 
@@ -2274,53 +2174,82 @@ func _on_summary_continue() -> void:
 	GameManager.is_paused = false
 	GameManager.advance_to_next_day()
 
-func _on_summary_build_mode() -> void:
-	"""Called when player clicks Return to Build Mode on the end of day summary."""
-	if tournament_leaderboard:
-		tournament_leaderboard.hide()
-	GameManager.is_paused = false
-	# Advance to next day first to reset day-cycle flags, then stop simulation
-	GameManager.advance_to_next_day()
-	GameManager.stop_simulation()
+# --- Menu / Save/Load ---
 
-# --- Save/Load ---
-
-func _create_save_load_button() -> void:
-	var bottom_bar = $UI/HUD/BottomBar
-
-	# Add separator before navigation buttons
-	var sep = VSeparator.new()
-	sep.custom_minimum_size = Vector2(1, 28)
-	sep.modulate = Color(1, 1, 1, 0.3)
-	bottom_bar.add_child(sep)
+func _create_menu_buttons() -> void:
+	"""Top row of the left control stack (above Rotate View): Menu button with a Map toggle beside it."""
+	var menu_row = HBoxContainer.new()
+	menu_row.name = "MenuControls"
+	menu_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	menu_row.add_theme_constant_override("separation", UIConstants.SEPARATION_MD)
 
 	var menu_btn = Button.new()
 	menu_btn.name = "MenuBtn"
 	menu_btn.text = "Menu"
+	menu_btn.tooltip_text = "Game menu (Esc)"
 	menu_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
+	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	menu_btn.pressed.connect(_on_menu_pressed)
-	bottom_bar.add_child(menu_btn)
+	menu_row.add_child(menu_btn)
 
-	# End Day functionality handled by ModeToggleBtn in SpeedControls
+	# Map toggle: stays pressed while the minimap is visible. Its state is synced from the
+	# minimap itself (see _setup_mini_map) so the Tab hotkey and menu transitions keep it accurate.
+	map_btn = Button.new()
+	map_btn.name = "MapBtn"
+	map_btn.text = "Map"
+	map_btn.tooltip_text = "Show / hide the minimap (Tab)"
+	map_btn.toggle_mode = true
+	map_btn.set_pressed_no_signal(true)  # Minimap starts visible
+	map_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
+	map_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_btn.toggled.connect(_on_map_toggled)
+	menu_row.add_child(map_btn)
 
-func _on_end_day_pressed() -> void:
-	if tournament_manager.is_tournament_in_progress():
-		tournament_manager.simulate_remaining_and_complete()
-	GameManager.force_end_day()
+	left_controls.add_child(menu_row)
+	left_controls.move_child(menu_row, 0)
 
 func _on_menu_pressed() -> void:
+	# Open the game menu (pause menu) overlay
+	_toggle_pause_menu()
+
+func _on_map_toggled(pressed: bool) -> void:
+	"""Map button: show or hide the minimap."""
+	if mini_map:
+		mini_map.visible = pressed
+
+func _sync_map_button() -> void:
+	"""Keep the Map button's pressed state matching the minimap's visibility."""
+	if map_btn and mini_map:
+		map_btn.set_pressed_no_signal(mini_map.visible)
+
+func _show_save_load_panel(from_pause_menu: bool = false) -> void:
 	# Toggle save/load panel
 	var hud = $UI/HUD
 	var existing = hud.get_node_or_null("SaveLoadPanel")
 	if existing:
 		existing.queue_free()
 		return
+	_just_loaded_game = false
 	var panel = SaveLoadPanel.new()
 	panel.name = "SaveLoadPanel"
 	panel.anchors_preset = Control.PRESET_CENTER
 	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	panel.quit_to_menu_requested.connect(_on_quit_to_menu)
+	if from_pause_menu:
+		panel.panel_closed.connect(_on_save_load_panel_closed_from_pause)
 	hud.add_child(panel)
+
+func _on_save_load_panel_closed_from_pause() -> void:
+	"""Called when the save/load panel (opened from the pause menu) closes."""
+	if _just_loaded_game:
+		# A game was just loaded — end the pause session and resume play.
+		_just_loaded_game = false
+		_hide_pause_menu()
+		_pause_session_active = false
+		GameManager.is_paused = false
+		return
+	# Backed out without loading — return to the pause menu (game stays paused).
+	_show_pause_menu()
 
 func _on_quit_to_menu() -> void:
 	# Return to main menu by reloading the scene
@@ -2328,10 +2257,11 @@ func _on_quit_to_menu() -> void:
 	GameManager.set_mode(GameManager.GameMode.MAIN_MENU)
 	get_tree().reload_current_scene()
 
-func _on_load_completed(_success: bool) -> void:
+func _on_load_completed(success: bool) -> void:
+	_just_loaded_game = success
 	_close_hole_context_menu()
 	_cancel_hole_move_mode()
-	if _success:
+	if success:
 		_game_over_shown = false
 		_rebuild_hole_list()
 		# Sync hole creation tool so the next hole gets the correct number
@@ -2450,7 +2380,6 @@ func _enter_hole_move_mode(mode: int, hole_data: GameManager.HoleData) -> void:
 	_hole_move_mode = mode
 	_hole_move_data = hole_data
 	hole_manager.highlight_hole(hole_data.hole_number, true)
-	_update_selection_indicator()
 	if placement_preview:
 		placement_preview.set_hole_move_mode(mode)
 
@@ -2461,7 +2390,6 @@ func _cancel_hole_move_mode() -> void:
 		hole_manager.highlight_hole(_hole_move_data.hole_number, false)
 	_hole_move_mode = HoleMoveMode.NONE
 	_hole_move_data = null
-	_update_selection_indicator()
 	if placement_preview:
 		placement_preview.set_hole_move_mode(HoleMoveMode.NONE)
 
@@ -2931,7 +2859,7 @@ func _setup_financial_panel() -> void:
 	hud.add_child(staff_panel)
 	staff_panel.hide()
 
-	# Note: Money click is now handled by TopHUDBar.money_clicked signal
+	# Note: Money click is now handled by HUDStatusColumn.money_clicked signal
 
 func _on_money_clicked() -> void:
 	## Toggle the financial panel when money is clicked.
@@ -2970,12 +2898,17 @@ func _setup_mini_map() -> void:
 	mini_map.anchor_top = 1
 	mini_map.anchor_right = 0
 	mini_map.anchor_bottom = 1
-	mini_map.offset_left = 10
-	mini_map.offset_top = -240  # Height + margin + space for bottom bar
-	mini_map.offset_right = 200  # Approximate width
-	mini_map.offset_bottom = -50  # Stay above bottom bar
+	mini_map.offset_left = 0
+	mini_map.offset_top = -(UIConstants.BOTTOM_BAR_HEIGHT  + 184)
+	mini_map.offset_right = 184
+	mini_map.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT)
+
+	# Mirror visibility into the Map button, whatever changed it (button, Tab hotkey,
+	# or the HUD being hidden/shown around the main menu).
+	mini_map.visibility_changed.connect(_sync_map_button)
 
 	hud.add_child(mini_map)
+	_sync_map_button()
 
 func _on_mini_map_camera_move(world_position: Vector2) -> void:
 	"""Move camera to the position clicked on mini-map."""
@@ -3057,15 +2990,6 @@ func _setup_tournament_panel() -> void:
 	hud.add_child(tournament_panel)
 	tournament_panel.setup(tournament_manager)
 
-	# Add tournament button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var tournament_btn = Button.new()
-	tournament_btn.name = "TournamentBtn"
-	tournament_btn.text = "Tournament"
-	tournament_btn.tooltip_text = "Host tournaments (U)"
-	tournament_btn.pressed.connect(_toggle_tournament_panel)
-	bottom_bar.add_child(tournament_btn)
-
 func _on_tournament_panel_closed() -> void:
 	"""Hide the tournament panel."""
 	tournament_panel.hide()
@@ -3098,15 +3022,6 @@ func _setup_land_panel() -> void:
 	land_panel.close_requested.connect(_on_land_panel_closed)
 	hud.add_child(land_panel)
 	land_panel.hide()
-
-	# Add land button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var land_btn = Button.new()
-	land_btn.name = "LandBtn"
-	land_btn.text = "Land"
-	land_btn.tooltip_text = "Buy land parcels (L)"
-	land_btn.pressed.connect(_toggle_land_panel)
-	bottom_bar.add_child(land_btn)
 
 func _on_land_panel_closed() -> void:
 	"""Hide the land panel."""
@@ -3146,15 +3061,6 @@ func _setup_marketing_panel() -> void:
 	marketing_panel.close_requested.connect(_on_marketing_panel_closed)
 	hud.add_child(marketing_panel)
 	marketing_panel.hide()
-
-	# Add marketing button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var marketing_btn = Button.new()
-	marketing_btn.name = "MarketingBtn"
-	marketing_btn.text = "Marketing"
-	marketing_btn.tooltip_text = "Marketing campaigns (M)"
-	marketing_btn.pressed.connect(_toggle_marketing_panel)
-	bottom_bar.add_child(marketing_btn)
 
 func _on_marketing_panel_closed() -> void:
 	"""Hide the marketing panel."""
@@ -3244,15 +3150,6 @@ func _toggle_analytics_panel() -> void:
 	if analytics_panel_ui:
 		_toggle_panel(analytics_panel_ui)
 
-# --- Audio Controls ---
-
-func _setup_audio_controls() -> void:
-	"""Add audio volume controls to the bottom bar."""
-	var bottom_bar = $UI/HUD/BottomBar
-	var audio_controls = AudioControls.new()
-	audio_controls.name = "AudioControls"
-	bottom_bar.add_child(audio_controls)
-
 # --- Golfer Info Popup ---
 
 func _setup_golfer_info_popup() -> void:
@@ -3286,7 +3183,19 @@ func _setup_round_summary_popup() -> void:
 
 func _on_golfer_round_for_summary(golfer_id: int, total_strokes: int, _total_par: int) -> void:
 	var golfer = golfer_manager.get_golfer(golfer_id)
-	if not golfer or golfer.is_owner_round:
+	if not golfer:
+		return
+	# Every completed round (owner included) feeds the toolbar's Golfers tab history
+	if terrain_toolbar:
+		terrain_toolbar.record_completed_round({
+			"name": golfer.golfer_name,
+			"strokes": total_strokes,
+			"par": golfer.total_par,
+			"day": GameManager.current_day,
+			"tier": golfer.golfer_tier,
+			"owner": golfer.is_owner_round,
+		})
+	if golfer.is_owner_round:
 		return
 	round_summary_popup.queue_notification({
 		"name": golfer.golfer_name,
@@ -3314,15 +3223,6 @@ func _setup_milestone_system() -> void:
 		_active_panel = null
 	)
 	$UI/HUD.add_child(milestones_panel)
-
-	# Add milestones button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var milestones_btn = Button.new()
-	milestones_btn.name = "MilestonesBtn"
-	milestones_btn.text = "Milestones"
-	milestones_btn.tooltip_text = "Goals & achievements (G)"
-	milestones_btn.pressed.connect(_toggle_milestones_panel)
-	bottom_bar.add_child(milestones_btn)
 
 	# Update SaveManager reference to include milestone manager
 	SaveManager.milestone_manager = milestone_manager
@@ -3358,15 +3258,6 @@ func _setup_course_scorecard_panel() -> void:
 		_active_panel = null
 	)
 	$UI/HUD.add_child(course_scorecard_panel)
-
-	# Add scorecard button to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var scorecard_btn = Button.new()
-	scorecard_btn.name = "ScorecardBtn"
-	scorecard_btn.text = "Scorecard"
-	scorecard_btn.tooltip_text = "Course scorecard (K)"
-	scorecard_btn.pressed.connect(_toggle_course_scorecard_panel)
-	bottom_bar.add_child(scorecard_btn)
 
 	# Refresh scorecard when holes, scores, or records change
 	EventBus.hole_created.connect(func(_num, _par, _dist):
@@ -3450,18 +3341,10 @@ func _setup_event_feed() -> void:
 			event_feed_panel.append_event(entry)
 	)
 
-	# Add feed button with inline unread badge to bottom bar
-	var bottom_bar = $UI/HUD/BottomBar
-	var feed_btn = Button.new()
-	feed_btn.name = "EventFeedBtn"
-	feed_btn.text = "Feed"
-	feed_btn.tooltip_text = "Event feed (N)"
-	feed_btn.pressed.connect(_toggle_event_feed)
-	bottom_bar.add_child(feed_btn)
-
+	# Surface the unread badge on the toolbar's Club tab Feed button
 	EventFeedManager.unread_count_changed.connect(func(count: int):
-		if feed_btn:
-			feed_btn.text = "Feed (%d)" % count if count > 0 else "Feed"
+		if terrain_toolbar:
+			terrain_toolbar.set_feed_unread(count)
 	)
 
 func _toggle_event_feed() -> void:
@@ -3496,7 +3379,7 @@ func _navigate_to_golfer_position(golfer_id: int) -> void:
 # --- Course Rating Overlay ---
 
 func _setup_course_rating_overlay() -> void:
-	"""Add course rating panel (toggled from top bar star rating)."""
+	"""Add course rating panel (toggled from the status column star rating)."""
 	course_rating_overlay = CourseRatingOverlay.new()
 	course_rating_overlay.name = "CourseRatingOverlay"
 	course_rating_overlay.close_requested.connect(func():
@@ -3505,26 +3388,26 @@ func _setup_course_rating_overlay() -> void:
 			_active_panel = null
 	)
 	course_rating_overlay.rating_updated.connect(func(stars: float):
-		if top_hud_bar:
-			top_hud_bar.update_rating(stars)
+		if hud_status_column:
+			hud_status_column.update_rating(stars)
 	)
 	$UI/HUD.add_child(course_rating_overlay)
 	course_rating_overlay.hide()
-	# Update top bar whenever course rating changes (end of day, etc.)
+	# Update the status column whenever course rating changes (end of day, etc.)
 	EventBus.course_rating_changed.connect(func(rating: Dictionary):
-		if top_hud_bar:
-			top_hud_bar.update_rating(rating.get("overall", 3.0))
+		if hud_status_column:
+			hud_status_column.update_rating(rating.get("overall", 3.0))
 	)
-	# Push initial rating to top bar (deferred so GameManager is ready)
-	_update_top_bar_rating.call_deferred()
+	# Push initial rating to the status column (deferred so GameManager is ready)
+	_update_status_rating.call_deferred()
 
 var _rating_retry_count: int = 0
 
-func _update_top_bar_rating() -> void:
-	if not GameManager.current_course or not GameManager.terrain_grid or not top_hud_bar:
+func _update_status_rating() -> void:
+	if not GameManager.current_course or not GameManager.terrain_grid or not hud_status_column:
 		if _rating_retry_count < 3:
 			_rating_retry_count += 1
-			get_tree().create_timer(0.5).timeout.connect(_update_top_bar_rating)
+			get_tree().create_timer(0.5).timeout.connect(_update_status_rating)
 		return
 	_rating_retry_count = 0
 	var rating := CourseRatingSystem.calculate_rating(
@@ -3536,7 +3419,7 @@ func _update_top_bar_rating() -> void:
 		GameManager.entity_layer
 	)
 	var stars: float = rating.get("overall", 3.0)
-	top_hud_bar.update_rating(stars)
+	hud_status_column.update_rating(stars)
 
 func _toggle_course_rating_panel() -> void:
 	_toggle_panel(course_rating_overlay)
@@ -3587,12 +3470,18 @@ func _show_pause_menu() -> void:
 		_active_panel.hide()
 		_active_panel = null
 
-	# Remember if game was already paused (e.g. end-of-day summary)
-	_was_paused_before_pause_menu = GameManager.is_paused
+	# Remember if the game was already paused before this pause session
+	# (e.g. end-of-day summary, pause button) so resume can restore it.
+	# The flag persists while the session bounces between the menu and its
+	# sub-panels (Save/Load, Settings), so it is only captured once.
+	if not _pause_session_active:
+		_was_paused_before_pause_menu = GameManager.is_paused
+		_pause_session_active = true
 	GameManager.is_paused = true
 
 	pause_menu = PauseMenu.new()
 	pause_menu.name = "PauseMenu"
+	pause_menu.camera = camera
 	pause_menu.resume_requested.connect(_on_pause_resume)
 	pause_menu.save_requested.connect(_on_pause_save)
 	pause_menu.load_requested.connect(_on_pause_load)
@@ -3601,11 +3490,16 @@ func _show_pause_menu() -> void:
 	pause_menu.quit_to_desktop_requested.connect(_on_pause_quit_to_desktop)
 	$UI/HUD.add_child(pause_menu)
 
-func _close_pause_menu() -> void:
-	"""Close the pause menu and restore prior pause state."""
+func _hide_pause_menu() -> void:
+	"""Hide the pause menu overlay without changing the game's pause state."""
 	if pause_menu:
 		pause_menu.queue_free()
 		pause_menu = null
+
+func _close_pause_menu() -> void:
+	"""Close the pause menu and restore prior pause state."""
+	_hide_pause_menu()
+	_pause_session_active = false
 	# Only unpause if the game wasn't already paused before we opened the menu
 	if not _was_paused_before_pause_menu:
 		GameManager.is_paused = false
@@ -3614,21 +3508,25 @@ func _on_pause_resume() -> void:
 	_close_pause_menu()
 
 func _on_pause_save() -> void:
-	_close_pause_menu()
-	_on_menu_pressed()
+	# Keep the game paused while the save/load panel is open
+	_hide_pause_menu()
+	_show_save_load_panel(true)
 
 func _on_pause_load() -> void:
-	_close_pause_menu()
-	_on_menu_pressed()
+	# Keep the game paused while the save/load panel is open
+	_hide_pause_menu()
+	_show_save_load_panel(true)
 
 func _on_pause_settings() -> void:
-	_close_pause_menu()
+	# Keep the game paused while the settings menu is open
+	_hide_pause_menu()
 	_show_settings_menu()
 
 func _show_settings_menu() -> void:
 	"""Show the settings menu overlay."""
 	var settings = SettingsMenu.new()
 	settings.name = "SettingsMenu"
+	settings.camera = camera
 	settings.close_requested.connect(func():
 		# Re-show pause menu when settings closes (if not from main menu)
 		if GameManager.current_mode != GameManager.GameMode.MAIN_MENU:
@@ -3680,7 +3578,7 @@ func _show_game_over() -> void:
 		game_over.queue_free()
 		_game_over_shown = false
 		GameManager.is_paused = false
-		_on_menu_pressed()
+		_show_save_load_panel()
 	)
 	game_over.quit_to_menu_requested.connect(func():
 		game_over.queue_free()

@@ -1,6 +1,20 @@
 extends PanelContainer
 class_name TerrainToolbar
-## TerrainToolbar - Redesigned build tools panel with icon+label buttons and rich tooltips
+## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
+##
+## Nine tabs:
+##  - Course Terrain: terrain painting, hazards, create hole, bulldozer, brush size
+##  - Improvements:   objects (trees, rocks, paths, flowers) and decorations
+##  - Buildings:      amenity buildings catalogue
+##  - Elevation:      sculpting controls and brush size
+##  - Holes:          course holes list (rows are filled by main.gd)
+##  - Golfers:        who is on the course and recent rounds
+##  - Player:         play the course, tournaments, player skills
+##  - Club:           land, marketing, milestones, feed, scorecard
+##  - Staff:          staff management
+##
+## Content within tabs is laid out horizontally and scrolls horizontally when
+## overflowing the available tab width.
 
 signal tool_selected(tool_type: int)
 signal create_hole_pressed
@@ -15,287 +29,508 @@ signal bulldozer_pressed
 signal staff_pressed
 signal brush_size_changed(new_size: int)
 signal green_preset_selected(preset_name: String)
-## View controls (SimGolf-style course rotation).
-signal view_rotate_cw_pressed
-signal view_rotate_ccw_pressed
-signal view_isometric_toggled(enabled: bool)
+signal play_course_pressed
+signal tournaments_pressed
+signal land_pressed
+signal marketing_pressed
+signal milestones_pressed
+signal feed_pressed
+signal scorecard_pressed
+signal golfer_row_clicked(golfer_id: int)
 
-var _current_tool: int = TerrainTypes.Type.FAIRWAY
+enum Tab { TERRAIN, IMPROVEMENTS, BUILDINGS, ELEVATION, HOLES, GOLFERS, PLAYER, CLUB, STAFF }
+
+const TAB_TITLES := {
+	Tab.TERRAIN: "Terrain",
+	Tab.IMPROVEMENTS: "Improve",
+	Tab.BUILDINGS: "Build",
+	Tab.ELEVATION: "Elev",
+	Tab.HOLES: "Holes",
+	Tab.GOLFERS: "Golfers",
+	Tab.PLAYER: "Player",
+	Tab.CLUB: "Club",
+	Tab.STAFF: "Staff",
+}
+
+const TAB_TOOLTIPS := {
+	Tab.TERRAIN: "Course Terrain",
+	Tab.IMPROVEMENTS: "Improvements",
+	Tab.BUILDINGS: "Buildings",
+	Tab.ELEVATION: "Elevation",
+	Tab.HOLES: "Course Holes",
+	Tab.GOLFERS: "Golfers",
+	Tab.PLAYER: "Player",
+	Tab.CLUB: "Club",
+	Tab.STAFF: "Staff",
+}
+
+const TOOL_TAB_MAP := {
+	TerrainTypes.Type.FAIRWAY: Tab.TERRAIN,
+	TerrainTypes.Type.ROUGH: Tab.TERRAIN,
+	TerrainTypes.Type.GREEN: Tab.TERRAIN,
+	TerrainTypes.Type.TEE_BOX: Tab.TERRAIN,
+	TerrainTypes.Type.BUNKER: Tab.TERRAIN,
+	TerrainTypes.Type.WATER: Tab.TERRAIN,
+	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
+	"create_hole": Tab.TERRAIN,
+	"bulldozer": Tab.TERRAIN,
+	"tree": Tab.IMPROVEMENTS,
+	"rock": Tab.IMPROVEMENTS,
+	TerrainTypes.Type.PATH: Tab.IMPROVEMENTS,
+	TerrainTypes.Type.FLOWER_BED: Tab.IMPROVEMENTS,
+	"decoration": Tab.IMPROVEMENTS,
+	"building": Tab.BUILDINGS,
+	"mound": Tab.ELEVATION,
+	"hollow": Tab.ELEVATION,
+	"raise": Tab.ELEVATION,
+	"lower": Tab.ELEVATION,
+	"play_course": Tab.PLAYER,
+	"tournaments": Tab.PLAYER,
+	"land": Tab.CLUB,
+	"marketing": Tab.CLUB,
+	"milestones": Tab.CLUB,
+	"feed": Tab.CLUB,
+	"scorecard": Tab.CLUB,
+	"staff": Tab.STAFF,
+}
+
+const TOOL_ROW_HEIGHT := 30
+const MAX_RECENT_ROUNDS := 30
+const BRUSH_SIZES := [1, 3, 5, 7, 9]
+
+var hole_list: HBoxContainer = null  # Course holes rows (filled by main.gd)
+var golfer_data_provider: Callable = Callable()  # -> Array of golfer row dicts
+
+var _current_tool: int = -1
 var _tool_buttons: Dictionary = {}  # tool_type -> ToolButton
-var _sections: Dictionary = {}  # section_name -> { header: Button, content: VBoxContainer }
-var _scroll_container: ScrollContainer
-var _content_vbox: VBoxContainer
+var _tab_bar: TabBar = null
+var _pages: Array[ScrollContainer] = []
 var _brush_size: int = 1
-var _brush_label: Label = null
-var _green_preset_row: HBoxContainer = null
+var _brush_labels: Array[Label] = []
+var _green_preset_group: VBoxContainer = null
 var _green_preset_buttons: Dictionary = {}  # preset_name -> Button
 var _active_green_preset: String = ""
-var _rotate_cw_btn: Button = null
-var _rotate_ccw_btn: Button = null
-var _iso_toggle_btn: Button = null
-var _view_orientation_label: Label = null
-const ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
-const BRUSH_SIZES = [1, 3, 5, 7, 9]
-
-const TOOL_SECTIONS = {
-	"Course Terrain": {
-		"icon": "[=]",
-		"tools": [
-			{"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "icon": "[=]", "hotkey": "1", "desc": "Mowed playing surface for approach shots"},
-			{"type": TerrainTypes.Type.ROUGH, "name": "Rough", "icon": "[~]", "hotkey": "2", "desc": "Longer grass bordering fairways"},
-			{"type": TerrainTypes.Type.GREEN, "name": "Green", "icon": "[O]", "hotkey": "3", "desc": "Putting surface around the hole"},
-			{"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "icon": "[T]", "hotkey": "4", "desc": "Starting area for each hole"},
-		]
-	},
-	"Hazards": {
-		"icon": "[!]",
-		"tools": [
-			{"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "icon": "[:]", "hotkey": "5", "desc": "Sand trap hazard"},
-			{"type": TerrainTypes.Type.WATER, "name": "Water", "icon": "[w]", "hotkey": "6", "desc": "Water hazard with penalty"},
-			{"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "icon": "[X]", "hotkey": "7", "desc": "Boundary area with stroke penalty"},
-		]
-	},
-	"Objects & Decor": {
-		"icon": "[.]",
-		"tools": [
-			{"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"},
-			{"type": "tree", "name": "Trees", "icon": "[^]", "hotkey": "T", "desc": "Adds beauty and obstacles"},
-			{"type": "rock", "name": "Rocks", "icon": "[*]", "hotkey": "R", "desc": "Decorative rock formations"},
-			{"type": TerrainTypes.Type.FLOWER_BED, "name": "Flower Bed", "icon": "[f]", "hotkey": "F", "desc": "Colorful landscaping"},
-			{"type": "building", "name": "Buildings", "icon": "[B]", "hotkey": "B", "desc": "Place amenity buildings"},
-			{"type": "decoration", "name": "Decorations", "icon": "[✦]", "hotkey": "O", "desc": "Aesthetic decorations for course rating"},
-			{"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"},
-		]
-	},
-	"Elevation": {
-		"icon": "[E]",
-		"tools": [
-			{"type": "mound", "name": "Rolling hill", "icon": "∩", "hotkey": "", "desc": "Sculpt a rounded hill with gently tapering slopes"},
-			{"type": "hollow", "name": "Hollow", "icon": "∪", "hotkey": "", "desc": "Carve a soft valley; preserves water, paths, and buildings"},
-			{"type": "raise", "name": "Raise", "icon": "[+]", "hotkey": "+", "desc": "Raise terrain elevation"},
-			{"type": "lower", "name": "Lower", "icon": "[-]", "hotkey": "-", "desc": "Lower terrain elevation"},
-		]
-	},
-	"Course": {
-		"icon": "[H]",
-		"tools": [
-			{"type": "create_hole", "name": "Create Hole", "icon": "[H]", "hotkey": "H", "desc": "Define tee box, green, and flag"},
-			{"type": "staff", "name": "Staff", "icon": "[P]", "hotkey": "P", "desc": "Manage course maintenance staff"},
-		]
-	},
-}
+var _active_golfers_box: HBoxContainer = null
+var _recent_rounds_box: HBoxContainer = null
+var _recent_rounds: Array[Dictionary] = []
+var _skill_labels: Array[Label] = []
+var _player_points_label: Label = null
+var _feed_button: Button = null
+var _feed_unread: int = 0
+var _refresh_timer: Timer = null
 
 func _ready() -> void:
 	_build_ui()
 
 func _build_ui() -> void:
-	# Apply panel style
+	# Panel style — docked flush into the bottom bar corner
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = UIConstants.COLOR_BG_PANEL
-	panel_style.corner_radius_top_left = 8
-	panel_style.corner_radius_top_right = 8
-	panel_style.corner_radius_bottom_right = 8
-	panel_style.corner_radius_bottom_left = 8
-	panel_style.content_margin_left = 8
-	panel_style.content_margin_right = 8
-	panel_style.content_margin_top = 8
-	panel_style.content_margin_bottom = 8
+	panel_style.corner_radius_top_left = 6
+	panel_style.corner_radius_top_right = 6
+	panel_style.corner_radius_bottom_right = 0
+	panel_style.corner_radius_bottom_left = 0
+	panel_style.content_margin_left = 0
+	panel_style.content_margin_right = 0
+	panel_style.content_margin_top = 2
+	panel_style.content_margin_bottom = 2
 	panel_style.border_width_left = 1
 	panel_style.border_width_top = 1
 	panel_style.border_width_right = 1
-	panel_style.border_width_bottom = 1
+	panel_style.border_width_bottom = 0
 	panel_style.border_color = UIConstants.COLOR_BORDER
 	add_theme_stylebox_override("panel", panel_style)
 
-	# Wider panel for better readability
-	custom_minimum_size = Vector2(260, 500)
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	custom_minimum_size = Vector2(300, 0)
 
-	# Main container
 	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
+	main_vbox.add_theme_constant_override("separation", 2)
 	main_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(main_vbox)
 
-	# Title
-	var title = Label.new()
-	title.text = "Course designer"
-	title.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_LG)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	main_vbox.add_child(title)
+	_build_tab_bar(main_vbox)
 
-	# Subtitle hint
-	var subtitle = Label.new()
-	subtitle.text = "Shape your course   ·   F1 for help"
-	subtitle.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	subtitle.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	main_vbox.add_child(subtitle)
+	var pages_container = PanelContainer.new()
+	var pages_style = StyleBoxEmpty.new()
+	pages_container.add_theme_stylebox_override("panel", pages_style)
+	pages_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pages_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(pages_container)
 
-	# Brush size control
-	var brush_row = HBoxContainer.new()
-	brush_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	brush_row.add_theme_constant_override("separation", 6)
+	# Build one horizontally-scrollable page per tab
+	for tab_index in TAB_TITLES.size():
+		var page = _build_page(tab_index)
+		page.visible = (tab_index == Tab.TERRAIN)
+		pages_container.add_child(page)
+		_pages.append(page)
 
-	var brush_title = Label.new()
-	brush_title.text = "Brush:"
-	brush_title.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	brush_title.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-	brush_row.add_child(brush_title)
+	_build_refresh_timer()
 
-	var brush_decrease = Button.new()
-	brush_decrease.text = "-"
-	brush_decrease.custom_minimum_size = Vector2(26, 26)
-	brush_decrease.pressed.connect(_on_brush_decrease)
-	brush_row.add_child(brush_decrease)
+func _build_tab_bar(parent: VBoxContainer) -> void:
+	_tab_bar = TabBar.new()
+	_tab_bar.focus_mode = Control.FOCUS_NONE
+	_tab_bar.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	_tab_bar.scrolling_enabled = true
+	_tab_bar.tab_alignment = TabBar.ALIGNMENT_LEFT
+	_tab_bar.custom_minimum_size = Vector2(0, 24)
 
-	_brush_label = Label.new()
-	_brush_label.text = "1x1"
-	_brush_label.custom_minimum_size = Vector2(36, 0)
-	_brush_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_brush_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	_brush_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
-	brush_row.add_child(_brush_label)
+	# Compact tab styles
+	var tab_selected = StyleBoxFlat.new()
+	tab_selected.bg_color = UIConstants.COLOR_PRIMARY
+	tab_selected.corner_radius_top_left = 4
+	tab_selected.corner_radius_top_right = 4
+	tab_selected.content_margin_left = 8
+	tab_selected.content_margin_right = 8
+	tab_selected.content_margin_top = 2
+	tab_selected.content_margin_bottom = 2
+	tab_selected.border_width_bottom = 2
+	tab_selected.border_color = UIConstants.COLOR_GOLD
 
-	var brush_increase = Button.new()
-	brush_increase.text = "+"
-	brush_increase.custom_minimum_size = Vector2(26, 26)
-	brush_increase.pressed.connect(_on_brush_increase)
-	brush_row.add_child(brush_increase)
+	var tab_unselected = StyleBoxFlat.new()
+	tab_unselected.bg_color = UIConstants.COLOR_BG_BUTTON
+	tab_unselected.corner_radius_top_left = 4
+	tab_unselected.corner_radius_top_right = 4
+	tab_unselected.content_margin_left = 8
+	tab_unselected.content_margin_right = 8
+	tab_unselected.content_margin_top = 2
+	tab_unselected.content_margin_bottom = 2
+	tab_unselected.border_width_bottom = 2
+	tab_unselected.border_color = UIConstants.COLOR_BORDER
 
-	main_vbox.add_child(brush_row)
+	var tab_panel = StyleBoxFlat.new()
+	tab_panel.bg_color = Color(UIConstants.COLOR_BG_DARK, 0.0)
+	tab_panel.content_margin_top = 0
+	tab_panel.content_margin_bottom = 0
 
-	var view_row = HBoxContainer.new()
-	view_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	view_row.add_theme_constant_override("separation", 6)
+	_tab_bar.add_theme_stylebox_override("tab_selected", tab_selected)
+	_tab_bar.add_theme_stylebox_override("tab_unselected", tab_unselected)
+	_tab_bar.add_theme_stylebox_override("tab_hovered", tab_selected)
+	_tab_bar.add_theme_stylebox_override("panel", tab_panel)
+	_tab_bar.add_theme_color_override("font_selected_color", UIConstants.COLOR_TEXT)
+	_tab_bar.add_theme_color_override("font_unselected_color", UIConstants.COLOR_TEXT_DIM)
+	_tab_bar.add_theme_color_override("font_hovered_color", UIConstants.COLOR_TEXT)
 
-	var view_title = Label.new()
-	view_title.text = "View:"
-	view_title.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	view_title.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-	view_row.add_child(view_title)
+	for tab_index in TAB_TITLES.size():
+		_tab_bar.add_tab(TAB_TITLES[tab_index])
+		_tab_bar.set_tab_tooltip(tab_index, TAB_TOOLTIPS[tab_index])
 
-	_rotate_ccw_btn = Button.new()
-	_rotate_ccw_btn.text = "⟲"
-	_rotate_ccw_btn.custom_minimum_size = Vector2(30, 26)
-	_rotate_ccw_btn.tooltip_text = "Rotate course counter-clockwise (Q)"
-	_rotate_ccw_btn.pressed.connect(_on_rotate_ccw_pressed)
-	view_row.add_child(_rotate_ccw_btn)
+	_tab_bar.tab_changed.connect(_on_tab_changed)
+	parent.add_child(_tab_bar)
 
-	_view_orientation_label = Label.new()
-	_view_orientation_label.text = "N"
-	_view_orientation_label.custom_minimum_size = Vector2(20, 0)
-	_view_orientation_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_view_orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	_view_orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
-	_view_orientation_label.tooltip_text = "Which way the course is facing"
-	view_row.add_child(_view_orientation_label)
+func _build_page(tab_index: int) -> ScrollContainer:
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.gui_input.connect(_on_scroll_gui_input.bind(scroll))
 
-	_rotate_cw_btn = Button.new()
-	_rotate_cw_btn.text = "⟳"
-	_rotate_cw_btn.custom_minimum_size = Vector2(30, 26)
-	_rotate_cw_btn.tooltip_text = "Rotate course clockwise (Shift+Q)"
-	_rotate_cw_btn.pressed.connect(_on_rotate_cw_pressed)
-	view_row.add_child(_rotate_cw_btn)
+	var h_bar = scroll.get_h_scroll_bar()
+	if h_bar:
+		h_bar.custom_minimum_size = Vector2(0, 4)
 
-	_iso_toggle_btn = Button.new()
-	_iso_toggle_btn.text = "Iso"
-	_iso_toggle_btn.toggle_mode = true
-	_iso_toggle_btn.button_pressed = true
-	_iso_toggle_btn.custom_minimum_size = Vector2(46, 26)
-	_iso_toggle_btn.tooltip_text = "Toggle isometric diamonds / top-down squares (I)"
-	_iso_toggle_btn.pressed.connect(_on_iso_toggle_pressed)
-	view_row.add_child(_iso_toggle_btn)
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.alignment = BoxContainer.ALIGNMENT_BEGIN
+	scroll.add_child(hbox)
 
-	main_vbox.add_child(view_row)
+	match tab_index:
+		Tab.TERRAIN:
+			_build_terrain_tab(hbox)
+		Tab.IMPROVEMENTS:
+			_build_improvements_tab(hbox)
+		Tab.BUILDINGS:
+			_build_buildings_tab(hbox)
+		Tab.ELEVATION:
+			_build_elevation_tab(hbox)
+		Tab.HOLES:
+			_build_holes_tab(hbox)
+		Tab.GOLFERS:
+			_build_golfers_tab(hbox)
+		Tab.PLAYER:
+			_build_player_tab(hbox)
+		Tab.CLUB:
+			_build_club_tab(hbox)
+		Tab.STAFF:
+			_build_staff_tab(hbox)
 
-	# Green preset row (hidden until GREEN tool selected)
-	_green_preset_row = HBoxContainer.new()
-	_green_preset_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_green_preset_row.add_theme_constant_override("separation", 4)
-	_green_preset_row.visible = false
+	return scroll
 
-	var preset_title = Label.new()
-	preset_title.text = "Green:"
-	preset_title.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	preset_title.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-	_green_preset_row.add_child(preset_title)
+func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			scroll.scroll_horizontal = maxi(0, scroll.scroll_horizontal - 50)
+			scroll.accept_event()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			scroll.scroll_horizontal += 50
+			scroll.accept_event()
 
-	for preset_name in ["small", "medium", "large"]:
-		var preset_btn = Button.new()
-		preset_btn.text = preset_name.substr(0, 1).to_upper()
-		preset_btn.tooltip_text = "%s green (%d tiles)" % [preset_name.capitalize(), TerrainGrid.GREEN_PRESETS[preset_name].size()]
-		preset_btn.custom_minimum_size = Vector2(30, 26)
-		preset_btn.pressed.connect(_on_green_preset_pressed.bind(preset_name))
-		_green_preset_row.add_child(preset_btn)
-		_green_preset_buttons[preset_name] = preset_btn
+# =============================================================================
+# Tab Builders (Horizontal Layouts)
+# =============================================================================
 
-	main_vbox.add_child(_green_preset_row)
+func _build_terrain_tab(hbox: HBoxContainer) -> void:
+	var surf_box = HBoxContainer.new()
+	surf_box.add_theme_constant_override("separation", 4)
+	surf_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "icon": "[=]", "hotkey": "1", "desc": "Mowed playing surface for approach shots"})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "icon": "[~]", "hotkey": "2", "desc": "Longer grass bordering fairways"})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.GREEN, "name": "Green", "icon": "[O]", "hotkey": "3", "desc": "Putting surface around the hole"})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "icon": "[T]", "hotkey": "4", "desc": "Starting area for each hole"})
+	hbox.add_child(_make_tab_group("SURFACES", surf_box))
 
-	main_vbox.add_child(HSeparator.new())
+	hbox.add_child(_make_separator())
 
-	# Scroll container for tools
-	_scroll_container = ScrollContainer.new()
-	_scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	main_vbox.add_child(_scroll_container)
+	var haz_box = HBoxContainer.new()
+	haz_box.add_theme_constant_override("separation", 4)
+	haz_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(haz_box, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "icon": "[:]", "hotkey": "5", "desc": "Sand trap hazard"})
+	_add_tool_button(haz_box, {"type": TerrainTypes.Type.WATER, "name": "Water", "icon": "[w]", "hotkey": "6", "desc": "Water hazard with penalty"})
+	_add_tool_button(haz_box, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "icon": "[X]", "hotkey": "7", "desc": "Boundary area with stroke penalty"})
+	_add_tool_button(haz_box, {"type": "create_hole", "name": "Create Hole", "icon": "[H]", "hotkey": "H", "desc": "Define tee box, green, and flag"})
+	_add_tool_button(haz_box, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"})
+	hbox.add_child(_make_tab_group("HAZARDS & TOOLS", haz_box))
 
-	_content_vbox = VBoxContainer.new()
-	_content_vbox.add_theme_constant_override("separation", UIConstants.SEPARATION_MD)
-	_content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_content_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll_container.add_child(_content_vbox)
+	hbox.add_child(_make_separator())
 
-	# Create each section (collapsed by default)
-	for section_name in TOOL_SECTIONS.keys():
-		_create_section(section_name, TOOL_SECTIONS[section_name], section_name not in ["Course Terrain", "Hazards"])
+	hbox.add_child(_make_brush_group())
 
-func _create_section(section_name: String, section_data: Dictionary, start_collapsed: bool = false) -> void:
-	var section_vbox = VBoxContainer.new()
-	section_vbox.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
-	_content_vbox.add_child(section_vbox)
+	hbox.add_child(_make_green_presets_group())
 
-	# Section header (clickable to expand/collapse)
-	var header_btn = Button.new()
-	var prefix = "> " if start_collapsed else "v "
-	header_btn.text = "%s %s" % [prefix, section_name]
-	header_btn.flat = true
-	header_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	header_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_MD)
-	header_btn.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-	header_btn.custom_minimum_size = Vector2(0, 32)
-	section_vbox.add_child(header_btn)
+func _build_improvements_tab(hbox: HBoxContainer) -> void:
+	var obj_box = HBoxContainer.new()
+	obj_box.add_theme_constant_override("separation", 4)
+	obj_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(obj_box, {"type": "tree", "name": "Trees", "icon": "[^]", "hotkey": "T", "desc": "Adds beauty and obstacles"})
+	_add_tool_button(obj_box, {"type": "rock", "name": "Rocks", "icon": "[*]", "hotkey": "R", "desc": "Decorative rock formations"})
+	_add_tool_button(obj_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"})
+	_add_tool_button(obj_box, {"type": TerrainTypes.Type.FLOWER_BED, "name": "Flower Bed", "icon": "[f]", "hotkey": "F", "desc": "Colorful landscaping"})
+	hbox.add_child(_make_tab_group("OBJECTS", obj_box))
 
-	# Section content container
-	var content = VBoxContainer.new()
-	content.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
-	content.visible = not start_collapsed  # Start collapsed if specified
-	section_vbox.add_child(content)
+	hbox.add_child(_make_separator())
 
-	# Store references
-	_sections[section_name] = {
-		"header": header_btn,
-		"content": content,
-		"collapsed": start_collapsed
-	}
+	var dec_box = HBoxContainer.new()
+	dec_box.add_theme_constant_override("separation", 4)
+	dec_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(dec_box, {"type": "decoration", "name": "Decorations", "icon": "[✦]", "hotkey": "O", "desc": "Aesthetic decorations for course rating"})
+	hbox.add_child(_make_tab_group("DECORATIONS", dec_box))
 
-	# Connect header click to toggle
-	header_btn.pressed.connect(_toggle_section.bind(section_name))
+	hbox.add_child(_make_separator())
 
-	# Create tool buttons
-	for tool_data in section_data["tools"]:
-		_create_tool_button(content, tool_data)
+	hbox.add_child(_make_tip_label("Decorations, trees & flower beds raise course aesthetics and golfer mood."))
 
-func _create_tool_button(parent: VBoxContainer, tool_data: Dictionary) -> void:
-	var tool_type = tool_data["type"]
-	var tool_name = tool_data["name"]
-	var tool_icon = tool_data.get("icon", "")
-	var hotkey = tool_data.get("hotkey", "")
-	var description = tool_data.get("desc", "")
+func _build_buildings_tab(hbox: HBoxContainer) -> void:
+	var bld_box = HBoxContainer.new()
+	bld_box.add_theme_constant_override("separation", 4)
+	bld_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(bld_box, {"type": "building", "name": "Buildings Catalogue", "icon": "[B]", "hotkey": "B", "desc": "Place amenity buildings"})
+	hbox.add_child(_make_tab_group("FACILITIES", bld_box))
 
-	# Get cost and maintenance
+	hbox.add_child(_make_separator())
+
+	hbox.add_child(_make_tip_label("Place clubhouses, pro shops, restaurants and restrooms to satisfy golfer needs."))
+
+func _build_elevation_tab(hbox: HBoxContainer) -> void:
+	var sculpt_box = HBoxContainer.new()
+	sculpt_box.add_theme_constant_override("separation", 4)
+	sculpt_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(sculpt_box, {"type": "mound", "name": "Rolling Hill", "icon": "∩", "hotkey": "", "desc": "Sculpt a rounded hill with gently tapering slopes"})
+	_add_tool_button(sculpt_box, {"type": "hollow", "name": "Hollow", "icon": "∪", "hotkey": "", "desc": "Carve a soft valley; preserves water, paths, and buildings"})
+	hbox.add_child(_make_tab_group("SCULPT", sculpt_box))
+
+	hbox.add_child(_make_separator())
+
+	var step_box = HBoxContainer.new()
+	step_box.add_theme_constant_override("separation", 4)
+	step_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(step_box, {"type": "raise", "name": "Raise", "icon": "[+]", "hotkey": "+", "desc": "Raise terrain elevation"})
+	_add_tool_button(step_box, {"type": "lower", "name": "Lower", "icon": "[-]", "hotkey": "-", "desc": "Lower terrain elevation"})
+	hbox.add_child(_make_tab_group("STEP", step_box))
+
+	hbox.add_child(_make_separator())
+
+	hbox.add_child(_make_brush_group())
+
+func _build_holes_tab(hbox: HBoxContainer) -> void:
+	var actions_box = HBoxContainer.new()
+	actions_box.add_theme_constant_override("separation", 4)
+	actions_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(actions_box, {"type": "create_hole", "name": "Create Hole", "icon": "[H]", "hotkey": "H", "desc": "Define tee box, green, and flag"})
+	hbox.add_child(_make_tab_group("ACTIONS", actions_box))
+
+	hbox.add_child(_make_separator())
+
+	var holes_group = VBoxContainer.new()
+	holes_group.add_theme_constant_override("separation", 2)
+	holes_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	holes_group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var lbl = Label.new()
+	lbl.text = "COURSE HOLES"
+	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	holes_group.add_child(lbl)
+
+	hole_list = HBoxContainer.new()
+	hole_list.name = "HoleList"
+	hole_list.add_theme_constant_override("separation", 6)
+	hole_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hole_list.alignment = BoxContainer.ALIGNMENT_BEGIN
+	holes_group.add_child(hole_list)
+
+	hbox.add_child(holes_group)
+
+func _build_golfers_tab(hbox: HBoxContainer) -> void:
+	var on_course_group = VBoxContainer.new()
+	on_course_group.add_theme_constant_override("separation", 2)
+	on_course_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var lbl1 = Label.new()
+	lbl1.text = "ON THE COURSE"
+	lbl1.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl1.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	on_course_group.add_child(lbl1)
+
+	_active_golfers_box = HBoxContainer.new()
+	_active_golfers_box.add_theme_constant_override("separation", 4)
+	_active_golfers_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_active_golfers_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	on_course_group.add_child(_active_golfers_box)
+	hbox.add_child(on_course_group)
+
+	hbox.add_child(_make_separator())
+
+	var recent_group = VBoxContainer.new()
+	recent_group.add_theme_constant_override("separation", 2)
+	recent_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var lbl2 = Label.new()
+	lbl2.text = "RECENT ROUNDS"
+	lbl2.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl2.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	recent_group.add_child(lbl2)
+
+	_recent_rounds_box = HBoxContainer.new()
+	_recent_rounds_box.add_theme_constant_override("separation", 6)
+	_recent_rounds_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_recent_rounds_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	recent_group.add_child(_recent_rounds_box)
+	hbox.add_child(recent_group)
+
+func _build_player_tab(hbox: HBoxContainer) -> void:
+	var actions_box = HBoxContainer.new()
+	actions_box.add_theme_constant_override("separation", 4)
+	actions_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(actions_box, {"type": "play_course", "name": "Play Course", "icon": "▶", "hotkey": "", "desc": "Grab your clubs and play a round on your own course"})
+	_add_tool_button(actions_box, {"type": "tournaments", "name": "Tournaments", "icon": "[U]", "hotkey": "U", "desc": "Host tournaments to earn prestige and revenue"})
+	hbox.add_child(_make_tab_group("ACTIONS", actions_box))
+
+	hbox.add_child(_make_separator())
+
+	var skills_box = HBoxContainer.new()
+	skills_box.add_theme_constant_override("separation", 8)
+	skills_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	skills_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_skill_labels.clear()
+	for i in PlayerGolferProfile.SKILLS.size():
+		var label = Label.new()
+		label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+		label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+		skills_box.add_child(label)
+		_skill_labels.append(label)
+	hbox.add_child(_make_tab_group("OWNER SKILLS", skills_box))
+
+	hbox.add_child(_make_separator())
+
+	var points_box = HBoxContainer.new()
+	points_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	points_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_player_points_label = Label.new()
+	_player_points_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	_player_points_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+	points_box.add_child(_player_points_label)
+	hbox.add_child(_make_tab_group("POINTS", points_box))
+
+	_refresh_player_skills()
+
+func _build_club_tab(hbox: HBoxContainer) -> void:
+	var ops_box = HBoxContainer.new()
+	ops_box.add_theme_constant_override("separation", 4)
+	ops_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(ops_box, {"type": "land", "name": "Land", "icon": "[L]", "hotkey": "L", "desc": "Buy land parcels to expand the course"})
+	_add_tool_button(ops_box, {"type": "marketing", "name": "Marketing", "icon": "[M]", "hotkey": "M", "desc": "Marketing campaigns to attract golfers"})
+	_add_tool_button(ops_box, {"type": "milestones", "name": "Milestones", "icon": "[G]", "hotkey": "G", "desc": "Goals and achievements"})
+	_add_tool_button(ops_box, {"type": "feed", "name": "Feed", "icon": "[N]", "hotkey": "N", "desc": "Course event feed"})
+	_add_tool_button(ops_box, {"type": "scorecard", "name": "Scorecard", "icon": "[K]", "hotkey": "K", "desc": "Course scorecard and records"})
+	hbox.add_child(_make_tab_group("OPERATIONS", ops_box))
+
+	hbox.add_child(_make_separator())
+
+	hbox.add_child(_make_tip_label("Expand land parcels, launch marketing campaigns, track milestones and check course records."))
+
+func _build_staff_tab(hbox: HBoxContainer) -> void:
+	var staff_box = HBoxContainer.new()
+	staff_box.add_theme_constant_override("separation", 4)
+	staff_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(staff_box, {"type": "staff", "name": "Staff Management", "icon": "[P]", "hotkey": "P", "desc": "Manage course maintenance staff"})
+	hbox.add_child(_make_tab_group("MANAGEMENT", staff_box))
+
+	hbox.add_child(_make_separator())
+
+	hbox.add_child(_make_tip_label("Hire groundskeepers and mechanics to maintain turf quality and clubhouse equipment."))
+
+# =============================================================================
+# Helper Widgets
+# =============================================================================
+
+func _make_tab_group(title: String, content: Control) -> VBoxContainer:
+	var group = VBoxContainer.new()
+	group.add_theme_constant_override("separation", 2)
+	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	if not title.is_empty():
+		var lbl = Label.new()
+		lbl.text = title.to_upper()
+		lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+		lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+		group.add_child(lbl)
+
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	group.add_child(content)
+	return group
+
+func _make_separator() -> VSeparator:
+	var sep = VSeparator.new()
+	sep.custom_minimum_size = Vector2(1, 28)
+	sep.modulate = Color(1, 1, 1, 0.2)
+	return sep
+
+func _make_tip_label(text: String) -> Control:
+	var group = VBoxContainer.new()
+	group.add_theme_constant_override("separation", 2)
+	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var lbl_title = Label.new()
+	lbl_title.text = "INFO"
+	lbl_title.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl_title.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	group.add_child(lbl_title)
+
+	var lbl = Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+	lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	group.add_child(lbl)
+	return group
+
+func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
+	var tool_type = tool_def["type"]
 	var cost = 0
 	var maintenance = 0
 	if tool_type is int:
@@ -306,13 +541,108 @@ func _create_tool_button(parent: VBoxContainer, tool_data: Dictionary) -> void:
 		cost = costs.get("cost", 0)
 		maintenance = costs.get("maintenance", 0)
 
-	# Create ToolButton
-	var btn = ToolButton.create(tool_type, tool_name, tool_icon, hotkey, description, cost, maintenance)
+	var btn = ToolButton.create(tool_type, tool_def["name"], tool_def.get("icon", ""),
+		tool_def.get("hotkey", ""), tool_def.get("desc", ""), cost, maintenance)
 	btn.tool_pressed.connect(_on_tool_button_pressed)
 	parent.add_child(btn)
 
-	# Store reference for highlighting
-	_tool_buttons[tool_type] = btn
+	btn.custom_minimum_size = Vector2(0, TOOL_ROW_HEIGHT)
+	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	btn.add_theme_constant_override("icon_max_width", 18)
+
+	if tool_type is String and tool_type == "feed":
+		_feed_button = btn
+	elif not (tool_type is String and _is_menu_action(tool_type)):
+		_tool_buttons[tool_type] = btn
+
+	return btn
+
+func _is_menu_action(tool_type: String) -> bool:
+	return tool_type in ["land", "marketing", "milestones", "feed", "scorecard", "tournaments", "play_course"]
+
+func _make_brush_group() -> VBoxContainer:
+	var group = VBoxContainer.new()
+	group.add_theme_constant_override("separation", 2)
+	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var lbl = Label.new()
+	lbl.text = "BRUSH"
+	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	group.add_child(lbl)
+
+	var brush_row = HBoxContainer.new()
+	brush_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	brush_row.add_theme_constant_override("separation", 3)
+	brush_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var brush_decrease = Button.new()
+	brush_decrease.text = "-"
+	brush_decrease.custom_minimum_size = Vector2(24, 26)
+	brush_decrease.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	brush_decrease.pressed.connect(_on_brush_decrease)
+	brush_row.add_child(brush_decrease)
+
+	var brush_label = Label.new()
+	brush_label.text = "%dx%d" % [_brush_size, _brush_size]
+	brush_label.custom_minimum_size = Vector2(30, 0)
+	brush_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	brush_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	brush_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+	brush_row.add_child(brush_label)
+	_brush_labels.append(brush_label)
+
+	var brush_increase = Button.new()
+	brush_increase.text = "+"
+	brush_increase.custom_minimum_size = Vector2(24, 26)
+	brush_increase.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	brush_increase.pressed.connect(_on_brush_increase)
+	brush_row.add_child(brush_increase)
+
+	group.add_child(brush_row)
+	return group
+
+func _make_green_presets_group() -> VBoxContainer:
+	_green_preset_group = VBoxContainer.new()
+	_green_preset_group.add_theme_constant_override("separation", 2)
+	_green_preset_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_green_preset_group.visible = false
+
+	var lbl = Label.new()
+	lbl.text = "PRESET"
+	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	_green_preset_group.add_child(lbl)
+
+	var preset_row = HBoxContainer.new()
+	preset_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	preset_row.add_theme_constant_override("separation", 3)
+	preset_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	for preset_name in ["small", "medium", "large"]:
+		var preset_btn = Button.new()
+		preset_btn.text = preset_name.substr(0, 1).to_upper()
+		preset_btn.tooltip_text = "%s green (%d tiles)" % [preset_name.capitalize(), TerrainGrid.GREEN_PRESETS[preset_name].size()]
+		preset_btn.custom_minimum_size = Vector2(24, 26)
+		preset_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+		preset_btn.pressed.connect(_on_green_preset_pressed.bind(preset_name))
+		preset_row.add_child(preset_btn)
+		_green_preset_buttons[preset_name] = preset_btn
+
+	_green_preset_group.add_child(preset_row)
+	return _green_preset_group
+
+func _build_refresh_timer() -> void:
+	_refresh_timer = Timer.new()
+	_refresh_timer.wait_time = 1.0
+	_refresh_timer.autostart = true
+	_refresh_timer.timeout.connect(_on_refresh_tick)
+	add_child(_refresh_timer)
+
+# =============================================================================
+# Costs for special string tools
+# =============================================================================
 
 func _get_special_tool_costs(tool_type: String) -> Dictionary:
 	match tool_type:
@@ -320,55 +650,188 @@ func _get_special_tool_costs(tool_type: String) -> Dictionary:
 			return {"cost": 20, "maintenance": 0}
 		"rock":
 			return {"cost": 15, "maintenance": 0}
-		"flower":
-			return {"cost": 35, "maintenance": 2}
 		"bulldozer":
 			return {"cost": 5, "maintenance": 0}
-		"building":
-			return {"cost": 0, "maintenance": 0}  # Varies by building
-		"create_hole":
-			return {"cost": 0, "maintenance": 0}
-		"staff":
-			return {"cost": 0, "maintenance": 0}
-		"raise", "lower":
-			return {"cost": 0, "maintenance": 0}
 	return {"cost": 0, "maintenance": 0}
 
-func _toggle_section(section_name: String) -> void:
-	var section = _sections.get(section_name)
-	if not section:
+# =============================================================================
+# Tab handling
+# =============================================================================
+
+func _on_tab_changed(tab_index: int) -> void:
+	_show_page(tab_index)
+
+func _show_page(tab_index: int) -> void:
+	for i in _pages.size():
+		_pages[i].visible = (i == tab_index)
+	match tab_index:
+		Tab.GOLFERS:
+			_refresh_golfer_lists()
+		Tab.PLAYER:
+			_refresh_player_skills()
+
+func select_tab(tab_index: int) -> void:
+	if tab_index >= 0 and tab_index < _pages.size():
+		_tab_bar.current_tab = tab_index
+		_show_page(tab_index)
+
+func _tab_index_for_tool(tool_type) -> int:
+	return TOOL_TAB_MAP.get(tool_type, -1)
+
+func _reveal_tab_for_tool(tool_type) -> void:
+	var tab_index = _tab_index_for_tool(tool_type)
+	if tab_index >= 0:
+		select_tab(tab_index)
+
+func _on_refresh_tick() -> void:
+	if not is_visible_in_tree():
+		return
+	if _tab_bar and _tab_bar.current_tab == Tab.GOLFERS:
+		_refresh_golfer_lists()
+	elif _tab_bar and _tab_bar.current_tab == Tab.PLAYER:
+		_refresh_player_skills()
+
+# =============================================================================
+# Golfer tab
+# =============================================================================
+
+func record_completed_round(data: Dictionary) -> void:
+	_recent_rounds.push_front(data)
+	if _recent_rounds.size() > MAX_RECENT_ROUNDS:
+		_recent_rounds.resize(MAX_RECENT_ROUNDS)
+	if is_visible_in_tree() and _tab_bar and _tab_bar.current_tab == Tab.GOLFERS:
+		_refresh_golfer_lists()
+
+func _refresh_golfer_lists() -> void:
+	if _active_golfers_box == null or _recent_rounds_box == null:
 		return
 
-	section["collapsed"] = not section["collapsed"]
-	section["content"].visible = not section["collapsed"]
+	for child in _active_golfers_box.get_children():
+		child.queue_free()
+	for child in _recent_rounds_box.get_children():
+		child.queue_free()
 
-	# Update header text
-	var prefix = "> " if section["collapsed"] else "v "
-	section["header"].text = "%s %s" % [prefix, section_name]
+	var rows: Array = []
+	if golfer_data_provider.is_valid():
+		rows = golfer_data_provider.call()
 
-func _expand_section(section_name: String) -> void:
-	var section = _sections.get(section_name)
-	if not section or not section["collapsed"]:
+	if rows.is_empty():
+		_active_golfers_box.add_child(_make_empty_label("No golfers on the course."))
+	else:
+		for row_data in rows:
+			_active_golfers_box.add_child(_make_golfer_row(row_data))
+
+	if _recent_rounds.is_empty():
+		_recent_rounds_box.add_child(_make_empty_label("No rounds played yet."))
+	else:
+		for round_data in _recent_rounds:
+			_recent_rounds_box.add_child(_make_round_row(round_data))
+
+func _make_empty_label(text: String) -> Label:
+	var label = Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	return label
+
+func _make_golfer_row(row_data: Dictionary) -> Control:
+	var row = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	var mood: float = row_data.get("mood", 0.5)
+	var mood_dot = Label.new()
+	mood_dot.text = "●"
+	mood_dot.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	if mood >= 0.66:
+		mood_dot.add_theme_color_override("font_color", UIConstants.COLOR_MOOD_HAPPY)
+	elif mood >= 0.33:
+		mood_dot.add_theme_color_override("font_color", UIConstants.COLOR_MOOD_NEUTRAL)
+	else:
+		mood_dot.add_theme_color_override("font_color", UIConstants.COLOR_MOOD_UNHAPPY)
+	mood_dot.tooltip_text = "Mood: %d%%" % int(mood * 100)
+	row.add_child(mood_dot)
+
+	var golfer_btn = Button.new()
+	golfer_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	golfer_btn.clip_text = false
+	golfer_btn.custom_minimum_size = Vector2(0, 26)
+	golfer_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	golfer_btn.text = "%s (%s) · H%d · %d str" % [
+		row_data.get("name", "Golfer"),
+		GolferTier.get_tier_name(row_data.get("tier", 1)),
+		row_data.get("hole", 1),
+		row_data.get("strokes", 0),
+	]
+	golfer_btn.tooltip_text = "%s (%s) on Hole %d (%d strokes) - Click to follow" % [
+		row_data.get("name", "Golfer"),
+		GolferTier.get_tier_name(row_data.get("tier", 1)),
+		row_data.get("hole", 1),
+		row_data.get("strokes", 0),
+	]
+	golfer_btn.pressed.connect(_on_golfer_row_pressed.bind(row_data.get("id", -1)))
+	row.add_child(golfer_btn)
+	return row
+
+func _make_round_row(round_data: Dictionary) -> Control:
+	var diff: int = int(round_data.get("strokes", 0)) - int(round_data.get("par", 0))
+	var label = Label.new()
+	label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	label.text = "%s%s: %d (%s%d) · D%d" % [
+		"★ " if round_data.get("owner", false) else "",
+		round_data.get("name", "Golfer"),
+		round_data.get("strokes", 0),
+		"+" if diff > 0 else "",
+		diff,
+		round_data.get("day", 1),
+	]
+	label.add_theme_color_override("font_color", UIConstants.get_score_color(diff))
+	label.tooltip_text = "%s's round (%s) on Day %d: %d strokes (%+d)" % [
+		round_data.get("name", "Golfer"),
+		GolferTier.get_tier_name(round_data.get("tier", 1)),
+		round_data.get("day", 1),
+		round_data.get("strokes", 0),
+		diff,
+	]
+	return label
+
+func _on_golfer_row_pressed(golfer_id: int) -> void:
+	if golfer_id >= 0:
+		golfer_row_clicked.emit(golfer_id)
+
+# =============================================================================
+# Player tab
+# =============================================================================
+
+func _refresh_player_skills() -> void:
+	if _player_points_label == null:
 		return
+	var profile: PlayerGolferProfile = GameManager.player_profile
+	if profile == null:
+		return
+	for i in _skill_labels.size():
+		if i < PlayerGolferProfile.SKILLS.size():
+			_skill_labels[i].text = "%s %d%%" % [PlayerGolferProfile.SKILLS[i], profile.points[i] * 10]
+	if profile.initialized:
+		_player_points_label.text = "Skills locked"
+	else:
+		_player_points_label.text = "%d of 10 pts remaining" % profile.remaining()
 
-	section["collapsed"] = false
-	section["content"].visible = true
+# =============================================================================
+# Club tab
+# =============================================================================
 
-	# Update header text
-	section["header"].text = "v  %s" % section_name
+func set_feed_unread(count: int) -> void:
+	_feed_unread = count
+	if _feed_button:
+		_feed_button.text = "Feed (%d)" % count if count > 0 else "Feed"
 
-func _find_section_for_tool(tool_type) -> String:
-	for section_name in TOOL_SECTIONS:
-		for tool_data in TOOL_SECTIONS[section_name]["tools"]:
-			if typeof(tool_data["type"]) == typeof(tool_type) and tool_data["type"] == tool_type:
-				return section_name
-	return ""
+# =============================================================================
+# Tool selection
+# =============================================================================
 
 func _on_tool_button_pressed(tool_type) -> void:
-	# Expand the parent section so the selected tool is visible
-	var section_name = _find_section_for_tool(tool_type)
-	if section_name != "":
-		_expand_section(section_name)
+	_reveal_tab_for_tool(tool_type)
 
 	if tool_type is int:
 		_current_tool = tool_type
@@ -376,7 +839,6 @@ func _on_tool_button_pressed(tool_type) -> void:
 		_update_green_preset_visibility()
 		tool_selected.emit(tool_type)
 	else:
-		# Handle special tool types
 		match tool_type:
 			"tree":
 				tree_placement_pressed.emit()
@@ -400,43 +862,48 @@ func _on_tool_button_pressed(tool_type) -> void:
 				bulldozer_pressed.emit()
 			"staff":
 				staff_pressed.emit()
+			"play_course":
+				play_course_pressed.emit()
+			"tournaments":
+				tournaments_pressed.emit()
+			"land":
+				land_pressed.emit()
+			"marketing":
+				marketing_pressed.emit()
+			"milestones":
+				milestones_pressed.emit()
+			"feed":
+				feed_pressed.emit()
+			"scorecard":
+				scorecard_pressed.emit()
 
 func _update_selection_highlight() -> void:
-	# Reset all buttons
 	for tool_type in _tool_buttons.keys():
 		var btn = _tool_buttons[tool_type]
-		if btn is ToolButton:
-			btn.set_selected(false)
-
-	# Highlight current tool
-	if _current_tool in _tool_buttons:
-		var btn = _tool_buttons[_current_tool]
-		if btn is ToolButton:
-			btn.set_selected(true)
+		if is_instance_valid(btn) and btn is ToolButton:
+			var is_match = (typeof(tool_type) == typeof(_current_tool) and tool_type == _current_tool)
+			btn.set_selected(is_match)
 
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree():
 		return
 
-	# Don't process any gameplay hotkeys while in main menu
 	if GameManager.current_mode == GameManager.GameMode.MAIN_MENU:
 		return
 
 	if event is InputEventKey and event.pressed and not event.echo:
-		# Don't process if Ctrl/Cmd is held (those are for undo/save)
 		if event.is_command_or_control_pressed():
 			return
 
-		# Don't process hotkeys if a text input has focus
 		var focused = get_viewport().gui_get_focus_owner()
 		if focused is LineEdit or focused is TextEdit:
 			return
 
-		# Check for section toggle hotkeys (with shift for symbols)
 		if event.shift_pressed:
 			match event.keycode:
 				KEY_1:  # Shift+1 = !
-					_toggle_section("Hazards")
+					select_tab(Tab.TERRAIN)
+					_on_tool_button_pressed(TerrainTypes.Type.BUNKER)
 					get_viewport().set_input_as_handled()
 					return
 				KEY_EQUAL:  # Shift+= = +
@@ -450,15 +917,17 @@ func _input(event: InputEvent) -> void:
 				KEY_R:  # Shift+R = routing overlay (handled in main.gd)
 					return
 
-		# Check for tool hotkeys
 		match event.keycode:
-			KEY_EQUAL:  # = for Course Terrain
-				_toggle_section("Course Terrain")
-			KEY_PERIOD:  # . for Objects & Decor
-				_toggle_section("Objects & Decor")
-			KEY_E:  # E for Elevation
-				_toggle_section("Elevation")
-			KEY_MINUS:  # - for lower elevation
+			KEY_EQUAL:  # = opens the Course Terrain tab
+				select_tab(Tab.TERRAIN)
+				get_viewport().set_input_as_handled()
+			KEY_PERIOD:  # . opens the Improvements tab
+				select_tab(Tab.IMPROVEMENTS)
+				get_viewport().set_input_as_handled()
+			KEY_E:  # E opens the Elevation tab
+				select_tab(Tab.ELEVATION)
+				get_viewport().set_input_as_handled()
+			KEY_MINUS:
 				_on_tool_button_pressed("lower")
 			KEY_1:
 				_on_tool_button_pressed(TerrainTypes.Type.FAIRWAY)
@@ -487,27 +956,31 @@ func _input(event: InputEvent) -> void:
 			KEY_O:
 				_on_tool_button_pressed("decoration")
 			KEY_H:
-				_expand_section("Course")
 				_on_tool_button_pressed("create_hole")
 			KEY_X:
 				_on_tool_button_pressed("bulldozer")
 			KEY_P:
+				select_tab(Tab.STAFF)
 				_on_tool_button_pressed("staff")
+
+# =============================================================================
+# Public API
+# =============================================================================
 
 func set_current_tool(tool_type: int) -> void:
 	_current_tool = tool_type
 	_update_selection_highlight()
+	_update_green_preset_visibility()
 
 func get_current_tool() -> int:
 	return _current_tool
 
 func clear_selection() -> void:
-	"""Clear all button selections (null selector state)"""
-	_current_tool = -1  # Invalid tool type indicates no selection
+	_current_tool = -1
 	_update_selection_highlight()
+	_update_green_preset_visibility()
 
 func has_selection() -> bool:
-	"""Check if any terrain tool is currently selected"""
 	return _current_tool >= 0 and _current_tool in _tool_buttons
 
 func get_brush_size() -> int:
@@ -528,19 +1001,20 @@ func _on_brush_increase() -> void:
 		brush_size_changed.emit(_brush_size)
 
 func _update_brush_label() -> void:
-	if _brush_label:
-		_brush_label.text = "%dx%d" % [_brush_size, _brush_size]
+	for label in _brush_labels:
+		if is_instance_valid(label):
+			label.text = "%dx%d" % [_brush_size, _brush_size]
 
 func _update_green_preset_visibility() -> void:
-	if _green_preset_row:
-		_green_preset_row.visible = (_current_tool == TerrainTypes.Type.GREEN)
+	if _green_preset_group:
+		_green_preset_group.visible = (_current_tool == TerrainTypes.Type.GREEN)
 		if _current_tool != TerrainTypes.Type.GREEN:
 			_active_green_preset = ""
 			_update_green_preset_highlight()
 
 func _on_green_preset_pressed(preset_name: String) -> void:
 	if _active_green_preset == preset_name:
-		_active_green_preset = ""  # Toggle off
+		_active_green_preset = ""
 	else:
 		_active_green_preset = preset_name
 	_update_green_preset_highlight()
@@ -549,10 +1023,11 @@ func _on_green_preset_pressed(preset_name: String) -> void:
 func _update_green_preset_highlight() -> void:
 	for pname in _green_preset_buttons:
 		var btn: Button = _green_preset_buttons[pname]
-		if pname == _active_green_preset:
-			btn.add_theme_color_override("font_color", UIConstants.COLOR_PRIMARY_HOVER)
-		else:
-			btn.remove_theme_color_override("font_color")
+		if is_instance_valid(btn):
+			if pname == _active_green_preset:
+				btn.add_theme_color_override("font_color", UIConstants.COLOR_PRIMARY_HOVER)
+			else:
+				btn.remove_theme_color_override("font_color")
 
 func get_active_green_preset() -> String:
 	return _active_green_preset
@@ -563,19 +1038,5 @@ func set_brush_size(value: int) -> void:
 		_update_brush_label()
 		brush_size_changed.emit(value)
 
-func _on_rotate_cw_pressed() -> void:
-	view_rotate_cw_pressed.emit()
-
-func _on_rotate_ccw_pressed() -> void:
-	view_rotate_ccw_pressed.emit()
-
-func _on_iso_toggle_pressed() -> void:
-	if _iso_toggle_btn:
-		view_isometric_toggled.emit(_iso_toggle_btn.button_pressed)
-
-func set_view_state(orientation: int, isometric: bool) -> void:
-	if _view_orientation_label:
-		var index: int = wrapi(orientation, 0, ORIENTATION_LABELS.size())
-		_view_orientation_label.text = ORIENTATION_LABELS[index]
-	if _iso_toggle_btn:
-		_iso_toggle_btn.set_pressed_no_signal(isometric)
+func set_view_state(_orientation: int, _isometric: bool) -> void:
+	pass

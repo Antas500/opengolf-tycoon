@@ -49,140 +49,21 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -6.0
-offset_bottom = -6.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme = ExtResource("8_theme")
 
-[node name="TopBar" type="HBoxContainer" parent="UI/HUD" unique_id=93667985]
+[node name="StatusColumnPlaceholder" type="VBoxContainer" parent="UI/HUD" unique_id=93667985]
 layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_bottom = 50.0
-grow_horizontal = 2
-
-[node name="MoneyLabel" type="Label" parent="UI/HUD/TopBar" unique_id=1605473265]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "$50,000"
-
-[node name="DayLabel" type="Label" parent="UI/HUD/TopBar" unique_id=1098233395]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Day 1 - 6:00 AM"
-
-[node name="ReputationLabel" type="Label" parent="UI/HUD/TopBar" unique_id=1212217159]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Reputation: 50"
-
-[node name="HoleInfoPanel" type="PanelContainer" parent="UI/HUD" unique_id=1099798089]
-layout_mode = 1
-anchors_preset = 4
-anchor_top = 0.5
-anchor_bottom = 0.5
-offset_left = 10.0
-offset_top = -200.0
-offset_right = 210.0
-offset_bottom = 200.0
-grow_vertical = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="UI/HUD/HoleInfoPanel" unique_id=1699784864]
-layout_mode = 2
-
-[node name="Title" type="Label" parent="UI/HUD/HoleInfoPanel/VBoxContainer" unique_id=527422391]
-layout_mode = 2
-text = "Course Holes"
-horizontal_alignment = 1
-
-[node name="ScrollContainer" type="ScrollContainer" parent="UI/HUD/HoleInfoPanel/VBoxContainer" unique_id=640073133]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="HoleList" type="VBoxContainer" parent="UI/HUD/HoleInfoPanel/VBoxContainer/ScrollContainer" unique_id=978674298]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ToolPanel" type="VBoxContainer" parent="UI/HUD" unique_id=310533751]
-layout_mode = 1
-anchors_preset = 6
+anchors_preset = 1
 anchor_left = 1.0
-anchor_top = 0.5
 anchor_right = 1.0
-anchor_bottom = 0.5
-offset_left = -200.0
-offset_top = -200.0
-offset_bottom = 200.0
+offset_left = -218.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 268.0
 grow_horizontal = 0
-grow_vertical = 2
-
-[node name="ToolsLabel" type="Label" parent="UI/HUD/ToolPanel" unique_id=242174181]
-layout_mode = 2
-text = "Terrain Tools"
-
-[node name="FairwayBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=1710089231]
-layout_mode = 2
-text = "Fairway"
-
-[node name="RoughBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=297979615]
-layout_mode = 2
-text = "Rough"
-
-[node name="GreenBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=693974218]
-layout_mode = 2
-text = "Green"
-
-[node name="BunkerBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=382251860]
-layout_mode = 2
-text = "Bunker"
-
-[node name="WaterBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=1784609560]
-layout_mode = 2
-text = "Water"
-
-[node name="PathBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=153458306]
-layout_mode = 2
-text = "Path"
-
-[node name="TeeBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=16920965]
-layout_mode = 2
-text = "Tee Box"
-
-[node name="OBBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=1231109053]
-layout_mode = 2
-text = "Out of Bounds"
-
-[node name="Separator1" type="HSeparator" parent="UI/HUD/ToolPanel" unique_id=1186925010]
-layout_mode = 2
-
-[node name="ObjectsLabel" type="Label" parent="UI/HUD/ToolPanel" unique_id=593254767]
-layout_mode = 2
-text = "Objects"
-
-[node name="TreesBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=1074012873]
-layout_mode = 2
-text = "Trees"
-
-[node name="FlowerBedBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=1956297469]
-layout_mode = 2
-text = "Flower Bed"
-
-[node name="RocksBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=160335807]
-layout_mode = 2
-text = "Rocks"
-
-[node name="Separator2" type="HSeparator" parent="UI/HUD/ToolPanel" unique_id=1287120308]
-layout_mode = 2
-
-[node name="HoleLabel" type="Label" parent="UI/HUD/ToolPanel" unique_id=561782402]
-layout_mode = 2
-text = "Hole Tools"
-
-[node name="CreateHoleBtn" type="Button" parent="UI/HUD/ToolPanel" unique_id=1182700407]
-layout_mode = 2
-text = "Create Hole"
 
 [node name="BottomBar" type="HBoxContainer" parent="UI/HUD" unique_id=676395160]
 layout_mode = 1
@@ -190,30 +71,62 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -60.0
+offset_top = -120.0
 grow_horizontal = 2
 grow_vertical = 0
 
-[node name="SpeedControls" type="HBoxContainer" parent="UI/HUD/BottomBar" unique_id=1574521636]
+[node name="LeftControls" type="VBoxContainer" parent="UI/HUD/BottomBar" unique_id=904583721]
 layout_mode = 2
+alignment = 1
 
-[node name="PauseBtn" type="Button" parent="UI/HUD/BottomBar/SpeedControls" unique_id=1287478317]
+[node name="RotateViewControls" type="HBoxContainer" parent="UI/HUD/BottomBar/LeftControls" unique_id=452819603]
+layout_mode = 2
+alignment = 1
+
+[node name="RotateCCWBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=778451209]
+layout_mode = 2
+text = "⟲"
+tooltip_text = "Rotate course counter-clockwise (Q)"
+custom_minimum_size = Vector2(28, 24)
+
+[node name="OrientationLabel" type="Label" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=334192875]
+layout_mode = 2
+text = "N"
+tooltip_text = "Which way the course is facing"
+custom_minimum_size = Vector2(18, 0)
+horizontal_alignment = 1
+
+[node name="RotateCWBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=556283914]
+layout_mode = 2
+text = "⟳"
+tooltip_text = "Rotate course clockwise (Shift+Q)"
+custom_minimum_size = Vector2(28, 24)
+
+[node name="IsoBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=667941285]
+layout_mode = 2
+text = "Iso"
+tooltip_text = "Toggle isometric diamonds / top-down squares (I)"
+custom_minimum_size = Vector2(42, 24)
+toggle_mode = true
+button_pressed = true
+
+[node name="SpeedControls" type="HBoxContainer" parent="UI/HUD/BottomBar/LeftControls" unique_id=1574521636]
+layout_mode = 2
+alignment = 1
+
+[node name="PauseBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=1287478317]
 layout_mode = 2
 text = "||"
+custom_minimum_size = Vector2(28, 24)
 
-[node name="PlayBtn" type="Button" parent="UI/HUD/BottomBar/SpeedControls" unique_id=1738357492]
+[node name="PlayBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=1738357492]
 layout_mode = 2
 text = ">"
+custom_minimum_size = Vector2(28, 24)
 
-[node name="FastBtn" type="Button" parent="UI/HUD/BottomBar/SpeedControls" unique_id=811286996]
+[node name="FastBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=811286996]
 layout_mode = 2
 text = ">>"
+custom_minimum_size = Vector2(28, 24)
 
-[node name="Spacer" type="Control" parent="UI/HUD/BottomBar" unique_id=1837661971]
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 2
 
-[node name="CoordinateLabel" type="Label" parent="UI/HUD/BottomBar" unique_id=82749080]
-layout_mode = 2
-text = "Tile: (0, 0)"

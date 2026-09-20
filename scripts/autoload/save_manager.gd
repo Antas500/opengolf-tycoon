@@ -268,6 +268,8 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager._closing_announced = false
 	GameManager._end_of_day_triggered = false
 	GameManager._end_of_day_emitted = false
+	# A fresh load always starts unpaused (stale pause state from the previous session)
+	GameManager.is_paused = false
 
 	# Active owner rounds are transient, like visitor rounds.
 	GameManager.player_profile = PlayerGolferProfile.from_data(data.get("player_golfer", {}))
@@ -373,14 +375,18 @@ func _apply_save_data(data: Dictionary) -> void:
 	if GameManager.shot_heatmap_tracker and data.has("shot_heatmap"):
 		GameManager.shot_heatmap_tracker.deserialize(data["shot_heatmap"])
 
-	# Golfers: Always clear on load - they will respawn naturally when the user
-	# switches to simulation mode. This avoids complex mid-action state restoration.
+	# Golfers: Always clear on load - they will respawn naturally when the day
+	# resumes (day now always starts automatically). This avoids complex mid-action state restoration.
 	if golfer_manager and golfer_manager.has_method("clear_all_golfers"):
 		golfer_manager.clear_all_golfers()
 
 	# Clear all balls as well - they'll be created fresh when golfers spawn
 	if ball_manager and ball_manager.has_method("clear_all_balls"):
 		ball_manager.clear_all_balls()
+
+	# Day always starts automatically — resume simulation after load.
+	GameManager.set_mode(GameManager.GameMode.SIMULATING)
+	GameManager.set_speed(GameManager.GameSpeed.NORMAL)
 
 	# NOTE: load_completed is emitted by load_game() after _apply_save_data returns
 

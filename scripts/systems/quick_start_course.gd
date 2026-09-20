@@ -76,7 +76,7 @@ static func build(terrain_grid: TerrainGrid, entity_layer: EntityLayer, hole_too
 	# Remove trees and rocks that ended up on fairways, greens, tee boxes, or bunkers
 	_clear_entities_on_course(terrain_grid, entity_layer)
 
-	EventBus.notify("9-hole Whispering Pines course created! Par 36. Press Start Day to play.", "success")
+	EventBus.notify("9-hole Whispering Pines course created! Par 36. Golfers are arriving — build while they play!", "success")
 
 
 ## Check if a tile is within owned land (safety net for corridor painting).

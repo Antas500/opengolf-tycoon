@@ -97,10 +97,20 @@ const SEPARATION_LG := 8
 # PANEL SIZES (base at 1080p)
 # =============================================================================
 
-const TOP_HUD_HEIGHT := 48
-const BOTTOM_BAR_HEIGHT := 50
+# Status readout: a column pinned to the top-right corner (HUDStatusColumn).
+# The top edge of the screen is otherwise free — nothing spans the full width.
+const HUD_COLUMN_WIDTH := 210
+const HUD_COLUMN_MARGIN := 8
+# Fallback height used before the column has measured itself (or if absent).
+const HUD_COLUMN_HEIGHT_ESTIMATE := 260
+# Group the status column joins so other HUD elements can find it.
+const HUD_COLUMN_GROUP := "hud_status_column"
+
+# Bottom bar height: view/speed controls on the left + tabbed toolbar on the right.
+# Keep in sync with main.tscn BottomBar offset_top.
+const BOTTOM_BAR_HEIGHT := 120
 const BUILD_TOOLS_WIDTH := 260
-const TOOL_BUTTON_HEIGHT := 36
+const TOOL_BUTTON_HEIGHT := 32
 
 # =============================================================================
 # TOOL ICONS (Unicode)
@@ -183,6 +193,18 @@ func get_tool_icon(tool_type) -> String:
 		return "[?]"
 	else:
 		return TOOL_ICONS.get(str(tool_type), "[?]")
+
+## Vertical space reserved by the top-right status column, measured live.
+## Right-docked HUD panels (event feed, autosave toast, tournament leaderboard)
+## use this as their top margin so they never sit underneath the column.
+## Falls back to a conservative estimate when the column isn't in the tree.
+func get_hud_column_clearance(node: Node = null) -> float:
+	var column: Node = null
+	if node and node.is_inside_tree():
+		column = node.get_tree().get_first_node_in_group(HUD_COLUMN_GROUP)
+	if column and column is Control and column.visible:
+		return column.get_occupied_height() + HUD_COLUMN_MARGIN
+	return float(HUD_COLUMN_MARGIN + HUD_COLUMN_HEIGHT_ESTIMATE + HUD_COLUMN_MARGIN)
 
 func get_weather_icon(weather_type: int) -> String:
 	return WEATHER_ICONS.get(weather_type, "???")
