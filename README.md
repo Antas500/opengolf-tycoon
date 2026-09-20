@@ -97,6 +97,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Isometric view** — 2:1 diamond terrain with SimGolf-style rotation: **Q** / **Shift+Q** rotate the course, **I** toggles isometric / top-down, plus W/A/S/D pan and mouse-wheel zoom
 - **Main menu** — New Game (with theme selection and course naming), Load Game, Settings, Quit
 - **Pause menu** — Escape key opens pause overlay with Resume, Settings, Save, and Quit options
+- **Camera while paused** — the game freezes but the camera stays controllable: pan with W/A/S/D or middle-mouse drag, zoom with the scroll wheel (also works from behind the pause and settings overlays)
 - **Settings menu** — Display, audio, and gameplay options
 - **Tool palette** — Terrain tools, object placement, hole creation, elevation tools
 - **Speed controls** — Play / Pause / Fast / Ultra with keyboard shortcuts

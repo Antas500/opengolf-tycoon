@@ -90,7 +90,9 @@ func _build_ui() -> void:
 
 	_add_section(vbox, "Camera & View", [
 		["WASD", "Pan camera"],
+		["Middle Mouse Drag", "Pan camera"],
 		["Scroll / [ ]", "Zoom in/out"],
+		["While paused", "Camera can still pan & zoom"],
 		["Q", "Rotate course counter-clockwise"],
 		["Shift+Q", "Rotate course clockwise"],
 		["I", "Isometric / top-down view"],

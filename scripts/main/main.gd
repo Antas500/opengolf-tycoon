@@ -3485,6 +3485,7 @@ func _show_pause_menu() -> void:
 
 	pause_menu = PauseMenu.new()
 	pause_menu.name = "PauseMenu"
+	pause_menu.camera = camera
 	pause_menu.resume_requested.connect(_on_pause_resume)
 	pause_menu.save_requested.connect(_on_pause_save)
 	pause_menu.load_requested.connect(_on_pause_load)
@@ -3529,6 +3530,7 @@ func _show_settings_menu() -> void:
 	"""Show the settings menu overlay."""
 	var settings = SettingsMenu.new()
 	settings.name = "SettingsMenu"
+	settings.camera = camera
 	settings.close_requested.connect(func():
 		# Re-show pause menu when settings closes (if not from main menu)
 		if GameManager.current_mode != GameManager.GameMode.MAIN_MENU:
