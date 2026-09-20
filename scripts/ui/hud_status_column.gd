@@ -35,6 +35,8 @@ var _last_money: int = 0
 var _money_trend_value: int = 0
 var _collapsed: bool = false
 
+var _last_effectively_paused: bool = false
+
 func _ready() -> void:
 	add_to_group(UIConstants.HUD_COLUMN_GROUP)
 	_build_ui()
@@ -43,6 +45,20 @@ func _ready() -> void:
 	_apply_anchors()
 	minimum_size_changed.connect(_refresh_height)
 	_refresh_height()
+
+func _process(_delta: float) -> void:
+	# The pause flag is set from several places that don't emit signals
+	# (pause menu, end-of-day summary, game over, speed controls), so poll
+	# the effective pause state and refresh the mode label when it changes.
+	if not is_inside_tree():
+		return
+	var gm = get_node_or_null("/root/GameManager")
+	if gm == null:
+		return
+	var effectively_paused = gm.get("is_paused") == true or gm.get("current_speed") == 0
+	if effectively_paused != _last_effectively_paused:
+		_last_effectively_paused = effectively_paused
+		_update_game_mode()
 
 func _build_ui() -> void:
 	custom_minimum_size = Vector2(UIConstants.HUD_COLUMN_WIDTH, 0)
@@ -273,17 +289,21 @@ func _update_game_mode() -> void:
 
 	# GameManager.GameMode enum: MAIN_MENU=0, BUILDING=1 (legacy), SIMULATING=2, PLAYING=3, PAUSED=4
 	# Day always runs — BUILDING is kept for save compatibility but maps to PLAYING.
+	# The game is effectively paused when the pause flag is set (pause menu,
+	# end-of-day summary, game over) or the speed control is on pause.
+	var effectively_paused = gm.get("is_paused") == true or gm.get("current_speed") == 0
 	match mode:
-		1, 2, 3:  # BUILDING (legacy), SIMULATING, PLAYING
-			_game_mode_icon.text = ">"
-			_game_mode_label.text = "PLAYING"
-			_game_mode_icon.add_theme_color_override("font_color", UIConstants.COLOR_SUCCESS)
-			_game_mode_label.add_theme_color_override("font_color", UIConstants.COLOR_SUCCESS)
-		4:  # PAUSED
-			_game_mode_icon.text = "||"
-			_game_mode_label.text = "PAUSED"
-			_game_mode_icon.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-			_game_mode_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+		1, 2, 3, 4:  # BUILDING (legacy), SIMULATING, PLAYING, PAUSED
+			if effectively_paused:
+				_game_mode_icon.text = "||"
+				_game_mode_label.text = "PAUSED"
+				_game_mode_icon.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+				_game_mode_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
+			else:
+				_game_mode_icon.text = ">"
+				_game_mode_label.text = "PLAYING"
+				_game_mode_icon.add_theme_color_override("font_color", UIConstants.COLOR_SUCCESS)
+				_game_mode_label.add_theme_color_override("font_color", UIConstants.COLOR_SUCCESS)
 		_:
 			_game_mode_icon.text = "?"
 			_game_mode_label.text = "MENU"

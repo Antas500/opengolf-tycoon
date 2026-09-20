@@ -80,6 +80,8 @@ var tournament_leaderboard: TournamentLeaderboard = null
 var tournament_results_popup: TournamentResultsPopup = null
 var pause_menu: PauseMenu = null
 var _was_paused_before_pause_menu: bool = false
+var _pause_session_active: bool = false  # True while the pause menu (or its Save/Load/Settings sub-panels) is open
+var _just_loaded_game: bool = false  # Set when a save just loaded successfully, consumed by the save/load panel
 var milestone_manager: MilestoneManager = null
 var milestones_panel: MilestonesPanel = null
 var seasonal_calendar_panel: SeasonalCalendarPanel = null
@@ -2224,19 +2226,34 @@ func _sync_map_button() -> void:
 	if map_btn and mini_map:
 		map_btn.set_pressed_no_signal(mini_map.visible)
 
-func _show_save_load_panel() -> void:
+func _show_save_load_panel(from_pause_menu: bool = false) -> void:
 	# Toggle save/load panel
 	var hud = $UI/HUD
 	var existing = hud.get_node_or_null("SaveLoadPanel")
 	if existing:
 		existing.queue_free()
 		return
+	_just_loaded_game = false
 	var panel = SaveLoadPanel.new()
 	panel.name = "SaveLoadPanel"
 	panel.anchors_preset = Control.PRESET_CENTER
 	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	panel.quit_to_menu_requested.connect(_on_quit_to_menu)
+	if from_pause_menu:
+		panel.panel_closed.connect(_on_save_load_panel_closed_from_pause)
 	hud.add_child(panel)
+
+func _on_save_load_panel_closed_from_pause() -> void:
+	"""Called when the save/load panel (opened from the pause menu) closes."""
+	if _just_loaded_game:
+		# A game was just loaded — end the pause session and resume play.
+		_just_loaded_game = false
+		_hide_pause_menu()
+		_pause_session_active = false
+		GameManager.is_paused = false
+		return
+	# Backed out without loading — return to the pause menu (game stays paused).
+	_show_pause_menu()
 
 func _on_quit_to_menu() -> void:
 	# Return to main menu by reloading the scene
@@ -2244,10 +2261,11 @@ func _on_quit_to_menu() -> void:
 	GameManager.set_mode(GameManager.GameMode.MAIN_MENU)
 	get_tree().reload_current_scene()
 
-func _on_load_completed(_success: bool) -> void:
+func _on_load_completed(success: bool) -> void:
+	_just_loaded_game = success
 	_close_hole_context_menu()
 	_cancel_hole_move_mode()
-	if _success:
+	if success:
 		_game_over_shown = false
 		_rebuild_hole_list()
 		# Sync hole creation tool so the next hole gets the correct number
@@ -3456,8 +3474,13 @@ func _show_pause_menu() -> void:
 		_active_panel.hide()
 		_active_panel = null
 
-	# Remember if game was already paused (e.g. end-of-day summary)
-	_was_paused_before_pause_menu = GameManager.is_paused
+	# Remember if the game was already paused before this pause session
+	# (e.g. end-of-day summary, pause button) so resume can restore it.
+	# The flag persists while the session bounces between the menu and its
+	# sub-panels (Save/Load, Settings), so it is only captured once.
+	if not _pause_session_active:
+		_was_paused_before_pause_menu = GameManager.is_paused
+		_pause_session_active = true
 	GameManager.is_paused = true
 
 	pause_menu = PauseMenu.new()
@@ -3470,11 +3493,16 @@ func _show_pause_menu() -> void:
 	pause_menu.quit_to_desktop_requested.connect(_on_pause_quit_to_desktop)
 	$UI/HUD.add_child(pause_menu)
 
-func _close_pause_menu() -> void:
-	"""Close the pause menu and restore prior pause state."""
+func _hide_pause_menu() -> void:
+	"""Hide the pause menu overlay without changing the game's pause state."""
 	if pause_menu:
 		pause_menu.queue_free()
 		pause_menu = null
+
+func _close_pause_menu() -> void:
+	"""Close the pause menu and restore prior pause state."""
+	_hide_pause_menu()
+	_pause_session_active = false
 	# Only unpause if the game wasn't already paused before we opened the menu
 	if not _was_paused_before_pause_menu:
 		GameManager.is_paused = false
@@ -3483,15 +3511,18 @@ func _on_pause_resume() -> void:
 	_close_pause_menu()
 
 func _on_pause_save() -> void:
-	_close_pause_menu()
-	_show_save_load_panel()
+	# Keep the game paused while the save/load panel is open
+	_hide_pause_menu()
+	_show_save_load_panel(true)
 
 func _on_pause_load() -> void:
-	_close_pause_menu()
-	_show_save_load_panel()
+	# Keep the game paused while the save/load panel is open
+	_hide_pause_menu()
+	_show_save_load_panel(true)
 
 func _on_pause_settings() -> void:
-	_close_pause_menu()
+	# Keep the game paused while the settings menu is open
+	_hide_pause_menu()
 	_show_settings_menu()
 
 func _show_settings_menu() -> void:
