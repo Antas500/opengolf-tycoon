@@ -799,10 +799,6 @@ func _setup_bottom_bar() -> void:
 		orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 		orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
 		orientation_label.add_theme_color_override("font_outline_color", Color.TRANSPARENT)
-	var view_lbl = rotate_view_controls.get_node_or_null("ViewLabel") as Label
-	if view_lbl:
-		view_lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-		view_lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
 
 	# Add a separator after LeftControls (which now contains both RotateView and Speed)
 	var sep = VSeparator.new()

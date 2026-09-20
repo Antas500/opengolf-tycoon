@@ -83,10 +83,6 @@ alignment = 1
 layout_mode = 2
 alignment = 1
 
-[node name="ViewLabel" type="Label" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=889412736]
-layout_mode = 2
-text = "View:"
-
 [node name="RotateCCWBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=778451209]
 layout_mode = 2
 text = "⟲"
