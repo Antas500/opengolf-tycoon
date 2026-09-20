@@ -35,10 +35,10 @@ func _create_styles() -> void:
 	_style_normal.corner_radius_top_right = 4
 	_style_normal.corner_radius_bottom_right = 4
 	_style_normal.corner_radius_bottom_left = 4
-	_style_normal.content_margin_left = 8
-	_style_normal.content_margin_right = 8
-	_style_normal.content_margin_top = 6
-	_style_normal.content_margin_bottom = 6
+	_style_normal.content_margin_left = 6
+	_style_normal.content_margin_right = 6
+	_style_normal.content_margin_top = 3
+	_style_normal.content_margin_bottom = 3
 	_style_normal.border_width_left = 1
 	_style_normal.border_width_top = 1
 	_style_normal.border_width_right = 1
@@ -52,10 +52,10 @@ func _create_styles() -> void:
 	_style_hover.corner_radius_top_right = 4
 	_style_hover.corner_radius_bottom_right = 4
 	_style_hover.corner_radius_bottom_left = 4
-	_style_hover.content_margin_left = 8
-	_style_hover.content_margin_right = 8
-	_style_hover.content_margin_top = 6
-	_style_hover.content_margin_bottom = 6
+	_style_hover.content_margin_left = 6
+	_style_hover.content_margin_right = 6
+	_style_hover.content_margin_top = 3
+	_style_hover.content_margin_bottom = 3
 	_style_hover.border_width_left = 1
 	_style_hover.border_width_top = 1
 	_style_hover.border_width_right = 1
@@ -69,10 +69,10 @@ func _create_styles() -> void:
 	_style_pressed.corner_radius_top_right = 4
 	_style_pressed.corner_radius_bottom_right = 4
 	_style_pressed.corner_radius_bottom_left = 4
-	_style_pressed.content_margin_left = 8
-	_style_pressed.content_margin_right = 8
-	_style_pressed.content_margin_top = 6
-	_style_pressed.content_margin_bottom = 6
+	_style_pressed.content_margin_left = 6
+	_style_pressed.content_margin_right = 6
+	_style_pressed.content_margin_top = 3
+	_style_pressed.content_margin_bottom = 3
 	_style_pressed.border_width_left = 1
 	_style_pressed.border_width_top = 1
 	_style_pressed.border_width_right = 1
@@ -86,10 +86,10 @@ func _create_styles() -> void:
 	_style_selected.corner_radius_top_right = 4
 	_style_selected.corner_radius_bottom_right = 4
 	_style_selected.corner_radius_bottom_left = 4
-	_style_selected.content_margin_left = 8
-	_style_selected.content_margin_right = 8
-	_style_selected.content_margin_top = 6
-	_style_selected.content_margin_bottom = 6
+	_style_selected.content_margin_left = 6
+	_style_selected.content_margin_right = 6
+	_style_selected.content_margin_top = 3
+	_style_selected.content_margin_bottom = 3
 	_style_selected.border_width_left = 2
 	_style_selected.border_width_top = 2
 	_style_selected.border_width_right = 2
@@ -116,7 +116,7 @@ func _update_button() -> void:
 		text += "  [%s]" % hotkey
 
 	# Set size - expand to fill available width
-	custom_minimum_size = Vector2(0, 44)
+	custom_minimum_size = Vector2(0, 30)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	alignment = HORIZONTAL_ALIGNMENT_LEFT
 
@@ -131,11 +131,11 @@ func _update_button() -> void:
 	if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
 		icon = load(icon_path)
 		expand_icon = true
-		add_theme_constant_override("icon_max_width", 32)
-		add_theme_constant_override("h_separation", 10)
+		add_theme_constant_override("icon_max_width", 18)
+		add_theme_constant_override("h_separation", 6)
 
 	# Font size
-	add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
+	add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 
 func _connect_signals() -> void:
 	pressed.connect(_on_pressed)

@@ -8,7 +8,7 @@ extends Node2D
 @onready var golfer_manager: GolferManager = $GolferManager
 @onready var bottom_bar: HBoxContainer = $UI/HUD/BottomBar
 var terrain_toolbar: TerrainToolbar = null
-var hole_list: VBoxContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
+var hole_list: HBoxContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
 @onready var left_controls: VBoxContainer = $UI/HUD/BottomBar/LeftControls
 @onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
 @onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
@@ -788,13 +788,14 @@ func _setup_bottom_bar() -> void:
 
 	# Style LeftControls (VBox containing RotateView above Speed) for tight stacking
 	if left_controls:
-		left_controls.add_theme_constant_override("separation", 4)
+		left_controls.add_theme_constant_override("separation", 2)
 		left_controls.alignment = BoxContainer.ALIGNMENT_CENTER
 	if rotate_view_controls:
 		rotate_view_controls.alignment = BoxContainer.ALIGNMENT_CENTER
-		rotate_view_controls.add_theme_constant_override("separation", 6)
+		rotate_view_controls.add_theme_constant_override("separation", 4)
 	if speed_controls:
 		speed_controls.alignment = BoxContainer.ALIGNMENT_CENTER
+		speed_controls.add_theme_constant_override("separation", 4)
 	if orientation_label:
 		orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 		orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
@@ -806,14 +807,14 @@ func _setup_bottom_bar() -> void:
 
 	# Add a separator after LeftControls (which now contains both RotateView and Speed)
 	var sep = VSeparator.new()
-	sep.custom_minimum_size = Vector2(1, 36)
+	sep.custom_minimum_size = Vector2(1, 40)
 	sep.modulate = Color(1, 1, 1, 0.3)
 	bottom_bar.add_child(sep)
 	# left_controls index determines separator position; fall back to speed_controls if missing
 	var sep_index = left_controls.get_index() + 1 if left_controls else speed_controls.get_index() + 1
 	bottom_bar.move_child(sep, sep_index)
 
-	# Ensure BottomBar anchors match the taller height (Menu + RotateView + Speed)
+	# Ensure BottomBar anchors match the configured height
 	bottom_bar.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
 
 func _toggle_panel(panel: CenteredPanel) -> void:
@@ -1265,30 +1266,35 @@ func _on_hole_created(hole_number: int, par: int, distance_yards: int) -> void:
 	StrokeIndexCalculator.recalculate_for_course()
 	var row = HBoxContainer.new()
 	row.name = "HoleRow%d" % hole_number
+	row.add_theme_constant_override("separation", 3)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 
 	# Make hole label a clickable button
 	var hole_btn = Button.new()
 	hole_btn.name = "HoleBtn"
-	hole_btn.text = "Hole %d: Par %d (%d yds)" % [hole_number, par, distance_yards]
-	hole_btn.flat = true
-	hole_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	hole_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hole_btn.text = "H%d: P%d (%d yds)" % [hole_number, par, distance_yards]
+	hole_btn.flat = false
+	hole_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hole_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	hole_btn.tooltip_text = "Click to view statistics"
+	hole_btn.tooltip_text = "Hole %d (Par %d, %d yds) - Click to view statistics" % [hole_number, par, distance_yards]
+	hole_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	hole_btn.custom_minimum_size = Vector2(0, 26)
 	hole_btn.pressed.connect(_show_hole_stats.bind(hole_number))
 	row.add_child(hole_btn)
 
 	var toggle_btn = Button.new()
 	toggle_btn.name = "ToggleBtn"
 	toggle_btn.text = "Open"
-	toggle_btn.custom_minimum_size = Vector2(55, 0)
+	toggle_btn.custom_minimum_size = Vector2(44, 26)
+	toggle_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	toggle_btn.pressed.connect(_on_hole_toggle_pressed.bind(hole_number))
 	row.add_child(toggle_btn)
 
 	var delete_btn = Button.new()
 	delete_btn.name = "DeleteBtn"
 	delete_btn.text = "X"
-	delete_btn.custom_minimum_size = Vector2(30, 0)
+	delete_btn.custom_minimum_size = Vector2(24, 26)
+	delete_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	delete_btn.pressed.connect(_on_hole_delete_pressed.bind(hole_number))
 	row.add_child(delete_btn)
 
@@ -2881,10 +2887,10 @@ func _setup_mini_map() -> void:
 	mini_map.anchor_top = 1
 	mini_map.anchor_right = 0
 	mini_map.anchor_bottom = 1
-	mini_map.offset_left = 10
-	mini_map.offset_top = -445  # Height + margin + space for taller bottom bar (tabbed toolbar)
-	mini_map.offset_right = 200  # Approximate width
-	mini_map.offset_bottom = -261  # Stay above enlarged bottom bar
+	mini_map.offset_left = 0
+	mini_map.offset_top = -(UIConstants.BOTTOM_BAR_HEIGHT  + 184)
+	mini_map.offset_right = 184
+	mini_map.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT)
 
 	# Mirror visibility into the Map button, whatever changed it (button, Tab hotkey,
 	# or the HUD being hidden/shown around the main menu).

@@ -50,7 +50,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = -6.0
-offset_bottom = -6.0
+offset_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -84,7 +84,7 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -256.0
+offset_top = -120.0
 grow_horizontal = 2
 grow_vertical = 0
 
@@ -104,26 +104,26 @@ text = "View:"
 layout_mode = 2
 text = "⟲"
 tooltip_text = "Rotate course counter-clockwise (Q)"
-custom_minimum_size = Vector2(30, 26)
+custom_minimum_size = Vector2(28, 24)
 
 [node name="OrientationLabel" type="Label" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=334192875]
 layout_mode = 2
 text = "N"
 tooltip_text = "Which way the course is facing"
-custom_minimum_size = Vector2(20, 0)
+custom_minimum_size = Vector2(18, 0)
 horizontal_alignment = 1
 
 [node name="RotateCWBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=556283914]
 layout_mode = 2
 text = "⟳"
 tooltip_text = "Rotate course clockwise (Shift+Q)"
-custom_minimum_size = Vector2(30, 26)
+custom_minimum_size = Vector2(28, 24)
 
 [node name="IsoBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=667941285]
 layout_mode = 2
 text = "Iso"
 tooltip_text = "Toggle isometric diamonds / top-down squares (I)"
-custom_minimum_size = Vector2(46, 26)
+custom_minimum_size = Vector2(42, 24)
 toggle_mode = true
 button_pressed = true
 
@@ -134,13 +134,16 @@ alignment = 1
 [node name="PauseBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=1287478317]
 layout_mode = 2
 text = "||"
+custom_minimum_size = Vector2(28, 24)
 
 [node name="PlayBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=1738357492]
 layout_mode = 2
 text = ">"
+custom_minimum_size = Vector2(28, 24)
 
 [node name="FastBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=811286996]
 layout_mode = 2
 text = ">>"
+custom_minimum_size = Vector2(28, 24)
 
 

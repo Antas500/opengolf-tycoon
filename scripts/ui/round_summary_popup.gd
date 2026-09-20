@@ -6,7 +6,7 @@ class_name RoundSummaryPopup
 const DISPLAY_DURATION: float = 5.0
 const FADE_DURATION: float = 0.5
 const PANEL_WIDTH: float = 260.0
-const BOTTOM_MARGIN: float = 262.0  # Tracks BottomBar (now 256px tall with the tabbed toolbar)
+const BOTTOM_MARGIN: float = 102.0  # Tracks BottomBar (UIConstants.BOTTOM_BAR_HEIGHT + 6px)
 const RIGHT_MARGIN: float = 20.0
 
 var _queue: Array = []

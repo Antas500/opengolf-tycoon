@@ -100,9 +100,9 @@ const SEPARATION_LG := 8
 const TOP_HUD_HEIGHT := 48
 # Bottom bar height: view/speed controls on the left + tabbed toolbar on the right.
 # Keep in sync with main.tscn BottomBar offset_top.
-const BOTTOM_BAR_HEIGHT := 256
+const BOTTOM_BAR_HEIGHT := 120
 const BUILD_TOOLS_WIDTH := 260
-const TOOL_BUTTON_HEIGHT := 36
+const TOOL_BUTTON_HEIGHT := 32
 
 # =============================================================================
 # TOOL ICONS (Unicode)
