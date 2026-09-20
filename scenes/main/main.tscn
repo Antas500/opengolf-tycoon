@@ -49,34 +49,21 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -6.0
-offset_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme = ExtResource("8_theme")
 
-[node name="TopBar" type="HBoxContainer" parent="UI/HUD" unique_id=93667985]
+[node name="StatusColumnPlaceholder" type="VBoxContainer" parent="UI/HUD" unique_id=93667985]
 layout_mode = 1
-anchors_preset = 10
+anchors_preset = 1
+anchor_left = 1.0
 anchor_right = 1.0
-offset_bottom = 50.0
-grow_horizontal = 2
-
-[node name="MoneyLabel" type="Label" parent="UI/HUD/TopBar" unique_id=1605473265]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "$50,000"
-
-[node name="DayLabel" type="Label" parent="UI/HUD/TopBar" unique_id=1098233395]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Day 1 - 6:00 AM"
-
-[node name="ReputationLabel" type="Label" parent="UI/HUD/TopBar" unique_id=1212217159]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Reputation: 50"
+offset_left = -218.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 268.0
+grow_horizontal = 0
 
 [node name="BottomBar" type="HBoxContainer" parent="UI/HUD" unique_id=676395160]
 layout_mode = 1

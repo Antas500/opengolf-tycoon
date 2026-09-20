@@ -5,7 +5,7 @@ class_name TournamentLeaderboard
 ## and MC (missed cut) labels.
 
 const PANEL_WIDTH: float = 340.0
-const TOP_MARGIN: float = 45.0
+# Top margin is measured at runtime so the board clears the status column.
 const RIGHT_MARGIN: float = 10.0
 
 var _entries: Array = []  # Array of entry dicts
@@ -360,4 +360,4 @@ func _get_score_color(diff: int, total_par: int) -> Color:
 func _position_panel() -> void:
 	await get_tree().process_frame
 	var vp_size = get_viewport().get_visible_rect().size
-	position = Vector2(vp_size.x - size.x - RIGHT_MARGIN, TOP_MARGIN)
+	position = Vector2(vp_size.x - size.x - RIGHT_MARGIN, UIConstants.get_hud_column_clearance(self))

@@ -25,9 +25,9 @@ const VIEW_ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
 # New UI components
 var player_round: PlayerRoundManager
 
-var top_hud_bar: TopHUDBar = null
+var hud_status_column: HUDStatusColumn = null
 
-# Legacy references (kept for compatibility, now managed by TopHUDBar)
+# Legacy references (kept for compatibility, now managed by HUDStatusColumn)
 var money_label: Label = null
 var day_label: Label = null
 var reputation_label: Label = null
@@ -204,7 +204,7 @@ func _ready() -> void:
 	_connect_signals()
 	_connect_ui_buttons()
 	_setup_bottom_bar()
-	_setup_top_hud_bar()
+	_setup_hud_status_column()
 	_setup_rain_overlay()
 	_setup_placement_preview()
 	_create_menu_buttons()
@@ -708,31 +708,28 @@ func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 		if child.name not in popup_panels:
 			child.visible = visible_flag
 
-func _setup_top_hud_bar() -> void:
-	"""Replace old TopBar with new TopHUDBar component"""
-	var old_top_bar = $UI/HUD/TopBar
+func _setup_hud_status_column() -> void:
+	"""Replace the legacy full-width TopBar with the top-right status column."""
+	var old_top_bar = $UI/HUD/StatusColumnPlaceholder
 	var hud = $UI/HUD
 
-	# Remove old top bar children
-	for child in old_top_bar.get_children():
-		child.queue_free()
-	old_top_bar.queue_free()
+	# Remove the placeholder node the scene ships with
+	if old_top_bar:
+		for child in old_top_bar.get_children():
+			child.queue_free()
+		old_top_bar.queue_free()
 
-	# Create new TopHUDBar
-	top_hud_bar = TopHUDBar.new()
-	top_hud_bar.name = "TopHUDBar"
+	# Create the status column (anchors itself to the top-right corner)
+	hud_status_column = HUDStatusColumn.new()
+	hud_status_column.name = "HUDStatusColumn"
 
-	# Set anchors to top, full width
-	top_hud_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_hud_bar.offset_bottom = UIConstants.TOP_HUD_HEIGHT
-
-	# Connect top bar clicks to panels
-	top_hud_bar.money_clicked.connect(_on_money_clicked)
-	top_hud_bar.rating_clicked.connect(_toggle_course_rating_panel)
+	# Connect status clicks to panels
+	hud_status_column.money_clicked.connect(_on_money_clicked)
+	hud_status_column.rating_clicked.connect(_toggle_course_rating_panel)
 
 	# Add to HUD as first child
-	hud.add_child(top_hud_bar)
-	hud.move_child(top_hud_bar, 0)
+	hud.add_child(hud_status_column)
+	hud.move_child(hud_status_column, 0)
 
 func _setup_rain_overlay() -> void:
 	rain_overlay = RainOverlay.new()
@@ -830,7 +827,7 @@ func _toggle_panel(panel: CenteredPanel) -> void:
 	panel.toggle()
 
 func _update_ui() -> void:
-	# TopHUDBar now handles money/day/reputation/weather/wind updates via signals
+	# HUDStatusColumn now handles money/day/reputation/weather/wind updates via signals
 	# Only update button states here
 	_update_button_states()
 
@@ -1299,7 +1296,7 @@ func _on_hole_created(hole_number: int, par: int, distance_yards: int) -> void:
 	row.add_child(delete_btn)
 
 	hole_list.add_child(row)
-	_update_top_bar_rating()
+	_update_status_rating()
 
 func _on_hole_toggle_pressed(hole_number: int) -> void:
 	if not GameManager.current_course:
@@ -1318,7 +1315,7 @@ func _on_hole_deleted(hole_number: int) -> void:
 		hole_list.get_node(row_name).queue_free()
 	# Rebuild the hole list to reflect renumbered holes
 	_rebuild_hole_list()
-	_update_top_bar_rating()
+	_update_status_rating()
 	StrokeIndexCalculator.recalculate_for_course()
 
 func _on_hole_toggled(hole_number: int, is_open: bool) -> void:
@@ -2848,7 +2845,7 @@ func _setup_financial_panel() -> void:
 	hud.add_child(staff_panel)
 	staff_panel.hide()
 
-	# Note: Money click is now handled by TopHUDBar.money_clicked signal
+	# Note: Money click is now handled by HUDStatusColumn.money_clicked signal
 
 func _on_money_clicked() -> void:
 	## Toggle the financial panel when money is clicked.
@@ -3368,7 +3365,7 @@ func _navigate_to_golfer_position(golfer_id: int) -> void:
 # --- Course Rating Overlay ---
 
 func _setup_course_rating_overlay() -> void:
-	"""Add course rating panel (toggled from top bar star rating)."""
+	"""Add course rating panel (toggled from the status column star rating)."""
 	course_rating_overlay = CourseRatingOverlay.new()
 	course_rating_overlay.name = "CourseRatingOverlay"
 	course_rating_overlay.close_requested.connect(func():
@@ -3377,26 +3374,26 @@ func _setup_course_rating_overlay() -> void:
 			_active_panel = null
 	)
 	course_rating_overlay.rating_updated.connect(func(stars: float):
-		if top_hud_bar:
-			top_hud_bar.update_rating(stars)
+		if hud_status_column:
+			hud_status_column.update_rating(stars)
 	)
 	$UI/HUD.add_child(course_rating_overlay)
 	course_rating_overlay.hide()
-	# Update top bar whenever course rating changes (end of day, etc.)
+	# Update the status column whenever course rating changes (end of day, etc.)
 	EventBus.course_rating_changed.connect(func(rating: Dictionary):
-		if top_hud_bar:
-			top_hud_bar.update_rating(rating.get("overall", 3.0))
+		if hud_status_column:
+			hud_status_column.update_rating(rating.get("overall", 3.0))
 	)
-	# Push initial rating to top bar (deferred so GameManager is ready)
-	_update_top_bar_rating.call_deferred()
+	# Push initial rating to the status column (deferred so GameManager is ready)
+	_update_status_rating.call_deferred()
 
 var _rating_retry_count: int = 0
 
-func _update_top_bar_rating() -> void:
-	if not GameManager.current_course or not GameManager.terrain_grid or not top_hud_bar:
+func _update_status_rating() -> void:
+	if not GameManager.current_course or not GameManager.terrain_grid or not hud_status_column:
 		if _rating_retry_count < 3:
 			_rating_retry_count += 1
-			get_tree().create_timer(0.5).timeout.connect(_update_top_bar_rating)
+			get_tree().create_timer(0.5).timeout.connect(_update_status_rating)
 		return
 	_rating_retry_count = 0
 	var rating := CourseRatingSystem.calculate_rating(
@@ -3408,7 +3405,7 @@ func _update_top_bar_rating() -> void:
 		GameManager.entity_layer
 	)
 	var stars: float = rating.get("overall", 3.0)
-	top_hud_bar.update_rating(stars)
+	hud_status_column.update_rating(stars)
 
 func _toggle_course_rating_panel() -> void:
 	_toggle_panel(course_rating_overlay)
