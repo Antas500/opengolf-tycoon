@@ -39,10 +39,13 @@ var _last_effectively_paused: bool = false
 
 func _ready() -> void:
 	add_to_group(UIConstants.HUD_COLUMN_GROUP)
+	_apply_anchors()
+	var eb := get_node_or_null("/root/EventBus")
+	if eb and eb.has_signal("load_completed"):
+		eb.load_completed.connect(func(_success): _update_all())
 	_build_ui()
 	_connect_signals()
 	_update_all()
-	_apply_anchors()
 	minimum_size_changed.connect(_refresh_height)
 	_refresh_height()
 

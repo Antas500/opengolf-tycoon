@@ -149,6 +149,7 @@ func _build_save_data() -> Dictionary:
 			"current_day": GameManager.current_day,
 			"current_hour": GameManager.current_hour,
 			"green_fee": GameManager.green_fee,
+			"tee_booking_interval": GameManager.tee_booking_interval,
 			"theme": CourseTheme.to_string_name(GameManager.current_theme),
 			"loan_balance": GameManager.loan_balance,
 			"difficulty": DifficultyPresets.to_string_name(GameManager.current_difficulty),
@@ -157,6 +158,10 @@ func _build_save_data() -> Dictionary:
 			"heightmap_noise_seed": GameManager.heightmap_noise_seed,
 		},
 	}
+
+	data["guest_experience"] = FeedbackManager.serialize_experience()
+	data["daily_stats"] = _serialize_daily_stats()
+	data["feedback"] = {"daily_counts": FeedbackManager.daily_counts.duplicate(), "trigger_counts": FeedbackManager.trigger_counts.duplicate(), "needs_complaints": FeedbackManager.needs_complaints.duplicate()}
 
 	# Terrain
 	if terrain_grid:
@@ -198,6 +203,8 @@ func _build_save_data() -> Dictionary:
 
 	# Golfers: NOT saved - they are cleared on load and respawn naturally when
 	# simulation resumes. Full mid-action state persistence is a future milestone.
+
+	data["hole_statistics"] = _serialize_hole_statistics()
 
 	# Course Records
 	data["course_records"] = CourseRecords.serialize_records(GameManager.course_records)
@@ -260,6 +267,11 @@ func _serialize_pin_positions(pin_positions: Array) -> Array:
 
 ## Apply loaded save data
 func _apply_save_data(data: Dictionary) -> void:
+	var was_loading := _is_loading
+	_is_loading = true
+	# Restoration is a transaction, not newly earned gameplay progress.
+	if milestone_manager:
+		milestone_manager.deserialize(data.get("milestones", {}))
 	# IMPORTANT: Set to BUILDING mode FIRST to prevent golfer_manager from
 	# processing golfers while we're still loading
 	GameManager.set_mode(GameManager.GameMode.BUILDING)
@@ -280,6 +292,7 @@ func _apply_save_data(data: Dictionary) -> void:
 	var old_money = GameManager.money
 	GameManager.money = int(game.get("money", GameManager.DEFAULT_STARTING_MONEY))
 	EventBus.money_changed.emit(old_money, GameManager.money)
+	GameManager.tee_booking_interval = clampi(int(game.get("tee_booking_interval",90)),60,180)
 	var old_rep = GameManager.reputation
 	GameManager.reputation = clampf(float(game.get("reputation", GameManager.DEFAULT_STARTING_REPUTATION)), 0.0, 100.0)
 	EventBus.reputation_changed.emit(old_rep, GameManager.reputation)
@@ -324,10 +337,6 @@ func _apply_save_data(data: Dictionary) -> void:
 		terrain_grid.set_view_isometric(bool(view.get("isometric", true)))
 		terrain_grid.set_view_orientation(int(view.get("orientation", 0)))
 
-	# Milestones — restore BEFORE holes so hole_created signals don't re-award
-	if milestone_manager and data.has("milestones"):
-		milestone_manager.deserialize(data["milestones"])
-
 	# Entities
 	if entity_layer and data.has("entities"):
 		entity_layer.deserialize(data["entities"])
@@ -368,6 +377,9 @@ func _apply_save_data(data: Dictionary) -> void:
 	if GameManager.marketing_manager and data.has("marketing"):
 		GameManager.marketing_manager.deserialize(data["marketing"])
 
+	_restore_hole_statistics(data.get("hole_statistics", {}))
+	GameManager.yesterday_stats = null
+
 	# Daily history
 	GameManager.daily_history = data.get("daily_history", [])
 
@@ -384,10 +396,22 @@ func _apply_save_data(data: Dictionary) -> void:
 	if ball_manager and ball_manager.has_method("clear_all_balls"):
 		ball_manager.clear_all_balls()
 
-	# Day always starts automatically — resume simulation after load.
+	_restore_daily_stats(data.get("daily_stats", {}))
+	_restore_feedback(data)
+	FeedbackManager.restore_experience(data.get("guest_experience", {}))
+	GameManager.update_course_rating()
+	EventBus.hour_changed.emit(GameManager.current_hour)
+	if GameManager.wind_system and GameManager.wind_system.has_method("_emit_wind_changed"):
+		GameManager.wind_system._emit_wind_changed()
+
+	# The day is already in play. Resume simulation after the save state is restored
+	# so a loaded course does not sit frozen in a separate build mode.
+	# Do not call start_simulation(): a save captured at closing time would roll the day.
 	GameManager.set_mode(GameManager.GameMode.SIMULATING)
 	GameManager.set_speed(GameManager.GameSpeed.NORMAL)
 
+	# Reset loading flag so signal handlers work normally again
+	_is_loading = was_loading
 	# NOTE: load_completed is emitted by load_game() after _apply_save_data returns
 
 ## Deserialize holes into GameManager.current_course
@@ -443,9 +467,7 @@ func _deserialize_holes(holes_data: Array) -> void:
 
 	GameManager.current_course._recalculate_par()
 
-	# Emit hole_created signals so HoleManager rebuilds visualizations
-	for hole in GameManager.current_course.holes:
-		EventBus.hole_created.emit(hole.hole_number, hole.par, hole.distance_yards)
+	# HoleManager rebuilds on load_completed; do not replay creation events.
 
 ## Read only the metadata from a save file (for listing)
 func _read_save_metadata(path: String) -> Dictionary:
@@ -472,7 +494,11 @@ func _on_day_changed(_new_day: int) -> void:
 	# Don't autosave while loading a game (would overwrite with partial state)
 	if _is_loading:
 		return
-	save_game("autosave")
+	call_deferred("_save_after_day_change", _new_day)
+
+func _save_after_day_change(day: int) -> void:
+	if not _is_loading and GameManager.current_day == day:
+		save_game("autosave")
 
 # ─── User Settings (audio, preferences — not per-save) ────────────
 
@@ -528,3 +554,61 @@ func save_user_settings() -> void:
 		for key in audio_data:
 			config.set_value("audio", key, audio_data[key])
 	config.save(SETTINGS_PATH)
+
+const HOLE_STAT_FIELDS := ["total_rounds", "total_strokes", "eagles", "birdies", "pars", "bogeys", "double_bogeys_plus", "holes_in_one", "best_score", "best_scorer_name"]
+
+func _serialize_hole_statistics() -> Dictionary:
+	var result := {}
+	for number in GameManager.hole_statistics:
+		var values := {}
+		for field in HOLE_STAT_FIELDS:
+			values[field] = GameManager.hole_statistics[number].get(field)
+		result[str(number)] = values
+	return result
+
+func _restore_hole_statistics(saved: Dictionary) -> void:
+	GameManager.hole_statistics.clear()
+	for number in saved:
+		var stats := GameManager.HoleStatistics.new(int(number))
+		for field in HOLE_STAT_FIELDS:
+			if saved[number].has(field): stats.set(field, saved[number][field])
+		GameManager.hole_statistics[int(number)] = stats
+
+## Persist accounting without serializing runtime objects or active golfers.
+func _serialize_daily_stats() -> Dictionary:
+	var saved := {}
+	for property in GameManager.daily_stats.get_property_list():
+		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			saved[property.name] = GameManager.daily_stats.get(property.name)
+	return saved
+
+func _restore_feedback(data: Dictionary) -> void:
+	var feedback: Dictionary = data.get("feedback", {})
+	if feedback is Dictionary and not feedback.is_empty():
+		if feedback.get("daily_counts") is Dictionary:
+			FeedbackManager.daily_counts = feedback["daily_counts"].duplicate()
+		if feedback.get("trigger_counts") is Dictionary:
+			FeedbackManager.trigger_counts = feedback["trigger_counts"].duplicate()
+		if feedback.get("needs_complaints") is Dictionary:
+			FeedbackManager.needs_complaints = feedback["needs_complaints"].duplicate()
+		return
+	# Older patch saves stored the three sentiment totals as top-level keys.
+	if data.has("feedback_positive") or data.has("feedback_negative") or data.has("feedback_neutral"):
+		FeedbackManager.daily_counts = {
+			"positive": int(data.get("feedback_positive", 0)),
+			"negative": int(data.get("feedback_negative", 0)),
+			"neutral": int(data.get("feedback_neutral", 0)),
+		}
+	var triggers = data.get("feedback_triggers", {})
+	if triggers is Dictionary and not triggers.is_empty():
+		FeedbackManager.trigger_counts = triggers.duplicate()
+
+func _restore_daily_stats(saved: Dictionary) -> void:
+	GameManager.daily_stats = GameManager.DailyStatistics.new()
+	for property in GameManager.daily_stats.get_property_list():
+		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE and saved.has(property.name):
+			if property.name == "tier_counts":
+				for key in saved.tier_counts:
+					GameManager.daily_stats.tier_counts[int(key)] = int(saved.tier_counts[key])
+			else:
+				GameManager.daily_stats.set(property.name, int(saved[property.name]))
