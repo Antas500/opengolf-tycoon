@@ -16,6 +16,7 @@ class_name TerrainToolbar
 ## Content within tabs is laid out horizontally and scrolls horizontally when
 ## overflowing the available tab width.
 
+signal course_review_pressed
 signal tool_selected(tool_type: int)
 signal create_hole_pressed
 signal tree_placement_pressed
@@ -28,6 +29,7 @@ signal lower_elevation_pressed
 signal bulldozer_pressed
 signal staff_pressed
 signal brush_size_changed(new_size: int)
+signal brush_shape_changed(round_shape: bool)
 signal green_preset_selected(preset_name: String)
 signal play_course_pressed
 signal tournaments_pressed
@@ -106,7 +108,9 @@ var _tool_buttons: Dictionary = {}  # tool_type -> ToolButton
 var _tab_bar: TabBar = null
 var _pages: Array[ScrollContainer] = []
 var _brush_size: int = 1
+var _round_brush := true
 var _brush_labels: Array[Label] = []
+var _brush_shape_buttons: Array[OptionButton] = []
 var _green_preset_group: VBoxContainer = null
 var _green_preset_buttons: Dictionary = {}  # preset_name -> Button
 var _active_green_preset: String = ""
@@ -299,6 +303,8 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_separator())
 
 	hbox.add_child(_make_brush_group())
+	hbox.add_child(_make_separator())
+	hbox.add_child(_make_review_group())
 
 	hbox.add_child(_make_green_presets_group())
 
@@ -467,6 +473,7 @@ func _build_club_tab(hbox: HBoxContainer) -> void:
 	_add_tool_button(ops_box, {"type": "milestones", "name": "Milestones", "icon": "[G]", "hotkey": "G", "desc": "Goals and achievements"})
 	_add_tool_button(ops_box, {"type": "feed", "name": "Feed", "icon": "[N]", "hotkey": "N", "desc": "Course event feed"})
 	_add_tool_button(ops_box, {"type": "scorecard", "name": "Scorecard", "icon": "[K]", "hotkey": "K", "desc": "Course scorecard and records"})
+	ops_box.add_child(_make_review_button())
 	hbox.add_child(_make_tab_group("OPERATIONS", ops_box))
 
 	hbox.add_child(_make_separator())
@@ -599,9 +606,34 @@ func _make_brush_group() -> VBoxContainer:
 	brush_increase.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	brush_increase.pressed.connect(_on_brush_increase)
 	brush_row.add_child(brush_increase)
-
 	group.add_child(brush_row)
+
+	var shape := OptionButton.new()
+	shape.add_item("Round")
+	shape.add_item("Square")
+	shape.select(0 if _round_brush else 1)
+	shape.tooltip_text = "Round brush for natural contours, square for precise edges"
+	shape.custom_minimum_size = Vector2(78, 22)
+	shape.focus_mode = Control.FOCUS_NONE
+	shape.item_selected.connect(_on_brush_shape_selected)
+	_brush_shape_buttons.append(shape)
+	group.add_child(shape)
 	return group
+
+func _make_review_button() -> Button:
+	var review := Button.new()
+	review.text = "Review"
+	review.tooltip_text = "Course review and next steps"
+	review.custom_minimum_size = Vector2(72, TOOL_ROW_HEIGHT)
+	review.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	review.pressed.connect(func(): course_review_pressed.emit())
+	return review
+
+func _make_review_group() -> VBoxContainer:
+	var row := HBoxContainer.new()
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(_make_review_button())
+	return _make_tab_group("REVIEW", row)
 
 func _make_green_presets_group() -> VBoxContainer:
 	_green_preset_group = VBoxContainer.new()
@@ -950,7 +982,7 @@ func _input(event: InputEvent) -> void:
 			KEY_R:
 				_on_tool_button_pressed("rock")
 			KEY_F:
-				_on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
+				if event.shift_pressed: _on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
 			KEY_B:
 				_on_tool_button_pressed("building")
 			KEY_O:
@@ -985,6 +1017,15 @@ func has_selection() -> bool:
 
 func get_brush_size() -> int:
 	return _brush_size
+
+func _on_brush_shape_selected(index: int) -> void:
+	_round_brush = index == 0
+	for button in _brush_shape_buttons:
+		if is_instance_valid(button) and button.selected != index:
+			button.set_block_signals(true)
+			button.select(index)
+			button.set_block_signals(false)
+	brush_shape_changed.emit(_round_brush)
 
 func _on_brush_decrease() -> void:
 	var idx = BRUSH_SIZES.find(_brush_size)

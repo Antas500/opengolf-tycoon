@@ -129,12 +129,14 @@ func test_golfer_expression_does_not_move_actor_or_delay_next_shot() -> void:
 func test_building_ghost_matches_facility_and_clears_when_preview_ends() -> void:
 	var manager = autofree(PlacementManager.new())
 	manager.selected_building_type = "restaurant"
-	manager.current_placement_data = {"size": {"width": 3, "height": 3}}
+	manager.placement_mode = PlacementManager.PlacementMode.BUILDING
+	manager.current_placement_data = {"size": [3, 3]}
 	var preview := PlacementPreview.new()
 	add_child_autofree(preview)
 	preview.set_process(false)
 	preview.placement_manager = manager
-	preview._draw_building_ghost(Vector2(120, 80), Color(0.3, 0.9, 0.3, 0.4))
+	preview.terrain_grid = null
+	preview._draw_building_ghost(Vector2i(120, 80), Color(0.3, 0.9, 0.3, 0.4))
 	assert_eq(preview._building_ghost.kind, "restaurant")
 	assert_eq(preview._building_ghost.position, Vector2(120, 80))
 	assert_almost_eq(preview._building_ghost.modulate.a, 0.4, 0.001)

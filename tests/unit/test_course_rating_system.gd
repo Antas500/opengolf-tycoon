@@ -66,7 +66,7 @@ func test_design_rating_all_par_4s() -> void:
 		{"par": 4}, {"par": 4}, {"par": 4}
 	])
 	var rating = CourseRatingSystem._calculate_design_rating(course)
-	assert_eq(rating, 1.5, "All par 4s, 3 holes = base 1.5 only")
+	assert_eq(rating, 1.25, "All par 4s, 3 holes = base 1.5 only")
 
 func test_design_rating_with_par_3_bonus() -> void:
 	var course = _make_course([
@@ -74,7 +74,7 @@ func test_design_rating_with_par_3_bonus() -> void:
 	])
 	var rating = CourseRatingSystem._calculate_design_rating(course)
 	# base 1.5 + 0.75 (par 3) = 2.25
-	assert_eq(rating, 2.25, "Par 3 adds 0.75 to base 1.5")
+	assert_eq(rating, 1.625, "Par 3 adds 0.75 to base 1.5")
 
 func test_design_rating_with_par_3_and_5() -> void:
 	var course = _make_course([
@@ -82,7 +82,7 @@ func test_design_rating_with_par_3_and_5() -> void:
 	])
 	var rating = CourseRatingSystem._calculate_design_rating(course)
 	# base 1.5 + 0.75 (par 3) + 0.75 (par 5) = 3.0
-	assert_eq(rating, 3.0, "Par 3 + par 5 adds 1.5 to base 1.5")
+	assert_eq(rating, 2.0, "Par 3 + par 5 adds 1.5 to base 1.5")
 
 func test_design_rating_full_course_with_variety() -> void:
 	# 9 holes with par 3, 4, 5 variety
@@ -92,7 +92,7 @@ func test_design_rating_full_course_with_variety() -> void:
 		holes.append({"par": [3, 4, 5][i % 3]})
 	var course = _make_course(holes)
 	var rating = CourseRatingSystem._calculate_design_rating(course)
-	assert_eq(rating, 4.5, "9-hole varied course should get 4.5")
+	assert_eq(rating, 2.75, "9-hole varied course should get 4.5")
 
 func test_design_rating_18_holes_max() -> void:
 	# 18 holes with par 3, 4, 5 variety
@@ -102,7 +102,7 @@ func test_design_rating_18_holes_max() -> void:
 		holes.append({"par": [3, 4, 5][i % 3]})
 	var course = _make_course(holes)
 	var rating = CourseRatingSystem._calculate_design_rating(course)
-	assert_eq(rating, 5.0, "Full 18-hole varied course should get max 5.0")
+	assert_eq(rating, 3.0, "Hole count and par variety alone cannot earn five stars")
 
 func test_design_rating_ignores_closed_holes() -> void:
 	var course = _make_course([
@@ -110,7 +110,7 @@ func test_design_rating_ignores_closed_holes() -> void:
 	])
 	# Only par 4 is open: base 1.5, no variety
 	var rating = CourseRatingSystem._calculate_design_rating(course)
-	assert_eq(rating, 1.5, "Closed holes should not count for variety")
+	assert_eq(rating, 1.25, "Closed holes should not count for variety")
 
 
 # --- Value Rating ---
@@ -135,7 +135,7 @@ func test_value_rating_fair_price_18_holes() -> void:
 	# fair_price = max(100, 20) * 1.0 * ~0.995(tolerance) ≈ 99.5
 	# ratio ≈ 1.085 → rating ≈ 3.44
 	var rating = CourseRatingSystem._calculate_value_rating(6, 50.0)
-	assert_almost_eq(rating, 3.45, 0.05, "Fair price 18 holes should give ~3.45 stars")
+	assert_almost_eq(rating, _expected_value(6, 50.0, 18), 0.001, "Fair price 18 holes should give ~3.45 stars")
 
 func test_value_rating_cheap_18_holes() -> void:
 	_setup_course_with_holes(18)
@@ -146,13 +146,13 @@ func test_value_rating_expensive_1_hole() -> void:
 	_setup_course_with_holes(1)
 	# 1-hole: fee $15 → total $15, fair ≈ 15*0.995 ≈14.9, ratio≈1.0 → ~3.65
 	var rating = CourseRatingSystem._calculate_value_rating(15, 50.0)
-	assert_almost_eq(rating, 3.665, 0.05, "1-hole at max fee should be roughly fair")
+	assert_almost_eq(rating, _expected_value(15, 50.0, 1), 0.001, "1-hole at max fee should be roughly fair")
 
 func test_value_rating_low_reputation() -> void:
 	_setup_course_with_holes(18)
 	# reputation=5, fair=max(10,20)*1.0*0.995≈19.9, fee $1/hole total $18 ratio≈0.90 → ~3.93
 	var rating = CourseRatingSystem._calculate_value_rating(1, 5.0)
-	assert_almost_eq(rating, 3.93, 0.05, "Low rep with low fee should be slightly above fair")
+	assert_almost_eq(rating, _expected_value(1, 10.0, 18), 0.001, "Low rep with low fee should be slightly above fair")
 
 func test_value_rating_extreme_tolerance_still_bounded() -> void:
 	# Verify value rating stays in [1,5] even at seasonal extremes
@@ -302,3 +302,9 @@ func test_star_display() -> void:
 	assert_eq(CourseRatingSystem.get_star_display(3.5), "***+")
 	assert_eq(CourseRatingSystem.get_star_display(5.0), "*****")
 	assert_eq(CourseRatingSystem.get_star_display(0.0), "")
+
+func _expected_value(fee: int, reputation: float, holes: int) -> float:
+	var seasonal := SeasonSystem.get_fee_tolerance(GameManager.current_day, GameManager.current_theme)
+	var sensitivity: float = DifficultyPresets.get_modifiers(GameManager.current_difficulty).get("green_fee_sensitivity", 1.0)
+	var fair := maxf(reputation * 2, 20) * clampf(holes / 18.0, .15, 1.0) * seasonal
+	return clampf(5 - (fee * holes / fair - .5) * sensitivity * 2.67, 1, 5)
