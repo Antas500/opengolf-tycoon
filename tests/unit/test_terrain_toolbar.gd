@@ -65,6 +65,88 @@ func test_tool_selection_and_signals() -> void:
 	assert_false(toolbar.has_selection())
 	assert_false(toolbar._green_preset_group.visible, "Green presets should be hidden when cleared")
 
+func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
+	var paint_tools := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
+		TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.BUNKER,
+		TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS]
+	for tool_type in paint_tools:
+		var button: ToolButton = toolbar._tool_buttons[tool_type]
+		assert_true(button is TerrainTileButton, "%s should be a tile button" % button.tool_name)
+		assert_null(button.icon, "Terrain swatches should not use the old square sprite icons")
+		assert_eq(button.text, "", "Text is shown beneath the diamond, not inside it")
+		assert_eq(button._name_label.text, button.tool_name)
+		assert_eq(button._hotkey_label.text, "[%s]" % button.hotkey)
+		assert_lte(button._name_label.position.y + button._name_label.size.y,
+			button._hotkey_label.position.y, "Name and shortcut should not overlap")
+		assert_lte(button._hotkey_label.position.y + button._hotkey_label.size.y,
+			button.size.y, "Shortcuts should fit within the toolbar height")
+		assert_true(button._name_label.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+			"Clicking a label should still select the tool")
+		assert_eq(button.cost, TerrainTypes.get_placement_cost(tool_type))
+
+	# Other pages and non-painting actions retain their familiar ToolButtons.
+	assert_false(toolbar._tool_buttons[TerrainTypes.Type.PATH] is TerrainTileButton)
+	assert_false(toolbar._tool_buttons["bulldozer"] is TerrainTileButton)
+	assert_false(toolbar._open_hole_buttons[0] is TerrainTileButton)
+
+func test_tile_previews_use_course_shader_and_neighboring_grass() -> void:
+	var corners := TerrainTileButton.tile_corners()
+	assert_eq(corners.size(), 4)
+	assert_eq(corners[1].x - corners[3].x, TerrainTileButton.TILE_SIZE.x)
+	assert_eq(corners[2].y - corners[0].y, TerrainTileButton.TILE_SIZE.y)
+	assert_eq(TerrainTileButton.TILE_SIZE.x, TerrainTileButton.TILE_SIZE.y * 2,
+		"The swatch has the same 2:1 footprint as a projected grid cell")
+
+	for tool_type in [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.GREEN,
+			TerrainTypes.Type.BUNKER, TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS]:
+		var button: TerrainTileButton = toolbar._tool_buttons[tool_type]
+		var tile: Polygon2D = button.get_child(1)
+		assert_eq(tile.polygon, corners)
+		assert_eq(tile.texture.get_size(), Vector2(1, 1))
+		assert_eq(tile.uv[0], Vector2(0.5, 0))
+		assert_eq(tile.uv[1], Vector2(1, 0.5))
+		var mat := button._surface_material
+		assert_eq(mat.shader, preload("res://shaders/course_surface.gdshader"))
+		assert_eq(mat.get_shader_parameter("grid_size"), Vector2(3, 3))
+		assert_eq(mat.get_shader_parameter("grid_axis_x"), Vector2(32, 16))
+		assert_eq(mat.get_shader_parameter("grid_axis_y"), Vector2(-32, 16))
+		var image: Image = mat.get_shader_parameter("terrain_data").get_image()
+		assert_eq(image.get_size(), Vector2i(3, 3))
+		assert_eq(roundi(image.get_pixel(1, 1).r * 255.0), tool_type)
+		assert_eq(roundi(image.get_pixel(0, 1).r * 255.0), TerrainTypes.Type.GRASS)
+		assert_eq(roundi(image.get_pixel(2, 1).r * 255.0), TerrainTypes.Type.GRASS)
+
+func test_terrain_tile_highlight_and_click_still_select_the_tool() -> void:
+	watch_signals(toolbar)
+	var button: TerrainTileButton = toolbar._tool_buttons[TerrainTypes.Type.WATER]
+	button.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.WATER])
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.WATER)
+	assert_true(button.is_selected())
+	assert_eq(button._outline.default_color, UIConstants.COLOR_GOLD)
+	assert_eq(button._hotkey_label.get_theme_color("font_color"), UIConstants.COLOR_GOLD)
+
+	toolbar.clear_selection()
+	assert_false(button.is_selected())
+	assert_eq(button._outline.default_color, UIConstants.COLOR_BORDER)
+
+func test_tile_previews_follow_course_theme_colors() -> void:
+	var button: TerrainTileButton = toolbar._tool_buttons[TerrainTypes.Type.WATER]
+	var original_colors := TilesetGenerator._active_colors.duplicate()
+	var recolored := original_colors.duplicate()
+	recolored["water"] = Color("d0478c")
+	recolored["fringe"] = Color("808044")
+	TilesetGenerator.set_theme_colors(recolored)
+	EventBus.theme_changed.emit(0)
+
+	var palette: Image = button._surface_material.get_shader_parameter("palette").get_image()
+	assert_eq(palette.get_pixel(TerrainTypes.Type.WATER, 0).to_html(false),
+		Color("d0478c").to_html(false))
+	assert_eq(button._surface_material.get_shader_parameter("fringe_color"), Color("808044"))
+
+	TilesetGenerator.set_theme_colors(original_colors)
+	EventBus.theme_changed.emit(0)
+
 func test_brush_size_controls() -> void:
 	watch_signals(toolbar)
 

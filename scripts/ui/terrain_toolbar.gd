@@ -287,10 +287,10 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	var surf_box = HBoxContainer.new()
 	surf_box.add_theme_constant_override("separation", 4)
 	surf_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "icon": "[=]", "hotkey": "1", "desc": "Mowed playing surface for approach shots"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "icon": "[~]", "hotkey": "2", "desc": "Longer grass bordering fairways"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.GREEN, "name": "Green", "icon": "[O]", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "icon": "[T]", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time"})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush", "tile_preview": true})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time", "tile_preview": true})
 	hbox.add_child(_make_tab_group("SURFACES", surf_box))
 
 	hbox.add_child(_make_separator())
@@ -298,13 +298,22 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	var haz_box = HBoxContainer.new()
 	haz_box.add_theme_constant_override("separation", 4)
 	haz_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "icon": "[:]", "hotkey": "5", "desc": "Sand trap hazard"})
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.WATER, "name": "Water", "icon": "[w]", "hotkey": "6", "desc": "Water hazard with penalty"})
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "icon": "[X]", "hotkey": "7", "desc": "Boundary area with stroke penalty"})
-	var open_hole_btn := _add_tool_button(haz_box, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
+	_add_tool_button(haz_box, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
+	_add_tool_button(haz_box, {"type": TerrainTypes.Type.WATER, "name": "Water", "hotkey": "6", "desc": "Water hazard with penalty", "tile_preview": true})
+	_add_tool_button(haz_box, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "hotkey": "7", "desc": "Boundary area with stroke penalty", "tile_preview": true})
+	hbox.add_child(_make_tab_group("HAZARDS", haz_box))
+
+	hbox.add_child(_make_separator())
+
+	var actions_box = HBoxContainer.new()
+	actions_box.add_theme_constant_override("separation", 4)
+	actions_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var open_hole_btn := _add_tool_button(actions_box, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
 	_open_hole_buttons.append(open_hole_btn)
-	_add_tool_button(haz_box, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"})
-	hbox.add_child(_make_tab_group("HAZARDS & TOOLS", haz_box))
+	open_hole_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var bulldozer_btn := _add_tool_button(actions_box, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"})
+	bulldozer_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hbox.add_child(_make_tab_group("TOOLS", actions_box))
 
 	hbox.add_child(_make_separator())
 
@@ -555,15 +564,25 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		cost = costs.get("cost", 0)
 		maintenance = costs.get("maintenance", 0)
 
-	var btn = ToolButton.create(tool_type, tool_def["name"], tool_def.get("icon", ""),
-		tool_def.get("hotkey", ""), tool_def.get("desc", ""), cost, maintenance)
+	var btn: ToolButton
+	if tool_def.get("tile_preview", false):
+		btn = TerrainTileButton.new()
+		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
+			tool_def.get("desc", ""), cost, maintenance)
+	else:
+		btn = ToolButton.create(tool_type, tool_def["name"], tool_def.get("icon", ""),
+			tool_def.get("hotkey", ""), tool_def.get("desc", ""), cost, maintenance)
 	btn.tool_pressed.connect(_on_tool_button_pressed)
 	parent.add_child(btn)
 
-	btn.custom_minimum_size = Vector2(0, TOOL_ROW_HEIGHT)
-	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	btn.add_theme_constant_override("icon_max_width", 18)
+	if btn is TerrainTileButton:
+		btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
+		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	else:
+		btn.custom_minimum_size = Vector2(0, TOOL_ROW_HEIGHT)
+		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+		btn.add_theme_constant_override("icon_max_width", 18)
 
 	if tool_type is String and tool_type == "feed":
 		_feed_button = btn
