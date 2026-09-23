@@ -71,12 +71,6 @@ vec2 tile_at(vec2 p) {
 	return vec2(id, data.g);
 }
 
-float same(float a, float b) { return 1.0 - step(0.5, abs(a - b)); }
-
-float coverage(float id, vec4 ids, vec4 weights) {
-	return dot(vec4(same(id, ids.x), same(id, ids.y), same(id, ids.z), same(id, ids.w)), weights);
-}
-
 vec3 surface(float id, float cover, float depth, vec2 world, float grain, float patch) {
 	vec3 base = texture(palette, vec2((id + 0.5) / 14.0, 0.5)).rgb;
 	float variation = (patch - 0.5) * 0.13 + (grain - 0.5) * 0.075;
@@ -134,28 +128,57 @@ void fragment() {
 		vec2 tile_world = p * tile_size;
 		// A restrained contour perturbation breaks stair steps without moving tile centers.
 		vec2 warp = vec2(noise(p * 0.72), noise(p * 0.72 + 37.0)) - 0.5;
-		vec2 sample_pos = p - 0.5 + warp * 0.16;
+		vec2 sample_pos = p + warp * 0.08;
 		vec2 cell = floor(sample_pos);
 		vec2 f = fract(sample_pos);
 		vec2 a = tile_at(cell);
-		vec2 b = tile_at(cell + vec2(1.0, 0.0));
-		vec2 c = tile_at(cell + vec2(0.0, 1.0));
-		vec2 d = tile_at(cell + vec2(1.0));
-		vec4 ids = vec4(a.x, b.x, c.x, d.x);
-		vec4 weights = vec4((1.0-f.x)*(1.0-f.y), f.x*(1.0-f.y), (1.0-f.x)*f.y, f.x*f.y);
-		vec4 covers = vec4(coverage(a.x, ids, weights), coverage(b.x, ids, weights),
-			coverage(c.x, ids, weights), coverage(d.x, ids, weights));
-		// Sharpen material boundaries while rounding the outside of connected corners.
-		float dominant = max(max(covers.x, covers.y), max(covers.z, covers.w));
-		// Narrow anti-aliased material boundary: no broad airbrushed transition.
-		vec4 blends = weights * smoothstep(vec4(dominant - 0.028), vec4(dominant), covers);
-		blends /= max(dot(blends, vec4(1.0)), 0.0001);
+		vec2 t_e = tile_at(cell + vec2(1.0, 0.0));
+		vec2 t_s = tile_at(cell + vec2(0.0, 1.0));
+		vec2 t_w = tile_at(cell + vec2(-1.0, 0.0));
+		vec2 t_n = tile_at(cell + vec2(0.0, -1.0));
+
+		// Material boundaries sit on the shared tile edges inside a narrow
+		// anti-aliased band. The old bilinear coverage field made the boundary
+		// of an isolated tile bulge outward into a rounded blob; edge-aligned
+		// bands keep every tile's full square footprint.
+		const float AA = 0.04;     // Half width of the anti-aliased boundary.
+		const float FRINGE = 0.30; // Half width of the edge-treatment band.
+		float d_e = f.x - 1.0;
+		float d_w = -f.x;
+		float d_s = f.y - 1.0;
+		float d_n = -f.y;
+		float m_e = step(0.5, abs(a.x - t_e.x)) * smoothstep(-AA, AA, d_e);
+		float m_w = step(0.5, abs(a.x - t_w.x)) * smoothstep(-AA, AA, d_w);
+		float m_s = step(0.5, abs(a.x - t_s.x)) * smoothstep(-AA, AA, d_s);
+		float m_n = step(0.5, abs(a.x - t_n.x)) * smoothstep(-AA, AA, d_n);
+
+		float w_c = (1.0 - m_e) * (1.0 - m_w) * (1.0 - m_s) * (1.0 - m_n);
+		float w_e = m_e * (1.0 - m_w) * (1.0 - m_s) * (1.0 - m_n);
+		float w_s = m_s * (1.0 - m_w) * (1.0 - m_e) * (1.0 - m_n);
+		float w_w = m_w * (1.0 - m_e) * (1.0 - m_s) * (1.0 - m_n);
+		float w_n = m_n * (1.0 - m_w) * (1.0 - m_s) * (1.0 - m_e);
+
+		// Coverage for edge treatments (fringe, lip, shoreline): 1 well inside
+		// the tile, fading across the boundary band. Square, like the boundary.
+		float c_e = step(0.5, abs(a.x - t_e.x)) * smoothstep(-FRINGE, FRINGE, d_e);
+		float c_w = step(0.5, abs(a.x - t_w.x)) * smoothstep(-FRINGE, FRINGE, d_w);
+		float c_s = step(0.5, abs(a.x - t_s.x)) * smoothstep(-FRINGE, FRINGE, d_s);
+		float c_n = step(0.5, abs(a.x - t_n.x)) * smoothstep(-FRINGE, FRINGE, d_n);
+		float cov_c = (1.0 - c_e) * (1.0 - c_w) * (1.0 - c_s) * (1.0 - c_n);
+		float cov_e = 1.0 - step(0.5, abs(a.x - t_e.x)) * (1.0 - smoothstep(-FRINGE, FRINGE, d_e));
+		float cov_s = 1.0 - step(0.5, abs(a.x - t_s.x)) * (1.0 - smoothstep(-FRINGE, FRINGE, d_s));
+		float cov_w = 1.0 - step(0.5, abs(a.x - t_w.x)) * (1.0 - smoothstep(-FRINGE, FRINGE, d_w));
+		float cov_n = 1.0 - step(0.5, abs(a.x - t_n.x)) * (1.0 - smoothstep(-FRINGE, FRINGE, d_n));
+
 		float grain = hash(floor(tile_world));
 		float patch = noise(tile_world * 0.009) * 0.65 + noise(tile_world * 0.035) * 0.35;
-		vec3 color = surface(a.x, covers.x, a.y, tile_world, grain, patch) * blends.x
-			+ surface(b.x, covers.y, b.y, tile_world, grain, patch) * blends.y
-			+ surface(c.x, covers.z, c.y, tile_world, grain, patch) * blends.z
-			+ surface(d.x, covers.w, d.y, tile_world, grain, patch) * blends.w;
+		float w_sum = w_c + w_e + w_s + w_w + w_n;
+		vec3 color = (surface(a.x, cov_c, a.y, tile_world, grain, patch) * w_c
+			+ surface(t_e.x, cov_e, t_e.y, tile_world, grain, patch) * w_e
+			+ surface(t_s.x, cov_s, t_s.y, tile_world, grain, patch) * w_s
+			+ surface(t_w.x, cov_w, t_w.y, tile_world, grain, patch) * w_w
+			+ surface(t_n.x, cov_n, t_n.y, tile_world, grain, patch) * w_n)
+			/ max(w_sum, 0.0001);
 		// Elevation slopes & 3D relief normal
 		float left_h = elevation_at_grid(p - vec2(0.6, 0.0));
 		float right_h = elevation_at_grid(p + vec2(0.6, 0.0));
