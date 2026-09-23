@@ -115,8 +115,11 @@ static func decide_shot(golfer: Golfer, hole_position: Vector2i) -> ShotDecision
 ## Main entry point: decide what shot to hit from GolferData.
 ## Works with both real golfers (via from_golfer) and phantom visualization golfers.
 ## Set ignore_wind=true for course design visualization (ShotPathCalculator).
-static func decide_shot_for(gd: GolferData, hole_position: Vector2i, ignore_wind: bool = false) -> ShotDecision:
-	var terrain_grid: TerrainGrid = GameManager.terrain_grid
+## `grid` overrides GameManager.terrain_grid — pass a detached terrain copy to plan
+## off the main thread (see HolePathPlanner).
+static func decide_shot_for(gd: GolferData, hole_position: Vector2i, ignore_wind: bool = false,
+		grid: TerrainGrid = null) -> ShotDecision:
+	var terrain_grid: TerrainGrid = grid if grid else GameManager.terrain_grid
 	if not terrain_grid:
 		return _make_decision(hole_position, Golfer.Club.IRON, "normal", 0.0)
 
@@ -809,6 +812,10 @@ static func _assess_miss_risk(
 static func _apply_green_center_bias(
 	gd: GolferData, hole_position: Vector2i, candidates: Array
 ) -> void:
+	# No hole context (e.g. routing a hole that is not built yet): don't borrow
+	# another hole's green — and don't touch the course from a worker thread.
+	if gd.current_hole < 0:
+		return
 	var course_data = GameManager.course_data
 	if not course_data or gd.current_hole >= course_data.holes.size():
 		return

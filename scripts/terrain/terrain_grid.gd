@@ -43,6 +43,11 @@ signal view_rotated(orientation: int, isometric: bool)
 ## Emitted whenever a "Green With Hole" (cup) marker is added or removed.
 signal cup_tiles_changed
 
+## Bumped on every terrain type, bunker depth or elevation write — including the
+## quiet bulk paths (load, generation) that emit no per-tile signals — so caches of
+## terrain-derived results (see HolePathPlanner) can tell when they went stale.
+var terrain_revision: int = 0
+
 ## Batch mode — defers signals until end_batch() to avoid overlay redraw cascade
 var _batch_mode: bool = false
 var _batch_changes: Array = []  # Array of {pos, old_type, new_type}
@@ -241,6 +246,7 @@ func _apply_variation_shader() -> void:
 	tile_map.material = shader_material
 
 func _initialize_grid() -> void:
+	terrain_revision += 1
 	_ensure_vertex_storage()
 	_tee_box_tiles.clear()
 	for x in range(grid_width):
@@ -470,6 +476,7 @@ func set_tile(pos: Vector2i, terrain_type: int, player_placed: bool = true) -> v
 	if old_type == terrain_type:
 		return
 	_grid[pos] = terrain_type
+	terrain_revision += 1
 	# Painting over a "Green With Hole" tile with anything else removes its cup.
 	if terrain_type != TerrainTypes.Type.GREEN and _cup_tiles.has(pos):
 		remove_cup_tile(pos)
@@ -576,6 +583,7 @@ func get_bunker_depth(pos: Vector2i) -> int:
 func set_bunker_depth(pos: Vector2i, depth: int) -> void:
 	if not is_valid_position(pos):
 		return
+	terrain_revision += 1
 	if depth == 0:
 		_bunker_depth_grid.erase(pos)
 	else:
@@ -665,9 +673,36 @@ func reset_for_new_course() -> void:
 	deserialize_elevation({})  # Zero the vertex field and refresh elevation dependents.
 	deserialize({})  # GRASS everywhere, clears player-placed marks and the tee index.
 	_bunker_depth_grid.clear()
+	terrain_revision += 1
 	clear_cup_tiles()
 	if _bunker_overlay:
 		_bunker_overlay.queue_redraw()
+
+## A detached copy of the terrain that shot planning reads — tile types, bunker
+## depths and vertex elevation — with no overlays, surface or children. It never
+## enters the scene tree, so ShotAI can query it from a worker thread while the
+## live grid keeps changing (see HolePathPlanner). The caller owns the copy and
+## must free() it.
+func create_analysis_copy() -> TerrainGrid:
+	var copy := TerrainGrid.new()
+	copy.grid_width = grid_width
+	copy.grid_height = grid_height
+	copy.tile_width = tile_width
+	copy.tile_height = tile_height
+	copy._grid = _grid.duplicate()
+	copy._bunker_depth_grid = _bunker_depth_grid.duplicate()
+	_ensure_vertex_storage()
+	copy._vertex_elevation = _vertex_elevation.duplicate()
+	copy._vertex_stride = _vertex_stride
+	copy.terrain_revision = terrain_revision
+	return copy
+
+## Overwrite a tile's terrain type with no side effects — no signals, indexes,
+## cup bookkeeping, visuals or revision bump. Only for "what if" questions on a
+## detached copy from create_analysis_copy(); the live grid must use set_tile().
+func set_analysis_tile(pos: Vector2i, terrain_type: int) -> void:
+	if is_valid_position(pos):
+		_grid[pos] = terrain_type
 
 func calculate_distance_yards(from: Vector2i, to: Vector2i) -> int:
 	const YARDS_PER_TILE: float = 22.0
@@ -980,6 +1015,7 @@ func set_vertex_elevation(vertex: Vector2i, height: int) -> void:
 		before[tile] = get_elevation(tile)
 
 	_vertex_elevation[index] = new_height
+	terrain_revision += 1
 	vertex_elevation_changed.emit(vertex, old_height, new_height)
 	_queue_elevation_refresh(vertex, affected)
 
@@ -1265,6 +1301,7 @@ func deserialize(data: Dictionary) -> void:
 			var pos = Vector2i(int(parts[0]), int(parts[1]))
 			if is_valid_position(pos):
 				_grid[pos] = int(data[key])
+	terrain_revision += 1
 	# Second pass: update visuals with correct autotile edges
 	for x in range(grid_width):
 		for y in range(grid_height):
@@ -1321,6 +1358,7 @@ func migrate_tile_elevation(data: Dictionary) -> void:
 
 ## Rebuild every elevation-derived texture after a bulk write (load, migration).
 func _after_elevation_bulk_load() -> void:
+	terrain_revision += 1
 	if _course_surface:
 		_course_surface.rebuild_elevation()
 	if _elevation_overlay:
@@ -1337,6 +1375,7 @@ func deserialize_bunker_depth(data: Dictionary) -> void:
 			var pos = Vector2i(int(parts[0]), int(parts[1]))
 			if is_valid_position(pos):
 				_bunker_depth_grid[pos] = int(data[key])
+	terrain_revision += 1
 
 	if _course_surface:
 		_course_surface.rebuild()

@@ -18,6 +18,24 @@ the ordinary terrain brushes and then opens the hole:
    creates the hole: yardage, par, forward/middle tees, pin rotation set and
    difficulty rating all follow from those two tiles.
 
+While a tee box is waiting and the Green tool is about to cut a cup, the placement
+preview shows the **potential hole** under the cursor, before anything is painted.
+It draws a dashed path from the waiting tee to the hovered tile, marks the expected
+landing zones and the cup with its gold pin, and shows a plaque with the hole number,
+par and yardage, e.g. `Hole 3 · Par 4 · 398 yds`. The route comes from the same
+shot planner that draws an open hole's path, so the preview is the path the hole
+gets once the cup is cut and the hole is opened. When a pair couldn't open, the
+path and pin turn red and the plaque explains why:
+
+- the tee and cup are too close together;
+- the tile is already green;
+- the player doesn't own the land;
+- a building or decoration is in the way;
+- more than one tee box is waiting.
+
+The path disappears as soon as the cup is cut, when another tool is selected or
+the tool is deselected, and when no tee box is waiting.
+
 "Unused" means *not already claimed by a hole*. Auto-generated forward and middle
 tees belong to their hole, so they never block the next tee box. Deleting a hole
 returns its tee box to the unused pool, so it can be paired with a freshly cut cup
@@ -86,6 +104,65 @@ preconditions: those layouts only paint the land the player owns, so a champions
 hole that runs off the property still exists as a hole (with the tee surface to be
 finished later) rather than silently disappearing.
 
+### Potential hole path
+
+`HoleLayout.potential_hole(tool, grid, course, cup_pos)` decides whether the path is
+shown and what it says. `PlacementPreview._update_potential_hole()` calls it every
+frame with the hovered tile. It is only called while terrain painting, and never in
+elevation, bulldozer, entity-placement or hole-move modes.
+
+```
+potential_hole = {}                                   unless all of:
+    tool == GREEN
+    green_places_cup(grid, course)                    # next green is a Green With Hole
+    unused_tee_boxes(grid, course) is not empty       # a tee box is waiting
+    grid.is_valid_position(cup_pos)
+
+tee             = nearest unused tee box to cup_pos   (ties → first in sorted order)
+distance_yards  = grid.calculate_distance_yards(tee, cup_pos)
+par             = GolfRules.calculate_par(distance_yards)
+hole_number     = course.holes.size() + 1
+extra_tees      = forward/middle tiles auto_generate_tee_positions() would add
+                  (multi-tee only; see extra_tee_tiles())
+can_cut_cup     = cup_site_blocker(grid, cup_pos) == ""
+ready           = can_cut_cup and exactly one tee waits
+                  and |cup_pos − tee| ≥ MIN_HOLE_TILES
+```
+
+`cup_site_blocker()` mirrors `main._paint_terrain_stamp()`. A stamp skips land the
+player doesn't own and tiles under a building or decoration. Painting green onto a
+tile that is already green doesn't change the tile, so no cup is cut there either.
+On a tile where the cup can be cut, `ready` predicts what `open_hole_request()`
+will return once it is cut, and the unit tests check the two agree.
+
+**Route.** `HolePathPlanner` returns the route for the pair. It calls
+`ShotPathCalculator.calculate_route()`, the same function
+`calculate_waypoints()` → `HoleVisualizer` uses, so the preview and the opened
+hole show the same waypoints. The planner makes two adjustments so the routes match:
+
+- `hole_index = −1`: the pair is not in `course.holes` yet, so ShotAI's green-centre
+  bias is skipped. Without this it would read `holes[0]` and bend the approach
+  toward another hole's green.
+- The route is planned on a terrain copy painted the way the course will look once
+  the hole opens: the cup tile is green, plus the forward/middle tees on multi-tee
+  courses.
+
+ShotAI takes about 0.2 s for a par 4 and 0.4 s for a par 5, which is too slow to
+run on the main thread for every tile the cursor crosses. So the planner works like
+this:
+
+| Case | What happens |
+|---|---|
+| Par 3 | `[tee, cup]`, immediately (ShotAI is not consulted) |
+| Par 4/5, cached | Cached route, immediately |
+| Par 4/5, not cached | `[]` returned, and the preview draws a faded straight line. A `WorkerThreadPool` task plans the route on `TerrainGrid.create_analysis_copy()`, a detached copy of tiles, bunker depths and elevation that never enters the scene tree. One task runs at a time. While it runs, only the newest request is kept, so the route catches up once the cursor settles. |
+| No thread support (Web export) | Planned on the main thread once the cursor has rested on the tile for `inline_dwell_msec` |
+
+Routes are cached per `(tee, cup, par, extra tees)`. The cache is dropped whenever
+`TerrainGrid.terrain_revision` changes. Every write to tiles, bunker depths or
+elevation bumps the revision, including loads and generation that emit no per-tile
+signals. A route planned on terrain that changed while the task ran is discarded.
+
 ### New Game
 
 Both rules count tiles on the *current* course, so a new game has to start from an
@@ -108,15 +185,31 @@ clearing it, which is what used to let the old course leak through.
 | Green Without Hole brush | `TerrainToolbar.BRUSH_SIZES` | up to 9×9 |
 | Tee box cost / green cost | `TerrainTypes.PROPERTIES` | $12 / $20 per tile |
 | Waiting-cup pin color | `CupOverlay.WAITING_PIN_COLOR` | gold |
+| Potential hole path colors | `PlacementPreview.HOLE_PATH_*` | cream path, red when not ready |
+| Potential hole plaque font size | `PlacementPreview.HOLE_PATH_FONT_SIZE` | 13 px, constant on screen |
+| Cached potential-hole routes | `HolePathPlanner.MAX_CACHED_ROUTES` | 256 |
+| No-thread route delay | `HolePathPlanner.inline_dwell_msec` | 500 ms |
 
 ## Tests
 
 - `tests/unit/test_hole_layout.gd` — the rules above, including claims by existing holes.
 - `tests/unit/test_cup_tiles.gd` — cup marker lifecycle, tee index, save round trip.
 - `tests/unit/test_hole_creation_tool.gd` — `open_hole()` output and preconditions.
+- `tests/unit/test_potential_hole.gd` — when the potential hole is shown, which tee
+  it pairs with, the yardage, par and hole number it reports, blocked cup sites,
+  and multi-tee previews.
+- `tests/unit/test_hole_path_planner.gd` — background planning, preview route ==
+  opened-hole route (with and without extra tees), caching, invalidation on terrain
+  edits, the no-thread fallback, and the detached terrain copy.
+- `tests/unit/test_shot_path_calculator.gd` — `calculate_route()` and the
+  `hole_index = −1` guard against borrowing another hole's green.
 - `tests/integration/hole_creation_flow.gd` — the whole flow through `main.gd`:
   capped tee brush, blocked second tee, cup green, undo/redo of the cup, widening
   the green, Open Hole pairing, and a save/load round trip.
+- `tests/integration/hole_path_preview.gd` — the preview through `main.gd` with a
+  simulated cursor: when it is hidden or shown, par 3 vs a par 4 planned in the
+  background, and the previewed route matching the opened hole's (par 4, and par 5
+  with multi-tee).
 - `tests/integration/generated_course_hole_layout.gd` — Quick Start and all four
   prebuilt packages still deliver every hole and leave nothing waiting.
 - `tests/integration/new_game_resets_course.gd` — a second New Game starts from a
