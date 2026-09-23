@@ -132,7 +132,7 @@ const TOOL_ICONS := {
 	"bulldozer": "[D]",
 	"raise": "[+]",
 	"lower": "[-]",
-	"create_hole": "[H]",
+	"open_hole": "[H]",
 	"staff": "[P]",
 }
 

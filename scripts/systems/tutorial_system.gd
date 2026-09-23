@@ -35,8 +35,8 @@ const STEP_DATA = {
 	},
 	Step.CREATE_HOLE: {
 		"title": "Step 2: Create a Hole",
-		"message": "Press H or click 'Create Hole' in the toolbar.\n\n1. Click to place the tee box\n2. Click to place the green\n3. Click to place the flag",
-		"action": "Create your first hole to continue",
+		"message": "Paint the two ends of a hole, then open it.\n\n1. Tee Box tool (T) — one tile for the tee\n2. Green tool (3) — one tile becomes the green with a hole\n3. Press H or click 'Open Hole' to pair them",
+		"action": "Open your first hole to continue",
 		"requires_action": true,
 		"signal": "hole_created",
 	},

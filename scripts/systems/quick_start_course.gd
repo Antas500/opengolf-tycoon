@@ -161,35 +161,12 @@ static func _paint_extra_bunker(terrain_grid: TerrainGrid, center: Vector2i) -> 
 					terrain_grid.set_tile(pos, TerrainTypes.Type.BUNKER)
 
 
-## Programmatically create a hole entry using the HoleCreationTool internals
-static func _create_hole(terrain_grid: TerrainGrid, hole_tool: HoleCreationTool, tee: Vector2i, green: Vector2i) -> void:
-	var hole := GameManager.HoleData.new()
-	hole.hole_number = hole_tool.current_hole_number
-	hole.tee_position = tee
-	hole.green_position = green
-	hole.hole_position = green
-	hole.distance_yards = terrain_grid.calculate_distance_yards(tee, green)
-	hole.par = HoleCreationTool.calculate_par(hole.distance_yards)
-	# Auto-generate multiple tee boxes and pin positions
-	hole.tee_positions = {"back": hole.tee_position, "middle": hole.tee_position, "forward": hole.tee_position}
-	if GameManager.multi_tee_enabled:
-		hole.auto_generate_tee_positions(terrain_grid)
-		for tee_key in ["forward", "middle"]:
-			var tee_pos: Vector2i = hole.tee_positions[tee_key]
-			if tee_pos != hole.tee_position and terrain_grid.is_valid_position(tee_pos):
-				terrain_grid.set_tile(tee_pos, TerrainTypes.Type.TEE_BOX)
-	hole.pin_positions = [hole.hole_position]
-	hole.auto_generate_pin_positions(terrain_grid)
-	hole.recalculate_par_by_tee(terrain_grid)
-
-	hole.difficulty_rating = DifficultyCalculator.calculate_hole_difficulty(hole, terrain_grid)
-
-	if not GameManager.current_course:
-		GameManager.current_course = GameManager.CourseData.new()
-
-	GameManager.current_course.add_hole(hole)
-	EventBus.hole_created.emit(hole.hole_number, hole.par, hole.distance_yards)
-	hole_tool.current_hole_number += 1
+## Programmatically create a hole from a painted tee box and green.
+## Shares the HoleCreationTool hole builder, without the preconditions the
+## player's Open Hole action enforces (see HoleLayout).
+static func _create_hole(_terrain_grid: TerrainGrid, hole_tool: HoleCreationTool, tee: Vector2i, green: Vector2i) -> void:
+	if hole_tool.create_generated_hole(tee, green) == null:
+		push_warning("QuickStartCourse: could not create a hole from %s to %s" % [tee, green])
 
 
 ## Remove trees and rocks that sit on course surfaces (fairway, green, tee box, bunker)

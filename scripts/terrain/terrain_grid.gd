@@ -22,6 +22,13 @@ var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) *
 var _vertex_stride: int = 0  # Row length of _vertex_elevation (grid_width + 1)
 var _bunker_depth_grid: Dictionary = {}  # Vector2i -> 0 (SHALLOW) or 1 (DEEP)
 var _player_placed_tiles: Dictionary = {}  # Vector2i -> true for tiles player placed (for maintenance)
+## Green tiles carrying a cup that is not yet part of a hole — a "Green With Hole" tile
+## waiting to be paired with a tee box. Once a hole is opened the marker is consumed and
+## the cup lives on as the hole's `hole_position`, so every marker here is unused.
+var _cup_tiles: Dictionary = {}  # Vector2i -> true
+## Index of TEE_BOX tiles, kept in step with _grid so the tee placement rule
+## ("no waiting tee box on the course") is a dictionary lookup, not a grid scan.
+var _tee_box_tiles: Dictionary = {}  # Vector2i -> true
 var _elevation_overlay: ElevationOverlay = null
 var _course_surface: CourseSurface = null
 var _wildlife: CourseWildlife = null
@@ -33,12 +40,20 @@ signal tile_changed(position: Vector2i, old_type: int, new_type: int)
 signal elevation_changed(position: Vector2i, old_elevation: int, new_elevation: int)
 signal vertex_elevation_changed(vertex: Vector2i, old_elevation: int, new_elevation: int)
 signal view_rotated(orientation: int, isometric: bool)
+## Emitted whenever a "Green With Hole" (cup) marker is added or removed.
+signal cup_tiles_changed
+
+## Bumped on every terrain type, bunker depth or elevation write — including the
+## quiet bulk paths (load, generation) that emit no per-tile signals — so caches of
+## terrain-derived results (see HolePathPlanner) can tell when they went stale.
+var terrain_revision: int = 0
 
 ## Batch mode — defers signals until end_batch() to avoid overlay redraw cascade
 var _batch_mode: bool = false
 var _batch_changes: Array = []  # Array of {pos, old_type, new_type}
 
 var _ob_markers_overlay: OBMarkersOverlay = null
+var _cup_overlay: CupOverlay = null
 var _water_overlay: WaterOverlay = null
 var _bunker_overlay: BunkerOverlay = null
 var _grass_overlay: GrassOverlay = null
@@ -75,6 +90,7 @@ func _ready() -> void:
 	if tile_map:
 		tile_map.hide()
 	_setup_ob_markers_overlay()
+	_setup_cup_overlay()
 	# The continuous surface supplies turf, sand, water, and paths on every platform.
 	# Keep the legacy overlay classes available for older tools, but don't double draw.
 	# TreeOverlay and RockOverlay disabled — entities render their own sprites.
@@ -159,6 +175,8 @@ func regenerate_tileset() -> void:
 	_redraw_all_overlays()
 
 func _redraw_all_overlays() -> void:
+	if _cup_overlay:
+		_cup_overlay.queue_redraw()
 	if _wildlife:
 		_wildlife.queue_redraw()
 	if _water_overlay:
@@ -228,7 +246,9 @@ func _apply_variation_shader() -> void:
 	tile_map.material = shader_material
 
 func _initialize_grid() -> void:
+	terrain_revision += 1
 	_ensure_vertex_storage()
+	_tee_box_tiles.clear()
 	for x in range(grid_width):
 		for y in range(grid_height):
 			var pos = Vector2i(x, y)
@@ -368,6 +388,8 @@ func _sync_projection_dependents() -> void:
 		_land_boundary_overlay.queue_redraw()
 	if _wind_flag_overlay:
 		_wind_flag_overlay.refresh_flag_positions()
+	if _cup_overlay:
+		_cup_overlay.refresh_pin_positions()
 	queue_redraw()
 
 func is_valid_position(pos: Vector2i) -> bool:
@@ -437,6 +459,8 @@ func refresh_all_overlays() -> void:
 		_path_overlay.queue_redraw()
 	if _ob_markers_overlay and _ob_markers_overlay.has_method("_calculate_boundaries"):
 		_ob_markers_overlay._calculate_boundaries()
+	if _cup_overlay:
+		_cup_overlay.queue_redraw()
 	if _heightmap:
 		_heightmap.rebuild_from_grids(self)
 	if _shot_heatmap_overlay:
@@ -452,6 +476,14 @@ func set_tile(pos: Vector2i, terrain_type: int, player_placed: bool = true) -> v
 	if old_type == terrain_type:
 		return
 	_grid[pos] = terrain_type
+	terrain_revision += 1
+	# Painting over a "Green With Hole" tile with anything else removes its cup.
+	if terrain_type != TerrainTypes.Type.GREEN and _cup_tiles.has(pos):
+		remove_cup_tile(pos)
+	if terrain_type == TerrainTypes.Type.TEE_BOX:
+		_tee_box_tiles[pos] = true
+	else:
+		_tee_box_tiles.erase(pos)
 	# Track player-placed tiles for maintenance cost calculation
 	if player_placed:
 		_player_placed_tiles[pos] = true
@@ -551,6 +583,7 @@ func get_bunker_depth(pos: Vector2i) -> int:
 func set_bunker_depth(pos: Vector2i, depth: int) -> void:
 	if not is_valid_position(pos):
 		return
+	terrain_revision += 1
 	if depth == 0:
 		_bunker_depth_grid.erase(pos)
 	else:
@@ -558,6 +591,118 @@ func set_bunker_depth(pos: Vector2i, depth: int) -> void:
 	EventBus.terrain_tile_changed.emit(pos, TerrainTypes.Type.BUNKER, TerrainTypes.Type.BUNKER)
 	if _course_surface:
 		_course_surface.update_tile(pos)
+
+# =============================================================================
+# Cup tiles — "Green With Hole" markers waiting to be paired with a tee box
+# =============================================================================
+
+## Mark a green tile as carrying a cup (a "Green With Hole" tile).
+## Only valid on GREEN terrain; returns true when a marker was added.
+func add_cup_tile(pos: Vector2i) -> bool:
+	if not is_valid_position(pos) or get_tile(pos) != TerrainTypes.Type.GREEN:
+		return false
+	if _cup_tiles.has(pos):
+		return false
+	_cup_tiles[pos] = true
+	cup_tiles_changed.emit()
+	return true
+
+## Remove the cup marker from a tile. Returns true when a marker was removed.
+func remove_cup_tile(pos: Vector2i) -> bool:
+	if not _cup_tiles.has(pos):
+		return false
+	_cup_tiles.erase(pos)
+	cup_tiles_changed.emit()
+	return true
+
+func has_cup_tile(pos: Vector2i) -> bool:
+	return _cup_tiles.has(pos)
+
+## Every green tile that carries a cup.
+func get_cup_tiles() -> Array[Vector2i]:
+	var tiles: Array[Vector2i] = []
+	for pos in _cup_tiles:
+		tiles.append(pos)
+	return tiles
+
+## Every TEE_BOX tile on the course (index maintained by set_tile).
+func get_tee_box_tiles() -> Array[Vector2i]:
+	var tiles: Array[Vector2i] = []
+	for pos in _tee_box_tiles:
+		tiles.append(pos)
+	return tiles
+
+## Rebuild the tee box index after bulk grid writes (load, generation).
+func _reindex_tee_boxes() -> void:
+	_tee_box_tiles.clear()
+	for pos in _grid:
+		if _grid[pos] == TerrainTypes.Type.TEE_BOX:
+			_tee_box_tiles[pos] = true
+
+func clear_cup_tiles() -> void:
+	if _cup_tiles.is_empty():
+		return
+	_cup_tiles.clear()
+	cup_tiles_changed.emit()
+
+func serialize_cup_tiles() -> Array:
+	var data: Array = []
+	for pos in _cup_tiles:
+		data.append("%d,%d" % [pos.x, pos.y])
+	return data
+
+func deserialize_cup_tiles(data) -> void:
+	_cup_tiles.clear()
+	if data == null:
+		return
+	for key in data:
+		var parts = str(key).split(",")
+		if parts.size() == 2:
+			var pos = Vector2i(int(parts[0]), int(parts[1]))
+			# Only keep markers that survived on a green tile.
+			if is_valid_position(pos) and get_tile(pos) == TerrainTypes.Type.GREEN:
+				_cup_tiles[pos] = true
+	cup_tiles_changed.emit()
+
+## Reset to bare land so a new course starts clean: every tile back to GRASS and
+## all per-tile state cleared (player-placed marks, bunker depths, sculpted
+## elevation, waiting cups). New Game paints natural terrain over the existing
+## grid, so without this the previous course leaks into the next one — and a
+## leftover tee box would block the player's very first tee.
+func reset_for_new_course() -> void:
+	deserialize_elevation({})  # Zero the vertex field and refresh elevation dependents.
+	deserialize({})  # GRASS everywhere, clears player-placed marks and the tee index.
+	_bunker_depth_grid.clear()
+	terrain_revision += 1
+	clear_cup_tiles()
+	if _bunker_overlay:
+		_bunker_overlay.queue_redraw()
+
+## A detached copy of the terrain that shot planning reads — tile types, bunker
+## depths and vertex elevation — with no overlays, surface or children. It never
+## enters the scene tree, so ShotAI can query it from a worker thread while the
+## live grid keeps changing (see HolePathPlanner). The caller owns the copy and
+## must free() it.
+func create_analysis_copy() -> TerrainGrid:
+	var copy := TerrainGrid.new()
+	copy.grid_width = grid_width
+	copy.grid_height = grid_height
+	copy.tile_width = tile_width
+	copy.tile_height = tile_height
+	copy._grid = _grid.duplicate()
+	copy._bunker_depth_grid = _bunker_depth_grid.duplicate()
+	_ensure_vertex_storage()
+	copy._vertex_elevation = _vertex_elevation.duplicate()
+	copy._vertex_stride = _vertex_stride
+	copy.terrain_revision = terrain_revision
+	return copy
+
+## Overwrite a tile's terrain type with no side effects — no signals, indexes,
+## cup bookkeeping, visuals or revision bump. Only for "what if" questions on a
+## detached copy from create_analysis_copy(); the live grid must use set_tile().
+func set_analysis_tile(pos: Vector2i, terrain_type: int) -> void:
+	if is_valid_position(pos):
+		_grid[pos] = terrain_type
 
 func calculate_distance_yards(from: Vector2i, to: Vector2i) -> int:
 	const YARDS_PER_TILE: float = 22.0
@@ -635,6 +780,12 @@ func _setup_ob_markers_overlay() -> void:
 	_ob_markers_overlay.name = "OBMarkersOverlay"
 	add_child(_ob_markers_overlay)
 	_ob_markers_overlay.initialize(self)
+
+func _setup_cup_overlay() -> void:
+	_cup_overlay = CupOverlay.new()
+	_cup_overlay.name = "CupOverlay"
+	add_child(_cup_overlay)
+	_cup_overlay.initialize(self)
 
 func _setup_water_overlay() -> void:
 	_water_overlay = WaterOverlay.new()
@@ -864,6 +1015,7 @@ func set_vertex_elevation(vertex: Vector2i, height: int) -> void:
 		before[tile] = get_elevation(tile)
 
 	_vertex_elevation[index] = new_height
+	terrain_revision += 1
 	vertex_elevation_changed.emit(vertex, old_height, new_height)
 	_queue_elevation_refresh(vertex, affected)
 
@@ -1149,11 +1301,13 @@ func deserialize(data: Dictionary) -> void:
 			var pos = Vector2i(int(parts[0]), int(parts[1]))
 			if is_valid_position(pos):
 				_grid[pos] = int(data[key])
+	terrain_revision += 1
 	# Second pass: update visuals with correct autotile edges
 	for x in range(grid_width):
 		for y in range(grid_height):
 			_update_tile_visual(Vector2i(x, y))
 
+	_reindex_tee_boxes()
 	if _course_surface:
 		_course_surface.rebuild()
 
@@ -1204,6 +1358,7 @@ func migrate_tile_elevation(data: Dictionary) -> void:
 
 ## Rebuild every elevation-derived texture after a bulk write (load, migration).
 func _after_elevation_bulk_load() -> void:
+	terrain_revision += 1
 	if _course_surface:
 		_course_surface.rebuild_elevation()
 	if _elevation_overlay:
@@ -1220,6 +1375,7 @@ func deserialize_bunker_depth(data: Dictionary) -> void:
 			var pos = Vector2i(int(parts[0]), int(parts[1]))
 			if is_valid_position(pos):
 				_bunker_depth_grid[pos] = int(data[key])
+	terrain_revision += 1
 
 	if _course_surface:
 		_course_surface.rebuild()

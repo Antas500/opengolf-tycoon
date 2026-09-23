@@ -20,6 +20,7 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 
 ### Course Design
 - [Builder and Course Review](builder-and-review.md) — Continuous brushes, stroke undo, actionable feedback and starter club
+- [Hole Creation](hole-creation.md) — 1x1 tee boxes, Green With Hole vs Green Without Hole, the potential hole path preview, and opening a hole from the waiting pair
 - [Landforms and Clubhouse Life](course-character.md) — Sculpted hills, coherent building architecture, and golfer reactions
 - [Path Furniture](path-furniture.md) — Path-edge alignment, grounded fixtures, and matching placement ghosts
 - [Living Course Details](course-wildlife.md) — Ducks, garden visitors, seasonal blooms, and decorative water animation

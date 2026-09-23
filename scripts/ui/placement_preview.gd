@@ -7,7 +7,6 @@ signal placement_confirmed(grid_pos: Vector2i, placement_type: String)
 var terrain_grid: TerrainGrid
 var placement_manager: PlacementManager
 var camera: IsometricCamera
-var hole_tool: HoleCreationTool  # Reference for hole creation preview
 var current_terrain_tool: int = -1  # Current terrain painting tool
 var terrain_painting_enabled: bool = false  # Whether to show terrain preview
 var elevation_mode_active: bool = false  # Whether elevation tool is active
@@ -34,12 +33,32 @@ const INVALID_OUTLINE := Color(1.0, 0.4, 0.4, 0.9)
 const BLOCKED_TILE_COLOR := Color(0.8, 0.2, 0.2, 0.4)
 const SMOOTH_SPEED := 20.0
 
+# Potential hole path: while a tee box waits and the Green tool is about to cut
+# the cup, the hovered tile is previewed as the hole it would make.
+const HOLE_PATH_COLOR := Color(1.0, 0.95, 0.72, 0.9)
+const HOLE_PATH_SHADOW := Color(0.0, 0.0, 0.0, 0.35)
+const HOLE_PATH_BLOCKED := Color(1.0, 0.45, 0.4, 0.9)
+const HOLE_PATH_LANDING := Color(0.5, 0.85, 1.0, 0.9)  # HoleVisualizer landing-zone blue
+const HOLE_PATH_TEE := Color(0.55, 0.95, 0.6, 0.95)
+const HOLE_PATH_WIDTH := 2.0
+const HOLE_PATH_DASH := 8.0
+const HOLE_PATH_FONT_SIZE := 13
+const HOLE_PATH_NOTE_FONT_SIZE := 11
+
+## The potential hole under the cursor (HoleLayout.potential_hole()), {} when hidden.
+var potential_hole: Dictionary = {}
+## Planned route for potential_hole: [tee, landing..., cup], or [] while planning.
+var potential_hole_route: Array[Vector2i] = []
+var _hole_path_planner := HolePathPlanner.new()
+
 # Animation state
 var _garden_ghost: GardenArt
 var _building_ghost: CourseArchitecture
 var _pulse_time: float = 0.0
 var _current_alpha: float = 0.0
 var _target_alpha: float = 0.0
+var _last_process_usec: int = -1
+var _label_style: StyleBoxFlat
 
 func _ready() -> void:
 	_garden_ghost = GardenArt.new()
@@ -53,29 +72,40 @@ func _ready() -> void:
 	z_index = 100  # Render above terrain
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
+	# The player keeps building while the game is paused (Engine.time_scale = 0)
+	# or fast-forwarded, so animate on wall-clock time like IsometricCamera does —
+	# the scaled delta would freeze the fade-in at 0 or overshoot it at 8x.
+	var delta := _real_delta()
 	_pulse_time += delta * 3.0
 
-	# Show preview for entity placement, terrain painting, elevation, bulldozer, OR hole creation
+	# Show preview for entity placement, terrain painting, elevation, or bulldozer
 	var show_entity_preview = placement_manager and placement_manager.placement_mode != PlacementManager.PlacementMode.NONE
 	var show_terrain_preview = terrain_painting_enabled and current_terrain_tool >= 0
-	var show_hole_preview = hole_tool and hole_tool.placement_mode != HoleCreationTool.PlacementMode.NONE
 	var show_elevation_preview = elevation_mode_active
 	var show_bulldozer_preview = bulldozer_mode_active
 	var show_move_preview = _hole_move_mode != 0
 
-	if show_entity_preview or show_terrain_preview or show_hole_preview or show_elevation_preview or show_bulldozer_preview or show_move_preview:
+	if show_entity_preview or show_terrain_preview or show_elevation_preview or show_bulldozer_preview or show_move_preview:
 		_target_alpha = 1.0
 		_update_preview(delta)
 	else:
 		_target_alpha = 0.0
 		current_preview_positions = []
+		_clear_potential_hole()
 
 	# Smooth alpha transition
 	_current_alpha = lerp(_current_alpha, _target_alpha, delta * 10.0)
 
-	if _current_alpha > 0.01 or show_hole_preview:
+	if _current_alpha > 0.01:
 		queue_redraw()
+
+## Seconds since the previous frame, unaffected by Engine.time_scale.
+func _real_delta() -> float:
+	var now := Time.get_ticks_usec()
+	var elapsed := 0.0 if _last_process_usec < 0 else float(now - _last_process_usec) / 1000000.0
+	_last_process_usec = now
+	return minf(elapsed, 0.1)  # Guard against huge jumps (minimized window, debugger).
 
 func set_terrain_grid(grid: TerrainGrid) -> void:
 	terrain_grid = grid
@@ -103,11 +133,12 @@ func set_elevation_mode(active: bool, raising: bool = true, sculpted: bool = fal
 func set_bulldozer_mode(active: bool) -> void:
 	bulldozer_mode_active = active
 
-func set_hole_tool(tool: HoleCreationTool) -> void:
-	hole_tool = tool
-
 func set_hole_move_mode(mode: int) -> void:
 	_hole_move_mode = mode
+
+func _exit_tree() -> void:
+	# A running route task reads a terrain copy the planner owns: let it finish.
+	_hole_path_planner.shutdown()
 
 func _update_preview(delta: float) -> void:
 	if not terrain_grid or not camera:
@@ -136,16 +167,52 @@ func _update_preview(delta: float) -> void:
 		# Check overall validity for entity placement
 		current_preview_valid = placement_manager.can_place_at(grid_pos, terrain_grid)
 	else:
-		# Terrain painting mode - show full brush area
-		if green_preset != "" and current_terrain_tool == TerrainTypes.Type.GREEN:
+		# Terrain painting mode - show the area the tool will actually paint
+		var course: GameManager.CourseData = GameManager.current_course
+		var places_cup: bool = current_terrain_tool == TerrainTypes.Type.GREEN \
+				and HoleLayout.green_places_cup(terrain_grid, course)
+		var max_brush: int = HoleLayout.max_brush_size(current_terrain_tool, terrain_grid, course)
+		var effective_brush: int = brush_size if max_brush == HoleLayout.UNLIMITED_BRUSH \
+				else mini(brush_size, max_brush)
+		if current_terrain_tool == TerrainTypes.Type.GREEN and green_preset != "" and not places_cup:
 			current_preview_positions = terrain_grid.get_green_preset_tiles(grid_pos, green_preset)
-		elif brush_size <= 1:
+		elif effective_brush <= 1:
 			current_preview_positions = [grid_pos]
 		else:
-			current_preview_positions = terrain_grid.get_brush_tiles(grid_pos, brush_size, round_brush)
+			current_preview_positions = terrain_grid.get_brush_tiles(grid_pos, effective_brush, round_brush)
 		current_preview_valid = terrain_grid.is_valid_position(grid_pos)
+		if current_terrain_tool == TerrainTypes.Type.TEE_BOX:
+			current_preview_valid = current_preview_valid \
+					and HoleLayout.can_place_tee_box(terrain_grid, course)
 
+	_update_potential_hole(grid_pos)
 	queue_redraw()
+
+## Refresh the potential hole for the hovered tile: shown only while terrain
+## painting with the Green tool, a Green With Hole comes next and a tee box waits.
+func _update_potential_hole(grid_pos: Vector2i) -> void:
+	var show_path: bool = terrain_painting_enabled and _hole_move_mode == 0 \
+			and not elevation_mode_active and not bulldozer_mode_active \
+			and not (placement_manager and placement_manager.placement_mode != PlacementManager.PlacementMode.NONE)
+	var hole: Dictionary = {}
+	if show_path:
+		hole = HoleLayout.potential_hole(current_terrain_tool, terrain_grid,
+				GameManager.current_course, grid_pos)
+	if hole.is_empty():
+		_clear_potential_hole()
+		return
+	potential_hole = hole
+	potential_hole_route = _hole_path_planner.route_for(terrain_grid, hole.tee, hole.cup, hole.par,
+			hole.extra_tees.values())
+
+func _clear_potential_hole() -> void:
+	if not potential_hole.is_empty() or not potential_hole_route.is_empty():
+		potential_hole = {}
+		potential_hole_route = []
+		queue_redraw()
+	_hole_path_planner.cancel_pending()
+	# Let a finished task hand its route to the cache even while hidden.
+	_hole_path_planner.poll()
 
 func _get_building_footprint(grid_pos: Vector2i) -> Array:
 	var footprint = placement_manager.get_building_footprint()
@@ -161,13 +228,6 @@ func _draw() -> void:
 		_building_ghost.visible = false
 	if not terrain_grid:
 		return
-
-	# Check for hole creation preview (always draw regardless of alpha)
-	if hole_tool and hole_tool.placement_mode != HoleCreationTool.PlacementMode.NONE:
-		if hole_tool.placement_mode == HoleCreationTool.PlacementMode.PLACING_TEE:
-			_draw_tee_placement_preview()
-		else:
-			_draw_hole_creation_preview()
 
 	# Check for hole move mode preview
 	if _hole_move_mode != 0:
@@ -198,6 +258,9 @@ func _draw() -> void:
 			else:
 				tile_valid = true  # Terrain/elevation/bulldozer painting is always valid on valid tiles
 			_draw_isometric_tile(grid_pos, tile_valid, alpha_mod, i == 0, is_special_mode)
+
+	if not potential_hole.is_empty():
+		_draw_potential_hole(_current_alpha)
 
 	if elevation_mode_active:
 		_draw_elevation_brush(alpha_mod)
@@ -698,6 +761,118 @@ func _draw_ghost_generic(pos: Vector2, w: float, h: float, a: float) -> void:
 	# Door
 	draw_rect(Rect2(pos.x + w * 0.4, pos.y + h * 0.65, w * 0.2, h * 0.35), Color(0.45, 0.35, 0.28, a))
 
+# =============================================================================
+# POTENTIAL HOLE PATH
+# =============================================================================
+
+## Draw the hole the hovered tile would make: the waiting tee, the expected shot
+## route (dashed; a straight provisional line while a par 4/5 route is planned),
+## the landing zones, the cup-to-be and a "Hole N · Par P · Y yds" plaque.
+func _draw_potential_hole(alpha: float) -> void:
+	var hole := potential_hole
+	var tee: Vector2i = hole.tee
+	var cup: Vector2i = hole.cup
+	var hole_ready: bool = hole.ready
+	var planned: bool = not potential_hole_route.is_empty()
+
+	var points := PackedVector2Array()
+	if planned:
+		for waypoint in potential_hole_route:
+			points.append(OverlayGeometry.tile_center(terrain_grid, self, waypoint))
+	else:
+		# Par 4/5 route still being planned: a provisional straight line.
+		points.append(OverlayGeometry.tile_center(terrain_grid, self, tee))
+		points.append(OverlayGeometry.tile_center(terrain_grid, self, cup))
+
+	# The waiting tee this cup would pair with.
+	var pulse := 0.75 + sin(_pulse_time) * 0.25
+	draw_polyline(OverlayGeometry.tile_polyline(terrain_grid, self, tee),
+			Color(HOLE_PATH_TEE, HOLE_PATH_TEE.a * alpha * pulse), 2.0)
+	# Forward (red) / middle (white) tees Open Hole will add when multi-tee is on,
+	# in HoleVisualizer's tee-marker colours.
+	var extra_tees: Dictionary = hole.get("extra_tees", {})
+	for tee_key in extra_tees:
+		var marker_color := Color(0.9, 0.2, 0.2) if tee_key == "forward" else Color(0.9, 0.9, 0.9)
+		draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, extra_tees[tee_key]),
+				Color(marker_color, 0.3 * alpha * pulse))
+
+	# Route: a soft dark underlay keeps the dashes readable on any turf.
+	var line_color := HOLE_PATH_COLOR if hole_ready else HOLE_PATH_BLOCKED
+	line_color.a *= alpha * (1.0 if planned else 0.6)
+	if points[0].distance_to(points[points.size() - 1]) >= 1.0:
+		draw_polyline(points, Color(HOLE_PATH_SHADOW, HOLE_PATH_SHADOW.a * alpha),
+				HOLE_PATH_WIDTH + 2.0, true)
+	for i in range(points.size() - 1):
+		if points[i].distance_to(points[i + 1]) >= 1.0:
+			draw_dashed_line(points[i], points[i + 1], line_color, HOLE_PATH_WIDTH,
+					HOLE_PATH_DASH, true, true)
+
+	# Landing zones, styled like the markers HoleVisualizer draws once the hole opens.
+	for i in range(1, points.size() - 1):
+		draw_circle(points[i], 5.0, Color(0.0, 0.0, 0.0, 0.5 * alpha))
+		draw_circle(points[i], 3.5, Color(HOLE_PATH_LANDING, HOLE_PATH_LANDING.a * alpha))
+
+	var cup_point := points[points.size() - 1]
+	var pin_top := _draw_potential_cup(cup, cup_point, alpha, hole_ready)
+	_draw_potential_hole_label(hole, pin_top, alpha)
+
+## Cup ellipse plus a small gold pin, previewing the waiting pin CupOverlay will
+## plant. Returns the top of the pin so the plaque can sit above it.
+func _draw_potential_cup(cup: Vector2i, cup_point: Vector2, alpha: float, hole_ready: bool) -> Vector2:
+	var right := OverlayGeometry.point_in_tile(terrain_grid, self, cup, Vector2(1.0, 0.5))
+	var bottom := OverlayGeometry.point_in_tile(terrain_grid, self, cup, Vector2(0.5, 1.0))
+	var radius := Vector2((right - cup_point).length(), (bottom - cup_point).length()) \
+			* CupOverlay.CUP_RADIUS_SCALE
+	var ellipse := PackedVector2Array()
+	for i in range(12):
+		var angle := TAU * float(i) / 12.0
+		ellipse.append(cup_point + Vector2(cos(angle) * radius.x, sin(angle) * radius.y))
+	draw_colored_polygon(ellipse, Color(CupOverlay.CUP_COLOR, CupOverlay.CUP_COLOR.a * alpha))
+
+	var pin_color := CupOverlay.WAITING_PIN_COLOR if hole_ready else HOLE_PATH_BLOCKED
+	var pole_top := cup_point - Vector2(0.0, CupOverlay.WAITING_POLE_HEIGHT * 0.75)
+	draw_line(cup_point, pole_top, Color(0.95, 0.95, 0.92, 0.9 * alpha), 1.5, true)
+	draw_colored_polygon(PackedVector2Array([
+		pole_top,
+		pole_top + Vector2(CupOverlay.WAITING_FLAG_LENGTH * 0.8, 3.5),
+		pole_top + Vector2(0.0, 7.0),
+	]), Color(pin_color, alpha))
+	return pole_top
+
+## "Hole N · Par P · Y yds", plus why the pair can't open yet. Drawn at a constant
+## on-screen size so it stays legible however far the camera is zoomed out.
+func _draw_potential_hole_label(hole: Dictionary, anchor: Vector2, alpha: float) -> void:
+	var font: Font = ThemeDB.fallback_font
+	var title := "Hole %d · Par %d · %d yds" % [hole.hole_number, hole.par, hole.distance_yards]
+	var note: String = hole.reason
+	var title_size := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, HOLE_PATH_FONT_SIZE)
+	var note_size := Vector2.ZERO
+	if not note.is_empty():
+		note_size = font.get_string_size(note, HORIZONTAL_ALIGNMENT_LEFT, -1, HOLE_PATH_NOTE_FONT_SIZE)
+	var padding := Vector2(8.0, 4.0)
+	var box_size := Vector2(maxf(title_size.x, note_size.x), title_size.y + note_size.y) + padding * 2.0
+	var box := Rect2(Vector2(-box_size.x * 0.5, -box_size.y - 6.0), box_size)
+
+	if _label_style == null:
+		_label_style = StyleBoxFlat.new()
+		_label_style.set_corner_radius_all(4)
+		_label_style.set_border_width_all(1)
+	_label_style.bg_color = Color(0.125, 0.247, 0.196, 0.87 * alpha)  # HoleVisualizer plaque green
+	_label_style.border_color = Color(UIConstants.COLOR_GOLD if hole.ready else HOLE_PATH_BLOCKED, alpha)
+
+	var screen_scale := 1.0 / camera.zoom.x if camera and camera.zoom.x > 0.0 else 1.0
+	draw_set_transform(anchor, 0.0, Vector2(screen_scale, screen_scale))
+	draw_style_box(_label_style, box)
+	var baseline := box.position.y + padding.y + font.get_ascent(HOLE_PATH_FONT_SIZE)
+	draw_string(font, Vector2(box.position.x + padding.x, baseline), title,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, HOLE_PATH_FONT_SIZE, Color(UIConstants.COLOR_TEXT, alpha))
+	if not note.is_empty():
+		baseline += title_size.y
+		draw_string(font, Vector2(box.position.x + padding.x, baseline), note,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, HOLE_PATH_NOTE_FONT_SIZE,
+				Color(1.0, 0.72, 0.68, alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _draw_hole_move_preview() -> void:
 	if not camera or not terrain_grid:
 		return
@@ -751,132 +926,6 @@ func _draw_hole_move_preview() -> void:
 	var font = ThemeDB.fallback_font
 	var center = terrain_grid.grid_to_screen_center(hover_pos)
 	draw_string(font, center + Vector2(-20, -20), label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 12, Color(1, 1, 1, 0.9))
-
-func _draw_tee_placement_preview() -> void:
-	if not hole_tool or not camera or not terrain_grid:
-		return
-
-	var mouse_world = camera.get_mouse_world_position()
-	var hover_grid_pos = terrain_grid.screen_to_grid(mouse_world)
-	if not terrain_grid.is_valid_position(hover_grid_pos):
-		return
-
-	var pulse = 0.7 + sin(_pulse_time) * 0.3
-	var tee_color = Color(0.4, 0.85, 0.45, 0.5 * pulse)
-	draw_colored_polygon(OverlayGeometry.tile_polygon(terrain_grid, self, hover_grid_pos), tee_color)
-	draw_polyline(OverlayGeometry.tile_polyline(terrain_grid, self, hover_grid_pos),
-			Color(1.0, 1.0, 1.0, 0.7 * pulse), 2.0)
-
-	# Label
-	var font = ThemeDB.fallback_font
-	var center = terrain_grid.grid_to_screen_center(hover_grid_pos)
-	draw_string(font, center + Vector2(-28, -20), "Place Tee", HORIZONTAL_ALIGNMENT_CENTER, -1, 12, Color(1, 1, 1, 0.9))
-
-func _draw_hole_creation_preview() -> void:
-	"""Draw preview line and info label during green placement"""
-	if not hole_tool or not camera:
-		return
-
-	var tee_pos = hole_tool.pending_tee_position
-	if tee_pos == Vector2i(-1, -1):
-		return
-
-	# Get current mouse position as potential green position
-	var mouse_world = camera.get_mouse_world_position()
-	var hover_grid_pos = terrain_grid.screen_to_grid(mouse_world)
-
-	if not terrain_grid.is_valid_position(hover_grid_pos):
-		return
-
-	# Calculate positions
-	var tee_screen = terrain_grid.grid_to_screen_center(tee_pos)
-	var hover_screen = terrain_grid.grid_to_screen_center(hover_grid_pos)
-	var midpoint = (tee_screen + hover_screen) / 2.0
-
-	# Calculate distance and par
-	const YARDS_PER_TILE: float = 22.0
-	var distance_tiles = Vector2(hover_grid_pos - tee_pos).length()
-	var distance_yards = int(distance_tiles * YARDS_PER_TILE)
-	var par = HoleCreationTool.calculate_par(distance_yards)
-
-	# Check if distance is valid (minimum 5 tiles / 110 yards)
-	var is_valid = distance_tiles >= 5
-
-	# Draw connection line
-	var line_color = Color(0.3, 1.0, 0.3, 0.7) if is_valid else Color(1.0, 0.3, 0.3, 0.7)
-	draw_line(tee_screen, hover_screen, line_color, 3.0, true)
-
-	# Draw dashed effect on the line
-	var line_length = tee_screen.distance_to(hover_screen)
-	var dash_length = 10.0
-	var direction = (hover_screen - tee_screen).normalized()
-	var dash_color = Color(1.0, 1.0, 1.0, 0.4)
-	var current_dist = 0.0
-	var dash_on = true
-	while current_dist < line_length:
-		if dash_on:
-			var start = tee_screen + direction * current_dist
-			var end_dist = min(current_dist + dash_length, line_length)
-			var end = tee_screen + direction * end_dist
-			draw_line(start, end, dash_color, 1.5, true)
-		dash_on = not dash_on
-		current_dist += dash_length
-
-	# Draw info box at midpoint
-	var box_width = 90.0
-	var box_height = 50.0
-	var box_pos = midpoint - Vector2(box_width / 2, box_height / 2)
-
-	# Background with rounded corners effect
-	var bg_color = Color(0.1, 0.1, 0.1, 0.85)
-	var border_color = line_color
-	draw_rect(Rect2(box_pos, Vector2(box_width, box_height)), bg_color)
-	draw_rect(Rect2(box_pos, Vector2(box_width, box_height)), border_color, false, 2.0)
-
-	# Draw text using draw_string
-	var font = ThemeDB.fallback_font
-	var font_size = 14
-
-	# Par text
-	var par_text = "Par %d" % par
-	var par_color = Color.WHITE
-	draw_string(font, midpoint + Vector2(-20, -8), par_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, par_color)
-
-	# Distance text
-	var dist_text = "%d yds" % distance_yards
-	var dist_color = Color(0.8, 0.8, 0.8) if is_valid else Color(1.0, 0.5, 0.5)
-	draw_string(font, midpoint + Vector2(-22, 12), dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, dist_color)
-
-	# Show warning if too short
-	if not is_valid:
-		var warn_text = "Too short!"
-		draw_string(font, midpoint + Vector2(-30, 30), warn_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, Color(1.0, 0.4, 0.4))
-
-	# Draw green hover preview (single tile — player expands with brush)
-	var pulse = 0.7 + sin(_pulse_time) * 0.3
-	var green_preview_color = Color(0.3, 0.9, 0.5, 0.4 * pulse) if is_valid else Color(0.9, 0.3, 0.3, 0.4 * pulse)
-	if terrain_grid.is_valid_position(hover_grid_pos):
-		draw_colored_polygon(
-				OverlayGeometry.tile_polygon(terrain_grid, self, hover_grid_pos),
-				green_preview_color)
-
-	# Show where forward/middle tees will be auto-placed (when multi-tee enabled)
-	if is_valid and GameManager.multi_tee_enabled:
-		var dir = Vector2(hover_grid_pos - tee_pos)
-		var dir_len = dir.length()
-		if dir_len >= 2.0:
-			var forward_pos = Vector2i(Vector2(tee_pos) + dir * 0.4)
-			var middle_pos = Vector2i(Vector2(tee_pos) + dir * 0.25)
-			var tee_previews = [
-				{"pos": forward_pos, "color": Color(0.9, 0.2, 0.2, 0.35 * pulse), "label": "Fwd"},
-				{"pos": middle_pos, "color": Color(0.9, 0.9, 0.9, 0.35 * pulse), "label": "Mid"},
-			]
-			for tp in tee_previews:
-				if tp["pos"] != tee_pos and terrain_grid.is_valid_position(tp["pos"]):
-					draw_colored_polygon(
-							OverlayGeometry.tile_polygon(terrain_grid, self, tp["pos"]), tp["color"])
-					var label_pos = terrain_grid.grid_to_screen_center(tp["pos"]) + Vector2(-10, -12)
-					draw_string(font, label_pos, tp["label"], HORIZONTAL_ALIGNMENT_CENTER, -1, 10, tp["color"])
 
 # =============================================================================
 # PUBLIC API

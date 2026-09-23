@@ -200,6 +200,16 @@ for each "attack" candidate:
     blended_aim = aim_point * pin_weight + green_center * (1.0 - pin_weight)
 ```
 
+`green_center` is `course.holes[gd.current_hole].green_position`. A golfer with
+`current_hole = -1` is routing a hole that is not in the course yet, such as the
+Green tool's potential-hole preview. In that case the bias is skipped rather than
+borrowing another hole's green, and the course isn't read from the planner's
+worker thread.
+
+`decide_shot_for(gd, hole_position, ignore_wind, grid)` takes an optional `grid`
+that replaces `GameManager.terrain_grid`. `HolePathPlanner` passes a detached
+`TerrainGrid.create_analysis_copy()` so it can plan off the main thread.
+
 ### 10. Personality & Situation Modifiers
 
 ```

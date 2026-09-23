@@ -38,6 +38,7 @@ var round_brush := true
 var brush_size: int = 1
 var _green_preset: String = ""  # Active green preset ("small"/"medium"/"large" or "" for brush)
 var is_painting: bool = false
+var _tee_block_notified: bool = false  # One "tee box is waiting" notice per stroke
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
 var last_paint_vertex: Vector2i = Vector2i(-1, -1)
 
@@ -483,6 +484,13 @@ func _connect_signals() -> void:
 	EventBus.new_game_started.connect(_on_new_game_started)
 	hole_manager.hole_selected.connect(_on_hole_flag_selected)
 	terrain_grid.view_rotated.connect(_on_terrain_view_rotated)
+	# Tee boxes, cups and holes decide what may be placed next and whether a hole
+	# is ready to open, so the toolbar re-reads the rules whenever they change.
+	terrain_grid.cup_tiles_changed.connect(_refresh_hole_layout_ui)
+	EventBus.new_game_started.connect(_refresh_hole_layout_ui)
+	EventBus.hole_created.connect(_on_hole_layout_hole_created)
+	EventBus.hole_deleted.connect(_on_hole_layout_hole_deleted)
+	EventBus.load_completed.connect(_on_hole_layout_load_completed)
 
 func _connect_ui_buttons() -> void:
 	# Replace old tool panel with new terrain toolbar
@@ -522,7 +530,7 @@ func _setup_terrain_toolbar() -> void:
 
 	# Build tool signals
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
-	terrain_toolbar.create_hole_pressed.connect(_on_create_hole_pressed)
+	terrain_toolbar.open_hole_pressed.connect(_on_open_hole_pressed)
 	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
 	terrain_toolbar.rock_placement_pressed.connect(_on_rock_placement_pressed)
 	terrain_toolbar.building_placement_pressed.connect(_on_building_placement_pressed)
@@ -763,7 +771,6 @@ func _setup_placement_preview() -> void:
 	placement_preview.set_terrain_grid(terrain_grid)
 	placement_preview.set_placement_manager(placement_manager)
 	placement_preview.set_camera(camera)
-	placement_preview.set_hole_tool(hole_tool)
 	# Add as child of main scene so it renders above terrain
 	add_child(placement_preview)
 
@@ -902,16 +909,6 @@ func _start_painting() -> void:
 		_handle_placement_click(grid_pos)
 		return
 
-	# Check if we're in hole placement mode
-	if hole_tool.placement_mode != HoleCreationTool.PlacementMode.NONE:
-		var mouse_world = camera.get_mouse_world_position()
-		var grid_pos = terrain_grid.screen_to_grid(mouse_world)
-		# Group all tee/green tiles into a single undo action
-		undo_manager.begin_stroke()
-		hole_tool.handle_click(grid_pos)
-		undo_manager.end_stroke()
-		return
-
 	# Check if we're in elevation painting mode
 	if elevation_tool.is_active():
 		is_painting = true
@@ -931,6 +928,7 @@ func _start_painting() -> void:
 			return
 
 	is_painting = true
+	_tee_block_notified = false
 	undo_manager.begin_stroke()
 	_paint_at_mouse()
 
@@ -939,6 +937,7 @@ func _stop_painting() -> void:
 	if bulldozer_mode and _bulldoze_drag_count > 0:
 		EventBus.notify("Cleared %d item%s (-$%d)" % [_bulldoze_drag_count, "s" if _bulldoze_drag_count != 1 else "", _bulldoze_drag_cost], "info")
 	is_painting = false
+	_tee_block_notified = false
 	last_paint_pos = Vector2i(-1, -1)
 	last_paint_vertex = Vector2i(-1, -1)
 	if not elevation_tool.is_active():
@@ -963,13 +962,30 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 			EventBus.notify("Not enough money!", "error")
 		return
 
+	# Tee boxes are single tiles and only one may wait on the course at a time.
+	if current_tool == TerrainTypes.Type.TEE_BOX:
+		var blocker := HoleLayout.tee_placement_blocker(terrain_grid, GameManager.current_course)
+		if not blocker.is_empty():
+			if not _tee_block_notified:
+				_tee_block_notified = true
+				EventBus.notify(blocker, "error")
+			return
+
+	# A green painted while no cup is waiting becomes a "Green With Hole" — one tile
+	# with a cup in it. Later greens are ordinary green and use the normal brush.
+	var places_cup := current_tool == TerrainTypes.Type.GREEN \
+			and HoleLayout.green_places_cup(terrain_grid, GameManager.current_course)
+	var max_brush: int = HoleLayout.max_brush_size(current_tool, terrain_grid, GameManager.current_course)
+	var effective_brush: int = brush_size if max_brush == HoleLayout.UNLIMITED_BRUSH \
+			else mini(brush_size, max_brush)
+
 	var tiles_to_paint: Array
-	if current_tool == TerrainTypes.Type.GREEN and _green_preset != "":
+	if current_tool == TerrainTypes.Type.GREEN and _green_preset != "" and not places_cup:
 		tiles_to_paint = terrain_grid.get_green_preset_tiles(grid_pos, _green_preset)
-	elif brush_size <= 1:
+	elif effective_brush <= 1:
 		tiles_to_paint = [grid_pos]
 	else:
-		tiles_to_paint = terrain_grid.get_brush_tiles(grid_pos, brush_size, round_brush)
+		tiles_to_paint = terrain_grid.get_brush_tiles(grid_pos, effective_brush, round_brush)
 	var total_cost = 0
 	var obstacle_removal_cost = 0
 	var blocked_by_land = false
@@ -1003,7 +1019,7 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 			if tile_total > 0 and not GameManager.can_afford(total_cost + obstacle_removal_cost + tile_total):
 				continue
 			var original_type: int = terrain_grid.get_tile(tile_pos)
-			var metadata := {"old_depth":terrain_grid.get_bunker_depth(tile_pos), "old_player_placed":terrain_grid._player_placed_tiles.has(tile_pos)}
+			var metadata := {"old_depth":terrain_grid.get_bunker_depth(tile_pos), "old_player_placed":terrain_grid._player_placed_tiles.has(tile_pos), "old_cup":terrain_grid.has_cup_tile(tile_pos)}
 			# Perform removals (suppress tile undo since the paint will set the final tile)
 			if tile_removal_cost > 0:
 				_suppress_tile_undo = true
@@ -1016,8 +1032,13 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 				_suppress_tile_undo = true
 				obstacle_removal_cost += tile_removal_cost
 			metadata["new_depth"] = CourseTheme.get_gameplay_modifiers(GameManager.current_theme).get("default_bunker_depth", 0) if current_tool == TerrainTypes.Type.BUNKER else 0
+			# A green painted while no cup is waiting becomes a Green With Hole.
+			var will_place_cup := places_cup and current_tool == TerrainTypes.Type.GREEN
+			metadata["new_cup"] = will_place_cup
 			undo_manager.record_tile_change(tile_pos, original_type, current_tool, metadata)
 			terrain_grid.set_tile(tile_pos, current_tool)
+			if will_place_cup and terrain_grid.add_cup_tile(tile_pos):
+				places_cup = false  # One cup per course, so this stroke is done.
 			# Apply theme-default bunker depth for newly placed bunkers
 			if current_tool == TerrainTypes.Type.BUNKER:
 				var modifiers = CourseTheme.get_gameplay_modifiers(GameManager.current_theme)
@@ -1040,6 +1061,10 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	if total_cost > 0:
 		GameManager.modify_money(-total_cost)
 		EventBus.log_transaction("Terrain: " + TerrainTypes.get_type_name(current_tool), -total_cost)
+
+	# Painting a tee box or a green changes what may be placed next, and whether a
+	# hole is ready to open.
+	_refresh_hole_layout_ui()
 
 func _update_measure_overlay() -> void:
 	if _measure_overlay:
@@ -1071,9 +1096,6 @@ func _cancel_action() -> void:
 	if placement_manager.placement_mode != PlacementManager.PlacementMode.NONE:
 		placement_manager.cancel_placement()
 		had_active_operation = true
-	if hole_tool.placement_mode != HoleCreationTool.PlacementMode.NONE:
-		hole_tool.cancel_placement()
-		had_active_operation = true
 
 	if had_active_operation:
 		# First ESC: cancelled the active operation, keep terrain tool selected
@@ -1095,17 +1117,14 @@ func _has_active_tool() -> bool:
 		return true
 	if placement_manager.placement_mode != PlacementManager.PlacementMode.NONE:
 		return true
-	if hole_tool.placement_mode != HoleCreationTool.PlacementMode.NONE:
-		return true
 	if terrain_toolbar and terrain_toolbar.has_selection():
 		return true
 	return false
 
 func _on_tool_selected(tool_type: int) -> void:
-	# Cancel any hole placement, building/tree placement, elevation mode, and bulldozer mode
+	# Cancel any building/tree placement, elevation mode, and bulldozer mode
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	placement_manager.cancel_placement()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
@@ -1124,6 +1143,8 @@ func _on_tool_selected(tool_type: int) -> void:
 		placement_preview.set_terrain_tool(tool_type)
 		placement_preview.set_brush_size(brush_size)
 		placement_preview.set_terrain_painting_enabled(true)
+	# The selected tool decides whether the brush is capped at a single tile.
+	_refresh_hole_layout_ui()
 	print("Tool selected: " + TerrainTypes.get_type_name(tool_type))
 
 func _on_brush_size_changed(new_size: int) -> void:
@@ -1252,18 +1273,43 @@ func _sync_view_controls() -> void:
 	if terrain_toolbar and terrain_grid and terrain_toolbar.has_method("set_view_state"):
 		terrain_toolbar.set_view_state(terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
 
-func _on_create_hole_pressed() -> void:
-	# Cancel any building/tree placement, elevation, bulldozer, or terrain painting
-	_cancel_hole_move_mode()
-	_close_hole_context_menu()
-	placement_manager.cancel_placement()
-	_cancel_elevation_mode()
-	_cancel_bulldozer_mode()
-	_disable_terrain_painting_preview()
-	is_painting = false
-	if terrain_toolbar:
-		terrain_toolbar.clear_selection()
-	hole_tool.start_tee_placement()
+## Open a hole from the tee box and green-with-hole tiles waiting on the course
+## (H key or the Open Hole button). See HoleLayout for the pairing rules.
+## The player's current tool stays selected: opening a hole is a single action,
+## not a mode, so building continues where it left off.
+func _on_open_hole_pressed() -> void:
+	var request: Dictionary = hole_tool.open_hole_request()
+	if not bool(request.get("ready", false)):
+		EventBus.notify(str(request.get("reason", "A hole cannot be opened yet.")), "error")
+		return
+
+	var hole: GameManager.HoleData = hole_tool.open_hole(request.get("tee", Vector2i(-1, -1)),
+			request.get("cup", Vector2i(-1, -1)))
+	if not hole:
+		EventBus.notify("That tee box and green cannot be opened as a hole.", "error")
+		return
+	EventBus.notify("Hole %d opened — Par %d, %d yards" % [hole.hole_number, hole.par,
+			hole.distance_yards], "success")
+
+func _on_hole_layout_hole_created(_hole_number: int, _par: int, _distance_yards: int) -> void:
+	_refresh_hole_layout_ui()
+
+func _on_hole_layout_hole_deleted(_hole_number: int) -> void:
+	_refresh_hole_layout_ui()
+
+func _on_hole_layout_load_completed(_success: bool) -> void:
+	_refresh_hole_layout_ui()
+
+## Push the current hole layout rules into the toolbar: which tool is limited to a
+## single tile, and whether a tee box + green with a hole are ready to be paired.
+func _refresh_hole_layout_ui() -> void:
+	if not terrain_toolbar or not terrain_grid:
+		return
+	var course: GameManager.CourseData = GameManager.current_course
+	var request: Dictionary = HoleLayout.open_hole_request(terrain_grid, course)
+	terrain_toolbar.set_open_hole_state(bool(request.get("ready", false)),
+			str(request.get("reason", "")))
+	terrain_toolbar.set_brush_limit(HoleLayout.max_brush_size(current_tool, terrain_grid, course))
 
 func _on_speed_selected(speed: int) -> void:
 	GameManager.set_speed(speed)
@@ -1367,7 +1413,6 @@ func _on_tree_placement_pressed() -> void:
 	"""Show tree selection menu and start tree placement mode"""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
@@ -1401,7 +1446,6 @@ func _on_building_placement_pressed() -> void:
 	print("Building button pressed!")
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
@@ -1475,7 +1519,6 @@ func _on_rock_placement_pressed() -> void:
 	"""Show rock size selection menu and start rock placement mode"""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
@@ -1521,7 +1564,6 @@ func _on_decoration_placement_pressed() -> void:
 	"""Show decoration selection menu and start decoration placement mode"""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
@@ -1671,7 +1713,6 @@ func _on_sculpt_terrain_pressed(raising: bool) -> void:
 func _on_raise_elevation_pressed() -> void:
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	placement_manager.cancel_placement()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
@@ -1688,7 +1729,6 @@ func _on_raise_elevation_pressed() -> void:
 func _on_lower_elevation_pressed() -> void:
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	placement_manager.cancel_placement()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
@@ -1706,7 +1746,6 @@ func _on_bulldozer_pressed() -> void:
 	"""Activate bulldozer mode to remove trees, rocks, and flower beds"""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
-	hole_tool.cancel_placement()
 	placement_manager.cancel_placement()
 	_cancel_elevation_mode()
 	_disable_terrain_painting_preview()
@@ -1742,6 +1781,22 @@ func _on_new_game_started() -> void:
 	add_child(loading_overlay)
 	await get_tree().process_frame
 	await get_tree().process_frame  # Two frames to ensure the overlay paints
+
+	# Wipe the previous course before building the new one: golfers, entities, hole
+	# flags, tiles, cups, elevation and undo history. Removing an entity restores the
+	# terrain underneath it, so entities go first and the grid reset goes last —
+	# otherwise whatever they restore would survive into the new course. Natural
+	# terrain generation paints over whatever is on the grid without clearing it,
+	# so without this a stale tee box would even block the player's first tee.
+	if golfer_manager:
+		golfer_manager.clear_all_golfers()
+	if entity_layer:
+		entity_layer.clear_all()
+	if hole_manager:
+		hole_manager.clear_visualizations()
+	if terrain_grid:
+		terrain_grid.reset_for_new_course()
+	undo_manager.clear()
 
 	# Regenerate tileset with the selected theme colors
 	if terrain_grid:
@@ -2688,6 +2743,7 @@ func _perform_undo() -> void:
 	_is_undoing = true
 	_execute_undo_action(action)
 	_is_undoing = false
+	_refresh_hole_layout_ui()
 	EventBus.notify("Undo", "info")
 
 func _perform_redo() -> void:
@@ -2709,6 +2765,7 @@ func _perform_redo() -> void:
 	_is_undoing = true
 	_execute_redo_action(action)
 	_is_undoing = false
+	_refresh_hole_layout_ui()
 	EventBus.notify("Redo", "info")
 
 func _execute_undo_action(action: Dictionary) -> void:
@@ -2722,6 +2779,9 @@ func _execute_undo_action(action: Dictionary) -> void:
 				terrain_grid.set_tile(change["position"], change["old_type"])
 				if change.has("old_depth"): terrain_grid.set_bunker_depth(change.position, change.old_depth)
 				if not change.get("old_player_placed", true): terrain_grid._player_placed_tiles.erase(change.position)
+				if change.has("old_cup"):
+					if change.old_cup: terrain_grid.add_cup_tile(change.position)
+					else: terrain_grid.remove_cup_tile(change.position)
 				refund += TerrainTypes.get_placement_cost(change["new_type"])
 			for removed in action.get("removed_entities", []):
 				if removed.type == "tree": entity_layer.place_tree(removed.position, removed.subtype)
@@ -2808,6 +2868,9 @@ func _execute_redo_action(action: Dictionary) -> void:
 			for change in changes:
 				terrain_grid.set_tile(change["position"], change["new_type"])
 				if change.has("new_depth"): terrain_grid.set_bunker_depth(change.position, change.new_depth)
+				if change.has("new_cup"):
+					if change.new_cup: terrain_grid.add_cup_tile(change.position)
+					else: terrain_grid.remove_cup_tile(change.position)
 				cost += TerrainTypes.get_placement_cost(change["new_type"])
 			cost = action.get("paid_cost", cost)
 			if cost > 0:
@@ -3451,7 +3514,7 @@ func _setup_course_rating_overlay() -> void:
 			EventBus.notify(advice.title, "info")
 		elif advice.action == "finance": _toggle_panel(financial_panel)
 		elif advice.action == "garden": _on_decoration_placement_pressed()
-		elif advice.action == "build": _on_create_hole_pressed()
+		elif advice.action == "build": _on_open_hole_pressed()
 	)
 	course_rating_overlay.close_requested.connect(func():
 		course_rating_overlay.hide()

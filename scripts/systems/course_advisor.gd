@@ -4,7 +4,7 @@ class_name CourseAdvisor
 static func review(grid, course, entities, rating: Dictionary, stats) -> Array[Dictionary]:
 	var advice: Array[Dictionary] = []
 	if not course or course.get_open_holes().is_empty():
-		return [{"title":"Create your first hole", "detail":"Place a tee and a green, then open the hole to welcome golfers.", "action":"build"}]
+		return [{"title":"Create your first hole", "detail":"Paint a tee box and a green with a hole, then press H to open the hole and welcome golfers.", "action":"build"}]
 	if stats and stats.operating_costs > 0 and stats.golfers_arrived > stats.golfers_served:
 		advice.append({"title":"%d guests did not finish" % (stats.golfers_arrived-stats.golfers_served),"detail":"Completed-visit satisfaction excludes these guests. Reduce bookings and inspect traffic delays before expanding.","action":"finance"})
 	for item in FeedbackManager.get_hotspots():
