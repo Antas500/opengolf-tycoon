@@ -84,6 +84,12 @@ func remove_hole_visualization(hole_number: int) -> void:
 	hole_visualizers.erase(hole_number)
 	hole_visualization_removed.emit(hole_number)
 
+## Drop every hole visualization. Used when the whole course is replaced (New
+## Game), where the disappearing holes never emit hole_deleted.
+func clear_visualizations() -> void:
+	for hole_number in hole_visualizers.keys():
+		remove_hole_visualization(hole_number)
+
 func get_hole_visualizer(hole_number: int) -> HoleVisualizer:
 	return hole_visualizers.get(hole_number, null)
 

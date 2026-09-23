@@ -18,7 +18,7 @@ class_name TerrainToolbar
 
 signal course_review_pressed
 signal tool_selected(tool_type: int)
-signal create_hole_pressed
+signal open_hole_pressed
 signal tree_placement_pressed
 signal rock_placement_pressed
 signal building_placement_pressed
@@ -74,7 +74,7 @@ const TOOL_TAB_MAP := {
 	TerrainTypes.Type.BUNKER: Tab.TERRAIN,
 	TerrainTypes.Type.WATER: Tab.TERRAIN,
 	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
-	"create_hole": Tab.TERRAIN,
+	"open_hole": Tab.TERRAIN,
 	"bulldozer": Tab.TERRAIN,
 	"tree": Tab.IMPROVEMENTS,
 	"rock": Tab.IMPROVEMENTS,
@@ -99,6 +99,8 @@ const TOOL_TAB_MAP := {
 const TOOL_ROW_HEIGHT := 30
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
+const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
+const OPEN_HOLE_BLOCKED_TOOLTIP := "Needs exactly one unused tee box and one unused green with a hole"
 
 var hole_list: HBoxContainer = null  # Course holes rows (filled by main.gd)
 var golfer_data_provider: Callable = Callable()  # -> Array of golfer row dicts
@@ -109,8 +111,11 @@ var _tab_bar: TabBar = null
 var _pages: Array[ScrollContainer] = []
 var _brush_size: int = 1
 var _round_brush := true
+var _brush_limit: int = HoleLayout.UNLIMITED_BRUSH  # 1 = current tool paints a single tile
 var _brush_labels: Array[Label] = []
+var _brush_buttons: Array[Button] = []
 var _brush_shape_buttons: Array[OptionButton] = []
+var _open_hole_buttons: Array[ToolButton] = []
 var _green_preset_group: VBoxContainer = null
 var _green_preset_buttons: Dictionary = {}  # preset_name -> Button
 var _active_green_preset: String = ""
@@ -284,8 +289,8 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	surf_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_add_tool_button(surf_box, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "icon": "[=]", "hotkey": "1", "desc": "Mowed playing surface for approach shots"})
 	_add_tool_button(surf_box, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "icon": "[~]", "hotkey": "2", "desc": "Longer grass bordering fairways"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.GREEN, "name": "Green", "icon": "[O]", "hotkey": "3", "desc": "Putting surface around the hole"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "icon": "[T]", "hotkey": "4", "desc": "Starting area for each hole"})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.GREEN, "name": "Green", "icon": "[O]", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush"})
+	_add_tool_button(surf_box, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "icon": "[T]", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time"})
 	hbox.add_child(_make_tab_group("SURFACES", surf_box))
 
 	hbox.add_child(_make_separator())
@@ -296,7 +301,8 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	_add_tool_button(haz_box, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "icon": "[:]", "hotkey": "5", "desc": "Sand trap hazard"})
 	_add_tool_button(haz_box, {"type": TerrainTypes.Type.WATER, "name": "Water", "icon": "[w]", "hotkey": "6", "desc": "Water hazard with penalty"})
 	_add_tool_button(haz_box, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "icon": "[X]", "hotkey": "7", "desc": "Boundary area with stroke penalty"})
-	_add_tool_button(haz_box, {"type": "create_hole", "name": "Create Hole", "icon": "[H]", "hotkey": "H", "desc": "Define tee box, green, and flag"})
+	var open_hole_btn := _add_tool_button(haz_box, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
+	_open_hole_buttons.append(open_hole_btn)
 	_add_tool_button(haz_box, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"})
 	hbox.add_child(_make_tab_group("HAZARDS & TOOLS", haz_box))
 
@@ -366,7 +372,8 @@ func _build_holes_tab(hbox: HBoxContainer) -> void:
 	var actions_box = HBoxContainer.new()
 	actions_box.add_theme_constant_override("separation", 4)
 	actions_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(actions_box, {"type": "create_hole", "name": "Create Hole", "icon": "[H]", "hotkey": "H", "desc": "Define tee box, green, and flag"})
+	var open_hole_btn := _add_tool_button(actions_box, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
+	_open_hole_buttons.append(open_hole_btn)
 	hbox.add_child(_make_tab_group("ACTIONS", actions_box))
 
 	hbox.add_child(_make_separator())
@@ -590,6 +597,7 @@ func _make_brush_group() -> VBoxContainer:
 	brush_decrease.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	brush_decrease.pressed.connect(_on_brush_decrease)
 	brush_row.add_child(brush_decrease)
+	_brush_buttons.append(brush_decrease)
 
 	var brush_label = Label.new()
 	brush_label.text = "%dx%d" % [_brush_size, _brush_size]
@@ -606,6 +614,7 @@ func _make_brush_group() -> VBoxContainer:
 	brush_increase.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	brush_increase.pressed.connect(_on_brush_increase)
 	brush_row.add_child(brush_increase)
+	_brush_buttons.append(brush_increase)
 	group.add_child(brush_row)
 
 	var shape := OptionButton.new()
@@ -618,6 +627,7 @@ func _make_brush_group() -> VBoxContainer:
 	shape.item_selected.connect(_on_brush_shape_selected)
 	_brush_shape_buttons.append(shape)
 	group.add_child(shape)
+	_apply_brush_limit()
 	return group
 
 func _make_review_button() -> Button:
@@ -880,8 +890,8 @@ func _on_tool_button_pressed(tool_type) -> void:
 				building_placement_pressed.emit()
 			"decoration":
 				decoration_placement_pressed.emit()
-			"create_hole":
-				create_hole_pressed.emit()
+			"open_hole":
+				open_hole_pressed.emit()
 			"mound":
 				sculpt_terrain_pressed.emit(true)
 			"hollow":
@@ -988,7 +998,7 @@ func _input(event: InputEvent) -> void:
 			KEY_O:
 				_on_tool_button_pressed("decoration")
 			KEY_H:
-				_on_tool_button_pressed("create_hole")
+				_on_tool_button_pressed("open_hole")
 			KEY_X:
 				_on_tool_button_pressed("bulldozer")
 			KEY_P:
@@ -1042,13 +1052,44 @@ func _on_brush_increase() -> void:
 		brush_size_changed.emit(_brush_size)
 
 func _update_brush_label() -> void:
+	var shown: int = effective_brush_size()
 	for label in _brush_labels:
 		if is_instance_valid(label):
-			label.text = "%dx%d" % [_brush_size, _brush_size]
+			label.text = "%dx%d" % [shown, shown]
+
+## The brush size the selected tool actually paints with. Tee boxes, and a green
+## that is about to become a green with a hole, are capped at a single tile.
+func effective_brush_size() -> int:
+	if _brush_limit != HoleLayout.UNLIMITED_BRUSH:
+		return mini(_brush_size, _brush_limit)
+	return _brush_size
+
+## Cap (or uncap) the brush for the selected tool: 1 = single tile, 0 = no cap.
+func set_brush_limit(limit: int) -> void:
+	if _brush_limit == limit:
+		return
+	_brush_limit = limit
+	_apply_brush_limit()
+
+func _apply_brush_limit() -> void:
+	var locked: bool = _brush_limit == 1
+	for button in _brush_buttons:
+		if is_instance_valid(button):
+			button.disabled = locked
+	for shape in _brush_shape_buttons:
+		if is_instance_valid(shape):
+			shape.disabled = locked
+	if _green_preset_group and is_instance_valid(_green_preset_group):
+		_green_preset_group.visible = _green_presets_allowed()
+	_update_brush_label()
+
+func _green_presets_allowed() -> bool:
+	# Presets shape a green without a hole; a green with a hole is a single tile.
+	return _current_tool == TerrainTypes.Type.GREEN and _brush_limit != 1
 
 func _update_green_preset_visibility() -> void:
 	if _green_preset_group:
-		_green_preset_group.visible = (_current_tool == TerrainTypes.Type.GREEN)
+		_green_preset_group.visible = _green_presets_allowed()
 		if _current_tool != TerrainTypes.Type.GREEN:
 			_active_green_preset = ""
 			_update_green_preset_highlight()
@@ -1078,6 +1119,15 @@ func set_brush_size(value: int) -> void:
 		_brush_size = value
 		_update_brush_label()
 		brush_size_changed.emit(value)
+
+## Enable/disable the Open Hole buttons and explain what is still missing.
+func set_open_hole_state(can_open: bool, reason: String = "") -> void:
+	for button in _open_hole_buttons:
+		if not is_instance_valid(button):
+			continue
+		button.disabled = not can_open
+		button.tool_description = OPEN_HOLE_TOOLTIP if can_open or reason.is_empty() \
+				else "%s. %s" % [OPEN_HOLE_BLOCKED_TOOLTIP, reason]
 
 func set_view_state(_orientation: int, _isometric: bool) -> void:
 	pass

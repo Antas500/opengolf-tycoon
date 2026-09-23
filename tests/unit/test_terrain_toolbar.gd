@@ -136,8 +136,8 @@ func test_feed_unread_badge() -> void:
 func test_action_signals() -> void:
 	watch_signals(toolbar)
 
-	toolbar._on_tool_button_pressed("create_hole")
-	assert_signal_emitted(toolbar, "create_hole_pressed")
+	toolbar._on_tool_button_pressed("open_hole")
+	assert_signal_emitted(toolbar, "open_hole_pressed")
 
 	toolbar._on_tool_button_pressed("tree")
 	assert_signal_emitted(toolbar, "tree_placement_pressed")
@@ -189,6 +189,42 @@ func test_action_signals() -> void:
 
 	toolbar._on_tool_button_pressed("scorecard")
 	assert_signal_emitted(toolbar, "scorecard_pressed")
+
+func test_open_hole_button_is_disabled_until_a_pair_is_ready() -> void:
+	toolbar.set_open_hole_state(false, "Paint a tee box to go with the waiting green.")
+	for button in toolbar._open_hole_buttons:
+		assert_true(button.disabled, "Open Hole must wait for a tee box and a cup")
+		assert_string_contains(button.tool_description, "Paint a tee box")
+
+	toolbar.set_open_hole_state(true, "")
+	for button in toolbar._open_hole_buttons:
+		assert_false(button.disabled)
+
+func test_brush_limit_caps_the_brush_for_the_selected_tool() -> void:
+	toolbar.set_brush_size(5)
+	assert_eq(toolbar.effective_brush_size(), 5)
+
+	toolbar.set_brush_limit(1)
+	assert_eq(toolbar.effective_brush_size(), 1)
+	assert_eq(toolbar._brush_labels[0].text, "1x1")
+	for button in toolbar._brush_buttons:
+		assert_true(button.disabled, "A 1x1 cap leaves nothing to change")
+
+	toolbar.set_brush_limit(HoleLayout.UNLIMITED_BRUSH)
+	assert_eq(toolbar.effective_brush_size(), 5)
+	assert_eq(toolbar._brush_labels[0].text, "5x5")
+	for button in toolbar._brush_buttons:
+		assert_false(button.disabled)
+
+func test_green_presets_hide_while_the_green_carries_a_cup() -> void:
+	toolbar._on_tool_button_pressed(TerrainTypes.Type.GREEN)
+	assert_true(toolbar._green_preset_group.visible)
+
+	toolbar.set_brush_limit(1)  # Green With Hole: one tile, no preset shape
+	assert_false(toolbar._green_preset_group.visible)
+
+	toolbar.set_brush_limit(HoleLayout.UNLIMITED_BRUSH)  # Green Without Hole
+	assert_true(toolbar._green_preset_group.visible)
 
 func test_mouse_wheel_horizontal_scroll_input() -> void:
 	var scroll: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN]

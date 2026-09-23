@@ -351,7 +351,7 @@ func _build_controls_tab() -> void:
 		["Ctrl+S", "Quick Save"],
 		["Ctrl+Z", "Undo"],
 		["Ctrl+Shift+Z", "Redo"],
-		["H", "Create Hole"],
+		["H", "Open Hole"],
 		["T", "Place Tree"],
 		["R", "Place Rock"],
 		["B", "Place Building"],

@@ -60,7 +60,7 @@ func _build_ui() -> void:
 		["R", "Rocks"],
 		["Shift+F", "Flower Bed"],
 		["B", "Buildings"],
-		["H", "Create Hole"],
+		["H", "Open Hole"],
 		["X", "Bulldozer"],
 	])
 

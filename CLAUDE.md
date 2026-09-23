@@ -126,7 +126,10 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 - **Theme-aware components**: TilesetGenerator, WaterOverlay, GrassOverlay, terrain shader parameters.
 
 ### Holes
-- **HoleCreationTool**: 3-step workflow (tee box → green → flag).
+- **HoleCreationTool**: opens a hole from the two tiles the player painted — one unused Tee Box and one unused **Green With Hole** — via **H** or the toolbar's Open Hole button. See [hole-creation docs](docs/algorithms/hole-creation.md).
+- **HoleLayout** (`scripts/tools/hole_layout.gd`): single source of truth for the rules. Tee Box always paints 1x1 and is blocked while an unused tee box waits. The Green tool paints a 1x1 **Green With Hole** (cup cut into the tile) while no cup is waiting, and an ordinary **Green Without Hole** at the normal brush size once one is. `open_hole_request()` reports whether a pair is ready and why not.
+- **TerrainGrid cup tiles**: `_cup_tiles` marks greens carrying a cup; dropped when the tile stops being green, restored by undo/redo, saved as `cup_tiles`. `_tee_box_tiles` indexes tee tiles so the placement rule is a lookup.
+- **CupOverlay**: renders the cup and a gold waiting pin on every Green With Hole that is not part of a hole yet.
 - Auto-par from yardage: Par 3 <250y, Par 4 250-470y, Par 5 >470y.
 - **DifficultyCalculator**: Per-hole rating (1-10) from length, hazards, slope, obstacles.
 - **StrokeIndexCalculator**: Derives handicap allocation (1=hardest) from difficulty ratings. Front/back nine interleaving for 10+ holes. See [stroke-index docs](docs/algorithms/stroke-index.md).
