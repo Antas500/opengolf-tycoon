@@ -3,7 +3,7 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: terrain painting, hazards, create hole, bulldozer, brush size
+##  - Course Terrain: course & hazard tiles (two rows), create hole, bulldozer, brush size
 ##  - Improvements:   objects (trees, rocks, paths, flowers) and decorations
 ##  - Buildings:      amenity buildings catalogue
 ##  - Elevation:      sculpting controls and brush size
@@ -97,6 +97,7 @@ const TOOL_TAB_MAP := {
 }
 
 const TOOL_ROW_HEIGHT := 30
+const COURSE_TILE_COLUMNS := 4  # Surfaces fill row 1, hazards row 2
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
@@ -284,24 +285,22 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	var surf_box = HBoxContainer.new()
-	surf_box.add_theme_constant_override("separation", 4)
-	surf_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush", "tile_preview": true})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time", "tile_preview": true})
-	hbox.add_child(_make_tab_group("SURFACES", surf_box))
-
-	hbox.add_child(_make_separator())
-
-	var haz_box = HBoxContainer.new()
-	haz_box.add_theme_constant_override("separation", 4)
-	haz_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.WATER, "name": "Water", "hotkey": "6", "desc": "Water hazard with penalty", "tile_preview": true})
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "hotkey": "7", "desc": "Boundary area with stroke penalty", "tile_preview": true})
-	hbox.add_child(_make_tab_group("HAZARDS", haz_box))
+	# Course surfaces and hazards share one group, laid out as two rows:
+	# row 1 = playing surfaces, row 2 = hazards.
+	var tiles_grid = GridContainer.new()
+	tiles_grid.name = "CourseTilesGrid"
+	tiles_grid.columns = COURSE_TILE_COLUMNS
+	tiles_grid.add_theme_constant_override("h_separation", 4)
+	tiles_grid.add_theme_constant_override("v_separation", 2)
+	tiles_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.WATER, "name": "Water", "hotkey": "6", "desc": "Water hazard with penalty", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "hotkey": "7", "desc": "Boundary area with stroke penalty", "tile_preview": true})
+	hbox.add_child(_make_tab_group("COURSE & HAZARDS", tiles_grid))
 
 	hbox.add_child(_make_separator())
 

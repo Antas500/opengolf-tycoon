@@ -6,8 +6,25 @@ func before_each() -> void:
 	toolbar = TerrainToolbar.new()
 	add_child_autofree(toolbar)
 
-func test_bottom_bar_height_is_reduced() -> void:
-	assert_eq(UIConstants.BOTTOM_BAR_HEIGHT, 120, "Bottom bar height should be reduced to 120px")
+func test_bottom_bar_fits_two_rows_of_course_tiles() -> void:
+	assert_eq(UIConstants.BOTTOM_BAR_HEIGHT, 190, "Bottom bar should be tall enough for two tile rows")
+	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT),
+		"Toolbar content must fit inside the bottom bar")
+
+func test_course_and_hazard_tiles_share_one_two_row_group() -> void:
+	var surfaces := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
+		TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX]
+	var hazards := [TerrainTypes.Type.BUNKER, TerrainTypes.Type.WATER,
+		TerrainTypes.Type.OUT_OF_BOUNDS]
+	var grid: GridContainer = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	assert_eq(grid.columns, TerrainToolbar.COURSE_TILE_COLUMNS)
+	for tool_type in surfaces + hazards:
+		assert_eq(toolbar._tool_buttons[tool_type].get_parent(), grid,
+			"Course and hazard tiles should live in the same group")
+	for tool_type in surfaces:
+		assert_lt(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Surfaces on row 1")
+	for tool_type in hazards:
+		assert_gte(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Hazards on row 2")
 
 func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.tab_count, 9, "Toolbar should have 9 tabs")
