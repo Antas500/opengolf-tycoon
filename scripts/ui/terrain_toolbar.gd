@@ -22,6 +22,7 @@ signal open_hole_pressed
 signal tree_placement_pressed
 signal rock_placement_pressed
 signal building_placement_pressed
+signal building_selected(building_type: String)
 signal decoration_placement_pressed
 signal raise_elevation_pressed
 signal sculpt_terrain_pressed(raising: bool)
@@ -44,9 +45,9 @@ enum Tab { TERRAIN, IMPROVEMENTS, BUILDINGS, ELEVATION, HOLES, GOLFERS, PLAYER, 
 
 const TAB_TITLES := {
 	Tab.TERRAIN: "Terrain",
-	Tab.IMPROVEMENTS: "Improve",
-	Tab.BUILDINGS: "Build",
-	Tab.ELEVATION: "Elev",
+	Tab.IMPROVEMENTS: "Improvements",
+	Tab.BUILDINGS: "Buildings",
+	Tab.ELEVATION: "Elevation",
 	Tab.HOLES: "Holes",
 	Tab.GOLFERS: "Golfers",
 	Tab.PLAYER: "Player",
@@ -126,6 +127,8 @@ var _recent_rounds: Array[Dictionary] = []
 var _skill_labels: Array[Label] = []
 var _player_points_label: Label = null
 var _feed_button: Button = null
+var _building_registry: Dictionary = {}
+var _building_shelf: HBoxContainer = null
 var _feed_unread: int = 0
 var _refresh_timer: Timer = null
 
@@ -383,15 +386,41 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tip_label("Decorations, trees & flower beds raise course aesthetics and golfer mood."))
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
-	var bld_box = HBoxContainer.new()
-	bld_box.add_theme_constant_override("separation", 4)
-	bld_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(bld_box, {"type": "building", "name": "Buildings Catalogue", "icon": "[B]", "hotkey": "B", "desc": "Place amenity buildings"})
-	hbox.add_child(_make_tab_group("FACILITIES", bld_box))
+	# Building choices live directly in this tab rather than behind a second
+	# catalogue window.  The tab is horizontally scrollable, so the cards can
+	# show useful artwork, cost and upkeep without making the toolbar taller.
+	_building_shelf = HBoxContainer.new()
+	_building_shelf.name = "BuildingShelf"
+	_building_shelf.add_theme_constant_override("separation", 8)
+	_building_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_building_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	hbox.add_child(_make_tab_group("FACILITIES", _building_shelf))
+	_populate_building_shelf()
 
 	hbox.add_child(_make_separator())
+	hbox.add_child(_make_tip_label("Choose a facility to place it. Scroll sideways for more buildings."))
 
-	hbox.add_child(_make_tip_label("Place clubhouses, pro shops, restaurants and restrooms to satisfy golfer needs."))
+func set_building_registry(registry: Dictionary) -> void:
+	_building_registry = registry.duplicate(true)
+	_populate_building_shelf()
+
+func _populate_building_shelf() -> void:
+	if not is_instance_valid(_building_shelf):
+		return
+	for child in _building_shelf.get_children():
+		child.queue_free()
+	for building_type in _building_registry:
+		var data: Dictionary = _building_registry[building_type]
+		var button := Button.new()
+		button.text = "%s\n$%d · $%d/day" % [data.get("name", building_type), data.get("cost", 0), data.get("operating_cost", 0)]
+		button.tooltip_text = data.get("description", "Select this facility to place it.")
+		button.pressed.connect(_on_building_card_pressed.bind(str(building_type)))
+		CatalogArtwork.decorate_button(button, str(building_type), data, true)
+		_building_shelf.add_child(button)
+
+func _on_building_card_pressed(building_type: String) -> void:
+	_reveal_tab_for_tool("building")
+	building_selected.emit(building_type)
 
 func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	var sculpt_box = HBoxContainer.new()
