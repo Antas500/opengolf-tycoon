@@ -310,7 +310,7 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.WATER, "name": "Water", "hotkey": "6", "desc": "Water hazard with penalty", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "hotkey": "7", "desc": "Boundary area with stroke penalty", "tile_preview": true})
-	hbox.add_child(_make_tab_group("COURSE & HAZARDS", tiles_grid))
+	hbox.add_child(_make_tab_group("", tiles_grid))
 
 	hbox.add_child(_make_separator())
 	hbox.add_child(_make_green_presets_group())
@@ -326,8 +326,6 @@ func _make_terrain_tools_column() -> VBoxContainer:
 	column.name = "TerrainToolsColumn"
 	column.add_theme_constant_override("separation", 2)
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	column.add_child(_make_small_group_label("TOOLS"))
 
 	var open_hole_btn := _add_tool_button(column, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
 	_open_hole_buttons.append(open_hole_btn)
