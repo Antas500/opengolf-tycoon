@@ -16,7 +16,7 @@ func test_course_and_hazard_tiles_share_one_two_row_group() -> void:
 		TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX]
 	var hazards := [TerrainTypes.Type.BUNKER, TerrainTypes.Type.WATER,
 		TerrainTypes.Type.OUT_OF_BOUNDS]
-	var grid: GridContainer = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
 	assert_eq(grid.columns, TerrainToolbar.COURSE_TILE_COLUMNS)
 	for tool_type in surfaces + hazards:
 		assert_eq(toolbar._tool_buttons[tool_type].get_parent(), grid,
@@ -25,6 +25,56 @@ func test_course_and_hazard_tiles_share_one_two_row_group() -> void:
 		assert_lt(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Surfaces on row 1")
 	for tool_type in hazards:
 		assert_gte(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Hazards on row 2")
+
+func test_hazard_row_is_shifted_right_into_the_notches_of_the_surface_row() -> void:
+	await _settle_layout()
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	var pitch := grid.tile_size.x + grid.h_separation
+	var hazard_count := grid.get_child_count() - grid.columns
+
+	for i in hazard_count:
+		var hazard: Control = grid.get_child(grid.columns + i)
+		var above_left: Control = grid.get_child(i)
+		var above_right: Control = grid.get_child(i + 1)
+
+		# Half a tile to the right: centred on the gap between the tiles above.
+		assert_almost_eq(hazard.position.x, (above_left.position.x + above_right.position.x) * 0.5,
+			0.01, "Hazard %d should sit in the notch between two surfaces" % i)
+		assert_almost_eq(hazard.position.x - above_left.position.x, pitch * 0.5, 0.01,
+			"Hazard %d should be shifted half a tile to the right" % i)
+
+		# Half a tile down: tucked up into the row above instead of stacked.
+		assert_almost_eq(hazard.position.y, grid.tile_size.y * 0.5 + grid.v_separation, 0.01,
+			"Hazard %d should tuck up into the notches of the surface row" % i)
+		assert_lt(hazard.position.y, grid.tile_size.y,
+			"Hazard %d should rise into the row above, not sit below it" % i)
+
+func test_interlocking_rows_never_overlap_each_others_diamonds() -> void:
+	await _settle_layout()
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	var tile := grid.tile_size
+
+	# A row 2 tile's top vertex must stay outside both diamonds above it.
+	for i in grid.get_child_count() - grid.columns:
+		var hazard: Control = grid.get_child(grid.columns + i)
+		var vertex := hazard.position + Vector2(tile.x * 0.5, 0.0)
+		for j in [i, i + 1]:
+			var above: Control = grid.get_child(j)
+			assert_false(TerrainTileButton.point_on_tile(vertex - above.position),
+				"Hazard %d should not cover the diamond of row 1 tile %d" % [i, j])
+
+func test_tile_buttons_only_answer_inside_the_diamond() -> void:
+	var tile := TerrainTileButton.TILE_SIZE
+	assert_true(TerrainTileButton.point_on_tile(tile * 0.5), "The middle of the tile is clickable")
+	assert_true(TerrainTileButton.point_on_tile(Vector2(tile.x * 0.5, 2.0)), "So is the top vertex")
+	assert_false(TerrainTileButton.point_on_tile(Vector2.ZERO),
+		"The empty corner of the bounding box is not")
+	assert_false(TerrainTileButton.point_on_tile(Vector2(tile.x, tile.y)),
+		"Nor is the opposite corner")
+
+## Containers lay their children out over the next frame.
+func _settle_layout() -> void:
+	await wait_frames(2)
 
 func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.tab_count, 9, "Toolbar should have 9 tabs")
@@ -90,15 +140,19 @@ func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 		var button: ToolButton = toolbar._tool_buttons[tool_type]
 		assert_true(button is TerrainTileButton, "%s should be a tile button" % button.tool_name)
 		assert_null(button.icon, "Terrain swatches should not use the old square sprite icons")
-		assert_eq(button.text, "", "Text is shown beneath the diamond, not inside it")
+		assert_eq(button.text, "", "The name is drawn on the tile, not as button text")
+		var labels := button.get_children().filter(func(child): return child is Label)
+		assert_eq(labels.size(), 1, "The name is the only caption on the tile")
 		assert_eq(button._name_label.text, button.tool_name)
-		assert_eq(button._hotkey_label.text, "[%s]" % button.hotkey)
-		assert_lte(button._name_label.position.y + button._name_label.size.y,
-			button._hotkey_label.position.y, "Name and shortcut should not overlap")
-		assert_lte(button._hotkey_label.position.y + button._hotkey_label.size.y,
-			button.size.y, "Shortcuts should fit within the toolbar height")
+		assert_false(button._name_label.text.contains(button.hotkey),
+			"The shortcut number is no longer drawn on the tile")
+		assert_eq(button._name_label.size, TerrainTileButton.BUTTON_SIZE,
+			"The name spans the tile so its text centres on the diamond")
+		assert_eq(button._name_label.position, Vector2.ZERO)
 		assert_true(button._name_label.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 			"Clicking a label should still select the tool")
+		assert_false(button.accessibility_description.is_empty(),
+			"The shortcut still reaches assistive tech")
 		assert_eq(button.cost, TerrainTypes.get_placement_cost(tool_type))
 
 	# Other pages and non-painting actions retain their familiar ToolButtons.
@@ -141,7 +195,8 @@ func test_terrain_tile_highlight_and_click_still_select_the_tool() -> void:
 	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.WATER)
 	assert_true(button.is_selected())
 	assert_eq(button._outline.default_color, UIConstants.COLOR_GOLD)
-	assert_eq(button._hotkey_label.get_theme_color("font_color"), UIConstants.COLOR_GOLD)
+	assert_eq(button._name_label.get_theme_color("font_color"), UIConstants.COLOR_GOLD,
+		"The selected tile's name is picked out in gold")
 
 	toolbar.clear_selection()
 	assert_false(button.is_selected())

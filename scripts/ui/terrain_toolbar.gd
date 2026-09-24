@@ -3,7 +3,7 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: course & hazard tiles (two rows), create hole, bulldozer, brush size
+##  - Course Terrain: course & hazard tiles in a two-row honeycomb, create hole, bulldozer, brush size
 ##  - Improvements:   objects (trees, rocks, paths, flowers) and decorations
 ##  - Buildings:      amenity buildings catalogue
 ##  - Elevation:      sculpting controls and brush size
@@ -285,13 +285,13 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	# Course surfaces and hazards share one group, laid out as two rows:
-	# row 1 = playing surfaces, row 2 = hazards.
-	var tiles_grid = GridContainer.new()
+	# Course surfaces and hazards share one honeycomb: row 1 = playing surfaces,
+	# row 2 = hazards, shifted half a tile right so each hazard diamond drops
+	# into a notch between the surfaces above it.
+	var tiles_grid = TileHoneycomb.new()
 	tiles_grid.name = "CourseTilesGrid"
 	tiles_grid.columns = COURSE_TILE_COLUMNS
-	tiles_grid.add_theme_constant_override("h_separation", 4)
-	tiles_grid.add_theme_constant_override("v_separation", 2)
+	tiles_grid.tile_size = TerrainTileButton.BUTTON_SIZE
 	tiles_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})

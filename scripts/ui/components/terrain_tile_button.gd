@@ -4,25 +4,29 @@ class_name TerrainTileButton
 ## The preview samples grass around the chosen material, just like an isolated
 ## painted tile on the grid. Only the Terrain tab's paint tools use this button;
 ## other ToolButtons keep their usual rectangular appearance.
+##
+## The button is exactly the diamond — its name sits centred on the tile and the
+## row below tucks into the notch it leaves (see TileHoneycomb) — so only the
+## diamond itself answers to the mouse (see _has_point).
 
-const BUTTON_SIZE := Vector2(88, 66)
-const TILE_SIZE := Vector2(68, 34)
+const TILE_SIZE := Vector2(84, 42)  # One projected course cell, 2:1 isometric.
+const BUTTON_SIZE := TILE_SIZE      # No padding: rows interlock on the grid.
+const NAME_FONT_SIZE := UIConstants.FONT_SIZE_XS
+const NAME_FONT_SIZE_MIN := 8  # Longest names shrink instead of spilling out.
 static var _white_texture: ImageTexture
 
 static func tile_corners() -> PackedVector2Array:
-	var center_x := BUTTON_SIZE.x * 0.5
-	var center_y := 2.0 + TILE_SIZE.y * 0.5
+	var center := BUTTON_SIZE * 0.5
 	return PackedVector2Array([
-		Vector2(center_x, center_y - TILE_SIZE.y * 0.5),
-		Vector2(center_x + TILE_SIZE.x * 0.5, center_y),
-		Vector2(center_x, center_y + TILE_SIZE.y * 0.5),
-		Vector2(center_x - TILE_SIZE.x * 0.5, center_y),
+		Vector2(center.x, center.y - TILE_SIZE.y * 0.5),
+		Vector2(center.x + TILE_SIZE.x * 0.5, center.y),
+		Vector2(center.x, center.y + TILE_SIZE.y * 0.5),
+		Vector2(center.x - TILE_SIZE.x * 0.5, center.y),
 	])
 
 var _surface_material: ShaderMaterial
 var _outline: Line2D
 var _name_label: Label
-var _hotkey_label: Label
 var _hovered := false
 
 func _ready() -> void:
@@ -37,7 +41,7 @@ func _exit_tree() -> void:
 		EventBus.theme_changed.disconnect(_on_theme_changed)
 
 func _update_button() -> void:
-	# The tile and its captions replace ToolButton's flat sprite and button text.
+	# The tile and its caption replace ToolButton's flat sprite and button text.
 	text = ""
 	icon = null
 	custom_minimum_size = BUTTON_SIZE
@@ -45,10 +49,11 @@ func _update_button() -> void:
 	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	accessibility_name = tool_name
+	# The shortcut stays in the tooltip and the screen reader — not on the tile.
 	accessibility_description = "%s Shortcut %s." % [tool_description, hotkey]
 	if _name_label:
 		_name_label.text = tool_name
-		_hotkey_label.text = "[%s]" % hotkey
+		_fit_name_label()
 
 func _create_styles() -> void:
 	# No rectangular chrome: hover and selection are drawn around the diamond.
@@ -58,6 +63,18 @@ func _create_styles() -> void:
 
 func _apply_styles() -> void:
 	pass  # ToolButton.set_selected() still tracks selection; the outline shows it.
+
+## True when `point` (local to the button) falls on the diamond rather than in
+## the empty corners of its bounding box.
+static func point_on_tile(point: Vector2) -> bool:
+	var offset := (point - TILE_SIZE * 0.5).abs()
+	return offset.x / (TILE_SIZE.x * 0.5) + offset.y / (TILE_SIZE.y * 0.5) <= 1.0
+
+## Only the diamond is clickable. Rows of the honeycomb overlap as rectangles,
+## so a rectangular hit area would let a lower tile steal clicks from the tile
+## whose notch it sits in.
+func _has_point(point: Vector2) -> bool:
+	return TerrainTileButton.point_on_tile(point)
 
 func _build_tile() -> void:
 	var corners := tile_corners()
@@ -90,26 +107,36 @@ func _build_tile() -> void:
 	_outline.antialiased = true
 	add_child(_outline)
 
+	# The name rides on the tile itself, centred on the diamond. The label
+	# covers the whole button so the text stays centred whatever its width.
 	_name_label = Label.new()
 	_name_label.text = tool_name
-	_name_label.position = Vector2(0, 38)
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_name_label.add_theme_constant_override("outline_size", 3)
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_name_label)
-	_name_label.size = Vector2(BUTTON_SIZE.x, 14)
-
-	_hotkey_label = Label.new()
-	_hotkey_label.text = "[%s]" % hotkey
-	_hotkey_label.position = Vector2(0, 52)
-	_hotkey_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hotkey_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	_hotkey_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_hotkey_label)
-	_hotkey_label.size = Vector2(BUTTON_SIZE.x, 14)
+	_fit_name_label()  # Font size first: it drives the label's minimum size.
+	# Covering the whole tile keeps the text centred on the diamond whatever
+	# the name's width, and stops the caption from being clipped to its text.
+	_name_label.custom_minimum_size = BUTTON_SIZE
+	_name_label.size = BUTTON_SIZE
 
 	_refresh_palette()
 	_update_visual_state()
+
+## Shrink oversized names so they stay inside the diamond.
+func _fit_name_label() -> void:
+	var font := _name_label.get_theme_font("font")
+	if font == null:
+		_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
+		return
+	var size := NAME_FONT_SIZE
+	while size > NAME_FONT_SIZE_MIN and \
+			font.get_string_size(tool_name, HORIZONTAL_ALIGNMENT_CENTER, -1, size).x \
+			> BUTTON_SIZE.x - 8.0:
+		size -= 1
+	_name_label.add_theme_font_size_override("font_size", size)
 
 func _make_surface_material() -> ShaderMaterial:
 	# The actual course shader operates on a 3x3 grid: the middle cell is this
@@ -166,15 +193,15 @@ func _update_visual_state() -> void:
 	if is_selected():
 		_outline.default_color = UIConstants.COLOR_GOLD
 		_outline.width = 2.5
-		_name_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT)
-		_hotkey_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+		_name_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
 	elif _hovered or has_focus():
 		_outline.default_color = UIConstants.COLOR_TEXT_DIM
 		_outline.width = 2.0
 		_name_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT)
-		_hotkey_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
 	else:
 		_outline.default_color = UIConstants.COLOR_BORDER
 		_outline.width = 1.0
 		_name_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-		_hotkey_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	# The name sits on the tile, so it always carries a dark outline to stay
+	# readable over pale surfaces such as sand and water.
+	_name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.09, 0.07, 0.9))
