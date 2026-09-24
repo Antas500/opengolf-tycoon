@@ -68,6 +68,7 @@ func _build_ui() -> void:
 		["=", "Course Terrain tab"],
 		[".", "Improvements tab"],
 		["E", "Elevation tab"],
+		["P", "Staff tab"],
 	])
 
 	_add_section(vbox, "Elevation", [
@@ -77,7 +78,6 @@ func _build_ui() -> void:
 
 	_add_section(vbox, "Management Panels", [
 		["F", "Finances"],
-		["P", "Staff"],
 		["U", "Tournaments"],
 		["L", "Land"],
 		["M", "Marketing"],

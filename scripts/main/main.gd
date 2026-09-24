@@ -64,7 +64,6 @@ var decoration_registry: Dictionary = {}
 var entity_layer: EntityLayer = null
 var building_info_panel: BuildingInfoPanel = null
 var financial_panel: FinancialPanel = null
-var staff_panel: StaffPanel = null
 var mini_map: MiniMap = null
 var map_btn: Button = null  # Toggles the minimap; kept in sync with MiniMap visibility
 var hole_stats_panel: HoleStatsPanel = null
@@ -541,7 +540,6 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.raise_elevation_pressed.connect(_on_raise_elevation_pressed)
 	terrain_toolbar.lower_elevation_pressed.connect(_on_lower_elevation_pressed)
 	terrain_toolbar.bulldozer_pressed.connect(_on_bulldozer_pressed)
-	terrain_toolbar.staff_pressed.connect(_on_staff_pressed)
 	terrain_toolbar.course_review_pressed.connect(func(): _toggle_panel(course_rating_overlay))
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
 	terrain_toolbar.brush_shape_changed.connect(func(value: bool):
@@ -550,7 +548,7 @@ func _setup_terrain_toolbar() -> void:
 	)
 	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
 
-	# Club / Player / Staff tab signals
+	# Club / Player tab signals
 	terrain_toolbar.play_course_pressed.connect(_on_play_course_pressed)
 	terrain_toolbar.tournaments_pressed.connect(_toggle_tournament_panel)
 	terrain_toolbar.land_pressed.connect(_toggle_land_panel)
@@ -724,7 +722,7 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "StaffPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel"]
+	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:
@@ -2935,14 +2933,8 @@ func _setup_financial_panel() -> void:
 	hud.add_child(financial_panel)
 	financial_panel.hide()
 
-	# Create staff panel
-	staff_panel = StaffPanel.new()
-	staff_panel.name = "StaffPanel"
-	staff_panel.close_requested.connect(_on_staff_panel_closed)
-	hud.add_child(staff_panel)
-	staff_panel.hide()
-
 	# Note: Money click is now handled by HUDStatusColumn.money_clicked signal
+	# Staff management lives in the toolbar Staff tab (not a popup).
 
 func _on_money_clicked() -> void:
 	## Toggle the financial panel when money is clicked.
@@ -2952,17 +2944,6 @@ func _on_financial_panel_closed() -> void:
 	"""Hide the financial panel."""
 	financial_panel.hide()
 	if _active_panel == financial_panel:
-		_active_panel = null
-
-func _on_staff_pressed() -> void:
-	## Toggle staff management panel.
-	if staff_panel:
-		_toggle_panel(staff_panel)
-
-func _on_staff_panel_closed() -> void:
-	"""Hide the staff panel."""
-	staff_panel.hide()
-	if _active_panel == staff_panel:
 		_active_panel = null
 
 # --- Mini Map ---

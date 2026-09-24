@@ -11,7 +11,7 @@ class_name TerrainToolbar
 ##  - Golfers:        who is on the course and recent rounds
 ##  - Player:         play the course, tournaments, player skills
 ##  - Club:           land, marketing, milestones, feed, scorecard
-##  - Staff:          staff management
+##  - Staff:          hire/fire staff, course condition, payroll, and effects
 ##
 ## Content within tabs is laid out horizontally and scrolls horizontally when
 ## overflowing the available tab width.
@@ -28,7 +28,6 @@ signal raise_elevation_pressed
 signal sculpt_terrain_pressed(raising: bool)
 signal lower_elevation_pressed
 signal bulldozer_pressed
-signal staff_pressed
 signal brush_size_changed(new_size: int)
 signal brush_shape_changed(round_shape: bool)
 signal green_preset_selected(preset_name: String)
@@ -94,7 +93,6 @@ const TOOL_TAB_MAP := {
 	"milestones": Tab.CLUB,
 	"feed": Tab.CLUB,
 	"scorecard": Tab.CLUB,
-	"staff": Tab.STAFF,
 }
 
 const TOOL_ROW_HEIGHT := 30
@@ -136,6 +134,7 @@ var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
 var _feed_unread: int = 0
 var _refresh_timer: Timer = null
+var _staff_panel: StaffPanel = null
 
 func _ready() -> void:
 	_build_ui()
@@ -575,15 +574,12 @@ func _build_club_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tip_label("Expand land parcels, launch marketing campaigns, track milestones and check course records."))
 
 func _build_staff_tab(hbox: HBoxContainer) -> void:
-	var staff_box = HBoxContainer.new()
-	staff_box.add_theme_constant_override("separation", 4)
-	staff_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(staff_box, {"type": "staff", "name": "Staff Management", "icon": "[P]", "hotkey": "P", "desc": "Manage course maintenance staff"})
-	hbox.add_child(_make_tab_group("MANAGEMENT", staff_box))
-
-	hbox.add_child(_make_separator())
-
-	hbox.add_child(_make_tip_label("Hire groundskeepers and mechanics to maintain turf quality and clubhouse equipment."))
+	# Staff management lives in the tab itself — condition, hire/fire, roster, effects.
+	_staff_panel = StaffPanel.new()
+	_staff_panel.name = "StaffPanel"
+	_staff_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_staff_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(_staff_panel)
 
 # =============================================================================
 # Helper Widgets
@@ -822,6 +818,9 @@ func _show_page(tab_index: int) -> void:
 			_refresh_golfer_lists()
 		Tab.PLAYER:
 			_refresh_player_skills()
+		Tab.STAFF:
+			if _staff_panel:
+				_staff_panel.refresh()
 
 func select_tab(tab_index: int) -> void:
 	if tab_index >= 0 and tab_index < _pages.size():
@@ -1013,8 +1012,6 @@ func _on_tool_button_pressed(tool_type) -> void:
 				lower_elevation_pressed.emit()
 			"bulldozer":
 				bulldozer_pressed.emit()
-			"staff":
-				staff_pressed.emit()
 			"play_course":
 				play_course_pressed.emit()
 			"tournaments":
@@ -1114,7 +1111,7 @@ func _input(event: InputEvent) -> void:
 				_on_tool_button_pressed("bulldozer")
 			KEY_P:
 				select_tab(Tab.STAFF)
-				_on_tool_button_pressed("staff")
+				get_viewport().set_input_as_handled()
 
 # =============================================================================
 # Public API
