@@ -3,7 +3,7 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: terrain painting, hazards, create hole, bulldozer, brush size
+##  - Course Terrain: tools column (open hole, bulldozer, brush) before the course & hazard tiles honeycomb
 ##  - Improvements:   objects (trees, rocks, paths, flowers) and decorations
 ##  - Buildings:      amenity buildings catalogue
 ##  - Elevation:      sculpting controls and brush size
@@ -11,7 +11,7 @@ class_name TerrainToolbar
 ##  - Golfers:        who is on the course and recent rounds
 ##  - Player:         play the course, tournaments, player skills
 ##  - Club:           land, marketing, milestones, feed, scorecard
-##  - Staff:          staff management
+##  - Staff:          hire/fire staff, course condition, payroll, and effects
 ##
 ## Content within tabs is laid out horizontally and scrolls horizontally when
 ## overflowing the available tab width.
@@ -22,12 +22,12 @@ signal open_hole_pressed
 signal tree_placement_pressed
 signal rock_placement_pressed
 signal building_placement_pressed
+signal building_selected(building_type: String)
 signal decoration_placement_pressed
 signal raise_elevation_pressed
 signal sculpt_terrain_pressed(raising: bool)
 signal lower_elevation_pressed
 signal bulldozer_pressed
-signal staff_pressed
 signal brush_size_changed(new_size: int)
 signal brush_shape_changed(round_shape: bool)
 signal green_preset_selected(preset_name: String)
@@ -44,9 +44,9 @@ enum Tab { TERRAIN, IMPROVEMENTS, BUILDINGS, ELEVATION, HOLES, GOLFERS, PLAYER, 
 
 const TAB_TITLES := {
 	Tab.TERRAIN: "Terrain",
-	Tab.IMPROVEMENTS: "Improve",
-	Tab.BUILDINGS: "Build",
-	Tab.ELEVATION: "Elev",
+	Tab.IMPROVEMENTS: "Improvements",
+	Tab.BUILDINGS: "Buildings",
+	Tab.ELEVATION: "Elevation",
 	Tab.HOLES: "Holes",
 	Tab.GOLFERS: "Golfers",
 	Tab.PLAYER: "Player",
@@ -93,10 +93,19 @@ const TOOL_TAB_MAP := {
 	"milestones": Tab.CLUB,
 	"feed": Tab.CLUB,
 	"scorecard": Tab.CLUB,
-	"staff": Tab.STAFF,
 }
 
 const TOOL_ROW_HEIGHT := 30
+const COURSE_TILE_COLUMNS := 4  # Surfaces fill row 1, hazards row 2
+const TILE_ROWS := 2  # Course and building tiles always sit in two interlocking rows
+## Vertical rhythm of the tile rows: two rows of TerrainTileButton.BUTTON_SIZE
+## tiles span 1.5 tiles, plus the gap where the lower row tucks into the
+## notches of the row above, plus the breathing room kept above the first row
+## and below the last — together filling the toolbar page height without the
+## rows touching each other or the edges of the page.
+const TILE_H_SEPARATION := 8
+const TILE_V_SEPARATION := 20
+const TILE_V_PADDING := 20
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
@@ -125,8 +134,11 @@ var _recent_rounds: Array[Dictionary] = []
 var _skill_labels: Array[Label] = []
 var _player_points_label: Label = null
 var _feed_button: Button = null
+var _building_registry: Dictionary = {}
+var _building_shelf: TileHoneycomb = null
 var _feed_unread: int = 0
 var _refresh_timer: Timer = null
+var _staff_panel: StaffPanel = null
 
 func _ready() -> void:
 	_build_ui()
@@ -284,35 +296,83 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	var surf_box = HBoxContainer.new()
-	surf_box.add_theme_constant_override("separation", 4)
-	surf_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "icon": "[=]", "hotkey": "1", "desc": "Mowed playing surface for approach shots"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "icon": "[~]", "hotkey": "2", "desc": "Longer grass bordering fairways"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.GREEN, "name": "Green", "icon": "[O]", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush"})
-	_add_tool_button(surf_box, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "icon": "[T]", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time"})
-	hbox.add_child(_make_tab_group("SURFACES", surf_box))
+	# The Open Hole action, the Bulldozer and the brush stack in one column
+	# before the tiles so the most-used course tools sit first in the tab.
+	hbox.add_child(_make_terrain_tools_column())
 
 	hbox.add_child(_make_separator())
 
-	var haz_box = HBoxContainer.new()
-	haz_box.add_theme_constant_override("separation", 4)
-	haz_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "icon": "[:]", "hotkey": "5", "desc": "Sand trap hazard"})
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.WATER, "name": "Water", "icon": "[w]", "hotkey": "6", "desc": "Water hazard with penalty"})
-	_add_tool_button(haz_box, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "icon": "[X]", "hotkey": "7", "desc": "Boundary area with stroke penalty"})
-	var open_hole_btn := _add_tool_button(haz_box, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
-	_open_hole_buttons.append(open_hole_btn)
-	_add_tool_button(haz_box, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"})
-	hbox.add_child(_make_tab_group("HAZARDS & TOOLS", haz_box))
+	# Course surfaces and hazards share one honeycomb: row 1 = playing surfaces,
+	# row 2 = hazards, shifted half a tile right so each hazard diamond drops
+	# into a notch between the surfaces above it.
+	var tiles_grid = TileHoneycomb.new()
+	tiles_grid.name = "CourseTilesGrid"
+	tiles_grid.columns = COURSE_TILE_COLUMNS
+	tiles_grid.tile_size = TerrainTileButton.BUTTON_SIZE
+	tiles_grid.h_separation = TILE_H_SEPARATION
+	tiles_grid.v_separation = TILE_V_SEPARATION
+	tiles_grid.v_padding = TILE_V_PADDING
+	tiles_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.WATER, "name": "Water", "hotkey": "6", "desc": "Water hazard with penalty", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "hotkey": "7", "desc": "Boundary area with stroke penalty", "tile_preview": true})
+	# The grid carries its own breathing room above and below the rows, so it
+	# keeps that spacing instead of stretching to fill the whole page height.
+	hbox.add_child(_make_tab_group("", tiles_grid, true))
 
 	hbox.add_child(_make_separator())
-
-	hbox.add_child(_make_brush_group())
-	hbox.add_child(_make_separator())
-	hbox.add_child(_make_review_group())
-
 	hbox.add_child(_make_green_presets_group())
+
+## Open Hole, Bulldozer and the brush controls stacked vertically. This column
+## opens the Course Terrain tab so the tools sit before the tile honeycomb.
+## Buttons use a compact 26px height (matching the brush stepper) so the whole
+## column still fits inside the 190px bottom bar. ToolButton._ready() resets
+## custom_minimum_size, so the compact height is applied on ready instead.
+func _make_terrain_tools_column() -> VBoxContainer:
+	const COLUMN_BUTTON_HEIGHT := 26
+	var column = VBoxContainer.new()
+	column.name = "TerrainToolsColumn"
+	column.add_theme_constant_override("separation", 2)
+	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var open_hole_btn := _add_tool_button(column, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
+	_open_hole_buttons.append(open_hole_btn)
+	_make_column_button_compact(open_hole_btn, COLUMN_BUTTON_HEIGHT)
+
+	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"})
+	_make_column_button_compact(bulldozer_btn, COLUMN_BUTTON_HEIGHT)
+
+	column.add_child(_make_small_group_label("BRUSH"))
+
+	var brush_row := _create_brush_row()
+	brush_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	brush_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(brush_row)
+
+	var shape := _create_brush_shape()
+	shape.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	shape.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(shape)
+
+	_apply_brush_limit()
+	return column
+
+## Size a ToolButton for vertical stacking in the tools column: full width,
+## compact height. Applied on ready so ToolButton._ready() cannot overwrite it.
+func _make_column_button_compact(btn: ToolButton, height: int) -> void:
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if btn.is_node_ready():
+		btn.custom_minimum_size = Vector2(0, height)
+	else:
+		btn.ready.connect(
+			func() -> void: btn.custom_minimum_size = Vector2(0, height),
+			CONNECT_ONE_SHOT
+		)
 
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	var obj_box = HBoxContainer.new()
@@ -337,15 +397,51 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tip_label("Decorations, trees & flower beds raise course aesthetics and golfer mood."))
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
-	var bld_box = HBoxContainer.new()
-	bld_box.add_theme_constant_override("separation", 4)
-	bld_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(bld_box, {"type": "building", "name": "Buildings Catalogue", "icon": "[B]", "hotkey": "B", "desc": "Place amenity buildings"})
-	hbox.add_child(_make_tab_group("FACILITIES", bld_box))
+	# Facilities use the same interlocking isometric buttons as Course & Hazards,
+	# laid out in two rows (columns follow the catalogue size, see
+	# _populate_building_shelf) so the big tiles fill the toolbar height; the
+	# page scrolls sideways when the catalogue is wider than the window.
+	_building_shelf = TileHoneycomb.new()
+	_building_shelf.name = "BuildingShelf"
+	_building_shelf.columns = building_tile_columns(_building_registry.size())
+	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
+	_building_shelf.h_separation = TILE_H_SEPARATION
+	_building_shelf.v_separation = TILE_V_SEPARATION
+	_building_shelf.v_padding = TILE_V_PADDING
+	_building_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_building_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	# No group heading or INFO blurb: the tiles speak for themselves and the
+	# rich hover tooltip carries each facility's cost and upkeep.
+	# The shelf carries its own breathing room above and below the rows, so it
+	# keeps that spacing instead of stretching to fill the whole page height.
+	hbox.add_child(_make_tab_group("", _building_shelf, true))
+	_populate_building_shelf()
 
-	hbox.add_child(_make_separator())
+func set_building_registry(registry: Dictionary) -> void:
+	_building_registry = registry.duplicate(true)
+	_populate_building_shelf()
 
-	hbox.add_child(_make_tip_label("Place clubhouses, pro shops, restaurants and restrooms to satisfy golfer needs."))
+func _populate_building_shelf() -> void:
+	if not is_instance_valid(_building_shelf):
+		return
+	for child in _building_shelf.get_children():
+		_building_shelf.remove_child(child)
+		child.queue_free()
+	_building_shelf.columns = building_tile_columns(_building_registry.size())
+	for building_type in _building_registry:
+		var data: Dictionary = _building_registry[building_type]
+		var button := BuildingTileButton.new()
+		button.configure_building(str(building_type), data)
+		button.pressed.connect(_on_building_card_pressed.bind(str(building_type)))
+		_building_shelf.add_child(button)
+
+## Columns needed to lay `count` building tiles out in TILE_ROWS rows.
+static func building_tile_columns(count: int) -> int:
+	return maxi(1, ceili(float(count) / TILE_ROWS))
+
+func _on_building_card_pressed(building_type: String) -> void:
+	_reveal_tab_for_tool("building")
+	building_selected.emit(building_type)
 
 func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	var sculpt_box = HBoxContainer.new()
@@ -488,21 +584,18 @@ func _build_club_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tip_label("Expand land parcels, launch marketing campaigns, track milestones and check course records."))
 
 func _build_staff_tab(hbox: HBoxContainer) -> void:
-	var staff_box = HBoxContainer.new()
-	staff_box.add_theme_constant_override("separation", 4)
-	staff_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(staff_box, {"type": "staff", "name": "Staff Management", "icon": "[P]", "hotkey": "P", "desc": "Manage course maintenance staff"})
-	hbox.add_child(_make_tab_group("MANAGEMENT", staff_box))
-
-	hbox.add_child(_make_separator())
-
-	hbox.add_child(_make_tip_label("Hire groundskeepers and mechanics to maintain turf quality and clubhouse equipment."))
+	# Staff management lives in the tab itself — condition, hire/fire, roster, effects.
+	_staff_panel = StaffPanel.new()
+	_staff_panel.name = "StaffPanel"
+	_staff_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_staff_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(_staff_panel)
 
 # =============================================================================
 # Helper Widgets
 # =============================================================================
 
-func _make_tab_group(title: String, content: Control) -> VBoxContainer:
+func _make_tab_group(title: String, content: Control, center_content: bool = false) -> VBoxContainer:
 	var group = VBoxContainer.new()
 	group.add_theme_constant_override("separation", 2)
 	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -514,7 +607,12 @@ func _make_tab_group(title: String, content: Control) -> VBoxContainer:
 		lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 		group.add_child(lbl)
 
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Tile grids already carry their own breathing room above and below the
+	# rows, so they keep their natural height instead of stretching to fill it.
+	if center_content:
+		content.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	else:
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	group.add_child(content)
 	return group
 
@@ -555,15 +653,25 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		cost = costs.get("cost", 0)
 		maintenance = costs.get("maintenance", 0)
 
-	var btn = ToolButton.create(tool_type, tool_def["name"], tool_def.get("icon", ""),
-		tool_def.get("hotkey", ""), tool_def.get("desc", ""), cost, maintenance)
+	var btn: ToolButton
+	if tool_def.get("tile_preview", false):
+		btn = TerrainTileButton.new()
+		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
+			tool_def.get("desc", ""), cost, maintenance)
+	else:
+		btn = ToolButton.create(tool_type, tool_def["name"], tool_def.get("icon", ""),
+			tool_def.get("hotkey", ""), tool_def.get("desc", ""), cost, maintenance)
 	btn.tool_pressed.connect(_on_tool_button_pressed)
 	parent.add_child(btn)
 
-	btn.custom_minimum_size = Vector2(0, TOOL_ROW_HEIGHT)
-	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	btn.add_theme_constant_override("icon_max_width", 18)
+	if btn is TerrainTileButton:
+		btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
+		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	else:
+		btn.custom_minimum_size = Vector2(0, TOOL_ROW_HEIGHT)
+		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+		btn.add_theme_constant_override("icon_max_width", 18)
 
 	if tool_type is String and tool_type == "feed":
 		_feed_button = btn
@@ -575,21 +683,19 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 func _is_menu_action(tool_type: String) -> bool:
 	return tool_type in ["land", "marketing", "milestones", "feed", "scorecard", "tournaments", "play_course"]
 
-func _make_brush_group() -> VBoxContainer:
-	var group = VBoxContainer.new()
-	group.add_theme_constant_override("separation", 2)
-	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
+func _make_small_group_label(text: String) -> Label:
 	var lbl = Label.new()
-	lbl.text = "BRUSH"
+	lbl.text = text
 	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-	group.add_child(lbl)
+	return lbl
 
+## Brush size stepper row ("-" label "+"). Shared by the Terrain tab's tools
+## column and the Elevation tab's brush group; the caller sets size flags.
+func _create_brush_row() -> HBoxContainer:
 	var brush_row = HBoxContainer.new()
 	brush_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	brush_row.add_theme_constant_override("separation", 3)
-	brush_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var brush_decrease = Button.new()
 	brush_decrease.text = "-"
@@ -615,8 +721,10 @@ func _make_brush_group() -> VBoxContainer:
 	brush_increase.pressed.connect(_on_brush_increase)
 	brush_row.add_child(brush_increase)
 	_brush_buttons.append(brush_increase)
-	group.add_child(brush_row)
+	return brush_row
 
+## Round/square brush shape picker. Shared like the brush row above.
+func _create_brush_shape() -> OptionButton:
 	var shape := OptionButton.new()
 	shape.add_item("Round")
 	shape.add_item("Square")
@@ -624,9 +732,23 @@ func _make_brush_group() -> VBoxContainer:
 	shape.tooltip_text = "Round brush for natural contours, square for precise edges"
 	shape.custom_minimum_size = Vector2(78, 22)
 	shape.focus_mode = Control.FOCUS_NONE
+	shape.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	shape.item_selected.connect(_on_brush_shape_selected)
 	_brush_shape_buttons.append(shape)
-	group.add_child(shape)
+	return shape
+
+func _make_brush_group() -> VBoxContainer:
+	var group = VBoxContainer.new()
+	group.add_theme_constant_override("separation", 2)
+	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	group.add_child(_make_small_group_label("BRUSH"))
+
+	var brush_row := _create_brush_row()
+	brush_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	group.add_child(brush_row)
+
+	group.add_child(_create_brush_shape())
 	_apply_brush_limit()
 	return group
 
@@ -711,6 +833,9 @@ func _show_page(tab_index: int) -> void:
 			_refresh_golfer_lists()
 		Tab.PLAYER:
 			_refresh_player_skills()
+		Tab.STAFF:
+			if _staff_panel:
+				_staff_panel.refresh()
 
 func select_tab(tab_index: int) -> void:
 	if tab_index >= 0 and tab_index < _pages.size():
@@ -902,8 +1027,6 @@ func _on_tool_button_pressed(tool_type) -> void:
 				lower_elevation_pressed.emit()
 			"bulldozer":
 				bulldozer_pressed.emit()
-			"staff":
-				staff_pressed.emit()
 			"play_course":
 				play_course_pressed.emit()
 			"tournaments":
@@ -1003,7 +1126,7 @@ func _input(event: InputEvent) -> void:
 				_on_tool_button_pressed("bulldozer")
 			KEY_P:
 				select_tab(Tab.STAFF)
-				_on_tool_button_pressed("staff")
+				get_viewport().set_input_as_handled()
 
 # =============================================================================
 # Public API

@@ -64,7 +64,6 @@ var decoration_registry: Dictionary = {}
 var entity_layer: EntityLayer = null
 var building_info_panel: BuildingInfoPanel = null
 var financial_panel: FinancialPanel = null
-var staff_panel: StaffPanel = null
 var mini_map: MiniMap = null
 var map_btn: Button = null  # Toggles the minimap; kept in sync with MiniMap visibility
 var hole_stats_panel: HoleStatsPanel = null
@@ -534,12 +533,13 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
 	terrain_toolbar.rock_placement_pressed.connect(_on_rock_placement_pressed)
 	terrain_toolbar.building_placement_pressed.connect(_on_building_placement_pressed)
+	terrain_toolbar.building_selected.connect(_on_building_type_selected_from_toolbar)
+	terrain_toolbar.set_building_registry(building_registry)
 	terrain_toolbar.decoration_placement_pressed.connect(_on_decoration_placement_pressed)
 	terrain_toolbar.sculpt_terrain_pressed.connect(_on_sculpt_terrain_pressed)
 	terrain_toolbar.raise_elevation_pressed.connect(_on_raise_elevation_pressed)
 	terrain_toolbar.lower_elevation_pressed.connect(_on_lower_elevation_pressed)
 	terrain_toolbar.bulldozer_pressed.connect(_on_bulldozer_pressed)
-	terrain_toolbar.staff_pressed.connect(_on_staff_pressed)
 	terrain_toolbar.course_review_pressed.connect(func(): _toggle_panel(course_rating_overlay))
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
 	terrain_toolbar.brush_shape_changed.connect(func(value: bool):
@@ -548,7 +548,7 @@ func _setup_terrain_toolbar() -> void:
 	)
 	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
 
-	# Club / Player / Staff tab signals
+	# Club / Player tab signals
 	terrain_toolbar.play_course_pressed.connect(_on_play_course_pressed)
 	terrain_toolbar.tournaments_pressed.connect(_toggle_tournament_panel)
 	terrain_toolbar.land_pressed.connect(_toggle_land_panel)
@@ -722,7 +722,7 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "StaffPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel"]
+	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:
@@ -1441,71 +1441,28 @@ func _on_tree_placement_pressed() -> void:
 	get_tree().root.add_child(dialog)
 	dialog.popup_centered_ratio(0.3)
 
-func _on_building_placement_pressed() -> void:
-	"""Show building selection menu and start building placement"""
-	print("Building button pressed!")
+func _on_building_type_selected_from_toolbar(building_type: String) -> void:
+	"""Start placement immediately for a building card in the Buildings tab."""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
 	is_painting = false
+	if building_type not in building_registry:
+		EventBus.notify("Building type not found: %s" % building_type, "error")
+		return
+	if building_registry[building_type].get("required", false) and entity_layer.has_building_of_type(building_type):
+		EventBus.notify("That required facility is already placed.", "info")
+		return
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
+	placement_manager.start_building_placement(building_type, building_registry[building_type])
 
-	if building_registry.is_empty():
-		print("ERROR: Building registry is empty!")
-		EventBus.notify("Building system not initialized!", "error")
-		return
-	
-	# Get building names from dictionary
-	var building_names = building_registry.keys()
-	print("Available buildings: ", building_names)
-	if building_names.is_empty():
-		EventBus.notify("No buildings available!", "error")
-		return
-	
-	var dialog = AcceptDialog.new()
-	dialog.title = "The architect's book"
-	dialog.size = Vector2i(740, 560)
-	dialog.theme = preload("res://assets/themes/game_theme.tres")
-	var scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(700, 470)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var shelf := GridContainer.new()
-	shelf.columns = 2
-	shelf.add_theme_constant_override("h_separation", 10)
-	shelf.add_theme_constant_override("v_separation", 10)
-	for building_type in building_names:
-		var data: Dictionary = building_registry[building_type]
-		var btn := Button.new()
-		btn.text = "%s\n$%d · $%d/day" % [data.get("name", building_type), data.get("cost", 0), data.get("operating_cost", 0)]
-		btn.tooltip_text = data.get("description", "")
-		if data.get("required", false) and entity_layer.has_building_of_type(building_type):
-			btn.disabled = true
-			btn.text = "%s\nAlready placed" % data.get("name", building_type)
-		else:
-			btn.pressed.connect(_on_building_type_selected.bind(building_type, dialog))
-		CatalogArtwork.decorate_button(btn, building_type, data, true)
-		shelf.add_child(btn)
-	scroll.add_child(shelf)
-	dialog.add_child(scroll)
-	dialog.confirmed.connect(dialog.queue_free)
-	dialog.canceled.connect(dialog.queue_free)
-	add_child(dialog)
-	dialog.popup_centered()
-
-func _on_building_type_selected(building_type: String, dialog: AcceptDialog) -> void:
-	"""Handle building type selection"""
-	print("Selected building: %s" % building_type)
-	dialog.queue_free()
-
-	if building_type in building_registry:
-		var building_data = building_registry[building_type]
-		placement_manager.start_building_placement(building_type, building_data)
-		print("Building placement mode: %s" % building_type)
-	else:
-		print("ERROR: Building type not found: %s" % building_type)
+func _on_building_placement_pressed() -> void:
+	"""Open the Buildings tab; facility cards there start placement directly."""
+	if terrain_toolbar:
+		terrain_toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
 
 func _on_tree_type_selected(tree_type: String, dialog: AcceptDialog) -> void:
 	"""Handle tree type selection"""
@@ -2976,14 +2933,8 @@ func _setup_financial_panel() -> void:
 	hud.add_child(financial_panel)
 	financial_panel.hide()
 
-	# Create staff panel
-	staff_panel = StaffPanel.new()
-	staff_panel.name = "StaffPanel"
-	staff_panel.close_requested.connect(_on_staff_panel_closed)
-	hud.add_child(staff_panel)
-	staff_panel.hide()
-
 	# Note: Money click is now handled by HUDStatusColumn.money_clicked signal
+	# Staff management lives in the toolbar Staff tab (not a popup).
 
 func _on_money_clicked() -> void:
 	## Toggle the financial panel when money is clicked.
@@ -2993,17 +2944,6 @@ func _on_financial_panel_closed() -> void:
 	"""Hide the financial panel."""
 	financial_panel.hide()
 	if _active_panel == financial_panel:
-		_active_panel = null
-
-func _on_staff_pressed() -> void:
-	## Toggle staff management panel.
-	if staff_panel:
-		_toggle_panel(staff_panel)
-
-func _on_staff_panel_closed() -> void:
-	"""Hide the staff panel."""
-	staff_panel.hide()
-	if _active_panel == staff_panel:
 		_active_panel = null
 
 # --- Mini Map ---

@@ -1,237 +1,301 @@
-extends CenteredPanel
+extends HBoxContainer
 class_name StaffPanel
-## StaffPanel - UI for hiring/firing staff and monitoring course condition
+## StaffPanel - Inline staff management UI for the toolbar Staff tab.
 ##
-## Displays course condition, payroll, hire buttons for 4 staff types,
-## and a roster of hired staff with fire buttons.
+## Shows course condition, payroll, hire buttons for the 4 staff types,
+## a roster of hired staff with fire buttons, and current effects.
+## Lives in the tabbed toolbar rather than a separate popup window.
 
-signal close_requested
+const HIRE_BUTTON_SIZE := Vector2(158, 28)
+const FIRE_BUTTON_SIZE := Vector2(40, 24)
 
 var _condition_bar: ProgressBar = null
 var _condition_label: Label = null
 var _payroll_label: Label = null
-var _staff_list_container: VBoxContainer = null
-var _modifiers_label: Label = null
+var _staff_list_container: HBoxContainer = null
+var _pace_label: Label = null
+var _cart_label: Label = null
+var _pro_shop_label: Label = null
+var _hire_buttons: Dictionary = {}  # StaffType -> Button
+var _bar_fill_style: StyleBoxFlat = null
+
+func _ready() -> void:
+	add_theme_constant_override("separation", 8)
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	alignment = BoxContainer.ALIGNMENT_BEGIN
+	_build_ui()
+	_connect_manager()
+	_update_display()
+
+func refresh() -> void:
+	_connect_manager()
+	_update_display()
+
+func _exit_tree() -> void:
+	var sm = _staff_manager()
+	if sm == null:
+		return
+	if sm.staff_changed.is_connected(_on_staff_changed):
+		sm.staff_changed.disconnect(_on_staff_changed)
+	if sm.condition_changed.is_connected(_on_condition_changed):
+		sm.condition_changed.disconnect(_on_condition_changed)
 
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(320, 450)
+	add_child(_make_condition_group())
+	add_child(_make_separator())
+	add_child(_make_hire_group())
+	add_child(_make_separator())
+	add_child(_make_roster_group())
+	add_child(_make_separator())
+	add_child(_make_effects_group())
 
-	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	add_child(margin)
+func _make_condition_group() -> VBoxContainer:
+	var content = VBoxContainer.new()
+	content.add_theme_constant_override("separation", 4)
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
 
-	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 8)
-	margin.add_child(main_vbox)
-
-	# Title row with close button
-	var title_row = HBoxContainer.new()
-	main_vbox.add_child(title_row)
-
-	var title = Label.new()
-	title.text = "Staff Management"
-	title.add_theme_font_size_override("font_size", 18)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_row.add_child(title)
-
-	var close_btn = Button.new()
-	close_btn.text = "X"
-	close_btn.custom_minimum_size = Vector2(30, 30)
-	close_btn.pressed.connect(_on_close_pressed)
-	title_row.add_child(close_btn)
-
-	main_vbox.add_child(HSeparator.new())
-
-	# Condition section
-	var condition_row = HBoxContainer.new()
-	main_vbox.add_child(condition_row)
-
-	var condition_text = Label.new()
-	condition_text.text = "Condition:"
-	condition_row.add_child(condition_text)
+	var bar_row = HBoxContainer.new()
+	bar_row.add_theme_constant_override("separation", 6)
+	bar_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_child(bar_row)
 
 	_condition_bar = ProgressBar.new()
 	_condition_bar.min_value = 0
 	_condition_bar.max_value = 100
 	_condition_bar.value = 100
-	_condition_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_condition_bar.custom_minimum_size = Vector2(120, 20)
 	_condition_bar.show_percentage = false
-	condition_row.add_child(_condition_bar)
+	_condition_bar.custom_minimum_size = Vector2(110, 16)
+	_condition_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_condition_bar.tooltip_text = "Course condition. Groundskeepers restore it; it degrades without them."
+	var bar_bg = StyleBoxFlat.new()
+	bar_bg.bg_color = UIConstants.COLOR_BG_DARK
+	bar_bg.set_corner_radius_all(3)
+	_condition_bar.add_theme_stylebox_override("background", bar_bg)
+	_bar_fill_style = StyleBoxFlat.new()
+	_bar_fill_style.bg_color = UIConstants.COLOR_SUCCESS
+	_bar_fill_style.set_corner_radius_all(3)
+	_condition_bar.add_theme_stylebox_override("fill", _bar_fill_style)
+	bar_row.add_child(_condition_bar)
 
 	_condition_label = Label.new()
-	_condition_label.text = "100% (Pristine)"
-	_condition_label.custom_minimum_size = Vector2(100, 0)
+	_condition_label.text = "100%  Pristine"
+	_condition_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	_condition_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT)
 	_condition_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	condition_row.add_child(_condition_label)
+	bar_row.add_child(_condition_label)
 
-	# Payroll row
 	_payroll_label = Label.new()
 	_payroll_label.text = "Daily Payroll: $0"
-	main_vbox.add_child(_payroll_label)
+	_payroll_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	_payroll_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+	content.add_child(_payroll_label)
 
-	main_vbox.add_child(HSeparator.new())
+	return _make_group("CONDITION", content)
 
-	# Hire section
-	var hire_label = Label.new()
-	hire_label.text = "HIRE STAFF:"
-	hire_label.add_theme_font_size_override("font_size", 14)
-	main_vbox.add_child(hire_label)
-
-	# 2x2 grid of hire buttons
+func _make_hire_group() -> VBoxContainer:
 	var hire_grid = GridContainer.new()
 	hire_grid.columns = 2
-	hire_grid.add_theme_constant_override("h_separation", 8)
-	hire_grid.add_theme_constant_override("v_separation", 6)
-	main_vbox.add_child(hire_grid)
+	hire_grid.add_theme_constant_override("h_separation", 6)
+	hire_grid.add_theme_constant_override("v_separation", 4)
+	hire_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	_add_hire_button(hire_grid, StaffManager.StaffType.GROUNDSKEEPER)
 	_add_hire_button(hire_grid, StaffManager.StaffType.MARSHAL)
 	_add_hire_button(hire_grid, StaffManager.StaffType.CART_OPERATOR)
 	_add_hire_button(hire_grid, StaffManager.StaffType.PRO_SHOP)
 
-	main_vbox.add_child(HSeparator.new())
+	return _make_group("HIRE STAFF", hire_grid)
 
-	# Staff roster section
-	var roster_label = Label.new()
-	roster_label.text = "CURRENT STAFF:"
-	roster_label.add_theme_font_size_override("font_size", 14)
-	main_vbox.add_child(roster_label)
-
-	var scroll = ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0, 120)
-	main_vbox.add_child(scroll)
-
-	_staff_list_container = VBoxContainer.new()
+func _make_roster_group() -> VBoxContainer:
+	_staff_list_container = HBoxContainer.new()
+	_staff_list_container.add_theme_constant_override("separation", 8)
+	_staff_list_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_staff_list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_staff_list_container.add_theme_constant_override("separation", 4)
-	scroll.add_child(_staff_list_container)
+	_staff_list_container.alignment = BoxContainer.ALIGNMENT_BEGIN
+	var group = _make_group("CURRENT STAFF", _staff_list_container)
+	group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return group
 
-	main_vbox.add_child(HSeparator.new())
+func _make_effects_group() -> VBoxContainer:
+	var content = VBoxContainer.new()
+	content.add_theme_constant_override("separation", 2)
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
 
-	# Modifiers section
-	var mod_label = Label.new()
-	mod_label.text = "EFFECTS:"
-	mod_label.add_theme_font_size_override("font_size", 14)
-	main_vbox.add_child(mod_label)
+	_pace_label = _make_effect_label("Pace: 60%")
+	_cart_label = _make_effect_label("Carts: 70%")
+	_pro_shop_label = _make_effect_label("Pro Shop: +$0/golfer")
+	content.add_child(_pace_label)
+	content.add_child(_cart_label)
+	content.add_child(_pro_shop_label)
 
-	_modifiers_label = Label.new()
-	_modifiers_label.text = "Pace: 60%  Pro Shop: +$0/golfer"
-	_modifiers_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-	main_vbox.add_child(_modifiers_label)
+	return _make_group("EFFECTS", content)
+
+func _make_effect_label(text: String) -> Label:
+	var label = Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	label.add_theme_color_override("font_color", UIConstants.COLOR_INFO_DIM)
+	return label
+
+func _make_group(title: String, content: Control) -> VBoxContainer:
+	var group = VBoxContainer.new()
+	group.add_theme_constant_override("separation", 2)
+	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var lbl = Label.new()
+	lbl.text = title
+	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	group.add_child(lbl)
+
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	group.add_child(content)
+	return group
+
+func _make_separator() -> VSeparator:
+	var sep = VSeparator.new()
+	sep.custom_minimum_size = Vector2(1, 28)
+	sep.modulate = Color(1, 1, 1, 0.2)
+	return sep
 
 func _add_hire_button(parent: GridContainer, staff_type: int) -> void:
 	var data = StaffManager.STAFF_DATA.get(staff_type, {})
 	var btn = Button.new()
-	btn.text = "+ %s $%d" % [data.get("name", "Staff"), data.get("base_salary", 50)]
+	btn.text = _hire_button_text(staff_type, 0)
 	btn.tooltip_text = data.get("description", "")
+	btn.custom_minimum_size = HIRE_BUTTON_SIZE
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	btn.pressed.connect(_on_hire_pressed.bind(staff_type))
 	parent.add_child(btn)
+	_hire_buttons[staff_type] = btn
 
-func _ready() -> void:
-	super._ready()
-	# Connect to staff manager signals for reactive updates
-	if GameManager.staff_manager:
-		GameManager.staff_manager.staff_changed.connect(_on_staff_changed)
-		GameManager.staff_manager.condition_changed.connect(_on_condition_changed)
+func _hire_button_text(staff_type: int, hired_count: int) -> String:
+	var data = StaffManager.STAFF_DATA.get(staff_type, {})
+	var name_str: String = data.get("name", "Staff")
+	var salary: int = data.get("base_salary", 50)
+	if hired_count > 0:
+		return "+ %s $%d  ×%d" % [name_str, salary, hired_count]
+	return "+ %s $%d" % [name_str, salary]
+
+func _connect_manager() -> void:
+	var sm = _staff_manager()
+	if sm == null:
+		return
+	if not sm.staff_changed.is_connected(_on_staff_changed):
+		sm.staff_changed.connect(_on_staff_changed)
+	if not sm.condition_changed.is_connected(_on_condition_changed):
+		sm.condition_changed.connect(_on_condition_changed)
+
+func _staff_manager() -> StaffManager:
+	if GameManager == null:
+		return null
+	return GameManager.staff_manager
 
 func _on_staff_changed() -> void:
 	_update_display()
 
 func _on_condition_changed(_new_condition: float) -> void:
-	_update_display()
+	_update_status()
 
 func _update_display() -> void:
-	if not GameManager.staff_manager:
+	_update_status()
+	_rebuild_roster()
+
+func _update_status() -> void:
+	if _condition_bar == null:
 		return
 
-	var sm = GameManager.staff_manager
-
-	# Update condition bar
-	var condition_pct = sm.course_condition * 100
+	var sm = _staff_manager()
+	var condition: float = sm.course_condition if sm else 1.0
+	var condition_pct := condition * 100.0
 	_condition_bar.value = condition_pct
 
-	# Color the progress bar based on condition
-	var bar_style = StyleBoxFlat.new()
-	if sm.course_condition >= 0.7:
-		bar_style.bg_color = Color(0.3, 0.7, 0.3)  # Green
-	elif sm.course_condition >= 0.5:
-		bar_style.bg_color = Color(0.8, 0.8, 0.3)  # Yellow
+	if condition >= 0.7:
+		_bar_fill_style.bg_color = UIConstants.COLOR_SUCCESS
+	elif condition >= 0.5:
+		_bar_fill_style.bg_color = UIConstants.COLOR_WARNING
 	else:
-		bar_style.bg_color = Color(0.8, 0.3, 0.3)  # Red
-	_condition_bar.add_theme_stylebox_override("fill", bar_style)
+		_bar_fill_style.bg_color = UIConstants.COLOR_DANGER
 
-	_condition_label.text = "%d%% (%s)" % [int(condition_pct), sm.get_condition_description()]
+	var description := sm.get_condition_description() if sm else "Pristine"
+	_condition_label.text = "%d%%  %s" % [int(condition_pct), description]
+	_condition_bar.tooltip_text = "Course condition: %d%% (%s). Groundskeepers restore it; it degrades without them." % [
+		int(condition_pct), description
+	]
 
-	# Update payroll
-	_payroll_label.text = "Daily Payroll: $%d" % sm.get_daily_payroll()
+	var payroll: int = sm.get_daily_payroll() if sm else 0
+	_payroll_label.text = "Daily Payroll: $%d" % payroll
 
-	# Update staff roster
+	var pace_pct: int = int((sm.get_pace_modifier() if sm else 0.6) * 100)
+	var cart_pct: int = int((sm.get_cart_modifier() if sm else 0.7) * 100)
+	var pro_bonus: int = int(sm.get_pro_shop_revenue_bonus() if sm else 0)
+	_pace_label.text = "Pace: %d%%" % pace_pct
+	_cart_label.text = "Carts: %d%%" % cart_pct
+	_pro_shop_label.text = "Pro Shop: +$%d/golfer" % pro_bonus
+
+	for staff_type in _hire_buttons:
+		var count := sm.get_staff_count_by_type(staff_type) if sm else 0
+		_hire_buttons[staff_type].text = _hire_button_text(staff_type, count)
+
+func _rebuild_roster() -> void:
+	if _staff_list_container == null:
+		return
+
 	for child in _staff_list_container.get_children():
+		_staff_list_container.remove_child(child)
 		child.queue_free()
 
-	if sm.hired_staff.is_empty():
+	var sm = _staff_manager()
+	if sm == null or sm.hired_staff.is_empty():
 		var empty_label = Label.new()
 		empty_label.text = "No staff hired"
-		empty_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		empty_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+		empty_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+		empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_staff_list_container.add_child(empty_label)
-	else:
-		for i in range(sm.hired_staff.size()):
-			var staff = sm.hired_staff[i]
-			_add_staff_row(i, staff)
+		return
 
-	# Update modifiers
-	var pace_pct = int(sm.get_pace_modifier() * 100)
-	var pro_bonus = int(sm.get_pro_shop_revenue_bonus())
-	_modifiers_label.text = "Pace: %d%%  Pro Shop: +$%d/golfer" % [pace_pct, pro_bonus]
+	for i in range(sm.hired_staff.size()):
+		_add_staff_row(i, sm.hired_staff[i])
 
 func _add_staff_row(index: int, staff: Dictionary) -> void:
 	var row = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 4)
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_staff_list_container.add_child(row)
 
-	# Staff info
 	var type_data = StaffManager.STAFF_DATA.get(staff.type, {})
-	var type_name = type_data.get("name", "Staff")
-	var staff_name = staff.get("name", "Unknown")
+	var type_name: String = type_data.get("name", "Staff")
+	var staff_name: String = staff.get("name", "Unknown")
 
 	var info_label = Label.new()
 	info_label.text = "%s (%s) $%d" % [staff_name, type_name, staff.salary]
-	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	info_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT)
+	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(info_label)
 
-	# Fire button
 	var fire_btn = Button.new()
-	fire_btn.text = "X"
-	fire_btn.custom_minimum_size = Vector2(24, 24)
+	fire_btn.text = "Fire"
+	fire_btn.custom_minimum_size = FIRE_BUTTON_SIZE
+	fire_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	fire_btn.tooltip_text = "Fire %s" % staff_name
 	fire_btn.pressed.connect(_on_fire_pressed.bind(index))
 	row.add_child(fire_btn)
 
 func _on_hire_pressed(staff_type: int) -> void:
-	if GameManager.staff_manager:
-		GameManager.staff_manager.hire_staff(staff_type)
-		_update_display()
+	var sm = _staff_manager()
+	if sm:
+		sm.hire_staff(staff_type)
 
 func _on_fire_pressed(index: int) -> void:
-	if GameManager.staff_manager:
-		GameManager.staff_manager.fire_staff(index)
-		_update_display()
-
-func _on_close_pressed() -> void:
-	close_requested.emit()
-	hide()
-
-func toggle() -> void:
-	if visible:
-		hide()
-	else:
-		_update_display()
-		show_centered()
+	var sm = _staff_manager()
+	if sm:
+		sm.fire_staff(index)

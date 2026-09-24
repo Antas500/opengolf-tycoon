@@ -14,7 +14,7 @@ signal close_requested
 
 const PANEL_WIDTH: float = 340.0
 # Top margin is measured at runtime so the panel clears the status column.
-const BOTTOM_MARGIN: float = 102.0  # Tracks BottomBar (UIConstants.BOTTOM_BAR_HEIGHT + 6px)
+const BOTTOM_MARGIN: float = UIConstants.BOTTOM_BAR_HEIGHT + 6.0  # Clears the BottomBar
 const RIGHT_MARGIN: float = 4.0
 
 var _scroll: ScrollContainer = null

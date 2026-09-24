@@ -63,11 +63,15 @@ func apply_projection(proj: GridProjection) -> void:
 		mat.set_shader_parameter("elevation_step_y", _grid.ELEVATION_STEP_Y)
 		mat.set_shader_parameter("is_isometric", _grid.view_isometric)
 
-func refresh_palette() -> void:
+## The toolbar's terrain swatches use this same palette and shader as the grid.
+static func make_palette_texture() -> ImageTexture:
 	var colors := Image.create(PALETTE_KEYS.size(), 1, false, Image.FORMAT_RGBA8)
 	for i in range(PALETTE_KEYS.size()):
 		colors.set_pixel(i, 0, TilesetGenerator.get_color(PALETTE_KEYS[i]))
-	_palette = ImageTexture.create_from_image(colors)
+	return ImageTexture.create_from_image(colors)
+
+func refresh_palette() -> void:
+	_palette = make_palette_texture()
 	material.set_shader_parameter("palette", _palette)
 	material.set_shader_parameter("fringe_color", TilesetGenerator.get_color("fringe"))
 
