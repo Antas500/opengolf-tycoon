@@ -58,6 +58,7 @@ var _batch_changes: Array = []  # Array of {pos, old_type, new_type}
 
 var _ob_markers_overlay: OBMarkersOverlay = null
 var _cup_overlay: CupOverlay = null
+var _tee_aim_overlay: TeeAimOverlay = null
 var _water_overlay: WaterOverlay = null
 var _bunker_overlay: BunkerOverlay = null
 var _grass_overlay: GrassOverlay = null
@@ -95,6 +96,7 @@ func _ready() -> void:
 		tile_map.hide()
 	_setup_ob_markers_overlay()
 	_setup_cup_overlay()
+	_setup_tee_aim_overlay()
 	# The continuous surface supplies turf, sand, water, and paths on every platform.
 	# Keep the legacy overlay classes available for older tools, but don't double draw.
 	# TreeOverlay and RockOverlay disabled — entities render their own sprites.
@@ -181,6 +183,8 @@ func regenerate_tileset() -> void:
 func _redraw_all_overlays() -> void:
 	if _cup_overlay:
 		_cup_overlay.queue_redraw()
+	if _tee_aim_overlay:
+		_tee_aim_overlay.queue_redraw()
 	if _wildlife:
 		_wildlife.queue_redraw()
 	if _water_overlay:
@@ -466,6 +470,8 @@ func refresh_all_overlays() -> void:
 		_ob_markers_overlay._calculate_boundaries()
 	if _cup_overlay:
 		_cup_overlay.queue_redraw()
+	if _tee_aim_overlay:
+		_tee_aim_overlay.rebuild()
 	if _heightmap:
 		_heightmap.rebuild_from_grids(self)
 	if _shot_heatmap_overlay:
@@ -796,6 +802,12 @@ func _setup_cup_overlay() -> void:
 	_cup_overlay.name = "CupOverlay"
 	add_child(_cup_overlay)
 	_cup_overlay.initialize(self)
+
+func _setup_tee_aim_overlay() -> void:
+	_tee_aim_overlay = TeeAimOverlay.new()
+	_tee_aim_overlay.name = "TeeAimOverlay"
+	add_child(_tee_aim_overlay)
+	_tee_aim_overlay.initialize(self)
 
 func _setup_water_overlay() -> void:
 	_water_overlay = WaterOverlay.new()

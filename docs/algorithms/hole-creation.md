@@ -36,6 +36,11 @@ path and pin turn red and the plaque explains why:
 The path disappears as soon as the cup is cut, when another tool is selected or
 the tool is deselected, and when no tee box is waiting.
 
+The tee box itself is painted as well: every tee tile carries the
+[aiming arrow](tee-aim-arrow.md) in its grass, with a red ball either side of it.
+A waiting tee box already aims at the waiting cup — the same arrow the hole gets
+once it opens — and the arrow curves when the hole is a dogleg.
+
 "Unused" means *not already claimed by a hole*. Auto-generated forward and middle
 tees belong to their hole, so they never block the next tee box. Deleting a hole
 returns its tee box to the unused pool, so it can be paired with a freshly cut cup
