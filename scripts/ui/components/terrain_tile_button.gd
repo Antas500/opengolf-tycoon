@@ -9,10 +9,11 @@ class_name TerrainTileButton
 ## row below tucks into the notch it leaves (see TileHoneycomb) — so only the
 ## diamond itself answers to the mouse (see _has_point).
 
-## One projected course cell, 2:1 isometric. Sized so two interlocking rows
-## (1.5 tiles tall plus the row gap, see TileHoneycomb) fill the page height of
-## the tabbed toolbar inside the bottom bar.
-const TILE_SIZE := Vector2(184, 92)
+## One projected course cell, 2:1 isometric. Sized so two interlocking rows —
+## 1.5 tiles tall plus the inter-row gap and the breathing room above and below
+## (see TileHoneycomb) — fill the page height of the tabbed toolbar inside the
+## bottom bar.
+const TILE_SIZE := Vector2(120, 60)
 const BUTTON_SIZE := TILE_SIZE      # No padding: rows interlock on the grid.
 const NAME_FONT_SIZE := UIConstants.FONT_SIZE_MD
 const NAME_FONT_SIZE_MIN := 10  # Longest names shrink instead of spilling out.
