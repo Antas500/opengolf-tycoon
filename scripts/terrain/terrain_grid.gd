@@ -569,21 +569,6 @@ func get_brush_tiles(center: Vector2i, brush_size: int, round_shape: bool = true
 		if is_valid_position(pos): tiles.append(pos)
 	return tiles
 
-const GREEN_PRESETS = {
-	"small": [Vector2i(0, 0)],
-	"medium": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1)],
-	"large": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)],
-}
-
-func get_green_preset_tiles(center: Vector2i, preset_name: String) -> Array:
-	var offsets = GREEN_PRESETS.get(preset_name, [Vector2i(0, 0)])
-	var tiles: Array = []
-	for offset in offsets:
-		var pos = center + offset
-		if is_valid_position(pos):
-			tiles.append(pos)
-	return tiles
-
 func get_bunker_depth(pos: Vector2i) -> int:
 	return _bunker_depth_grid.get(pos, 0)
 

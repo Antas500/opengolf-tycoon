@@ -15,7 +15,6 @@ var elevation_sculpted: bool = false  # True = rolling hill / hollow brush
 var bulldozer_mode_active: bool = false  # Whether bulldozer mode is active
 var round_brush := true
 var brush_size: int = 1  # Current brush size (1, 3, or 5)
-var green_preset: String = ""  # Active green preset ("small"/"medium"/"large" or "")
 var _hole_move_mode: int = 0  # 0=NONE, matches main.gd HoleMoveMode enum
 
 # Preview state
@@ -169,14 +168,10 @@ func _update_preview(delta: float) -> void:
 	else:
 		# Terrain painting mode - show the area the tool will actually paint
 		var course: GameManager.CourseData = GameManager.current_course
-		var places_cup: bool = current_terrain_tool == TerrainTypes.Type.GREEN \
-				and HoleLayout.green_places_cup(terrain_grid, course)
 		var max_brush: int = HoleLayout.max_brush_size(current_terrain_tool, terrain_grid, course)
 		var effective_brush: int = brush_size if max_brush == HoleLayout.UNLIMITED_BRUSH \
 				else mini(brush_size, max_brush)
-		if current_terrain_tool == TerrainTypes.Type.GREEN and green_preset != "" and not places_cup:
-			current_preview_positions = terrain_grid.get_green_preset_tiles(grid_pos, green_preset)
-		elif effective_brush <= 1:
+		if effective_brush <= 1:
 			current_preview_positions = [grid_pos]
 		else:
 			current_preview_positions = terrain_grid.get_brush_tiles(grid_pos, effective_brush, round_brush)

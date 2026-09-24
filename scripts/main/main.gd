@@ -36,7 +36,6 @@ var game_mode_label: Label = null
 var current_tool: int = -1  # Start with no tool selected
 var round_brush := true
 var brush_size: int = 1
-var _green_preset: String = ""  # Active green preset ("small"/"medium"/"large" or "" for brush)
 var is_painting: bool = false
 var _tee_block_notified: bool = false  # One "tee box is waiting" notice per stroke
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
@@ -546,7 +545,6 @@ func _setup_terrain_toolbar() -> void:
 		round_brush = value
 		placement_preview.round_brush = value
 	)
-	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
 
 	# Club / Player tab signals
 	terrain_toolbar.play_course_pressed.connect(_on_play_course_pressed)
@@ -984,9 +982,7 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 			else mini(brush_size, max_brush)
 
 	var tiles_to_paint: Array
-	if current_tool == TerrainTypes.Type.GREEN and _green_preset != "" and not places_cup:
-		tiles_to_paint = terrain_grid.get_green_preset_tiles(grid_pos, _green_preset)
-	elif effective_brush <= 1:
+	if effective_brush <= 1:
 		tiles_to_paint = [grid_pos]
 	else:
 		tiles_to_paint = terrain_grid.get_brush_tiles(grid_pos, effective_brush, round_brush)
@@ -1142,15 +1138,11 @@ func _on_tool_selected(tool_type: int) -> void:
 	is_painting = false
 
 	current_tool = tool_type
-	# Clear green preset when switching away from GREEN tool
-	if tool_type != TerrainTypes.Type.GREEN:
-		_green_preset = ""
 	# Update toolbar highlight
 	if terrain_toolbar:
 		terrain_toolbar.set_current_tool(tool_type)
 	# Update placement preview for terrain painting
 	if placement_preview:
-		placement_preview.green_preset = _green_preset
 		placement_preview.set_terrain_tool(tool_type)
 		placement_preview.set_brush_size(brush_size)
 		placement_preview.set_terrain_painting_enabled(true)
@@ -1165,10 +1157,6 @@ func _on_brush_size_changed(new_size: int) -> void:
 	brush_size = new_size
 	if placement_preview:
 		placement_preview.set_brush_size(new_size)
-
-func _on_green_preset_selected(preset_name: String) -> void:
-	_green_preset = preset_name
-	placement_preview.green_preset = preset_name
 
 func _on_view_rotate_cw() -> void:
 	_change_view_projection(true)
@@ -1311,8 +1299,8 @@ func _on_hole_layout_hole_deleted(_hole_number: int) -> void:
 func _on_hole_layout_load_completed(_success: bool) -> void:
 	_refresh_hole_layout_ui()
 
-## Push the current hole layout rules into the toolbar: which tool is limited to a
-## single tile, and whether a tee box + green with a hole are ready to be paired.
+## Keep the Green flag, brush cap and Open Hole action in sync with the current
+## tee/cup state.
 func _refresh_hole_layout_ui() -> void:
 	if not terrain_toolbar or not terrain_grid:
 		return
@@ -1321,6 +1309,7 @@ func _refresh_hole_layout_ui() -> void:
 	terrain_toolbar.set_open_hole_state(bool(request.get("ready", false)),
 			str(request.get("reason", "")))
 	terrain_toolbar.set_brush_limit(HoleLayout.max_brush_size(current_tool, terrain_grid, course))
+	terrain_toolbar.set_green_placement_state(HoleLayout.green_places_cup(terrain_grid, course))
 
 func _on_speed_selected(speed: int) -> void:
 	GameManager.set_speed(speed)

@@ -17,6 +17,7 @@ const TILE_SIZE := Vector2(120, 60)
 const BUTTON_SIZE := TILE_SIZE      # No padding: rows interlock on the grid.
 const NAME_FONT_SIZE := UIConstants.FONT_SIZE_MD
 const NAME_FONT_SIZE_MIN := 10  # Longest names shrink instead of spilling out.
+const GREEN_HOLE_FLAG_TEXTURE := preload("res://assets/sprites/flag/flag.png")
 static var _white_texture: ImageTexture
 ## Scattered terrain previewed as part of a patch rather than a lone tile.
 const FIELD_PREVIEWS: Array[int] = [TerrainTypes.Type.ROCKS, TerrainTypes.Type.BRUSH]
@@ -33,6 +34,8 @@ static func tile_corners() -> PackedVector2Array:
 var _surface_material: ShaderMaterial
 var _outline: Line2D
 var _name_label: Label
+var _cup_flag: Sprite2D
+var _green_places_cup := true
 var _hovered := false
 
 func _ready() -> void:
@@ -128,6 +131,18 @@ func _build_tile() -> void:
 	_name_label.custom_minimum_size = BUTTON_SIZE
 	_name_label.size = BUTTON_SIZE
 
+	# The Green tile button previews the next kind of green the tool will paint.
+	# A flag is shown only when that next tile will carry a cup.
+	if tool_type is int and tool_type == TerrainTypes.Type.GREEN:
+		_cup_flag = Sprite2D.new()
+		_cup_flag.name = "GreenWithHoleFlag"
+		_cup_flag.texture = GREEN_HOLE_FLAG_TEXTURE
+		_cup_flag.position = Vector2(BUTTON_SIZE.x * 0.72, BUTTON_SIZE.y * 0.43)
+		_cup_flag.scale = Vector2(0.35, 0.35)
+		_cup_flag.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_cup_flag.visible = _green_places_cup
+		add_child(_cup_flag)
+
 	_refresh_palette()
 	_update_visual_state()
 
@@ -204,6 +219,17 @@ func _on_mouse_exited() -> void:
 func set_selected(selected: bool) -> void:
 	super.set_selected(selected)
 	_update_visual_state()
+
+## Show the pin flag when the next Green placement will also cut a cup.
+func set_green_places_cup(places_cup: bool) -> void:
+	if not tool_type is int or tool_type != TerrainTypes.Type.GREEN:
+		return
+	_green_places_cup = places_cup
+	if is_instance_valid(_cup_flag):
+		_cup_flag.visible = places_cup
+
+func shows_green_with_hole_flag() -> bool:
+	return tool_type is int and tool_type == TerrainTypes.Type.GREEN and _green_places_cup
 
 func _update_visual_state() -> void:
 	if _outline == null:

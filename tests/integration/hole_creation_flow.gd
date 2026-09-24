@@ -60,7 +60,7 @@ func run() -> void:
 	main._on_tool_selected(TerrainTypes.Type.GREEN)
 	main.terrain_toolbar.set_brush_size(5)
 	check(main.terrain_toolbar.effective_brush_size() == 1, "Green With Hole is capped at 1x1")
-	check(main.terrain_toolbar._green_preset_group.visible == false, "No preset shape for a cup")
+	check(main.terrain_toolbar.green_will_place_cup(), "The Green button shows a flag for the cup")
 
 	var cup := Vector2i(68, 60)
 	main.undo_manager.begin_stroke()
@@ -70,6 +70,7 @@ func run() -> void:
 	check(grid.get_cup_tiles() == [cup], "The first green carries the hole")
 	check(grid.get_tile(cup + Vector2i(1, 0)) != TerrainTypes.Type.GREEN, "Cup green is one tile")
 	check(layout.green_places_cup(grid, gm.current_course) == false, "A cup is waiting now")
+	check(not main.terrain_toolbar.green_will_place_cup(), "The Green button's flag turns off while a cup waits")
 	check(main.terrain_toolbar._open_hole_buttons[0].disabled == false, "Open Hole is ready")
 	for i in range(2): await process_frame  # let the cup overlay draw its waiting pin
 
@@ -77,9 +78,11 @@ func run() -> void:
 	main._perform_undo()
 	check(grid.get_tile(cup) != TerrainTypes.Type.GREEN, "Undo removes the painted green")
 	check(grid.get_cup_tiles().is_empty(), "Undo removes the cup with it")
+	check(main.terrain_toolbar.green_will_place_cup(), "Undo restores the Green With Hole flag")
 	main._perform_redo()
 	check(grid.get_tile(cup) == TerrainTypes.Type.GREEN, "Redo repaints the green")
 	check(grid.get_cup_tiles() == [cup], "Redo restores the cup")
+	check(not main.terrain_toolbar.green_will_place_cup(), "Redo clears the Green With Hole flag")
 
 	# --- While a cup waits, the same green brush widens the putting surface ---
 	var patch := Vector2i(cup.x, cup.y + 2)
@@ -92,7 +95,7 @@ func run() -> void:
 	check(painted > 1, "Green Without Hole paints with the standard brush")
 	check(grid.get_cup_tiles() == [cup], "Widening the green adds no second cup")
 	check(main.terrain_toolbar.effective_brush_size() == 5, "The brush is uncapped once a cup waits")
-	check(main.terrain_toolbar._green_preset_group.visible == true, "Presets return for plain green")
+	check(not main.terrain_toolbar.green_will_place_cup(), "The Green button stays unflagged while a cup waits")
 
 	# --- Open Hole (H) pairs the waiting tee with the waiting cup ---
 	main._on_open_hole_pressed()
@@ -105,19 +108,21 @@ func run() -> void:
 	check(hole.hole_position == cup, "Cup position is the painted cup")
 	check(layout.can_place_tee_box(grid, gm.current_course), "The tee is claimed, so a new one may be painted")
 	check(layout.green_places_cup(grid, gm.current_course), "The next green carries the next cup")
+	check(main.terrain_toolbar.green_will_place_cup(), "Opening the hole restores the Green With Hole flag")
 	check(main.terrain_toolbar._open_hole_buttons[0].disabled == true, "Nothing waiting to open")
 
 	# --- The loop restarts: the next green is a capped Green With Hole again ---
 	main._on_tool_selected(TerrainTypes.Type.GREEN)
 	main.terrain_toolbar.set_brush_size(5)
 	check(main.terrain_toolbar.effective_brush_size() == 1, "A fresh green is capped at 1x1 again")
-	check(main.terrain_toolbar._green_preset_group.visible == false, "No preset shape for a cup")
+	check(main.terrain_toolbar.green_will_place_cup(), "The next Green button is flagged before painting")
 
 	var next_cup := Vector2i(50, 50)
 	main.undo_manager.begin_stroke()
 	main._paint_terrain_stamp(next_cup)
 	main.undo_manager.end_stroke()
 	check(grid.get_cup_tiles() == [next_cup], "The next green carries a cup")
+	check(not main.terrain_toolbar.green_will_place_cup(), "The flag turns off after placing the next cup")
 	for i in range(2): await process_frame  # draw the cup overlay for the new cup
 
 	# --- Waiting cups and open holes both survive a save/load round trip ---
@@ -127,6 +132,7 @@ func run() -> void:
 	check(gm.current_course.holes.size() == 1, "The hole survives save/load")
 	check(gm.current_course.holes[0].hole_position == cup, "The opened cup survives save/load")
 	check(grid.get_cup_tiles() == [next_cup], "The waiting cup survives save/load")
+	check(not main.terrain_toolbar.green_will_place_cup(), "The Green flag reflects the waiting cup after load")
 
 	if failures == 0:
 		print("HOLE_CREATION_FLOW_PASS: 1x1 tee cap, blocked second tee, green with hole, undo/redo of the cup, open hole pairing, standard green brush, save round trip")

@@ -222,12 +222,10 @@ func test_tool_selection_and_signals() -> void:
 	toolbar._on_tool_button_pressed(TerrainTypes.Type.GREEN)
 	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.GREEN])
 	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.GREEN)
-	assert_true(toolbar._green_preset_group.visible, "Green presets should be visible when Green is selected")
 
 	toolbar.clear_selection()
 	assert_eq(toolbar.get_current_tool(), -1)
 	assert_false(toolbar.has_selection())
-	assert_false(toolbar._green_preset_group.visible, "Green presets should be hidden when cleared")
 
 func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 	var paint_tools := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
@@ -373,17 +371,24 @@ func test_brush_size_controls() -> void:
 	assert_eq(toolbar.get_brush_size(), 3)
 	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [3])
 
-func test_green_preset_toggle() -> void:
-	watch_signals(toolbar)
+func test_green_tile_flag_tracks_the_next_green_type() -> void:
+	var button: TerrainTileButton = toolbar._tool_buttons[TerrainTypes.Type.GREEN]
+	assert_true(toolbar.green_will_place_cup(), "A new course's first green carries a cup")
+	assert_true(button.shows_green_with_hole_flag(), "Green With Hole is marked with a flag")
+	assert_true(button._cup_flag.visible)
+	assert_string_contains(button.tool_description, "Green With Hole")
 
-	toolbar._on_green_preset_pressed("medium")
-	assert_eq(toolbar.get_active_green_preset(), "medium")
-	assert_signal_emitted_with_parameters(toolbar, "green_preset_selected", ["medium"])
+	toolbar.set_green_placement_state(false)
+	assert_false(toolbar.green_will_place_cup())
+	assert_false(button.shows_green_with_hole_flag(), "Green Without Hole has no flag")
+	assert_false(button._cup_flag.visible)
+	assert_string_contains(button.tool_description, "Green Without Hole")
+	assert_string_contains(button.accessibility_description, "selected brush")
 
-	# Toggle off when clicked again
-	toolbar._on_green_preset_pressed("medium")
-	assert_eq(toolbar.get_active_green_preset(), "")
-	assert_signal_emitted_with_parameters(toolbar, "green_preset_selected", [""])
+func test_course_terrain_tab_has_no_green_size_presets() -> void:
+	var terrain_content: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0)
+	assert_eq(terrain_content.get_child_count(), 3,
+		"The terrain tab contains the tools, separator and tile grid, with no preset group")
 
 func test_holes_tab_has_hbox_hole_list() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
@@ -503,16 +508,6 @@ func test_brush_limit_caps_the_brush_for_the_selected_tool() -> void:
 	assert_eq(toolbar._brush_labels[0].text, "5x5")
 	for button in toolbar._brush_buttons:
 		assert_false(button.disabled)
-
-func test_green_presets_hide_while_the_green_carries_a_cup() -> void:
-	toolbar._on_tool_button_pressed(TerrainTypes.Type.GREEN)
-	assert_true(toolbar._green_preset_group.visible)
-
-	toolbar.set_brush_limit(1)  # Green With Hole: one tile, no preset shape
-	assert_false(toolbar._green_preset_group.visible)
-
-	toolbar.set_brush_limit(HoleLayout.UNLIMITED_BRUSH)  # Green Without Hole
-	assert_true(toolbar._green_preset_group.visible)
 
 func test_staff_tab_embeds_staff_management() -> void:
 	assert_false(toolbar.has_signal("staff_pressed"),

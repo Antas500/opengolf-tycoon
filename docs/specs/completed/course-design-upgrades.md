@@ -2,7 +2,7 @@
 
 **Author:** Claude (Product)
 **Date:** 2026-02-18
-**Status:** Complete — All Priority 1 and Priority 2 items implemented. Pin/tee/green move modes, stroke index, par override, forced carry display, routing overlay, multiple tee boxes, pin rotation, bunker depth, green presets, fairway width indicator.
+**Status:** Complete — All Priority 1 and Priority 2 items implemented. Pin/tee/green move modes, stroke index, par override, forced carry display, routing overlay, multiple tee boxes, pin rotation, bunker depth, Green With Hole flag indicator, fairway width indicator.
 **Version:** 0.2.9-alpha context
 
 ---
@@ -128,6 +128,8 @@ HoleData:
 These features add polish and strategic nuance using mostly existing infrastructure.
 
 ### 2.1 Green Size & Shape Tools
+
+**Current implementation note:** The green-specific size presets described below have been removed. Players shape Green Without Hole tiles with the shared terrain brush instead.
 
 **Problem:** Greens are just clusters of green-type tiles painted one at a time. No shaping tools.
 

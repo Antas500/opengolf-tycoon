@@ -30,7 +30,6 @@ signal lower_elevation_pressed
 signal bulldozer_pressed
 signal brush_size_changed(new_size: int)
 signal brush_shape_changed(round_shape: bool)
-signal green_preset_selected(preset_name: String)
 signal play_course_pressed
 signal tournaments_pressed
 signal land_pressed
@@ -142,9 +141,8 @@ var _brush_labels: Array[Label] = []
 var _brush_buttons: Array[Button] = []
 var _brush_shape_buttons: Array[OptionButton] = []
 var _open_hole_buttons: Array[ToolButton] = []
-var _green_preset_group: VBoxContainer = null
-var _green_preset_buttons: Dictionary = {}  # preset_name -> Button
-var _active_green_preset: String = ""
+var _green_tile_button: TerrainTileButton = null
+var _green_places_cup := true
 var _active_golfers_box: HBoxContainer = null
 var _recent_rounds_box: HBoxContainer = null
 var _recent_rounds: Array[Dictionary] = []
@@ -334,7 +332,7 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	tiles_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	# Top row: the tee and the green first, then the hazards and trouble.
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time", "tile_preview": true})
-	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Next green placement is a Green With Hole (one tile with a cup). The flag on this tile shows when it will place a cup.", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.POT_BUNKER, "name": "Pot Bunker", "hotkey": "Shift+5", "desc": "Small, deep bunker with a steep stacked-turf face. Wedge only, and the ball barely advances", "tile_preview": true})
@@ -351,9 +349,6 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	# The grid carries its own breathing room above and below the rows, so it
 	# keeps that spacing instead of stretching to fill the whole page height.
 	hbox.add_child(_make_tab_group("", tiles_grid, true))
-
-	hbox.add_child(_make_separator())
-	hbox.add_child(_make_green_presets_group())
 
 ## Open Hole, Bulldozer and the brush controls stacked vertically. This column
 ## opens the Course Terrain tab so the tools sit before the tile honeycomb.
@@ -705,6 +700,8 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		_feed_button = btn
 	elif not (tool_type is String and _is_menu_action(tool_type)):
 		_tool_buttons[tool_type] = btn
+		if tool_type is int and tool_type == TerrainTypes.Type.GREEN:
+			_green_tile_button = btn as TerrainTileButton
 
 	return btn
 
@@ -794,36 +791,6 @@ func _make_review_group() -> VBoxContainer:
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_child(_make_review_button())
 	return _make_tab_group("REVIEW", row)
-
-func _make_green_presets_group() -> VBoxContainer:
-	_green_preset_group = VBoxContainer.new()
-	_green_preset_group.add_theme_constant_override("separation", 2)
-	_green_preset_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_green_preset_group.visible = false
-
-	var lbl = Label.new()
-	lbl.text = "PRESET"
-	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-	_green_preset_group.add_child(lbl)
-
-	var preset_row = HBoxContainer.new()
-	preset_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	preset_row.add_theme_constant_override("separation", 3)
-	preset_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	for preset_name in ["small", "medium", "large"]:
-		var preset_btn = Button.new()
-		preset_btn.text = preset_name.substr(0, 1).to_upper()
-		preset_btn.tooltip_text = "%s green (%d tiles)" % [preset_name.capitalize(), TerrainGrid.GREEN_PRESETS[preset_name].size()]
-		preset_btn.custom_minimum_size = Vector2(24, 26)
-		preset_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-		preset_btn.pressed.connect(_on_green_preset_pressed.bind(preset_name))
-		preset_row.add_child(preset_btn)
-		_green_preset_buttons[preset_name] = preset_btn
-
-	_green_preset_group.add_child(preset_row)
-	return _green_preset_group
 
 func _build_refresh_timer() -> void:
 	_refresh_timer = Timer.new()
@@ -1031,7 +998,6 @@ func _on_tool_button_pressed(tool_type) -> void:
 	if tool_type is int:
 		_current_tool = tool_type
 		_update_selection_highlight()
-		_update_green_preset_visibility()
 		tool_selected.emit(tool_type)
 	else:
 		match tool_type:
@@ -1172,7 +1138,6 @@ func _input(event: InputEvent) -> void:
 func set_current_tool(tool_type: int) -> void:
 	_current_tool = tool_type
 	_update_selection_highlight()
-	_update_green_preset_visibility()
 
 func get_current_tool() -> int:
 	return _current_tool
@@ -1180,7 +1145,6 @@ func get_current_tool() -> int:
 func clear_selection() -> void:
 	_current_tool = -1
 	_update_selection_highlight()
-	_update_green_preset_visibility()
 
 func has_selection() -> bool:
 	return _current_tool >= 0 and _current_tool in _tool_buttons
@@ -1218,7 +1182,7 @@ func _update_brush_label() -> void:
 			label.text = "%dx%d" % [shown, shown]
 
 ## The brush size the selected tool actually paints with. Tee boxes, and a green
-## that is about to become a green with a hole, are capped at a single tile.
+## that is about to become a Green With Hole, are capped at a single tile.
 func effective_brush_size() -> int:
 	if _brush_limit != HoleLayout.UNLIMITED_BRUSH:
 		return mini(_brush_size, _brush_limit)
@@ -1239,46 +1203,31 @@ func _apply_brush_limit() -> void:
 	for shape in _brush_shape_buttons:
 		if is_instance_valid(shape):
 			shape.disabled = locked
-	if _green_preset_group and is_instance_valid(_green_preset_group):
-		_green_preset_group.visible = _green_presets_allowed()
 	_update_brush_label()
-
-func _green_presets_allowed() -> bool:
-	# Presets shape a green without a hole; a green with a hole is a single tile.
-	return _current_tool == TerrainTypes.Type.GREEN and _brush_limit != 1
-
-func _update_green_preset_visibility() -> void:
-	if _green_preset_group:
-		_green_preset_group.visible = _green_presets_allowed()
-		if _current_tool != TerrainTypes.Type.GREEN:
-			_active_green_preset = ""
-			_update_green_preset_highlight()
-
-func _on_green_preset_pressed(preset_name: String) -> void:
-	if _active_green_preset == preset_name:
-		_active_green_preset = ""
-	else:
-		_active_green_preset = preset_name
-	_update_green_preset_highlight()
-	green_preset_selected.emit(_active_green_preset)
-
-func _update_green_preset_highlight() -> void:
-	for pname in _green_preset_buttons:
-		var btn: Button = _green_preset_buttons[pname]
-		if is_instance_valid(btn):
-			if pname == _active_green_preset:
-				btn.add_theme_color_override("font_color", UIConstants.COLOR_PRIMARY_HOVER)
-			else:
-				btn.remove_theme_color_override("font_color")
-
-func get_active_green_preset() -> String:
-	return _active_green_preset
 
 func set_brush_size(value: int) -> void:
 	if value in BRUSH_SIZES:
 		_brush_size = value
 		_update_brush_label()
 		brush_size_changed.emit(value)
+
+## Keep the Green tile's flag and tooltip in sync with what the next green paints.
+func set_green_placement_state(places_cup: bool) -> void:
+	_green_places_cup = places_cup
+	if not is_instance_valid(_green_tile_button):
+		return
+	_green_tile_button.set_green_places_cup(places_cup)
+	if places_cup:
+		_green_tile_button.tool_description = \
+				"The next placement will be a Green With Hole: one tile with a cup and flag."
+	else:
+		_green_tile_button.tool_description = \
+				"The next placement will be a Green Without Hole. It uses the selected brush and adds no cup."
+	_green_tile_button.accessibility_description = "%s Shortcut %s." % [
+		_green_tile_button.tool_description, _green_tile_button.hotkey]
+
+func green_will_place_cup() -> bool:
+	return _green_places_cup
 
 ## Enable/disable the Open Hole buttons and explain what is still missing.
 func set_open_hole_state(can_open: bool, reason: String = "") -> void:
