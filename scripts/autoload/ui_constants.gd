@@ -108,7 +108,7 @@ const HUD_COLUMN_GROUP := "hud_status_column"
 
 # Bottom bar height: view/speed controls on the left + tabbed toolbar on the right.
 # Keep in sync with main.tscn BottomBar offset_top.
-const BOTTOM_BAR_HEIGHT := 190  # Fits two rows of Course & Hazard tiles
+const BOTTOM_BAR_HEIGHT := 190  # Fits two rows of big Course & Hazard / Building tiles
 const BUILD_TOOLS_WIDTH := 260
 const TOOL_BUTTON_HEIGHT := 32
 

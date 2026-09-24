@@ -9,10 +9,13 @@ class_name TerrainTileButton
 ## row below tucks into the notch it leaves (see TileHoneycomb) — so only the
 ## diamond itself answers to the mouse (see _has_point).
 
-const TILE_SIZE := Vector2(84, 42)  # One projected course cell, 2:1 isometric.
+## One projected course cell, 2:1 isometric. Sized so two interlocking rows
+## (1.5 tiles tall plus the row gap, see TileHoneycomb) fill the page height of
+## the tabbed toolbar inside the bottom bar.
+const TILE_SIZE := Vector2(184, 92)
 const BUTTON_SIZE := TILE_SIZE      # No padding: rows interlock on the grid.
-const NAME_FONT_SIZE := UIConstants.FONT_SIZE_XS
-const NAME_FONT_SIZE_MIN := 8  # Longest names shrink instead of spilling out.
+const NAME_FONT_SIZE := UIConstants.FONT_SIZE_MD
+const NAME_FONT_SIZE_MIN := 10  # Longest names shrink instead of spilling out.
 static var _white_texture: ImageTexture
 
 static func tile_corners() -> PackedVector2Array:
@@ -134,7 +137,7 @@ func _fit_name_label() -> void:
 	var size := NAME_FONT_SIZE
 	while size > NAME_FONT_SIZE_MIN and \
 			font.get_string_size(tool_name, HORIZONTAL_ALIGNMENT_CENTER, -1, size).x \
-			> BUTTON_SIZE.x - 8.0:
+			> BUTTON_SIZE.x * 0.7:
 		size -= 1
 	_name_label.add_theme_font_size_override("font_size", size)
 

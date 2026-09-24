@@ -99,7 +99,11 @@ const TOOL_TAB_MAP := {
 
 const TOOL_ROW_HEIGHT := 30
 const COURSE_TILE_COLUMNS := 4  # Surfaces fill row 1, hazards row 2
-const BUILDING_TILE_COLUMNS := 6  # Keep the full catalogue within the bottom bar height.
+const TILE_ROWS := 2  # Course and building tiles always sit in two interlocking rows
+## Gaps between tiles: two rows of TerrainTileButton.BUTTON_SIZE tiles plus
+## TILE_V_SEPARATION span 1.5 tiles + gap, filling the toolbar page height.
+const TILE_H_SEPARATION := 8
+const TILE_V_SEPARATION := 8
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
@@ -302,6 +306,8 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	tiles_grid.name = "CourseTilesGrid"
 	tiles_grid.columns = COURSE_TILE_COLUMNS
 	tiles_grid.tile_size = TerrainTileButton.BUTTON_SIZE
+	tiles_grid.h_separation = TILE_H_SEPARATION
+	tiles_grid.v_separation = TILE_V_SEPARATION
 	tiles_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
@@ -385,13 +391,16 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tip_label("Decorations, trees & flower beds raise course aesthetics and golfer mood."))
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
-	# Facilities use the same interlocking isometric buttons as Course & Hazards.
-	# Six columns keep the catalogue compact enough for the fixed-height bottom
-	# bar; the page still scrolls sideways if the window is narrower.
+	# Facilities use the same interlocking isometric buttons as Course & Hazards,
+	# laid out in two rows (columns follow the catalogue size, see
+	# _populate_building_shelf) so the big tiles fill the toolbar height; the
+	# page scrolls sideways when the catalogue is wider than the window.
 	_building_shelf = TileHoneycomb.new()
 	_building_shelf.name = "BuildingShelf"
-	_building_shelf.columns = BUILDING_TILE_COLUMNS
+	_building_shelf.columns = building_tile_columns(_building_registry.size())
 	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
+	_building_shelf.h_separation = TILE_H_SEPARATION
+	_building_shelf.v_separation = TILE_V_SEPARATION
 	_building_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_building_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	# No group heading or INFO blurb: the tiles speak for themselves and the
@@ -407,13 +416,19 @@ func _populate_building_shelf() -> void:
 	if not is_instance_valid(_building_shelf):
 		return
 	for child in _building_shelf.get_children():
+		_building_shelf.remove_child(child)
 		child.queue_free()
+	_building_shelf.columns = building_tile_columns(_building_registry.size())
 	for building_type in _building_registry:
 		var data: Dictionary = _building_registry[building_type]
 		var button := BuildingTileButton.new()
 		button.configure_building(str(building_type), data)
 		button.pressed.connect(_on_building_card_pressed.bind(str(building_type)))
 		_building_shelf.add_child(button)
+
+## Columns needed to lay `count` building tiles out in TILE_ROWS rows.
+static func building_tile_columns(count: int) -> int:
+	return maxi(1, ceili(float(count) / TILE_ROWS))
 
 func _on_building_card_pressed(building_type: String) -> void:
 	_reveal_tab_for_tool("building")

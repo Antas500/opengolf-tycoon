@@ -72,6 +72,34 @@ func test_tile_buttons_only_answer_inside_the_diamond() -> void:
 	assert_false(TerrainTileButton.point_on_tile(Vector2(tile.x, tile.y)),
 		"Nor is the opposite corner")
 
+func test_building_tiles_always_fill_two_rows() -> void:
+	for count in [1, 2, 7, 16, 17]:
+		var registry := {}
+		for i in count:
+			registry["b%d" % i] = {"name": "B%d" % i, "size": [1, 1], "cost": 100, "operating_cost": 0}
+		toolbar.set_building_registry(registry)
+		var columns: int = toolbar._building_shelf.columns
+		var rows := ceili(float(count) / columns)
+		assert_eq(rows, mini(count, TerrainToolbar.TILE_ROWS),
+			"%d buildings should be laid out in two rows" % count)
+
+func test_two_rows_of_big_tiles_fill_the_toolbar_page_height() -> void:
+	var tile := TerrainTileButton.BUTTON_SIZE
+	var two_rows := tile.y * 1.5 + TerrainToolbar.TILE_V_SEPARATION
+	# Tab bar, panel margins and the horizontal scrollbar shown when a page overflows.
+	var page_height := float(UIConstants.BOTTOM_BAR_HEIGHT) - 39.0
+	assert_gt(tile.y, 42.0, "Tiles should be bigger than the old 84x42 cells")
+	assert_lte(two_rows + 2.0, page_height, "Two rows (plus drop shadow) fit the page")
+	assert_gte(two_rows, page_height - 8.0, "Two rows should fill the page height")
+
+	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))["buildings"]
+	toolbar.set_building_registry(registry)
+	await _settle_layout()
+	var course_grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	assert_almost_eq(course_grid.get_combined_minimum_size().y, two_rows, 0.01)
+	assert_almost_eq(toolbar._building_shelf.get_combined_minimum_size().y, two_rows, 0.01)
+	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT))
+
 ## Containers lay their children out over the next frame.
 func _settle_layout() -> void:
 	await wait_frames(2)
@@ -168,7 +196,7 @@ func test_building_choices_use_the_course_tile_design() -> void:
 	toolbar.set_building_registry(registry)
 
 	assert_true(toolbar._building_shelf is TileHoneycomb)
-	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.BUILDING_TILE_COLUMNS)
+	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.building_tile_columns(registry.size()))
 	assert_eq(toolbar._building_shelf.get_child_count(), registry.size())
 	for button in toolbar._building_shelf.get_children():
 		assert_true(button is BuildingTileButton, "Building choices should use isometric tile buttons")

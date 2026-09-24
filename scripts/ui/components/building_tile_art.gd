@@ -7,8 +7,10 @@ class_name BuildingTileArt
 ## The preview is deliberately compact so it stays inside the diamond while
 ## leaving the button caption readable on top.
 
-const PREVIEW_SIZE := Vector2(84, 42)
+const PREVIEW_SIZE := TerrainTileButton.TILE_SIZE
 const TILE_PIXEL_SIZE := Vector2(64, 32)
+## The preview was tuned for an 84px-wide diamond; scale it with the tile.
+const PREVIEW_SCALE := PREVIEW_SIZE.x / 84.0
 
 var building_type := ""
 var building_data: Dictionary = {}
@@ -31,11 +33,11 @@ func _draw() -> void:
 		maxf(1.0, float(dimensions[1])) * TILE_PIXEL_SIZE.y)
 	# CourseArchitecture draws its own depth and roof overhang. Fit the complete
 	# footprint, rather than just its facade, into the middle of the diamond.
-	var scale_factor := minf(0.34, 66.0 / maxf(footprint.x, 1.0))
+	var scale_factor := minf(0.34, 66.0 / maxf(footprint.x, 1.0)) * PREVIEW_SCALE
 	var baseline := footprint.y - 12.0
 	var origin := Vector2(
 		(PREVIEW_SIZE.x - footprint.x * scale_factor) * 0.5,
-		34.0 - baseline * scale_factor)
+		PREVIEW_SIZE.y * (34.0 / 42.0) - baseline * scale_factor)
 
 	draw_set_transform(origin, 0.0, Vector2.ONE * scale_factor)
 	CourseArchitecture.draw_building(self, building_type, footprint)
