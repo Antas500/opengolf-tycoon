@@ -102,10 +102,12 @@ static func is_rough(type: int) -> bool:
 	return type == Type.ROUGH or type == Type.HEAVY_ROUGH or type == Type.DEEP_ROUGH
 
 ## Every terrain type the player can paint from the Course Terrain tab, in
-## toolbar order.
+## toolbar order: row 1 (tee box, green, bunker, rough, pot bunker, stream,
+## water) then row 2 (fairway, firm fairway, deep rough, waste bunker, brush,
+## rocks, out of bounds).
 const COURSE_PAINT_TYPES: Array[int] = [
-	Type.FAIRWAY, Type.FIRM_FAIRWAY, Type.ROUGH, Type.DEEP_ROUGH, Type.GREEN,
-	Type.TEE_BOX, Type.WASTE_BUNKER, Type.BRUSH,
-	Type.BUNKER, Type.POT_BUNKER, Type.WATER, Type.STREAM, Type.ROCKS,
-	Type.OUT_OF_BOUNDS,
+	Type.TEE_BOX, Type.GREEN, Type.BUNKER, Type.ROUGH, Type.POT_BUNKER,
+	Type.STREAM, Type.WATER,
+	Type.FAIRWAY, Type.FIRM_FAIRWAY, Type.DEEP_ROUGH, Type.WASTE_BUNKER,
+	Type.BRUSH, Type.ROCKS, Type.OUT_OF_BOUNDS,
 ]

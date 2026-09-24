@@ -403,9 +403,15 @@ func test_toolbar_paints_all_course_tiles_in_two_rows() -> void:
 		assert_eq(button.get_index(), i, "%s sits in toolbar order" % TerrainTypes.get_type_name(type))
 		assert_eq(button.tool_name, TerrainTypes.get_type_name(type))
 		assert_eq(TerrainToolbar.TOOL_TAB_MAP[type], TerrainToolbar.Tab.TERRAIN)
-	assert_lt(toolbar._tool_buttons[T.WASTE_BUNKER].get_index(), grid.columns, "Waste bunker is playable ground")
-	for type in [T.POT_BUNKER, T.STREAM, T.ROCKS]:
-		assert_gte(toolbar._tool_buttons[type].get_index(), grid.columns, "Hazards and trouble on row 2")
+	# Two full rows: tee-to-water on top, fairway-to-out-of-bounds below.
+	assert_eq(grid.columns * 2, TerrainTypes.COURSE_PAINT_TYPES.size(),
+		"The two rows hold every course tile")
+	for type in [T.TEE_BOX, T.GREEN, T.BUNKER, T.ROUGH, T.POT_BUNKER, T.STREAM, T.WATER]:
+		assert_lt(toolbar._tool_buttons[type].get_index(), grid.columns,
+			"%s on the top row" % TerrainTypes.get_type_name(type))
+	for type in [T.FAIRWAY, T.FIRM_FAIRWAY, T.DEEP_ROUGH, T.WASTE_BUNKER, T.BRUSH, T.ROCKS, T.OUT_OF_BOUNDS]:
+		assert_gte(toolbar._tool_buttons[type].get_index(), grid.columns,
+			"%s on the bottom row" % TerrainTypes.get_type_name(type))
 	assert_eq(toolbar._tool_buttons["rock"].tool_name, "Boulders", "The boulder tool isn't a second 'Rocks'")
 
 func test_toolbar_hotkeys_select_the_new_tiles() -> void:

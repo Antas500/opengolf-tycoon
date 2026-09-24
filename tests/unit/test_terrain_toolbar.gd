@@ -11,59 +11,85 @@ func test_bottom_bar_fits_two_rows_of_course_tiles() -> void:
 	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT),
 		"Toolbar content must fit inside the bottom bar")
 
-func test_course_and_hazard_tiles_share_one_two_row_group() -> void:
-	var surfaces := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
-		TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX]
-	var hazards := [TerrainTypes.Type.BUNKER, TerrainTypes.Type.WATER,
-		TerrainTypes.Type.OUT_OF_BOUNDS]
-	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+## The Course Terrain tiles in reading order: the top row runs from the tee to
+## the water, the bottom row pairs each playing surface with its trouble tiles.
+const TOP_ROW := [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN,
+	TerrainTypes.Type.BUNKER, TerrainTypes.Type.ROUGH, TerrainTypes.Type.POT_BUNKER,
+	TerrainTypes.Type.STREAM, TerrainTypes.Type.WATER]
+const BOTTOM_ROW := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
+	TerrainTypes.Type.DEEP_ROUGH, TerrainTypes.Type.WASTE_BUNKER, TerrainTypes.Type.BRUSH,
+	TerrainTypes.Type.ROCKS, TerrainTypes.Type.OUT_OF_BOUNDS]
+
+func test_course_tiles_share_one_group_in_top_and_bottom_rows() -> void:
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	assert_eq(grid.columns, TerrainToolbar.COURSE_TILE_COLUMNS)
-	for tool_type in surfaces + hazards:
+	assert_eq(grid.columns, TOP_ROW.size(), "The top row is full")
+	assert_eq(grid.get_child_count(), TOP_ROW.size() + BOTTOM_ROW.size(),
+		"Course tiles fill exactly the two rows, each with seven tiles")
+	for tool_type in TOP_ROW + BOTTOM_ROW:
 		assert_eq(toolbar._tool_buttons[tool_type].get_parent(), grid,
-			"Course and hazard tiles should live in the same group")
-	for tool_type in surfaces:
-		assert_lt(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Surfaces on row 1")
-	for tool_type in hazards:
-		assert_gte(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Hazards on row 2")
+			"Course tiles should live in the same group")
 
-func test_hazard_row_is_shifted_right_into_the_notches_of_the_surface_row() -> void:
+	for slot in TOP_ROW.size():
+		assert_eq(toolbar._tool_buttons[TOP_ROW[slot]].get_index(), slot,
+			"%s is tile %d of the top row" % [TerrainTypes.get_type_name(TOP_ROW[slot]), slot])
+	for slot in BOTTOM_ROW.size():
+		assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), TOP_ROW.size() + slot,
+			"%s is tile %d of the bottom row" % [TerrainTypes.get_type_name(BOTTOM_ROW[slot]), slot])
+
+	# The rows are drawn staggered: the bottom row sits half a tile below the top.
 	await _settle_layout()
-	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	var top_y: float = toolbar._tool_buttons[TOP_ROW[0]].position.y
+	for tool_type in TOP_ROW:
+		assert_almost_eq(toolbar._tool_buttons[tool_type].position.y, top_y, 0.01,
+			"%s sits on the top row" % TerrainTypes.get_type_name(tool_type))
+	for tool_type in BOTTOM_ROW:
+		assert_almost_eq(toolbar._tool_buttons[tool_type].position.y,
+			top_y + grid.tile_size.y * 0.5 + grid.v_separation, 0.01,
+			"%s sits on the bottom row" % TerrainTypes.get_type_name(tool_type))
+
+func test_bottom_row_is_shifted_right_into_the_notches_of_the_top_row() -> void:
+	await _settle_layout()
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var pitch := grid.tile_size.x + grid.h_separation
-	var hazard_count := grid.get_child_count() - grid.columns
+	var bottom_count := grid.get_child_count() - grid.columns
 
-	for i in hazard_count:
-		var hazard: Control = grid.get_child(grid.columns + i)
+	for i in bottom_count:
+		var below: Control = grid.get_child(grid.columns + i)
 		var above_left: Control = grid.get_child(i)
-		var above_right: Control = grid.get_child(i + 1)
 
-		# Half a tile to the right: centred on the gap between the tiles above.
-		assert_almost_eq(hazard.position.x, (above_left.position.x + above_right.position.x) * 0.5,
-			0.01, "Hazard %d should sit in the notch between two surfaces" % i)
-		assert_almost_eq(hazard.position.x - above_left.position.x, pitch * 0.5, 0.01,
-			"Hazard %d should be shifted half a tile to the right" % i)
+		# Half a tile to the right of the tile above: the row is staggered.
+		assert_almost_eq(below.position.x - above_left.position.x, pitch * 0.5, 0.01,
+			"Bottom row tile %d should be shifted half a tile to the right" % i)
+		if i + 1 < grid.columns:
+			# Centred on the gap between the two tiles above it.
+			var above_right: Control = grid.get_child(i + 1)
+			assert_almost_eq(below.position.x,
+				(above_left.position.x + above_right.position.x) * 0.5, 0.01,
+				"Bottom row tile %d should sit in the notch between two top row tiles" % i)
 
-		# Half a tile down: tucked up into the row above instead of stacked,
-		# below the breathing room kept above the first row.
-		assert_almost_eq(hazard.position.y,
+		# Half a tile down: tucked into the row above instead of stacked below
+		# it, while staying clear of the breathing room above the first row.
+		assert_almost_eq(below.position.y,
 			grid.v_padding + grid.tile_size.y * 0.5 + grid.v_separation, 0.01,
-			"Hazard %d should tuck up into the notches of the surface row" % i)
-		assert_lt(hazard.position.y, grid.tile_size.y,
-			"Hazard %d should rise into the row above, not sit below it" % i)
+			"Bottom row tile %d should tuck up into the notches of the top row" % i)
+		assert_lt(below.position.y, grid.v_padding + grid.tile_size.y,
+			"Bottom row tile %d should rise into the row above, not sit below it" % i)
 
 func test_interlocking_rows_never_overlap_each_others_diamonds() -> void:
 	await _settle_layout()
-	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var tile := grid.tile_size
 
-	# A row 2 tile's top vertex must stay outside both diamonds above it.
+	# A bottom row tile's top vertex must stay outside every diamond above it,
+	# including the last tile, which overhangs the end of the top row.
 	for i in grid.get_child_count() - grid.columns:
-		var hazard: Control = grid.get_child(grid.columns + i)
-		var vertex := hazard.position + Vector2(tile.x * 0.5, 0.0)
-		for j in [i, i + 1]:
-			var above: Control = grid.get_child(j)
+		var below: Control = grid.get_child(grid.columns + i)
+		var vertex := below.position + Vector2(tile.x * 0.5, 0.0)
+		for above in grid.get_children().slice(0, grid.columns):
 			assert_false(TerrainTileButton.point_on_tile(vertex - above.position),
-				"Hazard %d should not cover the diamond of row 1 tile %d" % [i, j])
+				"Bottom row tile %d should not cover the diamond of top row tile %d"
+					% [i, above.get_index()])
 
 func test_tile_buttons_only_answer_inside_the_diamond() -> void:
 	var tile := TerrainTileButton.TILE_SIZE
@@ -91,11 +117,7 @@ func test_two_rows_of_big_tiles_fill_the_toolbar_page_height() -> void:
 	# and the breathing room above and below the rows.
 	var two_rows := tile.y * 1.5 + TerrainToolbar.TILE_V_SEPARATION \
 			+ 2.0 * TerrainToolbar.TILE_V_PADDING
-	# Tab bar, panel margins and the horizontal scrollbar shown when a page overflows.
-	var page_height := float(UIConstants.BOTTOM_BAR_HEIGHT) - 39.0
 	assert_gt(tile.y, 42.0, "Tiles should be bigger than the old 84x42 cells")
-	assert_lte(two_rows + 2.0, page_height, "Two rows (plus drop shadow) fit the page")
-	assert_gte(two_rows, page_height - 8.0, "Two rows should fill the page height")
 
 	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))["buildings"]
 	toolbar.set_building_registry(registry)
@@ -104,6 +126,12 @@ func test_two_rows_of_big_tiles_fill_the_toolbar_page_height() -> void:
 	assert_almost_eq(course_grid.get_combined_minimum_size().y, two_rows, 0.01)
 	assert_almost_eq(toolbar._building_shelf.get_combined_minimum_size().y, two_rows, 0.01)
 	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT))
+
+	# The page the tiles sit on: the bottom bar less the tab bar, the panel
+	# margins and the horizontal scrollbar shown when a page overflows.
+	var page_height: float = toolbar._pages[TerrainToolbar.Tab.TERRAIN].size.y
+	assert_lte(two_rows + 2.0, page_height, "Two rows (plus drop shadow) fit the page")
+	assert_gte(two_rows, page_height - 8.0, "Two rows should fill the page height")
 
 func test_tile_rows_keep_space_above_below_and_between_them() -> void:
 	var padding: int = TerrainToolbar.TILE_V_PADDING
