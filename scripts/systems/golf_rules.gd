@@ -80,10 +80,10 @@ enum ReliefType {
 }
 
 ## Get penalty strokes for a terrain type (USGA Rules 17-18).
-## Water (penalty area): 1 stroke. OB: 1 stroke (+ distance via ReliefType).
+## Water or stream (penalty area): 1 stroke. OB: 1 stroke (+ distance via ReliefType).
 static func get_penalty_strokes(terrain_type: int) -> int:
 	match terrain_type:
-		TerrainTypes.Type.WATER:
+		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 			return 1
 		TerrainTypes.Type.OUT_OF_BOUNDS:
 			return 1  # USGA Rule 18.2: stroke and distance = 1 penalty stroke
@@ -93,7 +93,7 @@ static func get_penalty_strokes(terrain_type: int) -> int:
 ## Get relief type for a terrain type.
 static func get_relief_type(terrain_type: int) -> ReliefType:
 	match terrain_type:
-		TerrainTypes.Type.WATER:
+		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 			return ReliefType.DROP_AT_ENTRY
 		TerrainTypes.Type.OUT_OF_BOUNDS:
 			return ReliefType.STROKE_AND_DISTANCE
@@ -213,11 +213,16 @@ static func get_putt_miss_characteristics(distance_tiles: float, putting_skill: 
 
 ## Get accuracy modifier for a given terrain type and club.
 ## Returns 0.0-1.05 where 1.0 = perfect lie, lower = harder.
-## bunker_depth: 0 = SHALLOW (default), 1 = DEEP (pot bunker)
+## bunker_depth: 0 = SHALLOW (default), 1 = DEEP. Only Bunker tiles have a
+## depth; a Pot Bunker is always steeper than a deep bunker.
 static func get_lie_modifier(terrain_type: int, club: int, bunker_depth: int = 0) -> float:
 	match terrain_type:
 		TerrainTypes.Type.GRASS, TerrainTypes.Type.FAIRWAY:
 			return 1.0  # Perfect lie
+		TerrainTypes.Type.FIRM_FAIRWAY:
+			# Tight, firm lie: clean contact for full swings, but little
+			# cushion under the ball for delicate wedge shots.
+			return 0.92 if club == Golfer.Club.WEDGE else 1.0
 		TerrainTypes.Type.TEE_BOX:
 			return 1.05 if club == Golfer.Club.DRIVER else 1.0  # Slight tee bonus for driver
 		TerrainTypes.Type.GREEN:
@@ -226,12 +231,23 @@ static func get_lie_modifier(terrain_type: int, club: int, bunker_depth: int = 0
 			return 0.75  # 25% accuracy penalty
 		TerrainTypes.Type.HEAVY_ROUGH:
 			return 0.5   # 50% accuracy penalty
+		TerrainTypes.Type.DEEP_ROUGH:
+			return 0.4   # Ball sits down in knee-high grass
 		TerrainTypes.Type.BUNKER:
 			if bunker_depth == 1:  # DEEP
 				return 0.45 if club == Golfer.Club.WEDGE else 0.25
 			return 0.6 if club == Golfer.Club.WEDGE else 0.4
+		TerrainTypes.Type.POT_BUNKER:
+			# Steep revetted face: only a lofted wedge gets out cleanly.
+			return 0.35 if club == Golfer.Club.WEDGE else 0.15
+		TerrainTypes.Type.WASTE_BUNKER:
+			# Firm, unraked sand: the club may be grounded, so it plays like
+			# a sandy rough rather than a bunker.
+			return 0.8 if club == Golfer.Club.WEDGE else 0.7
 		TerrainTypes.Type.TREES:
 			return 0.3   # Very difficult shot
+		TerrainTypes.Type.BRUSH:
+			return 0.3   # Tangled scrub — a hack-out at best
 		TerrainTypes.Type.ROCKS:
 			return 0.25  # Extremely difficult — risk of injury/club damage
 		_:
@@ -246,14 +262,71 @@ static func get_terrain_distance_modifier(terrain_type: int, bunker_depth: int =
 			return 0.85  # 15% distance loss
 		TerrainTypes.Type.HEAVY_ROUGH:
 			return 0.7   # 30% distance loss
+		TerrainTypes.Type.DEEP_ROUGH:
+			return 0.6   # 40% distance loss
 		TerrainTypes.Type.BUNKER:
 			return 0.60 if bunker_depth == 1 else 0.75  # Deep: 40%, Shallow: 25% loss
+		TerrainTypes.Type.POT_BUNKER:
+			return 0.45  # 55% distance loss — straight up over the face
+		TerrainTypes.Type.WASTE_BUNKER:
+			return 0.85  # 15% distance loss, like rough
 		TerrainTypes.Type.TREES:
 			return 0.6   # 40% distance loss (punch out)
+		TerrainTypes.Type.BRUSH:
+			return 0.5   # 50% distance loss
 		TerrainTypes.Type.ROCKS:
 			return 0.5   # 50% distance loss
 		_:
 			return 1.0   # No penalty
+
+# =============================================================================
+# ROLL-OUT (landing terrain → how far the ball runs)
+# =============================================================================
+
+## True when a ball landing on this terrain stays where it lands: it splashes
+## into water, goes out of bounds, plugs in a bunker, or drops into a bed.
+static func stops_ball_on_landing(terrain_type: int) -> bool:
+	return TerrainTypes.is_out_of_play(terrain_type) or TerrainTypes.is_bunker(terrain_type) \
+		or terrain_type == TerrainTypes.Type.FLOWER_BED
+
+## True when a rolling ball that runs onto this terrain stops there: it rolls
+## into water or out of bounds, is gathered by a bunker, or snags in deep
+## rough or brush.
+static func catches_rolling_ball(terrain_type: int) -> bool:
+	return TerrainTypes.is_out_of_play(terrain_type) or TerrainTypes.is_bunker(terrain_type) \
+		or terrain_type == TerrainTypes.Type.DEEP_ROUGH or terrain_type == TerrainTypes.Type.BRUSH
+
+## Roll-out multiplier for the terrain a ball lands on (1.0 = fairway).
+static func get_roll_multiplier(terrain_type: int) -> float:
+	match terrain_type:
+		TerrainTypes.Type.GREEN:
+			return 1.3   # Fast, smooth surface — more roll
+		TerrainTypes.Type.FAIRWAY:
+			return 1.0   # Baseline
+		TerrainTypes.Type.FIRM_FAIRWAY:
+			return 1.6   # Hard, fast turf — the ball bounds on and releases
+		TerrainTypes.Type.TEE_BOX:
+			return 1.0   # Mowed short like fairway
+		TerrainTypes.Type.GRASS:
+			return 0.35  # Natural grass — slightly better than rough
+		TerrainTypes.Type.ROUGH:
+			return 0.3   # Rough grabs the ball
+		TerrainTypes.Type.HEAVY_ROUGH:
+			return 0.12  # Thick stuff — ball stops fast
+		TerrainTypes.Type.DEEP_ROUGH:
+			return 0.06  # Ball nestles down almost where it lands
+		TerrainTypes.Type.WASTE_BUNKER:
+			return 0.3   # Firm sand lets the ball skid a little
+		TerrainTypes.Type.TREES:
+			return 0.2   # Dense ground cover
+		TerrainTypes.Type.BRUSH:
+			return 0.05  # Swallowed by the scrub
+		TerrainTypes.Type.ROCKS:
+			return 0.15  # Rocky ground kills momentum
+		TerrainTypes.Type.PATH:
+			return 1.4   # Hard surface — extra bounce/roll
+		_:
+			return 0.3   # Unknown terrain — conservative
 
 # =============================================================================
 # CLUB WIND SENSITIVITY

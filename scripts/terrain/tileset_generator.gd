@@ -59,6 +59,12 @@ const TERRAIN_COLORS = {
 	"trees": Color(0.20, 0.42, 0.20),
 	"flower_bed": Color(0.45, 0.32, 0.22),
 	"rocks": Color(0.48, 0.46, 0.42),
+	"firm_fairway": Color("9aad58"),
+	"pot_bunker": Color("d8c690"),
+	"stream": Color("5aa3a6"),
+	"deep_rough": Color("3e5a2e"),
+	"waste_bunker": Color("c9b98e"),
+	"brush": Color("58622e"),
 }
 
 ## Apply a theme's color palette for the next tileset generation
@@ -654,17 +660,17 @@ static func _get_row_for_terrain_type(terrain_type: int) -> int:
 	match terrain_type:
 		1:  # GRASS
 			return TerrainRow.GRASS
-		2:  # FAIRWAY
+		2, 14:  # FAIRWAY, FIRM_FAIRWAY
 			return TerrainRow.FAIRWAY
 		5:  # GREEN
 			return TerrainRow.GREEN
 		3:  # ROUGH
 			return TerrainRow.ROUGH
-		4:  # HEAVY_ROUGH
+		4, 17, 19:  # HEAVY_ROUGH, DEEP_ROUGH, BRUSH
 			return TerrainRow.HEAVY_ROUGH
-		7:  # BUNKER
+		7, 15, 18:  # BUNKER, POT_BUNKER, WASTE_BUNKER
 			return TerrainRow.BUNKER
-		8:  # WATER
+		8, 16:  # WATER, STREAM
 			return TerrainRow.WATER
 		_:  # Single tiles
 			return TerrainRow.SINGLES
@@ -690,4 +696,7 @@ static func _get_single_tile_column(terrain_type: int) -> int:
 
 # Check if a terrain type uses autotiling
 static func terrain_uses_autotile(terrain_type: int) -> bool:
-	return terrain_type in [1, 2, 3, 4, 5, 7, 8]  # GRASS, FAIRWAY, ROUGH, HEAVY_ROUGH, GREEN, BUNKER, WATER
+	# GRASS, FAIRWAY, ROUGH, HEAVY_ROUGH, GREEN, BUNKER, WATER, and the variants
+	# that borrow their rows (FIRM_FAIRWAY, POT_BUNKER, STREAM, DEEP_ROUGH,
+	# WASTE_BUNKER, BRUSH)
+	return terrain_type in [1, 2, 3, 4, 5, 7, 8, 14, 15, 16, 17, 18, 19]

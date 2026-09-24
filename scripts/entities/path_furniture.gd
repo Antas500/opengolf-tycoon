@@ -23,7 +23,8 @@ static func layout(grid: TerrainGrid, pos: Vector2i, type: String) -> Dictionary
 				TerrainTypes.Type.GRASS, TerrainTypes.Type.ROUGH,
 				TerrainTypes.Type.HEAVY_ROUGH, TerrainTypes.Type.FAIRWAY,
 				TerrainTypes.Type.FLOWER_BED, TerrainTypes.Type.GREEN,
-				TerrainTypes.Type.TEE_BOX]:
+				TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.FIRM_FAIRWAY,
+				TerrainTypes.Type.DEEP_ROUGH, TerrainTypes.Type.WASTE_BUNKER]:
 				result.offset = Vector2(side.x * 23.0, side.y * 10.0)
 				result.facing = -side
 				return result

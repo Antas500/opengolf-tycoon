@@ -90,15 +90,21 @@ const MISS_SAMPLE_COUNT: int = 8          ## Monte Carlo samples for hazard risk
 const TERRAIN_SCORES: Dictionary = {
 	TerrainTypes.Type.GREEN: 180.0,
 	TerrainTypes.Type.FAIRWAY: 150.0,
+	TerrainTypes.Type.FIRM_FAIRWAY: 145.0,  # Great lie, but the ball may run on
 	TerrainTypes.Type.TEE_BOX: 130.0,
 	TerrainTypes.Type.GRASS: 40.0,
 	TerrainTypes.Type.PATH: 35.0,
 	TerrainTypes.Type.ROUGH: 10.0,
+	TerrainTypes.Type.WASTE_BUNKER: -10.0,  # Playable sandy lie, no hazard
 	TerrainTypes.Type.HEAVY_ROUGH: -20.0,
+	TerrainTypes.Type.DEEP_ROUGH: -45.0,
 	TerrainTypes.Type.BUNKER: -50.0,
 	TerrainTypes.Type.TREES: -80.0,
+	TerrainTypes.Type.BRUSH: -85.0,
+	TerrainTypes.Type.POT_BUNKER: -90.0,
 	TerrainTypes.Type.ROCKS: -100.0,
 	TerrainTypes.Type.WATER: -1000.0,
+	TerrainTypes.Type.STREAM: -1000.0,
 	TerrainTypes.Type.OUT_OF_BOUNDS: -1000.0,
 	TerrainTypes.Type.FLOWER_BED: -40.0,
 	TerrainTypes.Type.EMPTY: -1000.0,  # Treat as OB — outside property line
@@ -278,7 +284,7 @@ static func _decide_recovery_shot(
 					score -= 50.0  # Mild penalty for going backwards (but allowed)
 
 				# Bonus for ending up on fairway or green (sets up next shot well)
-				if terrain_type == TerrainTypes.Type.FAIRWAY:
+				if TerrainTypes.is_fairway(terrain_type):
 					score += 30.0
 				elif terrain_type == TerrainTypes.Type.GREEN:
 					score += 50.0  # Getting on the green from trouble is ideal
@@ -331,9 +337,13 @@ static func _get_recovery_clubs(terrain_type: int) -> Array:
 			return [Golfer.Club.WEDGE, Golfer.Club.IRON]  # No woods through trees
 		TerrainTypes.Type.ROCKS:
 			return [Golfer.Club.WEDGE]  # Wedge only from rocks
+		TerrainTypes.Type.BRUSH:
+			return [Golfer.Club.WEDGE]  # Hack it out of the scrub
+		TerrainTypes.Type.POT_BUNKER:
+			return [Golfer.Club.WEDGE]  # Only loft clears the revetted face
 		TerrainTypes.Type.BUNKER:
 			return [Golfer.Club.WEDGE, Golfer.Club.IRON]  # Sand wedge preferred
-		TerrainTypes.Type.HEAVY_ROUGH:
+		TerrainTypes.Type.HEAVY_ROUGH, TerrainTypes.Type.DEEP_ROUGH:
 			return [Golfer.Club.WEDGE, Golfer.Club.IRON]  # Can't get wood through thick stuff
 		_:
 			return [Golfer.Club.WEDGE, Golfer.Club.IRON, Golfer.Club.FAIRWAY_WOOD]
@@ -516,7 +526,8 @@ static func _evaluate_all_candidates(
 	if can_reach_green and not candidates.is_empty():
 		candidates.sort_custom(func(a, b): return a.score > b.score)
 		var best_terrain: int = terrain_grid.get_tile(candidates[0].landing_zone)
-		var good_terrains := [TerrainTypes.Type.GREEN, TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.TEE_BOX]
+		var good_terrains := [TerrainTypes.Type.GREEN, TerrainTypes.Type.FAIRWAY,
+			TerrainTypes.Type.FIRM_FAIRWAY, TerrainTypes.Type.TEE_BOX]
 		if best_terrain not in good_terrains:
 			for club in club_list:
 				var stats: Dictionary = Golfer.CLUB_STATS[club]
@@ -679,7 +690,8 @@ static func _score_landing_zone(
 
 	# --- Next-shot setup bonus ---
 	# Reward landing zones that leave a clear path to the hole
-	if shots_remaining > 1 and terrain_type in [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.GRASS, TerrainTypes.Type.TEE_BOX]:
+	if shots_remaining > 1 and (TerrainTypes.is_fairway(terrain_type) \
+			or terrain_type in [TerrainTypes.Type.GRASS, TerrainTypes.Type.TEE_BOX]):
 		if not _path_crosses_trees(landing, hole_position, terrain_grid):
 			score += 40.0  # Clear approach line bonus
 
@@ -689,9 +701,9 @@ static func _score_landing_zone(
 	# --- Personality adjustments ---
 	if gd.aggression < 0.3:
 		# Cautious players extra-penalize hazards
-		if terrain_type == TerrainTypes.Type.BUNKER:
+		if TerrainTypes.is_bunker(terrain_type):
 			score -= 80.0
-		if terrain_type in [TerrainTypes.Type.ROUGH, TerrainTypes.Type.HEAVY_ROUGH]:
+		if TerrainTypes.is_rough(terrain_type):
 			score -= 30.0
 	elif gd.aggression > 0.7:
 		# Aggressive players discount hazard penalties slightly
@@ -703,7 +715,7 @@ static func _score_landing_zone(
 	score -= tree_fly_penalty
 	return score
 
-## Calculate penalty from nearby hazards (water, OB within 2 tiles).
+## Calculate penalty from nearby hazards (water, streams, OB within 2 tiles).
 static func _nearby_hazard_penalty(pos: Vector2i, terrain_grid: TerrainGrid, aggression: float) -> float:
 	var penalty: float = 0.0
 	for dx in range(-2, 3):
@@ -715,7 +727,7 @@ static func _nearby_hazard_penalty(pos: Vector2i, terrain_grid: TerrainGrid, agg
 				continue
 			var t: int = terrain_grid.get_tile(check)
 			var dist: float = Vector2(dx, dy).length()
-			if t == TerrainTypes.Type.WATER or t == TerrainTypes.Type.OUT_OF_BOUNDS or t == TerrainTypes.Type.EMPTY:
+			if TerrainTypes.is_out_of_play(t):
 				# Distance falloff: adjacent tiles (dist=1) are worst
 				penalty += (20.0 / dist) * (1.0 - aggression * 0.5)
 			elif t == TerrainTypes.Type.TREES:
@@ -788,7 +800,7 @@ static func _assess_miss_risk(
 			continue
 
 		var miss_terrain: int = terrain_grid.get_tile(miss_landing)
-		if miss_terrain == TerrainTypes.Type.WATER or miss_terrain == TerrainTypes.Type.OUT_OF_BOUNDS:
+		if TerrainTypes.is_water(miss_terrain) or miss_terrain == TerrainTypes.Type.OUT_OF_BOUNDS:
 			hazard_hits += 1
 
 	# Convert hit fraction to penalty
@@ -843,23 +855,31 @@ static func _apply_green_center_bias(
 ## Assess how good the current lie is (0.0 = terrible, 1.0 = perfect)
 static func _assess_lie_quality(terrain_type: int) -> float:
 	match terrain_type:
-		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN:
+		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY, TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN:
 			return 1.0
 		TerrainTypes.Type.GRASS:
 			return 0.8
 		TerrainTypes.Type.PATH:
 			return 0.7
+		TerrainTypes.Type.WASTE_BUNKER:
+			return 0.6
 		TerrainTypes.Type.ROUGH:
 			return 0.5
 		TerrainTypes.Type.HEAVY_ROUGH:
 			return 0.3
 		TerrainTypes.Type.BUNKER:
 			return 0.3
+		TerrainTypes.Type.DEEP_ROUGH:
+			return 0.2
+		TerrainTypes.Type.POT_BUNKER:
+			return 0.15
 		TerrainTypes.Type.TREES:
 			return 0.15
+		TerrainTypes.Type.BRUSH:
+			return 0.12
 		TerrainTypes.Type.ROCKS:
 			return 0.1
-		TerrainTypes.Type.EMPTY, TerrainTypes.Type.OUT_OF_BOUNDS:
+		TerrainTypes.Type.EMPTY, TerrainTypes.Type.OUT_OF_BOUNDS, TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 			return 0.0
 		_:
 			return 0.2

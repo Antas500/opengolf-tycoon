@@ -53,11 +53,18 @@ func _build_ui() -> void:
 		["6", "Water"],
 		["7", "Out of Bounds"],
 		["8", "Path"],
+		["9", "Firm Fairway"],
+		["0", "Waste Bunker"],
+		["Shift+2", "Deep Rough"],
+		["Shift+5", "Pot Bunker"],
+		["Shift+6", "Stream"],
+		["Shift+7", "Rocks"],
+		["Shift+8", "Brush"],
 	])
 
 	_add_section(vbox, "Objects & Placement", [
 		["T", "Trees"],
-		["R", "Rocks"],
+		["R", "Boulders"],
 		["Shift+F", "Flower Bed"],
 		["B", "Buildings"],
 		["H", "Open Hole"],

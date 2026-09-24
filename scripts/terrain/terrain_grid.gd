@@ -22,6 +22,10 @@ var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) *
 var _vertex_stride: int = 0  # Row length of _vertex_elevation (grid_width + 1)
 var _bunker_depth_grid: Dictionary = {}  # Vector2i -> 0 (SHALLOW) or 1 (DEEP)
 var _player_placed_tiles: Dictionary = {}  # Vector2i -> true for tiles player placed (for maintenance)
+## Vector2i -> true for Rocks tiles that only carry a boulder standing on other
+## ground. The course surface draws native turf there (the boulder sprite has
+## its own base) instead of painted rocky ground. See set_object_footprint().
+var _object_footprints: Dictionary = {}
 ## Green tiles carrying a cup that is not yet part of a hole — a "Green With Hole" tile
 ## waiting to be paired with a tee box. Once a hole is opened the marker is consumed and
 ## the cup lives on as the hole's `hole_position`, so every marker here is unused.
@@ -249,6 +253,7 @@ func _initialize_grid() -> void:
 	terrain_revision += 1
 	_ensure_vertex_storage()
 	_tee_box_tiles.clear()
+	_object_footprints.clear()
 	for x in range(grid_width):
 		for y in range(grid_height):
 			var pos = Vector2i(x, y)
@@ -477,6 +482,8 @@ func set_tile(pos: Vector2i, terrain_type: int, player_placed: bool = true) -> v
 		return
 	_grid[pos] = terrain_type
 	terrain_revision += 1
+	# A new terrain type replaces whatever object footprint the tile carried.
+	_object_footprints.erase(pos)
 	# Painting over a "Green With Hole" tile with anything else removes its cup.
 	if terrain_type != TerrainTypes.Type.GREEN and _cup_tiles.has(pos):
 		remove_cup_tile(pos)
@@ -579,6 +586,23 @@ func get_green_preset_tiles(center: Vector2i, preset_name: String) -> Array:
 
 func get_bunker_depth(pos: Vector2i) -> int:
 	return _bunker_depth_grid.get(pos, 0)
+
+## Mark a Rocks tile as the footprint of a boulder that stands on other ground.
+## Gameplay still sees Rocks, but the course surface keeps drawing the native
+## turf, so a lone boulder looks as it always has while painted Rocks ground
+## renders as stony ground. Any later set_tile() clears the mark.
+func set_object_footprint(pos: Vector2i, footprint: bool) -> void:
+	if not is_valid_position(pos) or footprint == _object_footprints.has(pos):
+		return
+	if footprint:
+		_object_footprints[pos] = true
+	else:
+		_object_footprints.erase(pos)
+	if _course_surface:
+		_course_surface.update_tile(pos)
+
+func is_object_footprint(pos: Vector2i) -> bool:
+	return _object_footprints.has(pos)
 
 func set_bunker_depth(pos: Vector2i, depth: int) -> void:
 	if not is_valid_position(pos):
@@ -691,6 +715,7 @@ func create_analysis_copy() -> TerrainGrid:
 	copy.tile_height = tile_height
 	copy._grid = _grid.duplicate()
 	copy._bunker_depth_grid = _bunker_depth_grid.duplicate()
+	copy._object_footprints = _object_footprints.duplicate()
 	_ensure_vertex_storage()
 	copy._vertex_elevation = _vertex_elevation.duplicate()
 	copy._vertex_stride = _vertex_stride

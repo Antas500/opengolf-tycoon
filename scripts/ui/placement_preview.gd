@@ -377,6 +377,20 @@ func _get_terrain_preview_color() -> Color:
 			return Color(0.9, 0.3, 0.3, 0.5)  # Red
 		TerrainTypes.Type.FLOWER_BED:
 			return Color(0.9, 0.5, 0.7, 0.5)  # Pink
+		TerrainTypes.Type.FIRM_FAIRWAY:
+			return Color(0.7, 0.78, 0.4, 0.5)  # Straw green
+		TerrainTypes.Type.DEEP_ROUGH:
+			return Color(0.3, 0.5, 0.25, 0.5)  # Dark green
+		TerrainTypes.Type.POT_BUNKER:
+			return Color(0.8, 0.68, 0.45, 0.5)  # Dark sand
+		TerrainTypes.Type.WASTE_BUNKER:
+			return Color(0.78, 0.7, 0.55, 0.5)  # Grey-tan sand
+		TerrainTypes.Type.STREAM:
+			return Color(0.35, 0.7, 0.9, 0.5)  # Light blue
+		TerrainTypes.Type.ROCKS:
+			return Color(0.6, 0.58, 0.55, 0.5)  # Stone grey
+		TerrainTypes.Type.BRUSH:
+			return Color(0.4, 0.5, 0.2, 0.5)  # Olive
 		_:
 			return Color(0.5, 0.5, 0.5, 0.5)  # Gray default
 
@@ -895,22 +909,22 @@ func _draw_hole_move_preview() -> void:
 			label_text = "Pin"
 		2:  # MOVING_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
-			is_valid = tile != TerrainTypes.Type.WATER and tile != TerrainTypes.Type.OUT_OF_BOUNDS
+			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.4, 0.85, 0.45, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Tee"
 		3:  # MOVING_GREEN
 			var tile = terrain_grid.get_tile(hover_pos)
-			is_valid = tile != TerrainTypes.Type.WATER and tile != TerrainTypes.Type.OUT_OF_BOUNDS
+			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.3, 0.9, 0.5, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Green"
 		4:  # MOVING_FORWARD_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
-			is_valid = tile != TerrainTypes.Type.WATER and tile != TerrainTypes.Type.OUT_OF_BOUNDS
+			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.9, 0.3, 0.3, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Fwd Tee"
 		5:  # MOVING_MIDDLE_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
-			is_valid = tile != TerrainTypes.Type.WATER and tile != TerrainTypes.Type.OUT_OF_BOUNDS
+			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.85, 0.85, 0.85, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Mid Tee"
 

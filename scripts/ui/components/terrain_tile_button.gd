@@ -18,6 +18,8 @@ const BUTTON_SIZE := TILE_SIZE      # No padding: rows interlock on the grid.
 const NAME_FONT_SIZE := UIConstants.FONT_SIZE_MD
 const NAME_FONT_SIZE_MIN := 10  # Longest names shrink instead of spilling out.
 static var _white_texture: ImageTexture
+## Scattered terrain previewed as part of a patch rather than a lone tile.
+const FIELD_PREVIEWS: Array[int] = [TerrainTypes.Type.ROCKS, TerrainTypes.Type.BRUSH]
 
 static func tile_corners() -> PackedVector2Array:
 	var center := BUTTON_SIZE * 0.5
@@ -152,6 +154,15 @@ func _make_surface_material() -> ShaderMaterial:
 	# natural-grass preview. Avoid coercing their string id to a terrain enum.
 	var preview_terrain: int = int(tool_type) if tool_type is int else TerrainTypes.Type.GRASS
 	terrain_data.set_pixel(1, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
+	# A stream is drawn as a channel between neighbouring stream tiles, so its
+	# preview runs one through the tile instead of showing a lone spring pool.
+	if preview_terrain == TerrainTypes.Type.STREAM:
+		terrain_data.set_pixel(0, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
+		terrain_data.set_pixel(2, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
+	# Stones and shrubs keep clear of a lone tile's edges, so these previews
+	# show a piece of a larger patch instead.
+	elif preview_terrain in FIELD_PREVIEWS:
+		terrain_data.fill(Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
 	var elevation := Image.create(4, 4, false, Image.FORMAT_R8)
 	elevation.fill(Color(0.5, 0, 0))
 

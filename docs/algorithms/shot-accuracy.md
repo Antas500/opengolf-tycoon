@@ -37,10 +37,27 @@ The angular model produces very tight clusters at short range (same angle = fewe
 ```
 skill_accuracy = weighted blend of driving_skill and accuracy_skill (varies by club)
 base_accuracy  = club_accuracy_modifier (Driver: 0.70, FW: 0.78, Iron: 0.85, Wedge: 0.95, Putter: 0.98)
-lie_modifier   = terrain penalty (Fairway: 1.0, Rough: 0.75, Heavy Rough: 0.5, Bunker: 0.4–0.6, Trees: 0.3, Rocks: 0.25)
+lie_modifier   = terrain penalty from GolfRules.get_lie_modifier() (see table below)
 
 total_accuracy = base_accuracy * skill_accuracy * lie_modifier
 ```
+
+**Lie and distance by terrain** (`GolfRules.get_lie_modifier()` / `get_terrain_distance_modifier()`):
+
+| Terrain | Lie (wedge / other clubs) | Distance | Notes |
+| ------- | ------------------------- | -------- | ----- |
+| Fairway, Grass, Green | 1.0 | 1.0 | Perfect lie |
+| Tee Box | 1.0 (1.05 driver) | 1.0 | Tee bonus for the driver |
+| Firm Fairway | 0.92 / 1.0 | 1.0 | Tight lie: clean full swings, little cushion for wedges |
+| Rough | 0.75 | 0.85 | |
+| Waste Bunker | 0.8 / 0.7 | 0.85 | Firm sand, club may be grounded — not a hazard |
+| Heavy Rough | 0.5 | 0.70 | |
+| Deep Rough | 0.4 | 0.60 | Ball sits down in knee-high grass |
+| Bunker | 0.6 / 0.4 (deep: 0.45 / 0.25) | 0.75 (deep: 0.60) | See [bunker-depth.md](bunker-depth.md) |
+| Pot Bunker | 0.35 / 0.15 | 0.45 | Steep revetted face; ShotAI only takes a wedge |
+| Trees | 0.3 | 0.60 | |
+| Brush | 0.3 | 0.50 | ShotAI only takes a wedge |
+| Rocks | 0.25 | 0.50 | ShotAI only takes a wedge |
 
 **Skill accuracy blending by club:**
 
@@ -167,7 +184,7 @@ Small per-shot variance representing natural swing inconsistency:
 
 Applied multiplicatively to the distance modifier:
 
-- **Terrain distance penalty**: Rough 0.85, Heavy Rough 0.70, Bunker 0.75, Trees 0.60, Rocks 0.50
+- **Terrain distance penalty**: Rough 0.85, Waste Bunker 0.85, Heavy Rough 0.70, Deep Rough 0.60, Bunker 0.75 (deep 0.60), Pot Bunker 0.45, Trees 0.60, Brush 0.50, Rocks 0.50
 - **Wind**: headwind/tailwind modifier from `WindSystem.get_distance_modifier()` (see [wind-system.md](wind-system.md))
 - **Elevation**: `1.0 - (elevation_diff * 0.03)`, clamped to [0.75, 1.25] — ~3% per elevation unit
 

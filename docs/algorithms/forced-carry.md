@@ -17,7 +17,7 @@ Carry distances are displayed as dashed lines with yardage labels on the hole vi
 ```
 Walk the center-line from tee to pin at 1-tile intervals.
 For each sample position:
-  - If entering a hazard (WATER or BUNKER): record start
+  - If entering a hazard (water or stream, bunker or pot bunker): record start
   - If exiting a hazard: compute carry from last safe tile to current tile
   - Track "last safe tile" (most recent non-hazard position)
 ```
@@ -28,7 +28,7 @@ The scan uses straight-line Euclidean distance, not A* or ShotAI waypoints. This
 
 ```
 CarrySegment:
-  hazard_type    = WATER or BUNKER
+  hazard_type    = the hazard's terrain type (WATER/STREAM or BUNKER/POT_BUNKER)
   start_grid     = last safe tile before hazard
   end_grid       = first safe tile after hazard
   carry_yards    = distance in yards (tiles × 22)
@@ -39,13 +39,13 @@ CarrySegment:
 
 ```
 For each carry segment:
-  WATER:
+  WATER or STREAM:
     > 200 yards → +1.5 difficulty
     > 150 yards → +1.0
     > 100 yards → +0.5
     ≤ 100 yards → +0.2
 
-  BUNKER:
+  BUNKER or POT_BUNKER:
     > 150 yards → +0.5
     > 80 yards  → +0.3
     ≤ 80 yards  → +0.1

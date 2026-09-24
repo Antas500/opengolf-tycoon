@@ -949,7 +949,11 @@ func _paint_at_mouse() -> void:
 	if grid_pos == last_paint_pos: return
 	# Sample every crossed tile so quick mouse drags cannot leave holes.
 	var start := last_paint_pos if last_paint_pos != Vector2i(-1, -1) else grid_pos
-	for center in TerrainBrush.centers(start, grid_pos):
+	# Stream channels only join edge-adjacent tiles, so stream strokes never
+	# step diagonally.
+	var stroke := TerrainBrush.centers_4_connected(start, grid_pos) \
+			if current_tool == TerrainTypes.Type.STREAM else TerrainBrush.centers(start, grid_pos)
+	for center in stroke:
 		if terrain_grid.is_valid_position(center): _paint_terrain_stamp(center)
 	last_paint_pos = grid_pos
 
@@ -989,9 +993,12 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	var total_cost = 0
 	var obstacle_removal_cost = 0
 	var blocked_by_land = false
-	# Terrain types that auto-remove trees and rocks when placed
+	# Built course terrain auto-removes trees and rocks when placed; natural
+	# ground (rough, deep rough, brush, rocks) grows around them.
 	var clears_obstacles = current_tool in [
-		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.BUNKER, TerrainTypes.Type.WATER,
+		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
+		TerrainTypes.Type.BUNKER, TerrainTypes.Type.POT_BUNKER, TerrainTypes.Type.WASTE_BUNKER,
+		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM,
 		TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN
 	]
 	_suppress_tile_undo = true
@@ -1006,6 +1013,10 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 		# Skip tiles occupied by buildings
 		if entity_layer and (entity_layer.is_tile_occupied_by_building(tile_pos) or entity_layer.is_tile_occupied_by_decoration(tile_pos)):
 			continue
+		# A boulder's spot is already Rocks terrain; painting Rocks around it
+		# makes the boulder stand on the new rocky ground.
+		if current_tool == TerrainTypes.Type.ROCKS and entity_layer:
+			entity_layer.merge_rock_into_painted_rocks(tile_pos)
 		if terrain_grid.get_tile(tile_pos) != current_tool:
 			# Auto-remove trees and rocks when placing course terrain
 			var tile_removal_cost = 0
@@ -2017,7 +2028,9 @@ const BULLDOZER_COSTS = {
 	"tree": 15,
 	"rock": 10,
 	"flower_bed": 20,
-	"decoration": 20
+	"decoration": 20,
+	"rock_ground": 10,  # Painted Rocks terrain (no boulder) back to grass
+	"brush": 10,
 }
 
 func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.ZERO) -> void:
@@ -2128,6 +2141,29 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 		_bulldoze_drag_cost += cost
 		if not dragging:
 			EventBus.notify("Flower bed removed (-$%d)" % cost, "info")
+		return
+
+	# Painted rocky ground and brush clear back to natural grass (a boulder's
+	# own spot was handled above with the boulder).
+	if (tile_type == TerrainTypes.Type.ROCKS and entity_layer.get_rock_at(grid_pos) == null) \
+			or tile_type == TerrainTypes.Type.BRUSH:
+		var is_rock_ground: bool = tile_type == TerrainTypes.Type.ROCKS
+		var cost = BULLDOZER_COSTS["rock_ground" if is_rock_ground else "brush"]
+		var what := "rocky ground" if is_rock_ground else "brush"
+		if not GameManager.can_afford(cost):
+			if not dragging:
+				if GameManager.is_bankrupt():
+					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
+				else:
+					EventBus.notify("Not enough money to clear %s ($%d)" % [what, cost], "error")
+			return
+		GameManager.modify_money(-cost)
+		EventBus.log_transaction("Clear %s" % what, -cost)
+		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
+		_bulldoze_drag_count += 1
+		_bulldoze_drag_cost += cost
+		if not dragging:
+			EventBus.notify("Cleared %s (-$%d)" % [what, cost], "info")
 		return
 
 	# Nothing to remove at this position
@@ -2483,7 +2519,7 @@ func _is_valid_tee_position(pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(pos):
 		return false
 	var tile = terrain_grid.get_tile(pos)
-	if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
+	if TerrainTypes.is_water(tile) or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
 		return false
 	if entity_layer and entity_layer.is_tile_occupied_by_building(pos):
 		return false
@@ -2501,7 +2537,7 @@ func _is_valid_green_position(pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(pos):
 		return false
 	var tile = terrain_grid.get_tile(pos)
-	if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
+	if TerrainTypes.is_water(tile) or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
 		return false
 	if entity_layer and entity_layer.is_tile_occupied_by_building(pos):
 		return false
@@ -2639,7 +2675,7 @@ func _is_valid_secondary_tee_position(pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(pos):
 		return false
 	var tile = terrain_grid.get_tile(pos)
-	if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
+	if TerrainTypes.is_water(tile) or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
 		return false
 	if entity_layer and entity_layer.is_tile_occupied_by_building(pos):
 		return false

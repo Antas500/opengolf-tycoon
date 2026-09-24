@@ -77,18 +77,18 @@ func _recalculate() -> void:
 			var left_count = 0
 			for i in range(1, 15):
 				var check = Vector2i((sample_center + grid_perp * i).round())
-				if terrain_grid.is_valid_position(check) and terrain_grid.get_tile(check) == TerrainTypes.Type.FAIRWAY:
+				if terrain_grid.is_valid_position(check) and TerrainTypes.is_fairway(terrain_grid.get_tile(check)):
 					left_count += 1
 				else:
 					break
 			var right_count = 0
 			for i in range(1, 15):
 				var check = Vector2i((sample_center - grid_perp * i).round())
-				if terrain_grid.is_valid_position(check) and terrain_grid.get_tile(check) == TerrainTypes.Type.FAIRWAY:
+				if terrain_grid.is_valid_position(check) and TerrainTypes.is_fairway(terrain_grid.get_tile(check)):
 					right_count += 1
 				else:
 					break
-			var center_is_fairway = terrain_grid.is_valid_position(sample_pos) and terrain_grid.get_tile(sample_pos) == TerrainTypes.Type.FAIRWAY
+			var center_is_fairway = terrain_grid.is_valid_position(sample_pos) and TerrainTypes.is_fairway(terrain_grid.get_tile(sample_pos))
 			width = left_count + right_count + (1 if center_is_fairway else 0)
 
 			if width == 0:

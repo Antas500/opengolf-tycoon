@@ -194,6 +194,10 @@ func place_rock(grid_pos: Vector2i, rock_size: String = "medium") -> Rock:
 		_original_terrain[grid_pos] = terrain_grid.get_tile(grid_pos)
 	if terrain_grid:
 		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.ROCKS)
+		# A boulder on other ground keeps that spot's native turf look; one set
+		# on painted Rocks ground sits on the stony surface around it.
+		terrain_grid.set_object_footprint(grid_pos,
+			_original_terrain.get(grid_pos) != TerrainTypes.Type.ROCKS)
 
 	# Connect signals
 	rock.rock_selected.connect(_on_rock_selected)
@@ -371,8 +375,19 @@ func _restore_terrain(grid_pos: Vector2i) -> void:
 	if not terrain_grid:
 		return
 	var original = _original_terrain.get(grid_pos, TerrainTypes.Type.GRASS)
+	terrain_grid.set_object_footprint(grid_pos, false)
 	terrain_grid.set_tile(grid_pos, original)
 	_original_terrain.erase(grid_pos)
+
+## Rocks ground painted over a boulder's spot becomes the ground the boulder
+## stands on: the tile shows rocky ground now and stays Rocks if the boulder
+## is later removed. Returns true when the spot changed.
+func merge_rock_into_painted_rocks(grid_pos: Vector2i) -> bool:
+	if not terrain_grid or not rocks.has(grid_pos) or not terrain_grid.is_object_footprint(grid_pos):
+		return false
+	_original_terrain[grid_pos] = TerrainTypes.Type.ROCKS
+	terrain_grid.set_object_footprint(grid_pos, false)
+	return true
 
 func get_all_buildings() -> Array:
 	return buildings.values()
@@ -515,6 +530,11 @@ func deserialize(data: Dictionary) -> void:
 				var rock_size_val = "medium"
 				if rock_data_saved is Dictionary:
 					rock_size_val = rock_data_saved.get("size", rock_data_saved.get("rock_size", "medium"))
+				# Rocks ground couldn't be painted when a save lacks a boulder's
+				# original terrain, so that boulder stood on native grass.
+				if not _original_terrain.has(pos) and terrain_grid \
+						and terrain_grid.get_tile(pos) == TerrainTypes.Type.ROCKS:
+					_original_terrain[pos] = TerrainTypes.Type.GRASS
 				place_rock(pos, rock_size_val)
 
 	if data.has("decorations"):

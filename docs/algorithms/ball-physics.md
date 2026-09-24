@@ -18,11 +18,11 @@ The ball also scales up slightly during flight to create a depth perception effe
 
 After the carry lands, the ball may roll forward (or backward with backspin on wedge shots). Rollout distance depends on:
 - **Club type** — Drivers roll 5–15% of carry; wedge chips roll 6–18%
-- **Landing terrain** — Greens are fast (1.3x roll), rough grabs the ball (0.3x)
+- **Landing terrain** — Firm fairway runs fastest (1.6x roll), greens are fast (1.3x), rough grabs the ball (0.3x), deep rough and brush all but stop it
 - **Slope** — Downhill rolls up to 50% farther; uphill reduces roll
 - **Backspin** — Skilled players (accuracy+recovery > 0.7) can generate backspin on full wedge shots, making the ball roll backwards
 
-The rollout path is walked step-by-step, checking for hazards. If the ball rolls into water, OB, or a bunker, it stops there. Entering rough from fairway triggers a deceleration effect (60% remaining roll reduction).
+The rollout path is walked step-by-step, checking for hazards. If the ball rolls into water or a stream, OB, a bunker or pot bunker, or snags in deep rough or brush, it stops there (`GolfRules.catches_rolling_ball()`). A ball that *lands* in water, a stream, OB, a bunker, a pot bunker or a flower bed doesn't roll at all (`GolfRules.stops_ball_on_landing()`). Entering rough from fairway triggers a deceleration effect (60% remaining roll reduction).
 
 The walk records its waypoints in `roll_path` (carry point → resting point), so the aim guide can draw the actual roll instead of a straight line. `_calculate_shot()` and `_calculate_rollout()` also take a `deterministic` flag used by `Golfer.preview_shot()`: it replaces the random swing/rollout variance with its expected value and skips the miss, shank and distance-loss terms, producing the *intended* shot for the player's aim guide (see [Play the Course](player-rounds.md)).
 
@@ -110,17 +110,24 @@ if base_rollout < 0.0:
 
 ### 6. Terrain Roll Multiplier
 
+`GolfRules.get_roll_multiplier(terrain)` — the single table used by `Golfer._calculate_rollout()`.
+
 | Landing Terrain | Multiplier | Effect |
 | --------------- | ---------- | ------ |
+| Firm Fairway | 1.6x | Hard, fast links turf — the ball bounds on and releases |
 | Green | 1.3x | Fast, smooth surface |
 | Fairway | 1.0x | Baseline |
 | Tee Box | 1.0x | Same as fairway |
 | Grass | 0.35x | Natural grass grabs ball |
 | Rough | 0.3x | Rough grabs the ball |
+| Waste Bunker | 0.3x | Firm sand lets the ball skid a little |
 | Heavy Rough | 0.12x | Ball stops fast |
+| Deep Rough | 0.06x | Ball nestles down almost where it lands |
+| Brush | 0.05x | Swallowed by the scrub |
 | Trees | 0.2x | Dense ground cover |
 | Rocks | 0.15x | Rocky ground kills momentum |
 | Path | 1.4x | Hard surface, extra bounce |
+| Water, Stream, OB, Bunker, Pot Bunker, Flower Bed | — | No roll: the ball stays where it lands |
 
 **Backspin terrain interaction:**
 ```
@@ -159,9 +166,11 @@ step_size = rollout_distance / steps
 for each step along roll path:
     check_terrain = terrain at step position
 
-    if WATER: stop (ball goes in water)
-    if OUT_OF_BOUNDS: stop (ball goes OB)
-    if BUNKER: stop (ball plugs in sand)
+    # GolfRules.catches_rolling_ball()
+    if WATER or STREAM: stop (ball goes in the water)
+    if OUT_OF_BOUNDS or EMPTY: stop (ball goes OB)
+    if BUNKER or POT_BUNKER: stop (ball is gathered by the sand)
+    if DEEP_ROUGH or BRUSH: stop (ball snags in the long stuff)
 
     # Rough deceleration when entering from fairway
     if ROUGH and previous terrain was FAIRWAY:
@@ -207,7 +216,8 @@ if flight_max_height > 10.0:    # Skip for putts and short chips
 | Chip threshold | `golfer.gd:1488` | 0.65 distance ratio | Higher = more shots treated as chips |
 | Backspin skill threshold | `golfer.gd:1510` | 0.7 | Lower = more players get backspin |
 | Max backspin | `golfer.gd:1515` | -4% of carry | More negative = more backspin |
-| Terrain roll multipliers | `golfer.gd:1522-1542` | See table | Higher = more roll on that surface |
+| Terrain roll multipliers | `GolfRules.get_roll_multiplier()` | See table | Higher = more roll on that surface |
+| Ground that stops a rolling ball | `GolfRules.catches_rolling_ball()` | Water, stream, OB, bunkers, deep rough, brush | Add a type to make it swallow rolling balls |
 | Slope influence range | `golfer.gd:1571` | 0.1–0.5 | Higher = slope affects roll direction more |
 | Downhill bonus | `golfer.gd:1577` | +50% max | Higher = more downhill run |
 | Rough deceleration | `golfer.gd:1609` | 0.6x (40% reduction) | Lower = rough stops ball faster |

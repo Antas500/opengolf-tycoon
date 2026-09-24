@@ -4,7 +4,7 @@ class_name ForcedCarryCalculator
 ## Used by HoleVisualizer for display and DifficultyCalculator for difficulty scoring.
 
 class CarrySegment:
-	var hazard_type: int  # TerrainTypes.Type (WATER or BUNKER)
+	var hazard_type: int  # TerrainTypes.Type: a water type (WATER/STREAM) or a bunker type (BUNKER/POT_BUNKER)
 	var start_grid: Vector2i  # Last safe tile before hazard
 	var end_grid: Vector2i  # First safe tile after hazard
 	var carry_yards: int
@@ -38,7 +38,7 @@ static func calculate_carries(hole_data: GameManager.HoleData, terrain_grid: Ter
 			continue
 
 		var terrain = terrain_grid.get_tile(sample_pos)
-		var is_hazard = terrain in [TerrainTypes.Type.WATER, TerrainTypes.Type.BUNKER]
+		var is_hazard = TerrainTypes.is_water(terrain) or TerrainTypes.is_bunker(terrain)
 
 		if is_hazard and not in_hazard:
 			in_hazard = true
@@ -57,7 +57,7 @@ static func calculate_carries(hole_data: GameManager.HoleData, terrain_grid: Ter
 		if not is_hazard:
 			# Only update last_safe_pos from fairway-quality terrain — carry measures
 			# from where a golfer would reasonably land, not from rough/trees
-			if terrain in [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.TEE_BOX,
+			if TerrainTypes.is_fairway(terrain) or terrain in [TerrainTypes.Type.TEE_BOX,
 						   TerrainTypes.Type.GREEN, TerrainTypes.Type.PATH]:
 				last_safe_pos = sample_pos
 

@@ -22,7 +22,7 @@ static func review(grid, course, entities, rating: Dictionary, stats) -> Array[D
 				var tile: Vector2i = point + offset
 				if not grid.is_valid_position(tile): continue
 				samples += 1
-				if grid.get_tile(tile) in [TerrainTypes.Type.FAIRWAY,TerrainTypes.Type.GREEN,TerrainTypes.Type.TEE_BOX]: premium += 1
+				if grid.get_tile(tile) in [TerrainTypes.Type.FAIRWAY,TerrainTypes.Type.FIRM_FAIRWAY,TerrainTypes.Type.GREEN,TerrainTypes.Type.TEE_BOX]: premium += 1
 		var ratio := float(premium) / maxi(samples, 1)
 		if ratio < worst_ratio:
 			worst_ratio = ratio

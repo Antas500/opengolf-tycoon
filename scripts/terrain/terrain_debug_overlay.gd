@@ -21,6 +21,12 @@ const TYPE_COLORS = {
 	11: Color(0.1, 0.4, 0.1, 0.5),  # TREES - dark green
 	12: Color(0.9, 0.4, 0.6, 0.5),  # FLOWER_BED - pink
 	13: Color(0.5, 0.5, 0.5, 0.5),  # ROCKS - gray
+	14: Color(0.7, 0.8, 0.3, 0.5),  # FIRM_FAIRWAY - straw green
+	15: Color(0.8, 0.6, 0.3, 0.5),  # POT_BUNKER - dark sand
+	16: Color(0.3, 0.7, 1.0, 0.5),  # STREAM - light blue
+	17: Color(0.2, 0.35, 0.15, 0.5),  # DEEP_ROUGH - deep green
+	18: Color(0.85, 0.75, 0.6, 0.5),  # WASTE_BUNKER - pale sand
+	19: Color(0.4, 0.45, 0.15, 0.5),  # BRUSH - olive
 }
 
 func initialize(grid: TerrainGrid) -> void:
