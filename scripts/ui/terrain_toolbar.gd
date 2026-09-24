@@ -98,10 +98,14 @@ const TOOL_TAB_MAP := {
 const TOOL_ROW_HEIGHT := 30
 const COURSE_TILE_COLUMNS := 4  # Surfaces fill row 1, hazards row 2
 const TILE_ROWS := 2  # Course and building tiles always sit in two interlocking rows
-## Gaps between tiles: two rows of TerrainTileButton.BUTTON_SIZE tiles plus
-## TILE_V_SEPARATION span 1.5 tiles + gap, filling the toolbar page height.
+## Vertical rhythm of the tile rows: two rows of TerrainTileButton.BUTTON_SIZE
+## tiles span 1.5 tiles, plus the gap where the lower row tucks into the
+## notches of the row above, plus the breathing room kept above the first row
+## and below the last — together filling the toolbar page height without the
+## rows touching each other or the edges of the page.
 const TILE_H_SEPARATION := 8
-const TILE_V_SEPARATION := 8
+const TILE_V_SEPARATION := 12
+const TILE_V_PADDING := 5
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
@@ -307,6 +311,7 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	tiles_grid.tile_size = TerrainTileButton.BUTTON_SIZE
 	tiles_grid.h_separation = TILE_H_SEPARATION
 	tiles_grid.v_separation = TILE_V_SEPARATION
+	tiles_grid.v_padding = TILE_V_PADDING
 	tiles_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
@@ -315,7 +320,9 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.WATER, "name": "Water", "hotkey": "6", "desc": "Water hazard with penalty", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "hotkey": "7", "desc": "Boundary area with stroke penalty", "tile_preview": true})
-	hbox.add_child(_make_tab_group("", tiles_grid))
+	# The grid carries its own breathing room above and below the rows, so it
+	# keeps that spacing instead of stretching to fill the whole page height.
+	hbox.add_child(_make_tab_group("", tiles_grid, true))
 
 	hbox.add_child(_make_separator())
 	hbox.add_child(_make_green_presets_group())
@@ -400,11 +407,14 @@ func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
 	_building_shelf.h_separation = TILE_H_SEPARATION
 	_building_shelf.v_separation = TILE_V_SEPARATION
+	_building_shelf.v_padding = TILE_V_PADDING
 	_building_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_building_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	# No group heading or INFO blurb: the tiles speak for themselves and the
 	# rich hover tooltip carries each facility's cost and upkeep.
-	hbox.add_child(_make_tab_group("", _building_shelf))
+	# The shelf carries its own breathing room above and below the rows, so it
+	# keeps that spacing instead of stretching to fill the whole page height.
+	hbox.add_child(_make_tab_group("", _building_shelf, true))
 	_populate_building_shelf()
 
 func set_building_registry(registry: Dictionary) -> void:
@@ -585,7 +595,7 @@ func _build_staff_tab(hbox: HBoxContainer) -> void:
 # Helper Widgets
 # =============================================================================
 
-func _make_tab_group(title: String, content: Control) -> VBoxContainer:
+func _make_tab_group(title: String, content: Control, center_content: bool = false) -> VBoxContainer:
 	var group = VBoxContainer.new()
 	group.add_theme_constant_override("separation", 2)
 	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -597,7 +607,12 @@ func _make_tab_group(title: String, content: Control) -> VBoxContainer:
 		lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 		group.add_child(lbl)
 
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Tile grids already carry their own breathing room above and below the
+	# rows, so they keep their natural height instead of stretching to fill it.
+	if center_content:
+		content.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	else:
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	group.add_child(content)
 	return group
 

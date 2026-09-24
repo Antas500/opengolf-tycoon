@@ -31,6 +31,13 @@ class_name TileHoneycomb
 		v_separation = maxi(0, value)
 		queue_sort()
 
+## Breathing room kept above the first row and below the last, so the
+## interlocking rows never touch the edges of the space they sit in.
+@export var v_padding: int = 0:
+	set(value):
+		v_padding = maxi(0, value)
+		queue_sort()
+
 func _ready() -> void:
 	sort_children.connect(_layout_tiles)
 
@@ -49,7 +56,7 @@ func _position_for(slot: int) -> Vector2:
 	var row := slot / columns
 	var column := slot % columns
 	return Vector2(column * _column_pitch() + row * _row_shift().x,
-			row * _row_shift().y)
+		v_padding + row * _row_shift().y)
 
 func _column_pitch() -> float:
 	return tile_size.x + h_separation
@@ -58,14 +65,19 @@ func _column_pitch() -> float:
 func _row_shift() -> Vector2:
 	return Vector2(_column_pitch() * 0.5, tile_size.y * 0.5 + v_separation)
 
-## Extent actually covered by the tiles, including the staggered overhang.
+## Extent actually covered by the tiles, including the staggered overhang and
+## the breathing room above and below the rows.
 func _grid_size() -> Vector2:
 	var slot := 0
 	var size := Vector2.ZERO
+	var has_tiles := false
 	for child in get_children():
 		if child is Control and child.visible:
+			has_tiles = true
 			var bottom_right := _position_for(slot) + tile_size
 			size.x = maxf(size.x, bottom_right.x)
 			size.y = maxf(size.y, bottom_right.y)
 			slot += 1
+	if has_tiles:
+		size.y += v_padding  # The padding above row 1 is already in the positions.
 	return size
