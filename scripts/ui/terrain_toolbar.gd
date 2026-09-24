@@ -99,6 +99,7 @@ const TOOL_TAB_MAP := {
 
 const TOOL_ROW_HEIGHT := 30
 const COURSE_TILE_COLUMNS := 4  # Surfaces fill row 1, hazards row 2
+const BUILDING_TILE_COLUMNS := 6  # Keep the full catalogue within the bottom bar height.
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
@@ -128,7 +129,7 @@ var _skill_labels: Array[Label] = []
 var _player_points_label: Label = null
 var _feed_button: Button = null
 var _building_registry: Dictionary = {}
-var _building_shelf: HBoxContainer = null
+var _building_shelf: TileHoneycomb = null
 var _feed_unread: int = 0
 var _refresh_timer: Timer = null
 
@@ -386,19 +387,20 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tip_label("Decorations, trees & flower beds raise course aesthetics and golfer mood."))
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
-	# Building choices live directly in this tab rather than behind a second
-	# catalogue window.  The tab is horizontally scrollable, so the cards can
-	# show useful artwork, cost and upkeep without making the toolbar taller.
-	_building_shelf = HBoxContainer.new()
+	# Facilities use the same interlocking isometric buttons as Course & Hazards.
+	# Six columns keep the catalogue compact enough for the fixed-height bottom
+	# bar; the page still scrolls sideways if the window is narrower.
+	_building_shelf = TileHoneycomb.new()
 	_building_shelf.name = "BuildingShelf"
-	_building_shelf.add_theme_constant_override("separation", 8)
+	_building_shelf.columns = BUILDING_TILE_COLUMNS
+	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
 	_building_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_building_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	hbox.add_child(_make_tab_group("FACILITIES", _building_shelf))
 	_populate_building_shelf()
 
 	hbox.add_child(_make_separator())
-	hbox.add_child(_make_tip_label("Choose a facility to place it. Scroll sideways for more buildings."))
+	hbox.add_child(_make_tip_label("Choose a facility to place it. Hover for cost and upkeep."))
 
 func set_building_registry(registry: Dictionary) -> void:
 	_building_registry = registry.duplicate(true)
@@ -411,11 +413,9 @@ func _populate_building_shelf() -> void:
 		child.queue_free()
 	for building_type in _building_registry:
 		var data: Dictionary = _building_registry[building_type]
-		var button := Button.new()
-		button.text = "%s\n$%d · $%d/day" % [data.get("name", building_type), data.get("cost", 0), data.get("operating_cost", 0)]
-		button.tooltip_text = data.get("description", "Select this facility to place it.")
+		var button := BuildingTileButton.new()
+		button.configure_building(str(building_type), data)
 		button.pressed.connect(_on_building_card_pressed.bind(str(building_type)))
-		CatalogArtwork.decorate_button(button, str(building_type), data, true)
 		_building_shelf.add_child(button)
 
 func _on_building_card_pressed(building_type: String) -> void:

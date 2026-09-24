@@ -1,9 +1,9 @@
 extends ToolButton
 class_name TerrainTileButton
-## A course-painting tool drawn as one 2:1 isometric cell of CourseSurface.
-## The preview samples grass around the chosen material, just like an isolated
-## painted tile on the grid. Only the Terrain tab's paint tools use this button;
-## other ToolButtons keep their usual rectangular appearance.
+## A catalogue tool drawn as one 2:1 isometric cell of CourseSurface.
+## Terrain paint tools use their selected material; subclasses such as building
+## choices can keep the same diamond, hit target and selection treatment while
+## supplying their own compact artwork.
 ##
 ## The button is exactly the diamond — its name sits centred on the tile and the
 ## row below tucks into the notch it leaves (see TileHoneycomb) — so only the
@@ -144,7 +144,10 @@ func _make_surface_material() -> ShaderMaterial:
 	# grid origin places that middle cell exactly within the diamond's UVs.
 	var terrain_data := Image.create(3, 3, false, Image.FORMAT_RGBA8)
 	terrain_data.fill(Color(float(TerrainTypes.Type.GRASS) / 255.0, 0, 0.5, 1))
-	terrain_data.set_pixel(1, 1, Color(float(tool_type) / 255.0, 0, 0.5, 1))
+	# Non-terrain catalogue tiles (for example buildings) still sit on a
+	# natural-grass preview. Avoid coercing their string id to a terrain enum.
+	var preview_terrain: int = int(tool_type) if tool_type is int else TerrainTypes.Type.GRASS
+	terrain_data.set_pixel(1, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
 	var elevation := Image.create(4, 4, false, Image.FORMAT_R8)
 	elevation.fill(Color(0.5, 0, 0))
 
