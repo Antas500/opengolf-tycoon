@@ -62,6 +62,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Clubhouse upgrades** — 3 tiers (Basic → Pro Shop → Full Service), each unlocking higher revenue and satisfaction bonuses
 - **Terrain costs** — Placement and per-day maintenance costs vary by terrain type
 - **Operating costs** — Base daily cost scales with hole count and staff
+- **Staff management** — Hire and fire groundskeepers, marshals, cart operators, and pro shop staff from the Staff toolbar tab; monitor course condition, payroll, and staff effects
 - **Budget tracking** — Real-time balance, deductions on placement, refunds on undo, daily cost settlement
 - **Difficulty presets** — Easy, Normal, and Hard modes with different starting conditions
 

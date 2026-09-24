@@ -61,7 +61,7 @@ Main (Node2D) ← main.gd
 ├── Holes (Node2D)
 ├── IsometricCamera (Camera2D)
 └── UI (CanvasLayer)
-    └── HUD (Control) → HUDStatusColumn (top-right stats column), BottomBar (view/speed controls + tabbed TerrainToolbar: Terrain / Improve / Build / Elev / Holes / Golfers / Player / Club / Staff)
+    └── HUD (Control) → HUDStatusColumn (top-right stats column), BottomBar (view/speed controls + tabbed TerrainToolbar: Terrain / Improve / Build / Elev / Holes / Golfers / Player / Club / Staff). The Staff tab embeds hire/fire, course condition, payroll, and effects (no separate Staff Management window).
 ```
 
 ## Algorithm Documentation
