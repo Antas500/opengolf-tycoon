@@ -388,9 +388,6 @@ func test_action_signals() -> void:
 	toolbar._on_tool_button_pressed("bulldozer")
 	assert_signal_emitted(toolbar, "bulldozer_pressed")
 
-	toolbar._on_tool_button_pressed("staff")
-	assert_signal_emitted(toolbar, "staff_pressed")
-
 	toolbar._on_tool_button_pressed("play_course")
 	assert_signal_emitted(toolbar, "play_course_pressed")
 
@@ -447,6 +444,30 @@ func test_green_presets_hide_while_the_green_carries_a_cup() -> void:
 
 	toolbar.set_brush_limit(HoleLayout.UNLIMITED_BRUSH)  # Green Without Hole
 	assert_true(toolbar._green_preset_group.visible)
+
+func test_staff_tab_embeds_staff_management() -> void:
+	assert_false(toolbar.has_signal("staff_pressed"),
+		"Staff management is inline in the tab; it should not open a popup")
+	assert_false(toolbar._tool_buttons.has("staff"),
+		"Staff tab should not keep a Staff Management launcher button")
+	assert_not_null(toolbar._staff_panel, "Staff tab should embed a StaffPanel")
+	assert_true(toolbar._staff_panel is StaffPanel)
+	assert_eq(toolbar._staff_panel.get_parent().get_parent(), toolbar._pages[TerrainToolbar.Tab.STAFF],
+		"StaffPanel should live on the Staff tab page")
+
+	var labels: Array[String] = []
+	for label in toolbar._staff_panel.find_children("*", "Label", true, false):
+		labels.append(label.text)
+	assert_true(labels.has("CONDITION"), "Staff tab should show course condition")
+	assert_true(labels.has("HIRE STAFF"), "Staff tab should show hire buttons")
+	assert_true(labels.has("CURRENT STAFF"), "Staff tab should show the roster")
+	assert_true(labels.has("EFFECTS"), "Staff tab should show staff effects")
+	assert_eq(toolbar._staff_panel._hire_buttons.size(), 4, "Four staff types can be hired")
+
+	# Selecting the Staff tab refreshes the embedded panel rather than emitting a popup signal.
+	toolbar.select_tab(TerrainToolbar.Tab.STAFF)
+	assert_true(toolbar._pages[TerrainToolbar.Tab.STAFF].visible)
+	assert_true(toolbar._staff_panel.visible)
 
 func test_mouse_wheel_horizontal_scroll_input() -> void:
 	var scroll: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN]
