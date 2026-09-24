@@ -534,6 +534,8 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
 	terrain_toolbar.rock_placement_pressed.connect(_on_rock_placement_pressed)
 	terrain_toolbar.building_placement_pressed.connect(_on_building_placement_pressed)
+	terrain_toolbar.building_selected.connect(_on_building_type_selected_from_toolbar)
+	terrain_toolbar.set_building_registry(building_registry)
 	terrain_toolbar.decoration_placement_pressed.connect(_on_decoration_placement_pressed)
 	terrain_toolbar.sculpt_terrain_pressed.connect(_on_sculpt_terrain_pressed)
 	terrain_toolbar.raise_elevation_pressed.connect(_on_raise_elevation_pressed)
@@ -1441,71 +1443,28 @@ func _on_tree_placement_pressed() -> void:
 	get_tree().root.add_child(dialog)
 	dialog.popup_centered_ratio(0.3)
 
-func _on_building_placement_pressed() -> void:
-	"""Show building selection menu and start building placement"""
-	print("Building button pressed!")
+func _on_building_type_selected_from_toolbar(building_type: String) -> void:
+	"""Start placement immediately for a building card in the Buildings tab."""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
 	is_painting = false
+	if building_type not in building_registry:
+		EventBus.notify("Building type not found: %s" % building_type, "error")
+		return
+	if building_registry[building_type].get("required", false) and entity_layer.has_building_of_type(building_type):
+		EventBus.notify("That required facility is already placed.", "info")
+		return
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
+	placement_manager.start_building_placement(building_type, building_registry[building_type])
 
-	if building_registry.is_empty():
-		print("ERROR: Building registry is empty!")
-		EventBus.notify("Building system not initialized!", "error")
-		return
-	
-	# Get building names from dictionary
-	var building_names = building_registry.keys()
-	print("Available buildings: ", building_names)
-	if building_names.is_empty():
-		EventBus.notify("No buildings available!", "error")
-		return
-	
-	var dialog = AcceptDialog.new()
-	dialog.title = "The architect's book"
-	dialog.size = Vector2i(740, 560)
-	dialog.theme = preload("res://assets/themes/game_theme.tres")
-	var scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(700, 470)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var shelf := GridContainer.new()
-	shelf.columns = 2
-	shelf.add_theme_constant_override("h_separation", 10)
-	shelf.add_theme_constant_override("v_separation", 10)
-	for building_type in building_names:
-		var data: Dictionary = building_registry[building_type]
-		var btn := Button.new()
-		btn.text = "%s\n$%d · $%d/day" % [data.get("name", building_type), data.get("cost", 0), data.get("operating_cost", 0)]
-		btn.tooltip_text = data.get("description", "")
-		if data.get("required", false) and entity_layer.has_building_of_type(building_type):
-			btn.disabled = true
-			btn.text = "%s\nAlready placed" % data.get("name", building_type)
-		else:
-			btn.pressed.connect(_on_building_type_selected.bind(building_type, dialog))
-		CatalogArtwork.decorate_button(btn, building_type, data, true)
-		shelf.add_child(btn)
-	scroll.add_child(shelf)
-	dialog.add_child(scroll)
-	dialog.confirmed.connect(dialog.queue_free)
-	dialog.canceled.connect(dialog.queue_free)
-	add_child(dialog)
-	dialog.popup_centered()
-
-func _on_building_type_selected(building_type: String, dialog: AcceptDialog) -> void:
-	"""Handle building type selection"""
-	print("Selected building: %s" % building_type)
-	dialog.queue_free()
-
-	if building_type in building_registry:
-		var building_data = building_registry[building_type]
-		placement_manager.start_building_placement(building_type, building_data)
-		print("Building placement mode: %s" % building_type)
-	else:
-		print("ERROR: Building type not found: %s" % building_type)
+func _on_building_placement_pressed() -> void:
+	"""Open the Buildings tab; facility cards there start placement directly."""
+	if terrain_toolbar:
+		terrain_toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
 
 func _on_tree_type_selected(tree_type: String, dialog: AcceptDialog) -> void:
 	"""Handle tree type selection"""
