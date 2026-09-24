@@ -14,7 +14,7 @@ class_name TileHoneycomb
 		queue_sort()
 
 ## Size of one tile button (2:1 isometric footprint).
-@export var tile_size := Vector2(84, 42):
+@export var tile_size := TerrainTileButton.BUTTON_SIZE:
 	set(value):
 		tile_size = value
 		queue_sort()
