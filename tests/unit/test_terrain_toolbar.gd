@@ -80,9 +80,9 @@ func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.tab_count, 9, "Toolbar should have 9 tabs")
 	assert_eq(toolbar._pages.size(), 9, "Toolbar should have 9 pages")
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.TERRAIN), "Terrain")
-	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.IMPROVEMENTS), "Improve")
-	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.BUILDINGS), "Build")
-	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.ELEVATION), "Elev")
+	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.IMPROVEMENTS), "Improvements")
+	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.BUILDINGS), "Buildings")
+	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.ELEVATION), "Elevation")
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.HOLES), "Holes")
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.GOLFERS), "Golfers")
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.PLAYER), "Player")
@@ -159,6 +159,34 @@ func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 	assert_false(toolbar._tool_buttons[TerrainTypes.Type.PATH] is TerrainTileButton)
 	assert_false(toolbar._tool_buttons["bulldozer"] is TerrainTileButton)
 	assert_false(toolbar._open_hole_buttons[0] is TerrainTileButton)
+
+func test_building_choices_use_the_course_tile_design() -> void:
+	var registry := {
+		"clubhouse": {"name": "Clubhouse", "size": [4, 4], "cost": 10000, "operating_cost": 100},
+		"bench": {"name": "Bench", "size": [1, 1], "cost": 200, "operating_cost": 0},
+	}
+	toolbar.set_building_registry(registry)
+
+	assert_true(toolbar._building_shelf is TileHoneycomb)
+	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.BUILDING_TILE_COLUMNS)
+	assert_eq(toolbar._building_shelf.get_child_count(), registry.size())
+	for button in toolbar._building_shelf.get_children():
+		assert_true(button is BuildingTileButton, "Building choices should use isometric tile buttons")
+		assert_true(button is TerrainTileButton, "Building tiles should share the Course/Hazards button base")
+		assert_eq(button.custom_minimum_size, TerrainTileButton.BUTTON_SIZE)
+		assert_eq(button.text, "", "Building names should be drawn on the tile")
+		assert_eq(button._name_label.size, TerrainTileButton.BUTTON_SIZE)
+		assert_not_null(button._building_art)
+
+	var bench: BuildingTileButton = toolbar._building_shelf.get_child(1)
+	assert_eq(bench.tool_name, "Bench")
+	assert_eq(bench.cost, 200)
+	assert_eq(bench.maintenance, 0)
+	assert_string_contains(bench.tooltip_text, "Build: $200")
+
+	watch_signals(toolbar)
+	bench.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "building_selected", ["bench"])
 
 func test_tile_previews_use_course_shader_and_neighboring_grass() -> void:
 	var corners := TerrainTileButton.tile_corners()
