@@ -396,11 +396,10 @@ func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
 	_building_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_building_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	hbox.add_child(_make_tab_group("FACILITIES", _building_shelf))
+	# No group heading or INFO blurb: the tiles speak for themselves and the
+	# rich hover tooltip carries each facility's cost and upkeep.
+	hbox.add_child(_make_tab_group("", _building_shelf))
 	_populate_building_shelf()
-
-	hbox.add_child(_make_separator())
-	hbox.add_child(_make_tip_label("Choose a facility to place it. Hover for cost and upkeep."))
 
 func set_building_registry(registry: Dictionary) -> void:
 	_building_registry = registry.duplicate(true)

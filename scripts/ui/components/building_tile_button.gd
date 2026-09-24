@@ -5,8 +5,9 @@ class_name BuildingTileButton
 ##
 ## The tile uses a natural-grass preview underneath a compact architecture
 ## thumbnail. Building name remains centred on the diamond, while price and
-## upkeep stay available through the normal rich tooltip and accessibility
-## description instead of crowding the small tile.
+## upkeep are shown by the rich TooltipManager hover popup instead of crowding
+## the small tile. The native Godot tooltip is deliberately left empty so
+## hovering shows a single popup.
 
 var building_data: Dictionary = {}
 var _building_art: BuildingTileArt = null
@@ -26,7 +27,7 @@ func configure_building(building_type: String, data: Dictionary) -> void:
 		description,
 		cost,
 		upkeep)
-	tooltip_text = _make_tooltip()
+	tooltip_text = ""
 	accessibility_description = "%s. Build $%d. Upkeep $%d per day. %s" % [
 		tool_name, cost, upkeep, description]
 
@@ -45,10 +46,3 @@ func _build_building_art() -> void:
 	# the caption last so the building drawing never obscures the name.
 	if _name_label:
 		move_child(_building_art, _name_label.get_index())
-
-func _make_tooltip() -> String:
-	var name := str(building_data.get("name", tool_name))
-	var cost := int(building_data.get("cost", 0))
-	var upkeep := int(building_data.get("operating_cost", 0))
-	var description := str(building_data.get("description", "Select this facility to place it."))
-	return "%s\nBuild: $%d\nUpkeep: $%d/day\n%s" % [name, cost, upkeep, description]

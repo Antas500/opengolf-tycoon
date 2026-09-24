@@ -182,11 +182,23 @@ func test_building_choices_use_the_course_tile_design() -> void:
 	assert_eq(bench.tool_name, "Bench")
 	assert_eq(bench.cost, 200)
 	assert_eq(bench.maintenance, 0)
-	assert_string_contains(bench.tooltip_text, "Build: $200")
+	assert_eq(bench.tooltip_text, "", "Only the rich TooltipManager popup should appear on hover")
 
 	watch_signals(toolbar)
 	bench.pressed.emit()
 	assert_signal_emitted_with_parameters(toolbar, "building_selected", ["bench"])
+
+func test_buildings_tab_has_no_heading_or_info_section() -> void:
+	var page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.BUILDINGS]
+	var texts: Array[String] = []
+	for label in page.find_children("*", "Label", true, false):
+		if label.get_parent() is TerrainTileButton:
+			continue  # Building names drawn on the tiles themselves
+		texts.append(label.text)
+	assert_false(texts.has("FACILITIES"), "Buildings tab should not show a FACILITIES heading")
+	assert_false(texts.has("INFO"), "Buildings tab should not show an INFO section")
+	assert_eq(page.find_children("*", "VSeparator", true, false).size(), 0,
+		"Buildings tab should not keep a separator for the removed INFO section")
 
 func test_tile_previews_use_course_shader_and_neighboring_grass() -> void:
 	var corners := TerrainTileButton.tile_corners()
