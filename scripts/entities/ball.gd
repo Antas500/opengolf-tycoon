@@ -198,13 +198,14 @@ func _spawn_landing_impact() -> void:
 	var carry_terrain = terrain_grid.get_tile(grid_position)
 	var impact_terrain = "default"
 	match carry_terrain:
-		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.TEE_BOX:
+		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY, TerrainTypes.Type.TEE_BOX:
 			impact_terrain = "fairway"
-		TerrainTypes.Type.GRASS, TerrainTypes.Type.ROUGH, TerrainTypes.Type.HEAVY_ROUGH:
+		TerrainTypes.Type.GRASS, TerrainTypes.Type.ROUGH, TerrainTypes.Type.HEAVY_ROUGH, \
+				TerrainTypes.Type.DEEP_ROUGH, TerrainTypes.Type.BRUSH:
 			impact_terrain = "grass"
-		TerrainTypes.Type.BUNKER:
+		TerrainTypes.Type.BUNKER, TerrainTypes.Type.POT_BUNKER, TerrainTypes.Type.WASTE_BUNKER:
 			impact_terrain = "bunker"
-		TerrainTypes.Type.WATER:
+		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 			impact_terrain = "water"
 		TerrainTypes.Type.GREEN:
 			impact_terrain = "fairway"
@@ -221,12 +222,12 @@ func _land_ball() -> void:
 	var terrain_type = terrain_grid.get_tile(grid_position)
 
 	match terrain_type:
-		TerrainTypes.Type.WATER:
+		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 			_change_state(BallState.IN_WATER)
 			ball_landed_in_water.emit(grid_position)
 		TerrainTypes.Type.OUT_OF_BOUNDS:
 			_change_state(BallState.OUT_OF_BOUNDS)
-		TerrainTypes.Type.BUNKER:
+		TerrainTypes.Type.BUNKER, TerrainTypes.Type.POT_BUNKER:
 			_change_state(BallState.AT_REST)
 			ball_landed_in_bunker.emit(grid_position)
 		_:

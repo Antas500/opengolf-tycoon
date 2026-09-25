@@ -36,25 +36,40 @@ static func _calculate_hazard_difficulty(corridor_tiles: Array, terrain_grid: Te
 	var ob_count: int = 0
 	var tree_count: int = 0
 	var bunker_difficulty: float = 0.0
+	var trouble_difficulty: float = 0.0  # Playable but punishing ground
 
 	for tile_pos in corridor_tiles:
 		var terrain_type = terrain_grid.get_tile(tile_pos)
 		match terrain_type:
-			TerrainTypes.Type.WATER:
+			TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 				water_count += 1
 			TerrainTypes.Type.BUNKER:
 				var depth = terrain_grid.get_bunker_depth(tile_pos)
 				bunker_difficulty += 0.25 if depth == 1 else 0.15
+			TerrainTypes.Type.POT_BUNKER:
+				bunker_difficulty += 0.3
 			TerrainTypes.Type.OUT_OF_BOUNDS:
 				ob_count += 1
 			TerrainTypes.Type.TREES:
 				tree_count += 1
+			TerrainTypes.Type.BRUSH:
+				trouble_difficulty += 0.08
+			TerrainTypes.Type.ROCKS:
+				# A lone boulder is already an obstacle sprite; only painted
+				# rocky ground adds hole difficulty.
+				if not terrain_grid.is_object_footprint(tile_pos):
+					trouble_difficulty += 0.08
+			TerrainTypes.Type.DEEP_ROUGH:
+				trouble_difficulty += 0.04
+			TerrainTypes.Type.WASTE_BUNKER:
+				trouble_difficulty += 0.03
 
 	var difficulty: float = 0.0
 	difficulty += water_count * 0.3
 	difficulty += bunker_difficulty
 	difficulty += ob_count * 0.2
 	difficulty += tree_count * 0.1
+	difficulty += trouble_difficulty
 	return difficulty
 
 ## Calculate difficulty from elevation changes along the hole
@@ -103,9 +118,9 @@ static func _calculate_dogleg_difficulty(hole_data: GameManager.HoleData, terrai
 			var left_pos = Vector2i(Vector2(midpoint) + perpendicular * offset)
 			var right_pos = Vector2i(Vector2(midpoint) - perpendicular * offset)
 
-			if terrain_grid.is_valid_position(left_pos) and terrain_grid.get_tile(left_pos) == TerrainTypes.Type.FAIRWAY:
+			if terrain_grid.is_valid_position(left_pos) and TerrainTypes.is_fairway(terrain_grid.get_tile(left_pos)):
 				has_left_fairway = true
-			if terrain_grid.is_valid_position(right_pos) and terrain_grid.get_tile(right_pos) == TerrainTypes.Type.FAIRWAY:
+			if terrain_grid.is_valid_position(right_pos) and TerrainTypes.is_fairway(terrain_grid.get_tile(right_pos)):
 				has_right_fairway = true
 
 		# Strong dogleg if fairway only extends to one side
@@ -200,9 +215,9 @@ static func _calculate_landing_zone_difficulty(hole_data: GameManager.HoleData, 
 				if not terrain_grid.is_valid_position(check_pos):
 					continue
 				var terrain = terrain_grid.get_tile(check_pos)
-				if terrain == TerrainTypes.Type.WATER:
+				if TerrainTypes.is_water(terrain):
 					difficulty += 0.15
-				elif terrain == TerrainTypes.Type.BUNKER:
+				elif TerrainTypes.is_bunker(terrain):
 					difficulty += 0.08
 				elif terrain == TerrainTypes.Type.OUT_OF_BOUNDS:
 					difficulty += 0.12
@@ -241,7 +256,7 @@ static func _calculate_carry_difficulty(hole_data: GameManager.HoleData, terrain
 	var segments = ForcedCarryCalculator.calculate_carries(hole_data, terrain_grid)
 	var difficulty: float = 0.0
 	for seg in segments:
-		if seg.hazard_type == TerrainTypes.Type.WATER:
+		if TerrainTypes.is_water(seg.hazard_type):
 			if seg.carry_yards > 200:
 				difficulty += 1.5
 			elif seg.carry_yards > 150:
@@ -250,7 +265,7 @@ static func _calculate_carry_difficulty(hole_data: GameManager.HoleData, terrain
 				difficulty += 0.5
 			else:
 				difficulty += 0.2
-		elif seg.hazard_type == TerrainTypes.Type.BUNKER:
+		elif TerrainTypes.is_bunker(seg.hazard_type):
 			if seg.carry_yards > 150:
 				difficulty += 0.5
 			elif seg.carry_yards > 80:

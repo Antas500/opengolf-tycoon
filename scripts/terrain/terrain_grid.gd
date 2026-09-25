@@ -22,6 +22,10 @@ var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) *
 var _vertex_stride: int = 0  # Row length of _vertex_elevation (grid_width + 1)
 var _bunker_depth_grid: Dictionary = {}  # Vector2i -> 0 (SHALLOW) or 1 (DEEP)
 var _player_placed_tiles: Dictionary = {}  # Vector2i -> true for tiles player placed (for maintenance)
+## Vector2i -> true for Rocks tiles that only carry a boulder standing on other
+## ground. The course surface draws native turf there (the boulder sprite has
+## its own base) instead of painted rocky ground. See set_object_footprint().
+var _object_footprints: Dictionary = {}
 ## Green tiles carrying a cup that is not yet part of a hole — a "Green With Hole" tile
 ## waiting to be paired with a tee box. Once a hole is opened the marker is consumed and
 ## the cup lives on as the hole's `hole_position`, so every marker here is unused.
@@ -54,6 +58,7 @@ var _batch_changes: Array = []  # Array of {pos, old_type, new_type}
 
 var _ob_markers_overlay: OBMarkersOverlay = null
 var _cup_overlay: CupOverlay = null
+var _tee_aim_overlay: TeeAimOverlay = null
 var _water_overlay: WaterOverlay = null
 var _bunker_overlay: BunkerOverlay = null
 var _grass_overlay: GrassOverlay = null
@@ -91,6 +96,7 @@ func _ready() -> void:
 		tile_map.hide()
 	_setup_ob_markers_overlay()
 	_setup_cup_overlay()
+	_setup_tee_aim_overlay()
 	# The continuous surface supplies turf, sand, water, and paths on every platform.
 	# Keep the legacy overlay classes available for older tools, but don't double draw.
 	# TreeOverlay and RockOverlay disabled — entities render their own sprites.
@@ -177,6 +183,8 @@ func regenerate_tileset() -> void:
 func _redraw_all_overlays() -> void:
 	if _cup_overlay:
 		_cup_overlay.queue_redraw()
+	if _tee_aim_overlay:
+		_tee_aim_overlay.queue_redraw()
 	if _wildlife:
 		_wildlife.queue_redraw()
 	if _water_overlay:
@@ -249,6 +257,7 @@ func _initialize_grid() -> void:
 	terrain_revision += 1
 	_ensure_vertex_storage()
 	_tee_box_tiles.clear()
+	_object_footprints.clear()
 	for x in range(grid_width):
 		for y in range(grid_height):
 			var pos = Vector2i(x, y)
@@ -461,6 +470,8 @@ func refresh_all_overlays() -> void:
 		_ob_markers_overlay._calculate_boundaries()
 	if _cup_overlay:
 		_cup_overlay.queue_redraw()
+	if _tee_aim_overlay:
+		_tee_aim_overlay.rebuild()
 	if _heightmap:
 		_heightmap.rebuild_from_grids(self)
 	if _shot_heatmap_overlay:
@@ -477,6 +488,8 @@ func set_tile(pos: Vector2i, terrain_type: int, player_placed: bool = true) -> v
 		return
 	_grid[pos] = terrain_type
 	terrain_revision += 1
+	# A new terrain type replaces whatever object footprint the tile carried.
+	_object_footprints.erase(pos)
 	# Painting over a "Green With Hole" tile with anything else removes its cup.
 	if terrain_type != TerrainTypes.Type.GREEN and _cup_tiles.has(pos):
 		remove_cup_tile(pos)
@@ -562,23 +575,25 @@ func get_brush_tiles(center: Vector2i, brush_size: int, round_shape: bool = true
 		if is_valid_position(pos): tiles.append(pos)
 	return tiles
 
-const GREEN_PRESETS = {
-	"small": [Vector2i(0, 0)],
-	"medium": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1)],
-	"large": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)],
-}
-
-func get_green_preset_tiles(center: Vector2i, preset_name: String) -> Array:
-	var offsets = GREEN_PRESETS.get(preset_name, [Vector2i(0, 0)])
-	var tiles: Array = []
-	for offset in offsets:
-		var pos = center + offset
-		if is_valid_position(pos):
-			tiles.append(pos)
-	return tiles
-
 func get_bunker_depth(pos: Vector2i) -> int:
 	return _bunker_depth_grid.get(pos, 0)
+
+## Mark a Rocks tile as the footprint of a boulder that stands on other ground.
+## Gameplay still sees Rocks, but the course surface keeps drawing the native
+## turf, so a lone boulder looks as it always has while painted Rocks ground
+## renders as stony ground. Any later set_tile() clears the mark.
+func set_object_footprint(pos: Vector2i, footprint: bool) -> void:
+	if not is_valid_position(pos) or footprint == _object_footprints.has(pos):
+		return
+	if footprint:
+		_object_footprints[pos] = true
+	else:
+		_object_footprints.erase(pos)
+	if _course_surface:
+		_course_surface.update_tile(pos)
+
+func is_object_footprint(pos: Vector2i) -> bool:
+	return _object_footprints.has(pos)
 
 func set_bunker_depth(pos: Vector2i, depth: int) -> void:
 	if not is_valid_position(pos):
@@ -691,6 +706,7 @@ func create_analysis_copy() -> TerrainGrid:
 	copy.tile_height = tile_height
 	copy._grid = _grid.duplicate()
 	copy._bunker_depth_grid = _bunker_depth_grid.duplicate()
+	copy._object_footprints = _object_footprints.duplicate()
 	_ensure_vertex_storage()
 	copy._vertex_elevation = _vertex_elevation.duplicate()
 	copy._vertex_stride = _vertex_stride
@@ -786,6 +802,12 @@ func _setup_cup_overlay() -> void:
 	_cup_overlay.name = "CupOverlay"
 	add_child(_cup_overlay)
 	_cup_overlay.initialize(self)
+
+func _setup_tee_aim_overlay() -> void:
+	_tee_aim_overlay = TeeAimOverlay.new()
+	_tee_aim_overlay.name = "TeeAimOverlay"
+	add_child(_tee_aim_overlay)
+	_tee_aim_overlay.initialize(self)
 
 func _setup_water_overlay() -> void:
 	_water_overlay = WaterOverlay.new()

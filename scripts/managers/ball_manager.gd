@@ -166,7 +166,7 @@ func animate_shot(golfer_id: int, from_grid: Vector2i, to_grid: Vector2i, distan
 	ball.visible = true
 
 	# Sand spray when hitting out of a bunker
-	if terrain_grid and terrain_grid.get_tile(from_grid) == TerrainTypes.Type.BUNKER:
+	if terrain_grid and TerrainTypes.is_sand(terrain_grid.get_tile(from_grid)):
 		var from_world = terrain_grid.grid_to_screen_center(from_grid)
 		SandSprayEffect.create_at(ball.get_parent(), from_world)
 
@@ -307,7 +307,7 @@ func _on_ball_shot_precise(golfer_id: int, from_screen: Vector2, to_screen: Vect
 	# Sand spray when hitting out of a bunker
 	if terrain_grid:
 		var from_grid = terrain_grid.screen_to_grid(from_screen)
-		if terrain_grid.get_tile(from_grid) == TerrainTypes.Type.BUNKER:
+		if TerrainTypes.is_sand(terrain_grid.get_tile(from_grid)):
 			SandSprayEffect.create_at(ball.get_parent(), from_screen)
 
 	# Calculate flight duration based on distance to carry point (not total with rollout)

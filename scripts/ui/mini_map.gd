@@ -33,6 +33,12 @@ const FALLBACK_TERRAIN_COLORS: Dictionary = {
 	11: Color(0.15, 0.35, 0.15),  # TREES
 	12: Color(0.45, 0.32, 0.22),  # FLOWER_BED
 	13: Color(0.48, 0.46, 0.42),  # ROCKS
+	14: Color(0.62, 0.72, 0.38),  # FIRM_FAIRWAY
+	15: Color(0.80, 0.70, 0.48),  # POT_BUNKER
+	16: Color(0.35, 0.62, 0.85),  # STREAM
+	17: Color(0.24, 0.40, 0.20),  # DEEP_ROUGH
+	18: Color(0.78, 0.70, 0.52),  # WASTE_BUNKER
+	19: Color(0.30, 0.38, 0.18),  # BRUSH
 }
 
 # Cached theme-aware terrain colors (rebuilt on theme change)
@@ -60,6 +66,12 @@ func _build_terrain_colors() -> void:
 		TerrainTypes.Type.TREES: theme_colors.get("trees", Color(0.15, 0.35, 0.15)),
 		TerrainTypes.Type.FLOWER_BED: theme_colors.get("flower_bed", Color(0.45, 0.32, 0.22)),
 		TerrainTypes.Type.ROCKS: theme_colors.get("rocks", Color(0.48, 0.46, 0.42)),
+		TerrainTypes.Type.FIRM_FAIRWAY: theme_colors.get("firm_fairway", Color(0.62, 0.72, 0.38)),
+		TerrainTypes.Type.POT_BUNKER: theme_colors.get("pot_bunker", Color(0.80, 0.70, 0.48)),
+		TerrainTypes.Type.STREAM: theme_colors.get("stream", Color(0.35, 0.62, 0.85)),
+		TerrainTypes.Type.DEEP_ROUGH: theme_colors.get("deep_rough", Color(0.24, 0.40, 0.20)),
+		TerrainTypes.Type.WASTE_BUNKER: theme_colors.get("waste_bunker", Color(0.78, 0.70, 0.52)),
+		TerrainTypes.Type.BRUSH: theme_colors.get("brush", Color(0.30, 0.38, 0.18)),
 	}
 
 # Land boundary colors

@@ -16,7 +16,7 @@ scripts/
 ├── entities/       # Golfer, Ball, Building, Tree, Rock, Flag
 ├── managers/       # GolferManager, BallManager, HoleManager, PlacementManager, BuildingRegistry, TournamentManager
 ├── systems/        # WindSystem, WeatherSystem, CourseRatingSystem, CourseTheme, FeedbackTriggers, GolferTier, TournamentSystem, DayNightSystem, CourseRecords, ShotAI, GolferNeeds, SeasonSystem, MilestoneSystem, TutorialSystem, DifficultyPresets, ColorblindMode
-├── terrain/        # TerrainGrid, TerrainTypes, TilesetGenerator, + 10 overlay classes
+├── terrain/        # TerrainGrid, TerrainTypes, TilesetGenerator, + overlay classes (cup, tee aim arrows, OB stakes, shot heatmap, …)
 ├── tools/          # HoleCreationTool, ElevationTool, UndoManager, GenerateTileset
 ├── ui/             # 40 UI components (MainMenu, PauseMenu, SettingsMenu, MiniMap, FinancialPanel, MilestonesPanel, HoleStatsPanel, CourseScorecardPanel, SaveLoadPanel, HotkeyPanel, etc.)
 ├── main/           # main.gd (scene controller)
@@ -26,7 +26,7 @@ scenes/
 └── entities/golfer.tscn
 data/
 ├── buildings.json      # 8 building types with upgrade tiers
-├── terrain_types.json  # 14 terrain type definitions
+├── terrain_types.json  # 20 terrain type definitions
 └── golfer_traits.json  # 5 golfer archetypes with spawn weights
 assets/tilesets/        # Terrain tileset (PNG + .tres)
 ```
@@ -77,8 +77,8 @@ Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/al
 ### Terrain
 - **TerrainGrid**: 128x128 grid (64x32 px tiles). `_grid` dict (Vector2i → terrain type int), `_elevation_grid` (Vector2i → -5..+5).
 - **GridProjection** (`terrain/grid_projection.gd`): the single grid ↔ world map. Renders the grid top-down or as 2:1 isometric diamonds and spins it through four 90° view orientations (SimGolf-style rotate). Purely affine, so `unproject()` is exact for mouse picking and both terrain shaders can invert it per fragment. The projected course always fills the same world rectangle, so camera bounds, the minimap and land boundaries are rotation-independent.
-- **Overlays** draw per-tile shapes through `OverlayGeometry` (`terrain/overlay_geometry.gd`), which projects tile outlines/centres into the overlay's local space so they render as diamonds when isometric.
-- **14 terrain types**: EMPTY, GRASS, FAIRWAY, ROUGH, HEAVY_ROUGH, GREEN, TEE_BOX, BUNKER, WATER, PATH, OUT_OF_BOUNDS, TREES, FLOWER_BED, ROCKS.
+- **Overlays** draw per-tile shapes through `OverlayGeometry` (`terrain/overlay_geometry.gd`), which projects tile outlines/centres into the overlay's local space so they render as diamonds when isometric. Each tee tile's painted aim arrow (`terrain/tee_aim_overlay.gd`) is one of them: it points at the hole's cup, curving round the corner of a dogleg ([tee-aim-arrow](docs/algorithms/tee-aim-arrow.md)).
+- **20 terrain types**: EMPTY, GRASS, FAIRWAY, ROUGH, HEAVY_ROUGH, GREEN, TEE_BOX, BUNKER, WATER, PATH, OUT_OF_BOUNDS, TREES, FLOWER_BED, ROCKS, FIRM_FAIRWAY, POT_BUNKER, STREAM, DEEP_ROUGH, WASTE_BUNKER, BRUSH. New ids are only ever appended (saves store raw ints). Gameplay code checks families — `TerrainTypes.is_water()`, `is_out_of_play()`, `is_bunker()`, `is_sand()`, `is_fairway()`, `is_rough()` — so variants behave like their parents; see `docs/algorithms/terrain-types.md`.
 - **TilesetGenerator**: Runtime procedural tileset (no external image assets required). Perlin noise, mowing stripes, sand stipple, water shimmer. Theme-aware via `set_theme_colors()` and `get_color()` methods.
 
 ### Golfer Simulation

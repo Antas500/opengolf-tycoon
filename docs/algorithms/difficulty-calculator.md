@@ -44,18 +44,26 @@ Longer holes are inherently harder because they require more shots and more thin
 Scans a 10-tile-wide corridor from tee to green and counts hazard tiles:
 
 ```
-difficulty  = water_count  * 0.3
-            + bunker_count * 0.15
+difficulty  = water_count  * 0.3        # water and stream tiles
+            + bunker_difficulty          # 0.15 / 0.25 deep / 0.30 pot bunker
             + ob_count     * 0.2
             + tree_count   * 0.1
+            + trouble_difficulty         # brush, painted rocks, deep rough, waste
 ```
 
 | Hazard | Per-Tile Weight | Rationale |
 | ------ | --------------- | --------- |
-| Water | 0.30 | Penalty stroke + re-tee |
+| Water, Stream | 0.30 | Penalty stroke + drop |
+| Pot Bunker | 0.30 | Wedge-only escape, barely advances |
+| Deep Bunker | 0.25 | See [bunker-depth.md](bunker-depth.md) |
 | Out of Bounds | 0.20 | Stroke and distance penalty |
 | Bunker | 0.15 | Difficult to escape, no penalty |
 | Trees | 0.10 | Blocked shots, limited recovery |
+| Brush, Rocks (painted) | 0.08 | Wedge-only hack-outs. A lone boulder's footprint (see `TerrainGrid.is_object_footprint()`) doesn't count |
+| Deep Rough | 0.04 | Poor lie, ball snags |
+| Waste Bunker | 0.03 | Sandy lie, no penalty |
+
+Landing-zone checks treat streams as water and pot bunkers as bunkers; dogleg detection treats firm fairway as fairway.
 
 ### 4. Elevation Difficulty
 

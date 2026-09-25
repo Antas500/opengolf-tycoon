@@ -4,9 +4,11 @@
 
 ## Plain English
 
-Bunkers have two depths: SHALLOW (default) and DEEP. Deep bunkers (pot bunkers) are harder to escape — shots from deep bunkers are less accurate and travel shorter distances. They also contribute more to hole difficulty.
+Bunkers have two depths: SHALLOW (default) and DEEP. Deep bunkers are harder to escape — shots from deep bunkers are less accurate and travel shorter distances. They also contribute more to hole difficulty.
 
 Players toggle depth by Shift+clicking on bunker tiles. Links and Heathland themes default to DEEP when placing new bunkers.
+
+The **Pot Bunker** course tile (`TerrainTypes.Type.POT_BUNKER`) is a separate terrain type rather than a depth: a small pit with a revetted wall that is harsher than any Bunker tile (wedge 0.35 / other 0.15, distance 0.45, +0.30 difficulty per tile) and that ShotAI only escapes with a wedge. It has no depth setting. The **Waste Bunker** tile is sandy ground that is *not* a hazard (see [shot-accuracy.md](shot-accuracy.md)).
 
 ---
 
@@ -45,6 +47,7 @@ DEEP:    0.60 (40% distance loss — ball pops out shorter)
 Per bunker tile in corridor:
   SHALLOW: +0.15 difficulty
   DEEP:    +0.25 difficulty
+  POT BUNKER tile: +0.30 difficulty
 ```
 
 ### 5. Visual Differentiation

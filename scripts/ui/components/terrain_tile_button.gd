@@ -17,7 +17,10 @@ const TILE_SIZE := Vector2(120, 60)
 const BUTTON_SIZE := TILE_SIZE      # No padding: rows interlock on the grid.
 const NAME_FONT_SIZE := UIConstants.FONT_SIZE_MD
 const NAME_FONT_SIZE_MIN := 10  # Longest names shrink instead of spilling out.
+const GREEN_HOLE_FLAG_TEXTURE := preload("res://assets/sprites/flag/flag.png")
 static var _white_texture: ImageTexture
+## Scattered terrain previewed as part of a patch rather than a lone tile.
+const FIELD_PREVIEWS: Array[int] = [TerrainTypes.Type.ROCKS, TerrainTypes.Type.BRUSH]
 
 static func tile_corners() -> PackedVector2Array:
 	var center := BUTTON_SIZE * 0.5
@@ -31,6 +34,8 @@ static func tile_corners() -> PackedVector2Array:
 var _surface_material: ShaderMaterial
 var _outline: Line2D
 var _name_label: Label
+var _cup_flag: Sprite2D
+var _green_places_cup := true
 var _hovered := false
 
 func _ready() -> void:
@@ -126,8 +131,62 @@ func _build_tile() -> void:
 	_name_label.custom_minimum_size = BUTTON_SIZE
 	_name_label.size = BUTTON_SIZE
 
+	# The Green tile button previews the next kind of green the tool will paint.
+	# A flag is shown only when that next tile will carry a cup.
+	if tool_type is int and tool_type == TerrainTypes.Type.GREEN:
+		_cup_flag = Sprite2D.new()
+		_cup_flag.name = "GreenWithHoleFlag"
+		_cup_flag.texture = GREEN_HOLE_FLAG_TEXTURE
+		_cup_flag.position = Vector2(BUTTON_SIZE.x * 0.72, BUTTON_SIZE.y * 0.43)
+		_cup_flag.scale = Vector2(0.35, 0.35)
+		_cup_flag.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_cup_flag.visible = _green_places_cup
+		add_child(_cup_flag)
+	elif tool_type is int and tool_type == TerrainTypes.Type.FLOWER_BED:
+		var flowers := _make_flower_bed_art()
+		add_child(flowers)
+		if _name_label:
+			move_child(flowers, _name_label.get_index())
+
 	_refresh_palette()
 	_update_visual_state()
+
+func _make_flower_bed_art() -> Node2D:
+	var art := Node2D.new()
+	art.name = "FlowerBedPreviewArt"
+	var flower_data: Array = [
+		[Vector2(36, 26), Color("f28b91"), 3.5],
+		[Vector2(52, 19), Color("ffca68"), 3.0],
+		[Vector2(68, 22), Color("f4b2c9"), 3.2],
+		[Vector2(84, 28), Color("bdb0de"), 3.2],
+		[Vector2(46, 36), Color("eddfad"), 3.0],
+		[Vector2(62, 38), Color("f18675"), 3.5],
+		[Vector2(76, 34), Color("f28b91"), 3.0],
+	]
+	for fd in flower_data:
+		var center: Vector2 = fd[0]
+		var col: Color = fd[1]
+		var sz: float = fd[2]
+		for i in 5:
+			var a: float = i * TAU / 5.0
+			var p := Polygon2D.new()
+			p.color = col
+			var petal_center: Vector2 = center + Vector2(cos(a), sin(a)) * sz * 0.5
+			var pts := PackedVector2Array()
+			for j in 6:
+				var ja: float = j * TAU / 6.0
+				pts.append(petal_center + Vector2(cos(ja), sin(ja)) * sz * 0.45)
+			p.polygon = pts
+			art.add_child(p)
+		var c_poly := Polygon2D.new()
+		c_poly.color = Color(0.95, 0.85, 0.3)
+		var c_pts := PackedVector2Array()
+		for j in 6:
+			var ja: float = j * TAU / 6.0
+			c_pts.append(center + Vector2(cos(ja), sin(ja)) * sz * 0.3)
+		c_poly.polygon = c_pts
+		art.add_child(c_poly)
+	return art
 
 ## Shrink oversized names so they stay inside the diamond.
 func _fit_name_label() -> void:
@@ -152,6 +211,15 @@ func _make_surface_material() -> ShaderMaterial:
 	# natural-grass preview. Avoid coercing their string id to a terrain enum.
 	var preview_terrain: int = int(tool_type) if tool_type is int else TerrainTypes.Type.GRASS
 	terrain_data.set_pixel(1, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
+	# A stream is drawn as a channel between neighbouring stream tiles, so its
+	# preview runs one through the tile instead of showing a lone spring pool.
+	if preview_terrain == TerrainTypes.Type.STREAM:
+		terrain_data.set_pixel(0, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
+		terrain_data.set_pixel(2, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
+	# Stones and shrubs keep clear of a lone tile's edges, so these previews
+	# show a piece of a larger patch instead.
+	elif preview_terrain in FIELD_PREVIEWS:
+		terrain_data.fill(Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
 	var elevation := Image.create(4, 4, false, Image.FORMAT_R8)
 	elevation.fill(Color(0.5, 0, 0))
 
@@ -191,12 +259,40 @@ func _on_mouse_exited() -> void:
 	super._on_mouse_exited()
 
 func set_selected(selected: bool) -> void:
+	# Disabled tiles (e.g. Tee while waiting) can never be selected.
+	if disabled and selected:
+		super.set_selected(false)
+		_update_visual_state()
+		return
 	super.set_selected(selected)
 	_update_visual_state()
+
+## Show the pin flag when the next Green placement will also cut a cup.
+func set_green_places_cup(places_cup: bool) -> void:
+	if not tool_type is int or tool_type != TerrainTypes.Type.GREEN:
+		return
+	_green_places_cup = places_cup
+	if is_instance_valid(_cup_flag):
+		_cup_flag.visible = places_cup
+
+func shows_green_with_hole_flag() -> bool:
+	return tool_type is int and tool_type == TerrainTypes.Type.GREEN and _green_places_cup
 
 func _update_visual_state() -> void:
 	if _outline == null:
 		return
+	# Greyed out when disabled (unused tee waiting, etc.)
+	if disabled:
+		_outline.default_color = Color(0.35, 0.35, 0.35, 0.6)
+		_outline.width = 1.0
+		_name_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 0.75))
+		_name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.09, 0.07, 0.45))
+		modulate = Color(0.5, 0.5, 0.5, 0.65)
+		return
+
+	# Restore full opacity when enabled.
+	modulate = Color(1, 1, 1, 1)
+
 	if is_selected():
 		_outline.default_color = UIConstants.COLOR_GOLD
 		_outline.width = 2.5

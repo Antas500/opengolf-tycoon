@@ -1,11 +1,16 @@
 extends ColorRect
 class_name CourseSurface
 ## Continuous, world-anchored terrain. Two textures feed the surface shader:
-##   R = terrain ID / 255, G = bunker depth, B = (tile elevation + 5) / 10, A reserved.
+##   R = terrain ID / 255, G = bunker depth, B = (tile elevation + 5) / 10,
+##   A = 0 on an object footprint (a boulder standing on other ground, which
+##       keeps the native turf look), otherwise 1.
 
+## Palette color key for each terrain ID, indexed by TerrainTypes.Type. The
+## shader reads the palette width, so appending a type only needs a key here.
 const PALETTE_KEYS: Array[String] = [
 	"empty", "grass", "fairway_light", "rough", "heavy_rough", "green_light",
-	"tee_box_light", "bunker", "water", "path", "oob", "grass", "flower_bed", "grass",
+	"tee_box_light", "bunker", "water", "path", "oob", "grass", "flower_bed", "rocks",
+	"firm_fairway", "pot_bunker", "stream", "deep_rough", "waste_bunker", "brush",
 ]
 var _grid: TerrainGrid
 var _data: Image
@@ -106,7 +111,8 @@ func flush_elevation() -> void:
 
 func _write_tile(pos: Vector2i) -> void:
 	_data.set_pixel(pos.x, pos.y, Color(float(_grid.get_tile(pos)) / 255.0,
-		float(_grid.get_bunker_depth(pos)), float(_grid.get_elevation(pos) + 5) / 10.0, 1.0))
+		float(_grid.get_bunker_depth(pos)), float(_grid.get_elevation(pos) + 5) / 10.0,
+		0.0 if _grid.is_object_footprint(pos) else 1.0))
 
 func _on_tile_changed(pos: Vector2i, _old: int, _new: int) -> void:
 	update_tile(pos)

@@ -3,8 +3,8 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: tools column (open hole, bulldozer, brush) before the course & hazard tiles honeycomb
-##  - Improvements:   objects (trees, rocks, paths, flowers) and decorations
+##  - Course Terrain: tools column (open hole, bulldozer, brush) before one course, hazard & landscape tiles honeycomb
+##  - Improvements:   paths and decorations
 ##  - Buildings:      amenity buildings catalogue
 ##  - Elevation:      sculpting controls and brush size
 ##  - Holes:          course holes list (rows are filled by main.gd)
@@ -19,8 +19,8 @@ class_name TerrainToolbar
 signal course_review_pressed
 signal tool_selected(tool_type: int)
 signal open_hole_pressed
-signal tree_placement_pressed
-signal rock_placement_pressed
+signal tree_selected(tree_type: String)
+signal rock_selected(rock_size: String)
 signal building_placement_pressed
 signal building_selected(building_type: String)
 signal decoration_placement_pressed
@@ -30,7 +30,6 @@ signal lower_elevation_pressed
 signal bulldozer_pressed
 signal brush_size_changed(new_size: int)
 signal brush_shape_changed(round_shape: bool)
-signal green_preset_selected(preset_name: String)
 signal play_course_pressed
 signal tournaments_pressed
 signal land_pressed
@@ -67,19 +66,29 @@ const TAB_TOOLTIPS := {
 }
 
 const TOOL_TAB_MAP := {
-	TerrainTypes.Type.FAIRWAY: Tab.TERRAIN,
-	TerrainTypes.Type.ROUGH: Tab.TERRAIN,
-	TerrainTypes.Type.GREEN: Tab.TERRAIN,
 	TerrainTypes.Type.TEE_BOX: Tab.TERRAIN,
+	TerrainTypes.Type.GREEN: Tab.TERRAIN,
 	TerrainTypes.Type.BUNKER: Tab.TERRAIN,
+	TerrainTypes.Type.ROUGH: Tab.TERRAIN,
+	TerrainTypes.Type.POT_BUNKER: Tab.TERRAIN,
+	TerrainTypes.Type.STREAM: Tab.TERRAIN,
 	TerrainTypes.Type.WATER: Tab.TERRAIN,
+	TerrainTypes.Type.FAIRWAY: Tab.TERRAIN,
+	TerrainTypes.Type.FIRM_FAIRWAY: Tab.TERRAIN,
+	TerrainTypes.Type.DEEP_ROUGH: Tab.TERRAIN,
+	TerrainTypes.Type.WASTE_BUNKER: Tab.TERRAIN,
+	TerrainTypes.Type.BRUSH: Tab.TERRAIN,
+	TerrainTypes.Type.ROCKS: Tab.TERRAIN,
 	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
 	"open_hole": Tab.TERRAIN,
 	"bulldozer": Tab.TERRAIN,
-	"tree": Tab.IMPROVEMENTS,
-	"rock": Tab.IMPROVEMENTS,
+	"tree": Tab.TERRAIN,
+	"rock": Tab.TERRAIN,
+	"boulder_small": Tab.TERRAIN,
+	"boulder_medium": Tab.TERRAIN,
+	"boulder_large": Tab.TERRAIN,
 	TerrainTypes.Type.PATH: Tab.IMPROVEMENTS,
-	TerrainTypes.Type.FLOWER_BED: Tab.IMPROVEMENTS,
+	TerrainTypes.Type.FLOWER_BED: Tab.TERRAIN,
 	"decoration": Tab.IMPROVEMENTS,
 	"building": Tab.BUILDINGS,
 	"mound": Tab.ELEVATION,
@@ -95,8 +104,18 @@ const TOOL_TAB_MAP := {
 	"scorecard": Tab.CLUB,
 }
 
+## Shift + number keys pick the extra course tiles: the harsher variants of
+## Rough (2), Bunker (5) and Water (6), then Rocks (7) and Brush (8).
+const SHIFT_TERRAIN_HOTKEYS := {
+	KEY_2: TerrainTypes.Type.DEEP_ROUGH,
+	KEY_5: TerrainTypes.Type.POT_BUNKER,
+	KEY_6: TerrainTypes.Type.STREAM,
+	KEY_7: TerrainTypes.Type.ROCKS,
+	KEY_8: TerrainTypes.Type.BRUSH,
+}
+
 const TOOL_ROW_HEIGHT := 30
-const COURSE_TILE_COLUMNS := 4  # Surfaces fill row 1, hazards row 2
+const COURSE_TILE_COLUMNS := 7  # Top row runs tee -> water, bottom row fairway -> out of bounds
 const TILE_ROWS := 2  # Course and building tiles always sit in two interlocking rows
 ## Vertical rhythm of the tile rows: two rows of TerrainTileButton.BUTTON_SIZE
 ## tiles span 1.5 tiles, plus the gap where the lower row tucks into the
@@ -125,9 +144,11 @@ var _brush_labels: Array[Label] = []
 var _brush_buttons: Array[Button] = []
 var _brush_shape_buttons: Array[OptionButton] = []
 var _open_hole_buttons: Array[ToolButton] = []
-var _green_preset_group: VBoxContainer = null
-var _green_preset_buttons: Dictionary = {}  # preset_name -> Button
-var _active_green_preset: String = ""
+var _green_tile_button: TerrainTileButton = null
+var _tee_tile_button: TerrainTileButton = null
+var _green_places_cup := true
+var _tee_box_can_place: bool = true
+var _tee_box_blocker: String = ""
 var _active_golfers_box: HBoxContainer = null
 var _recent_rounds_box: HBoxContainer = null
 var _recent_rounds: Array[Dictionary] = []
@@ -136,12 +157,20 @@ var _player_points_label: Label = null
 var _feed_button: Button = null
 var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
+var _course_tiles: TileHoneycomb = null
+var _landscape_buttons: Array[Node] = []
+var _selected_string_tool: String = ""
 var _feed_unread: int = 0
 var _refresh_timer: Timer = null
 var _staff_panel: StaffPanel = null
 
 func _ready() -> void:
 	_build_ui()
+	EventBus.theme_changed.connect(_on_theme_changed)
+
+func _exit_tree() -> void:
+	if EventBus.theme_changed.is_connected(_on_theme_changed):
+		EventBus.theme_changed.disconnect(_on_theme_changed)
 
 func _build_ui() -> void:
 	# Panel style — docked flush into the bottom bar corner
@@ -302,10 +331,13 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 
 	hbox.add_child(_make_separator())
 
-	# Course surfaces and hazards share one honeycomb: row 1 = playing surfaces,
-	# row 2 = hazards, shifted half a tile right so each hazard diamond drops
-	# into a notch between the surfaces above it.
+	# The course tiles share one honeycomb of two rows, the bottom row shifted
+	# half a tile right so each diamond drops into a notch between the two tiles
+	# above it. Top row: Tee Box, Green, Bunker, Rough, Pot Bunker, Stream,
+	# Water. Bottom row: Fairway, Firm Fairway, Deep Rough, Waste Bunker,
+	# Brush, Rocks, Out of Bounds.
 	var tiles_grid = TileHoneycomb.new()
+	_course_tiles = tiles_grid
 	tiles_grid.name = "CourseTilesGrid"
 	tiles_grid.columns = COURSE_TILE_COLUMNS
 	tiles_grid.tile_size = TerrainTileButton.BUTTON_SIZE
@@ -313,19 +345,27 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	tiles_grid.v_separation = TILE_V_SEPARATION
 	tiles_grid.v_padding = TILE_V_PADDING
 	tiles_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
-	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
-	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Putting surface. With no cup waiting it lays one Green With Hole tile (1x1); after that it paints green with the brush", "tile_preview": true})
+	# Top row: the tee and the green first, then the hazards and trouble.
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.TEE_BOX, "name": "Tee Box", "hotkey": "4", "desc": "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.GREEN, "name": "Green", "hotkey": "3", "desc": "Next green placement is a Green With Hole (one tile with a cup). The flag on this tile shows when it will place a cup.", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.BUNKER, "name": "Bunker", "hotkey": "5", "desc": "Sand trap hazard", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROUGH, "name": "Rough", "hotkey": "2", "desc": "Longer grass bordering fairways", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.POT_BUNKER, "name": "Pot Bunker", "hotkey": "Shift+5", "desc": "Small, deep bunker with a steep stacked-turf face. Wedge only, and the ball barely advances", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.STREAM, "name": "Stream", "hotkey": "Shift+6", "desc": "Running water hazard with a one-stroke penalty. Paint it in lines; golfers can still walk across", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.WATER, "name": "Water", "hotkey": "6", "desc": "Water hazard with penalty", "tile_preview": true})
+	# Bottom row: playing surfaces and natural ground, each variant beside its parent.
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FAIRWAY, "name": "Fairway", "hotkey": "1", "desc": "Mowed playing surface for approach shots", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.FIRM_FAIRWAY, "name": "Firm Fairway", "hotkey": "9", "desc": "Fast-running links turf: a tight lie, and balls bound on and roll about 60% farther", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.DEEP_ROUGH, "name": "Deep Rough", "hotkey": "Shift+2", "desc": "Knee-high grass that grabs rolling balls. Shots from it lose accuracy and 40% of their distance", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.WASTE_BUNKER, "name": "Waste Bunker", "hotkey": "0", "desc": "Natural sandy scrubland. Not a hazard: plays like sandy rough and needs no upkeep", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.BRUSH, "name": "Brush", "hotkey": "Shift+8", "desc": "Dense scrub that swallows the ball. Only a wedge hacks it out", "tile_preview": true})
+	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.ROCKS, "name": "Rocks", "hotkey": "Shift+7", "desc": "Stony ground: the worst lie on the course, wedge only", "tile_preview": true})
 	_add_tool_button(tiles_grid, {"type": TerrainTypes.Type.OUT_OF_BOUNDS, "name": "Out of Bounds", "hotkey": "7", "desc": "Boundary area with stroke penalty", "tile_preview": true})
 	# The grid carries its own breathing room above and below the rows, so it
 	# keeps that spacing instead of stretching to fill the whole page height.
 	hbox.add_child(_make_tab_group("", tiles_grid, true))
 
-	hbox.add_child(_make_separator())
-	hbox.add_child(_make_green_presets_group())
+	_populate_landscape_tiles()
 
 ## Open Hole, Bulldozer and the brush controls stacked vertically. This column
 ## opens the Course Terrain tab so the tools sit before the tile honeycomb.
@@ -343,7 +383,7 @@ func _make_terrain_tools_column() -> VBoxContainer:
 	_open_hole_buttons.append(open_hole_btn)
 	_make_column_button_compact(open_hole_btn, COLUMN_BUTTON_HEIGHT)
 
-	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, rocks, flowers, decorations"})
+	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, boulders, rocky ground, brush, flowers, decorations"})
 	_make_column_button_compact(bulldozer_btn, COLUMN_BUTTON_HEIGHT)
 
 	column.add_child(_make_small_group_label("BRUSH"))
@@ -375,14 +415,11 @@ func _make_column_button_compact(btn: ToolButton, height: int) -> void:
 		)
 
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
-	var obj_box = HBoxContainer.new()
-	obj_box.add_theme_constant_override("separation", 4)
-	obj_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(obj_box, {"type": "tree", "name": "Trees", "icon": "[^]", "hotkey": "T", "desc": "Adds beauty and obstacles"})
-	_add_tool_button(obj_box, {"type": "rock", "name": "Rocks", "icon": "[*]", "hotkey": "R", "desc": "Decorative rock formations"})
-	_add_tool_button(obj_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"})
-	_add_tool_button(obj_box, {"type": TerrainTypes.Type.FLOWER_BED, "name": "Flower Bed", "icon": "[f]", "hotkey": "F", "desc": "Colorful landscaping"})
-	hbox.add_child(_make_tab_group("OBJECTS", obj_box))
+	var path_box = HBoxContainer.new()
+	path_box.add_theme_constant_override("separation", 4)
+	path_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(path_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"})
+	hbox.add_child(_make_tab_group("PATHS", path_box))
 
 	hbox.add_child(_make_separator())
 
@@ -394,7 +431,83 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 
 	hbox.add_child(_make_separator())
 
-	hbox.add_child(_make_tip_label("Decorations, trees & flower beds raise course aesthetics and golfer mood."))
+	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play."))
+
+func _on_theme_changed(_theme: int) -> void:
+	_populate_landscape_tiles()
+
+func _populate_landscape_tiles() -> void:
+	if not is_instance_valid(_course_tiles):
+		return
+	# Detach old landscape tiles immediately so repeated theme changes cannot
+	# leave duplicate tiles in the layout or stale entries in the tool lookup.
+	for key in _tool_buttons.keys():
+		if _tool_buttons[key] in _landscape_buttons:
+			_tool_buttons.erase(key)
+	for child in _landscape_buttons:
+		_course_tiles.remove_child(child)
+		child.queue_free()
+	_landscape_buttons.clear()
+
+	var theme_id: int = CourseTheme.Type.PARKLAND
+	if GameManager:
+		theme_id = GameManager.current_theme
+	var theme_trees: Array = CourseTheme.get_tree_types(theme_id)
+	var total_tiles: int = 1 + 3 + theme_trees.size()
+	_course_tiles.columns = COURSE_TILE_COLUMNS + ceili(float(total_tiles) / TILE_ROWS)
+
+	# 1. Flower Bed terrain tile
+	var fb_btn := _add_tool_button(_course_tiles, {
+		"type": TerrainTypes.Type.FLOWER_BED,
+		"name": "Flower Bed",
+		"hotkey": "Shift+F",
+		"desc": "Colorful landscaping",
+		"tile_preview": true
+	})
+	_tool_buttons[TerrainTypes.Type.FLOWER_BED] = fb_btn
+
+	# 2. Boulder tiles
+	var boulder_configs = [
+		{"size": "small", "name": "Small Boulder", "tool_id": "boulder_small"},
+		{"size": "medium", "name": "Boulders", "tool_id": "rock"},
+		{"size": "large", "name": "Large Boulder", "tool_id": "boulder_large"}
+	]
+	for b_cfg in boulder_configs:
+		var r_data: Dictionary = Rock.ROCK_PROPERTIES.get(b_cfg["size"], {}).duplicate(true)
+		r_data["name"] = b_cfg["name"]
+		var b_btn := BoulderTileButton.new()
+		b_btn.configure_boulder(b_cfg["size"], r_data)
+		b_btn.tool_pressed.connect(_on_tool_button_pressed)
+		_course_tiles.add_child(b_btn)
+		b_btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
+		b_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var b_tool_id: String = str(b_cfg["tool_id"])
+		_tool_buttons[b_tool_id] = b_btn
+		if b_cfg["size"] == "medium":
+			_tool_buttons["boulder_medium"] = b_btn
+
+	# 3. Theme Trees
+	var first_tree_btn: TreeTileButton = null
+	for tree_type in theme_trees:
+		var t_data: Dictionary = TreeEntity.TREE_PROPERTIES.get(tree_type, {}).duplicate(true)
+		var t_btn := TreeTileButton.new()
+		t_btn.configure_tree(str(tree_type), t_data)
+		t_btn.tool_pressed.connect(_on_tool_button_pressed)
+		_course_tiles.add_child(t_btn)
+		t_btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
+		t_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var tool_id: String = "tree_" + str(tree_type)
+		_tool_buttons[tool_id] = t_btn
+		if first_tree_btn == null:
+			first_tree_btn = t_btn
+			_tool_buttons["tree"] = t_btn
+
+	# Extend both existing course rows, rather than starting another honeycomb.
+	# Keeping the first seven tiles in each row preserves the course layout.
+	_landscape_buttons.assign(_course_tiles.get_children().slice(COURSE_TILE_COLUMNS * TILE_ROWS))
+	for i in _course_tiles.columns - COURSE_TILE_COLUMNS:
+		_course_tiles.move_child(_landscape_buttons[i], COURSE_TILE_COLUMNS + i)
+	_update_selection_highlight()
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	# Facilities use the same interlocking isometric buttons as Course & Hazards,
@@ -677,6 +790,11 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		_feed_button = btn
 	elif not (tool_type is String and _is_menu_action(tool_type)):
 		_tool_buttons[tool_type] = btn
+		if tool_type is int:
+			if tool_type == TerrainTypes.Type.GREEN:
+				_green_tile_button = btn as TerrainTileButton
+			elif tool_type == TerrainTypes.Type.TEE_BOX:
+				_tee_tile_button = btn as TerrainTileButton
 
 	return btn
 
@@ -767,36 +885,6 @@ func _make_review_group() -> VBoxContainer:
 	row.add_child(_make_review_button())
 	return _make_tab_group("REVIEW", row)
 
-func _make_green_presets_group() -> VBoxContainer:
-	_green_preset_group = VBoxContainer.new()
-	_green_preset_group.add_theme_constant_override("separation", 2)
-	_green_preset_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_green_preset_group.visible = false
-
-	var lbl = Label.new()
-	lbl.text = "PRESET"
-	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-	_green_preset_group.add_child(lbl)
-
-	var preset_row = HBoxContainer.new()
-	preset_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	preset_row.add_theme_constant_override("separation", 3)
-	preset_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	for preset_name in ["small", "medium", "large"]:
-		var preset_btn = Button.new()
-		preset_btn.text = preset_name.substr(0, 1).to_upper()
-		preset_btn.tooltip_text = "%s green (%d tiles)" % [preset_name.capitalize(), TerrainGrid.GREEN_PRESETS[preset_name].size()]
-		preset_btn.custom_minimum_size = Vector2(24, 26)
-		preset_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-		preset_btn.pressed.connect(_on_green_preset_pressed.bind(preset_name))
-		preset_row.add_child(preset_btn)
-		_green_preset_buttons[preset_name] = preset_btn
-
-	_green_preset_group.add_child(preset_row)
-	return _green_preset_group
-
 func _build_refresh_timer() -> void:
 	_refresh_timer = Timer.new()
 	_refresh_timer.wait_time = 1.0
@@ -843,6 +931,8 @@ func select_tab(tab_index: int) -> void:
 		_show_page(tab_index)
 
 func _tab_index_for_tool(tool_type) -> int:
+	if tool_type is String and (tool_type.begins_with("tree_") or tool_type.begins_with("boulder_")):
+		return Tab.TERRAIN
 	return TOOL_TAB_MAP.get(tool_type, -1)
 
 func _reveal_tab_for_tool(tool_type) -> void:
@@ -998,55 +1088,87 @@ func set_feed_unread(count: int) -> void:
 # =============================================================================
 
 func _on_tool_button_pressed(tool_type) -> void:
+	# Tee Box is unselectable while an unused tee waits on the course.
+	if tool_type is int and tool_type == TerrainTypes.Type.TEE_BOX and not _tee_box_can_place:
+		if _current_tool == TerrainTypes.Type.TEE_BOX:
+			clear_selection()
+		return
+
 	_reveal_tab_for_tool(tool_type)
 
 	if tool_type is int:
 		_current_tool = tool_type
+		_selected_string_tool = ""
 		_update_selection_highlight()
-		_update_green_preset_visibility()
 		tool_selected.emit(tool_type)
 	else:
-		match tool_type:
-			"tree":
-				tree_placement_pressed.emit()
-			"rock":
-				rock_placement_pressed.emit()
-			"building":
-				building_placement_pressed.emit()
-			"decoration":
-				decoration_placement_pressed.emit()
-			"open_hole":
-				open_hole_pressed.emit()
-			"mound":
-				sculpt_terrain_pressed.emit(true)
-			"hollow":
-				sculpt_terrain_pressed.emit(false)
-			"raise":
-				raise_elevation_pressed.emit()
-			"lower":
-				lower_elevation_pressed.emit()
-			"bulldozer":
-				bulldozer_pressed.emit()
-			"play_course":
-				play_course_pressed.emit()
-			"tournaments":
-				tournaments_pressed.emit()
-			"land":
-				land_pressed.emit()
-			"marketing":
-				marketing_pressed.emit()
-			"milestones":
-				milestones_pressed.emit()
-			"feed":
-				feed_pressed.emit()
-			"scorecard":
-				scorecard_pressed.emit()
+		var s_tool := str(tool_type)
+		if s_tool.begins_with("tree_"):
+			var tree_type := s_tool.substr(5)
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			tree_selected.emit(tree_type)
+		elif s_tool == "tree":
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else ["oak"]
+			var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
+			tree_selected.emit(first_tree)
+		elif s_tool.begins_with("boulder_"):
+			var size := s_tool.substr(8)
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			rock_selected.emit(size)
+		elif s_tool == "rock":
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			rock_selected.emit("medium")
+		else:
+			match tool_type:
+				"building":
+					building_placement_pressed.emit()
+				"decoration":
+					decoration_placement_pressed.emit()
+				"open_hole":
+					open_hole_pressed.emit()
+				"mound":
+					sculpt_terrain_pressed.emit(true)
+				"hollow":
+					sculpt_terrain_pressed.emit(false)
+				"raise":
+					raise_elevation_pressed.emit()
+				"lower":
+					lower_elevation_pressed.emit()
+				"bulldozer":
+					bulldozer_pressed.emit()
+				"play_course":
+					play_course_pressed.emit()
+				"tournaments":
+					tournaments_pressed.emit()
+				"land":
+					land_pressed.emit()
+				"marketing":
+					marketing_pressed.emit()
+				"milestones":
+					milestones_pressed.emit()
+				"feed":
+					feed_pressed.emit()
+				"scorecard":
+					scorecard_pressed.emit()
 
 func _update_selection_highlight() -> void:
 	for tool_type in _tool_buttons.keys():
 		var btn = _tool_buttons[tool_type]
 		if is_instance_valid(btn) and btn is ToolButton:
-			var is_match = (typeof(tool_type) == typeof(_current_tool) and tool_type == _current_tool)
+			var is_match = false
+			if typeof(tool_type) == typeof(_current_tool) and tool_type == _current_tool:
+				is_match = true
+			elif not _selected_string_tool.is_empty() and str(tool_type) == _selected_string_tool:
+				is_match = true
 			btn.set_selected(is_match)
 
 func _input(event: InputEvent) -> void:
@@ -1069,6 +1191,11 @@ func _input(event: InputEvent) -> void:
 				KEY_1:  # Shift+1 = !
 					select_tab(Tab.TERRAIN)
 					_on_tool_button_pressed(TerrainTypes.Type.BUNKER)
+					get_viewport().set_input_as_handled()
+					return
+				# Deep Rough, Pot Bunker, Stream, Rocks, Brush
+				KEY_2, KEY_5, KEY_6, KEY_7, KEY_8:
+					_on_tool_button_pressed(SHIFT_TERRAIN_HOTKEYS[event.keycode])
 					get_viewport().set_input_as_handled()
 					return
 				KEY_EQUAL:  # Shift+= = +
@@ -1110,12 +1237,22 @@ func _input(event: InputEvent) -> void:
 				_on_tool_button_pressed(TerrainTypes.Type.OUT_OF_BOUNDS)
 			KEY_8:
 				_on_tool_button_pressed(TerrainTypes.Type.PATH)
+			KEY_9:
+				_on_tool_button_pressed(TerrainTypes.Type.FIRM_FAIRWAY)
+			KEY_0:
+				_on_tool_button_pressed(TerrainTypes.Type.WASTE_BUNKER)
 			KEY_T:
-				_on_tool_button_pressed("tree")
+				select_tab(Tab.TERRAIN)
+				var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else ["oak"]
+				var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
+				_on_tool_button_pressed("tree_" + first_tree)
 			KEY_R:
+				select_tab(Tab.TERRAIN)
 				_on_tool_button_pressed("rock")
 			KEY_F:
-				if event.shift_pressed: _on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
+				if event.shift_pressed:
+					select_tab(Tab.TERRAIN)
+					_on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
 			KEY_B:
 				_on_tool_button_pressed("building")
 			KEY_O:
@@ -1133,20 +1270,24 @@ func _input(event: InputEvent) -> void:
 # =============================================================================
 
 func set_current_tool(tool_type: int) -> void:
+	# Prevent selecting Tee when an unused tee waits.
+	if tool_type == TerrainTypes.Type.TEE_BOX and not _tee_box_can_place:
+		clear_selection()
+		return
 	_current_tool = tool_type
+	_selected_string_tool = ""
 	_update_selection_highlight()
-	_update_green_preset_visibility()
 
 func get_current_tool() -> int:
 	return _current_tool
 
 func clear_selection() -> void:
 	_current_tool = -1
+	_selected_string_tool = ""
 	_update_selection_highlight()
-	_update_green_preset_visibility()
 
 func has_selection() -> bool:
-	return _current_tool >= 0 and _current_tool in _tool_buttons
+	return (_current_tool >= 0 and _current_tool in _tool_buttons) or (not _selected_string_tool.is_empty() and _selected_string_tool in _tool_buttons)
 
 func get_brush_size() -> int:
 	return _brush_size
@@ -1181,7 +1322,7 @@ func _update_brush_label() -> void:
 			label.text = "%dx%d" % [shown, shown]
 
 ## The brush size the selected tool actually paints with. Tee boxes, and a green
-## that is about to become a green with a hole, are capped at a single tile.
+## that is about to become a Green With Hole, are capped at a single tile.
 func effective_brush_size() -> int:
 	if _brush_limit != HoleLayout.UNLIMITED_BRUSH:
 		return mini(_brush_size, _brush_limit)
@@ -1202,46 +1343,31 @@ func _apply_brush_limit() -> void:
 	for shape in _brush_shape_buttons:
 		if is_instance_valid(shape):
 			shape.disabled = locked
-	if _green_preset_group and is_instance_valid(_green_preset_group):
-		_green_preset_group.visible = _green_presets_allowed()
 	_update_brush_label()
-
-func _green_presets_allowed() -> bool:
-	# Presets shape a green without a hole; a green with a hole is a single tile.
-	return _current_tool == TerrainTypes.Type.GREEN and _brush_limit != 1
-
-func _update_green_preset_visibility() -> void:
-	if _green_preset_group:
-		_green_preset_group.visible = _green_presets_allowed()
-		if _current_tool != TerrainTypes.Type.GREEN:
-			_active_green_preset = ""
-			_update_green_preset_highlight()
-
-func _on_green_preset_pressed(preset_name: String) -> void:
-	if _active_green_preset == preset_name:
-		_active_green_preset = ""
-	else:
-		_active_green_preset = preset_name
-	_update_green_preset_highlight()
-	green_preset_selected.emit(_active_green_preset)
-
-func _update_green_preset_highlight() -> void:
-	for pname in _green_preset_buttons:
-		var btn: Button = _green_preset_buttons[pname]
-		if is_instance_valid(btn):
-			if pname == _active_green_preset:
-				btn.add_theme_color_override("font_color", UIConstants.COLOR_PRIMARY_HOVER)
-			else:
-				btn.remove_theme_color_override("font_color")
-
-func get_active_green_preset() -> String:
-	return _active_green_preset
 
 func set_brush_size(value: int) -> void:
 	if value in BRUSH_SIZES:
 		_brush_size = value
 		_update_brush_label()
 		brush_size_changed.emit(value)
+
+## Keep the Green tile's flag and tooltip in sync with what the next green paints.
+func set_green_placement_state(places_cup: bool) -> void:
+	_green_places_cup = places_cup
+	if not is_instance_valid(_green_tile_button):
+		return
+	_green_tile_button.set_green_places_cup(places_cup)
+	if places_cup:
+		_green_tile_button.tool_description = \
+				"The next placement will be a Green With Hole: one tile with a cup and flag."
+	else:
+		_green_tile_button.tool_description = \
+				"The next placement will be a Green Without Hole. It uses the selected brush and adds no cup."
+	_green_tile_button.accessibility_description = "%s Shortcut %s." % [
+		_green_tile_button.tool_description, _green_tile_button.hotkey]
+
+func green_will_place_cup() -> bool:
+	return _green_places_cup
 
 ## Enable/disable the Open Hole buttons and explain what is still missing.
 func set_open_hole_state(can_open: bool, reason: String = "") -> void:
@@ -1251,6 +1377,42 @@ func set_open_hole_state(can_open: bool, reason: String = "") -> void:
 		button.disabled = not can_open
 		button.tool_description = OPEN_HOLE_TOOLTIP if can_open or reason.is_empty() \
 				else "%s. %s" % [OPEN_HOLE_BLOCKED_TOOLTIP, reason]
+
+## Grey out, unselect and make unselectable the Tee tile while an unused tee waits.
+func set_tee_box_state(can_place: bool, reason: String = "") -> void:
+	_tee_box_can_place = can_place
+	_tee_box_blocker = reason
+	var btn: ToolButton = _tool_buttons.get(TerrainTypes.Type.TEE_BOX, null) as ToolButton
+	if not is_instance_valid(btn):
+		btn = _tee_tile_button
+	if not is_instance_valid(btn):
+		return
+
+	# If the tee was selected and now becomes unavailable, unselect it.
+	if not can_place and _current_tool == TerrainTypes.Type.TEE_BOX:
+		clear_selection()
+
+	btn.disabled = not can_place
+
+	# Greyed out visual — modulate plus outline handled in TerrainTileButton,
+	# but also set here so the change is immediate even if _update_visual_state
+	# hasn't run yet.
+	if not can_place:
+		btn.modulate = Color(0.45, 0.45, 0.45, 0.65)
+		var base_desc := "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time"
+		if not reason.is_empty():
+			btn.tool_description = "%s (%s)" % [base_desc, reason]
+		else:
+			btn.tool_description = "%s (Blocked — a tee box is already waiting. Open the hole first (H).)" % base_desc
+	else:
+		btn.modulate = Color(1, 1, 1, 1)
+		btn.tool_description = "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time"
+
+	btn.accessibility_description = "%s Shortcut %s." % [btn.tool_description, btn.hotkey]
+
+	# Ensure the diamond outline reflects the disabled state immediately.
+	if btn.has_method("_update_visual_state"):
+		btn._update_visual_state()
 
 func set_view_state(_orientation: int, _isometric: bool) -> void:
 	pass

@@ -13,6 +13,12 @@
     "out_of_bounds": {"id": 10, "name": "Out of Bounds", "playable": false, "placement_cost": 0, "penalty_strokes": 1},
     "trees": {"id": 11, "name": "Trees", "playable": true, "placement_cost": 10, "blocks_shots": true},
     "flower_bed": {"id": 12, "name": "Flower Bed", "playable": false, "placement_cost": 15, "maintenance_cost": 2},
-    "rocks": {"id": 13, "name": "Rocks", "playable": true, "placement_cost": 8}
+    "rocks": {"id": 13, "name": "Rocks", "playable": true, "placement_cost": 8},
+    "firm_fairway": {"id": 14, "name": "Firm Fairway", "playable": true, "placement_cost": 6, "maintenance_cost": 1},
+    "pot_bunker": {"id": 15, "name": "Pot Bunker", "playable": true, "placement_cost": 18, "maintenance_cost": 2, "is_hazard": true},
+    "stream": {"id": 16, "name": "Stream", "playable": false, "placement_cost": 15, "maintenance_cost": 1, "is_hazard": true, "penalty_strokes": 1},
+    "deep_rough": {"id": 17, "name": "Deep Rough", "playable": true, "placement_cost": 1, "maintenance_cost": 0},
+    "waste_bunker": {"id": 18, "name": "Waste Bunker", "playable": true, "placement_cost": 6, "maintenance_cost": 0},
+    "brush": {"id": 19, "name": "Brush", "playable": true, "placement_cost": 3, "maintenance_cost": 0}
   }
 }

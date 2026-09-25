@@ -1018,7 +1018,7 @@ func awaits_player_shot() -> bool:
 	return player_profile != null and current_state == State.PREPARING_SHOT and GameManager.terrain_grid != null and GameManager.terrain_grid.get_tile(Vector2i(ball_position_precise.round())) != TerrainTypes.Type.GREEN
 
 static func shape_allowed(shape: int, terrain: int) -> bool:
-	return shape == 0 or (shape in [1, 2, 3] and terrain in [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.FAIRWAY])
+	return shape == 0 or (shape in [1, 2, 3] and (terrain == TerrainTypes.Type.TEE_BOX or TerrainTypes.is_fairway(terrain)))
 
 ## Bend applied to the owner's shot direction for the shape in `player_shape`:
 ## 0 = straight, 1 = fade (L→R), 2 = draw (R→L), 3 = high backspin (no bend).
@@ -1877,7 +1877,8 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 	var rollout = _calculate_rollout(club, carry_position, carry_position_precise,
 		Vector2(from), actual_distance, total_accuracy, deterministic)
 
-	if player_profile and player_shape == 3 and terrain_grid.get_tile(carry_position) in [TerrainTypes.Type.GREEN, TerrainTypes.Type.FAIRWAY]:
+	var carry_tile: int = terrain_grid.get_tile(carry_position)
+	if player_profile and player_shape == 3 and (carry_tile == TerrainTypes.Type.GREEN or TerrainTypes.is_fairway(carry_tile)):
 		var spin := minf(1.5, 0.25 * (1.0 + player_profile.bonus(7)))
 		rollout.final_position = carry_position_precise - direction * spin
 		rollout.rollout_distance = spin
@@ -1963,9 +1964,9 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 
 	var carry_terrain = terrain_grid.get_tile(carry_grid)
 
-	# No rollout if ball lands in water, OB/empty, bunker (plugs in sand), or flower beds
-	if carry_terrain in [TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS,
-			TerrainTypes.Type.EMPTY, TerrainTypes.Type.BUNKER, TerrainTypes.Type.FLOWER_BED]:
+	# No rollout if ball lands in water/stream, OB/empty, a bunker (plugs in
+	# sand), or flower beds
+	if GolfRules.stops_ball_on_landing(carry_terrain):
 		return no_rollout
 
 	# --- Base rollout fraction (proportion of carry distance) ---
@@ -2022,28 +2023,8 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 			is_backspin = true
 
 	# --- Landing terrain multiplier on rollout ---
-	var terrain_roll_mult = 1.0
-	match carry_terrain:
-		TerrainTypes.Type.GREEN:
-			terrain_roll_mult = 1.3   # Fast, smooth surface — more roll
-		TerrainTypes.Type.FAIRWAY:
-			terrain_roll_mult = 1.0   # Baseline
-		TerrainTypes.Type.TEE_BOX:
-			terrain_roll_mult = 1.0   # Mowed short like fairway
-		TerrainTypes.Type.GRASS:
-			terrain_roll_mult = 0.35  # Natural grass — slightly better than rough
-		TerrainTypes.Type.ROUGH:
-			terrain_roll_mult = 0.3   # Rough grabs the ball
-		TerrainTypes.Type.HEAVY_ROUGH:
-			terrain_roll_mult = 0.12  # Thick stuff — ball stops fast
-		TerrainTypes.Type.TREES:
-			terrain_roll_mult = 0.2   # Dense ground cover
-		TerrainTypes.Type.ROCKS:
-			terrain_roll_mult = 0.15  # Rocky ground kills momentum
-		TerrainTypes.Type.PATH:
-			terrain_roll_mult = 1.4   # Hard surface — extra bounce/roll
-		_:
-			terrain_roll_mult = 0.3   # Unknown terrain — conservative
+	# Green 1.3, fairway 1.0, firm fairway 1.6, rough 0.3 ... (see GolfRules)
+	var terrain_roll_mult: float = GolfRules.get_roll_multiplier(carry_terrain)
 
 	# Backspin is less affected by terrain (spin is on the ball, not surface)
 	# But rough does kill spin somewhat
@@ -2099,17 +2080,11 @@ func _calculate_rollout(club: Club, carry_grid: Vector2i, carry_precise: Vector2
 
 		var check_terrain = terrain_grid.get_tile(check_grid)
 
-		# Ball stops if it rolls into certain terrain
-		if check_terrain == TerrainTypes.Type.WATER:
-			final_position = check_point  # Ball goes in the water
-			roll_path.append(check_point)
-			break
-		if check_terrain == TerrainTypes.Type.OUT_OF_BOUNDS or check_terrain == TerrainTypes.Type.EMPTY:
-			final_position = check_point  # Ball goes OB (EMPTY = outside property)
-			roll_path.append(check_point)
-			break
-		if check_terrain == TerrainTypes.Type.BUNKER:
-			final_position = check_point  # Ball plugs into bunker
+		# Ball stops if it rolls into certain terrain: water or a stream, OB
+		# (EMPTY = outside property), a bunker, or deep rough / brush that
+		# swallows it.
+		if GolfRules.catches_rolling_ball(check_terrain):
+			final_position = check_point
 			roll_path.append(check_point)
 			break
 
@@ -2201,7 +2176,7 @@ func _find_water_entry_point(from_pos: Vector2i, water_pos: Vector2i) -> Vector2
 	for point in points:
 		if not terrain_grid.is_valid_position(point):
 			continue
-		if terrain_grid.get_tile(point) == TerrainTypes.Type.WATER:
+		if TerrainTypes.is_water(terrain_grid.get_tile(point)):
 			return point
 
 	# Fallback: if no entry point found along trajectory, use landing position
@@ -2264,7 +2239,7 @@ func _find_water_drop_position(entry_position: Vector2i) -> Vector2i:
 
 				var candidate_terrain = terrain_grid.get_tile(candidate)
 				# Must be playable terrain
-				if candidate_terrain in [TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS, TerrainTypes.Type.EMPTY]:
+				if TerrainTypes.is_out_of_play(candidate_terrain):
 					continue
 
 				# Must not be closer to the hole than the point of entry
@@ -2275,18 +2250,26 @@ func _find_water_drop_position(entry_position: Vector2i) -> Vector2i:
 				# Score: prefer fairway/grass, penalize rough/trees
 				var score = 0.0
 				match candidate_terrain:
-					TerrainTypes.Type.FAIRWAY:
+					TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY:
 						score = 100.0
 					TerrainTypes.Type.GRASS, TerrainTypes.Type.TEE_BOX:
 						score = 80.0
 					TerrainTypes.Type.ROUGH:
 						score = 50.0
+					TerrainTypes.Type.WASTE_BUNKER:
+						score = 40.0
 					TerrainTypes.Type.HEAVY_ROUGH:
 						score = 30.0
+					TerrainTypes.Type.DEEP_ROUGH:
+						score = 25.0
 					TerrainTypes.Type.BUNKER:
 						score = 20.0
+					TerrainTypes.Type.POT_BUNKER:
+						score = 15.0
 					TerrainTypes.Type.TREES:
 						score = 10.0
+					TerrainTypes.Type.BRUSH, TerrainTypes.Type.ROCKS:
+						score = 5.0
 
 				# Prefer closer to the entry point (shorter walk)
 				score -= Vector2(candidate).distance_to(Vector2(entry_position)) * 5.0
@@ -2371,7 +2354,8 @@ func _path_crosses_obstacle(start: Vector2i, end: Vector2i, walking: bool) -> bo
 		var terrain_type = terrain_grid.get_tile(sample_pos)
 
 		if walking:
-			# When walking, only avoid water, OB, and empty (outside property)
+			# When walking, only avoid water, OB, and empty (outside property).
+			# Streams are narrow enough to cross on foot, so they don't block.
 			if terrain_type in [TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS, TerrainTypes.Type.EMPTY]:
 				return true
 		else:

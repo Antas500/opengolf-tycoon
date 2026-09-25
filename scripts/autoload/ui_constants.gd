@@ -108,7 +108,7 @@ const HUD_COLUMN_GROUP := "hud_status_column"
 
 # Bottom bar height: view/speed controls on the left + tabbed toolbar on the right.
 # Keep in sync with main.tscn BottomBar offset_top.
-const BOTTOM_BAR_HEIGHT := 190  # Fits two rows of big Course & Hazard / Building tiles
+const BOTTOM_BAR_HEIGHT := 190  # Fits two rows of big Course Terrain / Building tiles
 const BUILD_TOOLS_WIDTH := 260
 const TOOL_BUTTON_HEIGHT := 32
 
@@ -190,6 +190,13 @@ func get_tool_icon(tool_type) -> String:
 			8: return TOOL_ICONS.get("water", "[w]")
 			9: return TOOL_ICONS.get("path", "[.]")
 			10: return TOOL_ICONS.get("out_of_bounds", "[X]")
+			12: return TOOL_ICONS.get("flower", "[f]")
+			13: return TOOL_ICONS.get("rock", "[*]")
+			14: return TOOL_ICONS.get("fairway", "[=]")  # FIRM_FAIRWAY
+			15, 18: return TOOL_ICONS.get("bunker", "[:]")  # POT_BUNKER, WASTE_BUNKER
+			16: return TOOL_ICONS.get("water", "[w]")  # STREAM
+			17: return TOOL_ICONS.get("rough", "[~]")  # DEEP_ROUGH
+			19: return TOOL_ICONS.get("tree", "[^]")  # BRUSH
 		return "[?]"
 	else:
 		return TOOL_ICONS.get(str(tool_type), "[?]")

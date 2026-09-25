@@ -11,8 +11,8 @@ the ordinary terrain brushes and then opens the hole:
 2. **Green** paints a **Green With Hole** when the course has no waiting cup: one
    tile with a cup cut into it, drawn with a gold pin so it is distinguishable from
    the red pins of open holes. Once a cup is waiting, the same Green tool becomes a
-   **Green Without Hole** brush and paints at the normal brush size and preset
-   shapes, so the player can widen the putting surface around the cup.
+   **Green Without Hole** brush and paints with the normal terrain brush size
+   and shape, so the player can widen the putting surface around the cup.
 3. **Open Hole** (`H` or the toolbar button, enabled only when a pair is ready)
    pairs the single unused tee box with the single unused Green With Hole and
    creates the hole: yardage, par, forward/middle tees, pin rotation set and
@@ -35,6 +35,11 @@ path and pin turn red and the plaque explains why:
 
 The path disappears as soon as the cup is cut, when another tool is selected or
 the tool is deselected, and when no tee box is waiting.
+
+The tee box itself is painted as well: every tee tile carries the
+[aiming arrow](tee-aim-arrow.md) in its grass, with a red ball either side of it.
+A waiting tee box already aims at the waiting cup — the same arrow the hole gets
+once it opens — and the arrow curves when the hole is a dogleg.
 
 "Unused" means *not already claimed by a hole*. Auto-generated forward and middle
 tees belong to their hole, so they never block the next tee box. Deleting a hole
@@ -182,7 +187,7 @@ clearing it, which is what used to let the old course leak through.
 | Yards per tile | `TerrainGrid.calculate_distance_yards()` | 22 yd |
 | Tee box brush cap | `HoleLayout.max_brush_size()` | 1×1 |
 | Green With Hole brush cap | `HoleLayout.max_brush_size()` | 1×1 |
-| Green Without Hole brush | `TerrainToolbar.BRUSH_SIZES` | up to 9×9 |
+| Green Without Hole brush | `TerrainToolbar.BRUSH_SIZES` | up to 9×9 (shared terrain brush; no green-specific presets) |
 | Tee box cost / green cost | `TerrainTypes.PROPERTIES` | $12 / $20 per tile |
 | Waiting-cup pin color | `CupOverlay.WAITING_PIN_COLOR` | gold |
 | Potential hole path colors | `PlacementPreview.HOLE_PATH_*` | cream path, red when not ready |

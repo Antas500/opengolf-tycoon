@@ -103,7 +103,8 @@ func _terrain_allows_at(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 	return false
 
 func _can_place_tree(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
-	# Trees can be placed on grass, rough, fairway, heavy rough, and path
+	# Trees can be placed on grassy ground (grass, fairways, rough) and path.
+	# A tree's spot draws as natural grass, so sandy or scrubby ground is out.
 	if not terrain_grid.is_valid_position(grid_pos):
 		return false
 	
@@ -111,22 +112,32 @@ func _can_place_tree(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 	return tile_type in [
 		TerrainTypes.Type.GRASS,
 		TerrainTypes.Type.FAIRWAY,
+		TerrainTypes.Type.FIRM_FAIRWAY,
 		TerrainTypes.Type.ROUGH,
 		TerrainTypes.Type.HEAVY_ROUGH,
+		TerrainTypes.Type.DEEP_ROUGH,
 		TerrainTypes.Type.PATH
 	]
 
 func _can_place_rock(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
-	# Rocks can be placed on grass, rough, fairway, and heavy rough
+	# Boulders can be placed on grassy ground (grass, fairways, rough) and on
+	# painted Rocks ground that has no boulder yet.
 	if not terrain_grid.is_valid_position(grid_pos):
 		return false
 
 	var tile_type = terrain_grid.get_tile(grid_pos)
+	if tile_type == TerrainTypes.Type.ROCKS:
+		# A boulder's own spot is Rocks terrain too — one boulder per tile.
+		if terrain_grid.is_object_footprint(grid_pos):
+			return false
+		return GameManager.entity_layer == null or GameManager.entity_layer.get_rock_at(grid_pos) == null
 	return tile_type in [
 		TerrainTypes.Type.GRASS,
 		TerrainTypes.Type.FAIRWAY,
+		TerrainTypes.Type.FIRM_FAIRWAY,
 		TerrainTypes.Type.ROUGH,
-		TerrainTypes.Type.HEAVY_ROUGH
+		TerrainTypes.Type.HEAVY_ROUGH,
+		TerrainTypes.Type.DEEP_ROUGH
 	]
 
 func _can_place_building(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
@@ -152,7 +163,9 @@ func _can_place_building(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 				TerrainTypes.Type.GRASS,
 				TerrainTypes.Type.ROUGH,
 				TerrainTypes.Type.HEAVY_ROUGH,
+				TerrainTypes.Type.DEEP_ROUGH,
 				TerrainTypes.Type.FAIRWAY,
+				TerrainTypes.Type.FIRM_FAIRWAY,
 				TerrainTypes.Type.PATH
 			]
 			
@@ -175,8 +188,8 @@ func _can_place_decoration(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> boo
 	for terrain_name in placeable:
 		match terrain_name:
 			"grass": valid_types.append(TerrainTypes.Type.GRASS)
-			"fairway": valid_types.append(TerrainTypes.Type.FAIRWAY)
-			"rough": valid_types.append(TerrainTypes.Type.ROUGH)
+			"fairway": valid_types.append_array([TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY])
+			"rough": valid_types.append_array([TerrainTypes.Type.ROUGH, TerrainTypes.Type.DEEP_ROUGH])
 			"heavy_rough": valid_types.append(TerrainTypes.Type.HEAVY_ROUGH)
 			"path": valid_types.append(TerrainTypes.Type.PATH)
 

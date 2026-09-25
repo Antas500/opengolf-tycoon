@@ -44,7 +44,8 @@ func test_special_shapes_only_on_tee_and_fairway() -> void:
 	for terrain in TerrainTypes.Type.values():
 		assert_true(Golfer.shape_allowed(0, terrain))
 		for shape in [1, 2, 3]:
-			assert_eq(Golfer.shape_allowed(shape, terrain), terrain in [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.FAIRWAY])
+			assert_eq(Golfer.shape_allowed(shape, terrain), terrain in [TerrainTypes.Type.TEE_BOX,
+				TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY])
 	assert_false(Golfer.shape_allowed(4, TerrainTypes.Type.FAIRWAY))
 
 func test_player_waits_off_green_but_putting_is_automatic() -> void:

@@ -90,6 +90,52 @@ const PROFILES: Dictionary = {
 		[  0.08,  0.22,  0.35,  0.15 ],
 	],
 
+	# POT_BUNKER: Small, steep-sided pit — deeper than a bunker
+	TerrainTypes.Type.POT_BUNKER: [
+		[ -0.35, -0.75, -0.75, -0.35 ],
+		[ -0.75, -1.10, -1.10, -0.75 ],
+		[ -0.75, -1.10, -1.10, -0.75 ],
+		[ -0.35, -0.75, -0.75, -0.35 ],
+	],
+
+	# STREAM: A shallow channel, sunk less than standing water
+	TerrainTypes.Type.STREAM: [
+		[ -0.20, -0.25, -0.25, -0.20 ],
+		[ -0.25, -0.30, -0.30, -0.25 ],
+		[ -0.25, -0.30, -0.30, -0.25 ],
+		[ -0.20, -0.25, -0.25, -0.20 ],
+	],
+
+	# FIRM_FAIRWAY: Rumpled links ground, humpier than a parkland fairway
+	TerrainTypes.Type.FIRM_FAIRWAY: [
+		[  0.02,  0.10,  0.04,  0.12 ],
+		[ -0.08,  0.03,  0.11,  0.02 ],
+		[  0.06, -0.06,  0.02,  0.10 ],
+		[ -0.02,  0.08, -0.05,  0.04 ],
+	],
+
+	# DEEP_ROUGH / BRUSH: Unmaintained, bumpy ground like heavy rough
+	TerrainTypes.Type.DEEP_ROUGH: [
+		[  0.12, -0.15,  0.18, -0.10 ],
+		[ -0.18,  0.14, -0.12,  0.20 ],
+		[  0.15, -0.10,  0.16, -0.18 ],
+		[ -0.12,  0.18, -0.15,  0.10 ],
+	],
+	TerrainTypes.Type.BRUSH: [
+		[  0.10,  0.18,  0.06,  0.14 ],
+		[  0.16,  0.24,  0.20,  0.08 ],
+		[  0.06,  0.20,  0.22,  0.16 ],
+		[  0.12,  0.08,  0.14,  0.10 ],
+	],
+
+	# WASTE_BUNKER: Gently rolling natural sand, no bowl
+	TerrainTypes.Type.WASTE_BUNKER: [
+		[  0.00, -0.04, -0.02,  0.02 ],
+		[ -0.05, -0.08, -0.06, -0.02 ],
+		[ -0.03, -0.07, -0.05,  0.00 ],
+		[  0.01, -0.02,  0.00,  0.03 ],
+	],
+
 	# TREES: Raised mound at base (root system)
 	TerrainTypes.Type.TREES: [
 		[  0.00,  0.08,  0.08,  0.00 ],

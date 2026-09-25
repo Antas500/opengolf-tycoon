@@ -59,7 +59,7 @@ const TRUNKLESS_TYPES: Array = ["cactus", "fescue", "cattails", "bush", "heather
 const DECIDUOUS_TYPES: Array = ["oak", "maple", "birch"]
 
 ## Course themes where pine trees get snow in winter
-var SNOWY_THEMES: Array = [CourseTheme.Type.PARKLAND, CourseTheme.Type.MOUNTAIN, CourseTheme.Type.HEATHLAND]
+const SNOWY_THEMES: Array = [CourseTheme.Type.PARKLAND, CourseTheme.Type.MOUNTAIN, CourseTheme.Type.HEATHLAND]
 
 ## Seasonal sprite paths for deciduous trees + snowy pine
 const SEASONAL_SPRITE_PATHS: Dictionary = {

@@ -99,6 +99,12 @@ func _create_styles() -> void:
 	_apply_styles()
 
 func _apply_styles() -> void:
+	if disabled:
+		# Greyed out when disabled.
+		modulate = Color(0.5, 0.5, 0.5, 0.65)
+	else:
+		modulate = Color(1, 1, 1, 1)
+
 	if _is_selected:
 		add_theme_stylebox_override("normal", _style_selected)
 		add_theme_stylebox_override("hover", _style_selected)
@@ -171,6 +177,10 @@ func _on_mouse_exited() -> void:
 # =============================================================================
 
 func set_selected(selected: bool) -> void:
+	if disabled and selected:
+		_is_selected = false
+		_apply_styles()
+		return
 	_is_selected = selected
 	_apply_styles()
 

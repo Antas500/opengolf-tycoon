@@ -14,7 +14,7 @@ When a golfer's turn comes, they need to decide **where to aim** and **which clu
 
 ### Recovery Mode
 
-When in trees, deep rough, bunkers, or rocks, the golfer enters recovery mode. Club selection is restricted (no woods through trees, wedge-only from rocks). The AI scans a full 360 degrees for escape routes — even sideways or backwards is a valid option. It strongly prefers nearby safe targets (distance penalty of 2.0 per tile from ball) and rewards advancing toward the hole, with modest bonuses for landing on fairway (+30) or green (+50). This prevents golfers from choosing a distant fairway over a nearby green strip when escaping bunkers.
+When in trees, heavy or deep rough, bunkers, pot bunkers, brush or rocks, the golfer enters recovery mode. Club selection is restricted (no woods through trees or long grass, wedge-only from rocks, brush and pot bunkers). The AI scans a full 360 degrees for escape routes — even sideways or backwards is a valid option. It strongly prefers nearby safe targets (distance penalty of 2.0 per tile from ball) and rewards advancing toward the hole, with modest bonuses for landing on fairway (+30) or green (+50). This prevents golfers from choosing a distant fairway over a nearby green strip when escaping bunkers.
 
 ### Wind Compensation
 
@@ -36,12 +36,15 @@ For par 4s and par 5s, the AI plans backwards from the green. The ideal strategy
 
 ```
 lie_quality = terrain_to_quality_score:
-    Fairway / Tee Box / Green:  1.0
+    Fairway / Firm Fairway / Tee Box / Green:  1.0
     Grass:                       0.8
     Path:                        0.7
+    Waste Bunker:                0.6
     Rough:                       0.5
     Heavy Rough / Bunker:        0.3
-    Trees:                       0.15
+    Deep Rough:                  0.2
+    Pot Bunker / Trees:          0.15
+    Brush:                       0.12
     Rocks:                       0.1
 
 if lie_quality < 0.4:  → enter recovery mode
@@ -98,18 +101,26 @@ For each candidate club, scan angles and distances:
 | ------------ | ------- |
 | Green        | +180    |
 | Fairway      | +150    |
+| Firm Fairway | +145    |
 | Tee Box      | +130    |
 | Grass        | +40     |
 | Path         | +35     |
 | Rough        | +10     |
+| Waste Bunker | -10     |
 | Heavy Rough  | -20     |
 | Flower Bed   | -40     |
+| Deep Rough   | -45     |
 | Bunker       | -50     |
 | Trees        | -80     |
+| Brush        | -85     |
+| Pot Bunker   | -90     |
 | Rocks        | -100    |
-| Empty        | -200    |
+| Empty        | -1000   |
 | Water        | -1000   |
+| Stream       | -1000   |
 | Out of Bounds| -1000   |
+
+Streams count as water everywhere the AI looks for hazards: nearby-hazard penalties, miss-risk sampling and landing scores. Firm fairway counts as fairway for the approach rescan and the clear-next-shot bonus.
 
 ### 5. Landing Zone Scoring
 
@@ -233,8 +244,10 @@ if score_to_par <= -2:
 allowed_clubs:
     Trees:      [Wedge, Iron]         # No woods through trees
     Rocks:      [Wedge]               # Wedge only
+    Brush:      [Wedge]               # Hack it out of the scrub
+    Pot Bunker: [Wedge]               # Only loft clears the revetted face
     Bunker:     [Wedge, Iron]         # Sand wedge preferred
-    Heavy Rough:[Wedge, Iron]         # Can't get wood through thick stuff
+    Heavy / Deep Rough: [Wedge, Iron] # Can't get wood through thick stuff
 
 # Scan 360 degrees in 24 directions, 4 distances each
 max_distance = club_max * skill_factor * 0.7  # Don't try max distance from trouble

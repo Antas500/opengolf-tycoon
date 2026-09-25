@@ -171,8 +171,9 @@ static func _calculate_condition_rating(terrain_grid, course_data) -> float:
 		for pos in corridor:
 			total_tiles += 1
 			var terrain = terrain_grid.get_tile(pos)
-			# Premium terrain: fairway, green, tee box
-			if terrain in [TerrainTypes.Type.GREEN, TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.TEE_BOX]:
+			# Premium terrain: fairway (soft or firm), green, tee box
+			if terrain in [TerrainTypes.Type.GREEN, TerrainTypes.Type.FAIRWAY,
+					TerrainTypes.Type.FIRM_FAIRWAY, TerrainTypes.Type.TEE_BOX]:
 				premium_tiles += 1
 
 	if total_tiles == 0:

@@ -374,7 +374,7 @@ static func _calculate_shot_headless(from: Vector2i, target: Vector2i, club: int
 			if terrain_grid.is_valid_position(rolled_grid):
 				var roll_terrain = terrain_grid.get_tile(rolled_grid)
 				# Don't roll into impassable terrain
-				if roll_terrain != TerrainTypes.Type.WATER and roll_terrain != TerrainTypes.Type.OUT_OF_BOUNDS and roll_terrain != TerrainTypes.Type.EMPTY:
+				if not TerrainTypes.is_out_of_play(roll_terrain):
 					landing_position = rolled_grid
 					landing_point = rolled_pos
 
@@ -516,7 +516,7 @@ static func _find_drop_position(from: Vector2i, water_pos: Vector2i, terrain_gri
 		var check = Vector2i((Vector2(from) + direction * i).round())
 		if terrain_grid.is_valid_position(check):
 			var t = terrain_grid.get_tile(check)
-			if t != TerrainTypes.Type.WATER and t != TerrainTypes.Type.OUT_OF_BOUNDS and t != TerrainTypes.Type.EMPTY:
+			if not TerrainTypes.is_out_of_play(t):
 				return check
 
 	return from  # Fallback to original position

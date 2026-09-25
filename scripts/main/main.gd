@@ -36,7 +36,6 @@ var game_mode_label: Label = null
 var current_tool: int = -1  # Start with no tool selected
 var round_brush := true
 var brush_size: int = 1
-var _green_preset: String = ""  # Active green preset ("small"/"medium"/"large" or "" for brush)
 var is_painting: bool = false
 var _tee_block_notified: bool = false  # One "tee box is waiting" notice per stroke
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
@@ -530,8 +529,8 @@ func _setup_terrain_toolbar() -> void:
 	# Build tool signals
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
 	terrain_toolbar.open_hole_pressed.connect(_on_open_hole_pressed)
-	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
-	terrain_toolbar.rock_placement_pressed.connect(_on_rock_placement_pressed)
+	terrain_toolbar.tree_selected.connect(_on_tree_type_selected_from_toolbar)
+	terrain_toolbar.rock_selected.connect(_on_rock_size_selected_from_toolbar)
 	terrain_toolbar.building_placement_pressed.connect(_on_building_placement_pressed)
 	terrain_toolbar.building_selected.connect(_on_building_type_selected_from_toolbar)
 	terrain_toolbar.set_building_registry(building_registry)
@@ -546,7 +545,6 @@ func _setup_terrain_toolbar() -> void:
 		round_brush = value
 		placement_preview.round_brush = value
 	)
-	terrain_toolbar.green_preset_selected.connect(_on_green_preset_selected)
 
 	# Club / Player tab signals
 	terrain_toolbar.play_course_pressed.connect(_on_play_course_pressed)
@@ -949,7 +947,11 @@ func _paint_at_mouse() -> void:
 	if grid_pos == last_paint_pos: return
 	# Sample every crossed tile so quick mouse drags cannot leave holes.
 	var start := last_paint_pos if last_paint_pos != Vector2i(-1, -1) else grid_pos
-	for center in TerrainBrush.centers(start, grid_pos):
+	# Stream channels only join edge-adjacent tiles, so stream strokes never
+	# step diagonally.
+	var stroke := TerrainBrush.centers_4_connected(start, grid_pos) \
+			if current_tool == TerrainTypes.Type.STREAM else TerrainBrush.centers(start, grid_pos)
+	for center in stroke:
 		if terrain_grid.is_valid_position(center): _paint_terrain_stamp(center)
 	last_paint_pos = grid_pos
 
@@ -980,18 +982,19 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 			else mini(brush_size, max_brush)
 
 	var tiles_to_paint: Array
-	if current_tool == TerrainTypes.Type.GREEN and _green_preset != "" and not places_cup:
-		tiles_to_paint = terrain_grid.get_green_preset_tiles(grid_pos, _green_preset)
-	elif effective_brush <= 1:
+	if effective_brush <= 1:
 		tiles_to_paint = [grid_pos]
 	else:
 		tiles_to_paint = terrain_grid.get_brush_tiles(grid_pos, effective_brush, round_brush)
 	var total_cost = 0
 	var obstacle_removal_cost = 0
 	var blocked_by_land = false
-	# Terrain types that auto-remove trees and rocks when placed
+	# Built course terrain auto-removes trees and rocks when placed; natural
+	# ground (rough, deep rough, brush, rocks) grows around them.
 	var clears_obstacles = current_tool in [
-		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.BUNKER, TerrainTypes.Type.WATER,
+		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
+		TerrainTypes.Type.BUNKER, TerrainTypes.Type.POT_BUNKER, TerrainTypes.Type.WASTE_BUNKER,
+		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM,
 		TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN
 	]
 	_suppress_tile_undo = true
@@ -1006,6 +1009,10 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 		# Skip tiles occupied by buildings
 		if entity_layer and (entity_layer.is_tile_occupied_by_building(tile_pos) or entity_layer.is_tile_occupied_by_decoration(tile_pos)):
 			continue
+		# A boulder's spot is already Rocks terrain; painting Rocks around it
+		# makes the boulder stand on the new rocky ground.
+		if current_tool == TerrainTypes.Type.ROCKS and entity_layer:
+			entity_layer.merge_rock_into_painted_rocks(tile_pos)
 		if terrain_grid.get_tile(tile_pos) != current_tool:
 			# Auto-remove trees and rocks when placing course terrain
 			var tile_removal_cost = 0
@@ -1122,6 +1129,15 @@ func _has_active_tool() -> bool:
 	return false
 
 func _on_tool_selected(tool_type: int) -> void:
+	# Tee Box is unselectable while an unused tee waits.
+	if tool_type == TerrainTypes.Type.TEE_BOX:
+		if not HoleLayout.can_place_tee_box(terrain_grid, GameManager.current_course):
+			if terrain_toolbar:
+				terrain_toolbar.clear_selection()
+			current_tool = -1
+			is_painting = false
+			return
+
 	# Cancel any building/tree placement, elevation mode, and bulldozer mode
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
@@ -1131,15 +1147,11 @@ func _on_tool_selected(tool_type: int) -> void:
 	is_painting = false
 
 	current_tool = tool_type
-	# Clear green preset when switching away from GREEN tool
-	if tool_type != TerrainTypes.Type.GREEN:
-		_green_preset = ""
 	# Update toolbar highlight
 	if terrain_toolbar:
 		terrain_toolbar.set_current_tool(tool_type)
 	# Update placement preview for terrain painting
 	if placement_preview:
-		placement_preview.green_preset = _green_preset
 		placement_preview.set_terrain_tool(tool_type)
 		placement_preview.set_brush_size(brush_size)
 		placement_preview.set_terrain_painting_enabled(true)
@@ -1154,10 +1166,6 @@ func _on_brush_size_changed(new_size: int) -> void:
 	brush_size = new_size
 	if placement_preview:
 		placement_preview.set_brush_size(new_size)
-
-func _on_green_preset_selected(preset_name: String) -> void:
-	_green_preset = preset_name
-	placement_preview.green_preset = preset_name
 
 func _on_view_rotate_cw() -> void:
 	_change_view_projection(true)
@@ -1300,8 +1308,8 @@ func _on_hole_layout_hole_deleted(_hole_number: int) -> void:
 func _on_hole_layout_load_completed(_success: bool) -> void:
 	_refresh_hole_layout_ui()
 
-## Push the current hole layout rules into the toolbar: which tool is limited to a
-## single tile, and whether a tee box + green with a hole are ready to be paired.
+## Keep the Green flag, brush cap and Open Hole action in sync with the current
+## tee/cup state.
 func _refresh_hole_layout_ui() -> void:
 	if not terrain_toolbar or not terrain_grid:
 		return
@@ -1310,6 +1318,16 @@ func _refresh_hole_layout_ui() -> void:
 	terrain_toolbar.set_open_hole_state(bool(request.get("ready", false)),
 			str(request.get("reason", "")))
 	terrain_toolbar.set_brush_limit(HoleLayout.max_brush_size(current_tool, terrain_grid, course))
+	terrain_toolbar.set_green_placement_state(HoleLayout.green_places_cup(terrain_grid, course))
+
+	# Tee tile: unselected, unselectable and greyed out while an unused tee waits.
+	var can_place_tee := HoleLayout.can_place_tee_box(terrain_grid, course)
+	var tee_blocker := HoleLayout.tee_placement_blocker(terrain_grid, course)
+	terrain_toolbar.set_tee_box_state(can_place_tee, tee_blocker)
+	if not can_place_tee and current_tool == TerrainTypes.Type.TEE_BOX:
+		current_tool = -1
+		is_painting = false
+		terrain_toolbar.clear_selection()
 
 func _on_speed_selected(speed: int) -> void:
 	GameManager.set_speed(speed)
@@ -1409,37 +1427,14 @@ func _rebuild_hole_list() -> void:
 			if not hole.is_open:
 				_on_hole_toggled(hole.hole_number, false)
 
-func _on_tree_placement_pressed() -> void:
-	"""Show tree selection menu and start tree placement mode"""
+func _prepare_for_nature_placement() -> void:
+	"""Leave other placement modes before starting a tree or boulder placement."""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
 	is_painting = false
-	if terrain_toolbar:
-		terrain_toolbar.clear_selection()
-
-	# Create tree selection dialog
-	var dialog = AcceptDialog.new()
-	dialog.title = "Select Tree Type"
-	dialog.size = Vector2i(350, 50 + CourseTheme.get_tree_types(GameManager.current_theme).size() * 50)
-
-	var vbox = VBoxContainer.new()
-
-	# Add button for each tree type available in the current theme
-	var theme_trees = CourseTheme.get_tree_types(GameManager.current_theme)
-	for tree_type in theme_trees:
-		var tree_data = TreeEntity.TREE_PROPERTIES.get(tree_type, {})
-		var btn = Button.new()
-		btn.text = "%s ($%d)" % [tree_data.get("name", tree_type.capitalize()), tree_data.get("cost", 20)]
-		btn.custom_minimum_size = Vector2(300, 40)
-		btn.pressed.connect(_on_tree_type_selected.bind(tree_type, dialog))
-		vbox.add_child(btn)
-
-	dialog.add_child(vbox)
-	get_tree().root.add_child(dialog)
-	dialog.popup_centered_ratio(0.3)
 
 func _on_building_type_selected_from_toolbar(building_type: String) -> void:
 	"""Start placement immediately for a building card in the Buildings tab."""
@@ -1464,58 +1459,19 @@ func _on_building_placement_pressed() -> void:
 	if terrain_toolbar:
 		terrain_toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
 
-func _on_tree_type_selected(tree_type: String, dialog: AcceptDialog) -> void:
-	"""Handle tree type selection"""
-	print("Selected tree: %s" % tree_type)
-	dialog.queue_free()
+func _on_tree_type_selected_from_toolbar(tree_type: String) -> void:
+	"""Start placement immediately for a tree tile in the Course Terrain tab."""
+	_prepare_for_nature_placement()
 	selected_tree_type = tree_type
 	placement_manager.start_tree_placement(tree_type)
-	print("Tree placement mode: %s" % tree_type)
+	print("Tree placement mode from toolbar: %s" % tree_type)
 
-func _on_rock_placement_pressed() -> void:
-	"""Show rock size selection menu and start rock placement mode"""
-	_cancel_hole_move_mode()
-	_close_hole_context_menu()
-	_cancel_elevation_mode()
-	_cancel_bulldozer_mode()
-	_disable_terrain_painting_preview()
-	is_painting = false
-	if terrain_toolbar:
-		terrain_toolbar.clear_selection()
-
-	# Create rock selection dialog
-	var dialog = AcceptDialog.new()
-	dialog.title = "Select Rock Size"
-	dialog.size = Vector2i(350, 200)
-
-	var vbox = VBoxContainer.new()
-
-	# Add button for each rock size
-	var rock_sizes = {
-		"small": {"name": "Small Rock", "cost": 10},
-		"medium": {"name": "Medium Rock", "cost": 15},
-		"large": {"name": "Large Rock", "cost": 20}
-	}
-
-	for rock_size in rock_sizes.keys():
-		var rock_data = rock_sizes[rock_size]
-		var btn = Button.new()
-		btn.text = "%s ($%d)" % [rock_data["name"], rock_data["cost"]]
-		btn.custom_minimum_size = Vector2(300, 40)
-		btn.pressed.connect(_on_rock_size_selected.bind(rock_size, dialog))
-		vbox.add_child(btn)
-
-	dialog.add_child(vbox)
-	get_tree().root.add_child(dialog)
-	dialog.popup_centered_ratio(0.3)
-
-func _on_rock_size_selected(rock_size: String, dialog: AcceptDialog) -> void:
-	"""Handle rock size selection"""
-	print("Selected rock size: %s" % rock_size)
-	dialog.queue_free()
+func _on_rock_size_selected_from_toolbar(rock_size: String) -> void:
+	"""Start placement immediately for a boulder tile in the Course Terrain tab."""
+	_prepare_for_nature_placement()
 	selected_rock_size = rock_size
 	placement_manager.start_rock_placement(rock_size)
-	print("Rock placement mode: %s" % rock_size)
+	print("Rock placement mode from toolbar: %s" % rock_size)
 
 func _on_decoration_placement_pressed() -> void:
 	"""Show decoration selection menu and start decoration placement mode"""
@@ -2017,7 +1973,9 @@ const BULLDOZER_COSTS = {
 	"tree": 15,
 	"rock": 10,
 	"flower_bed": 20,
-	"decoration": 20
+	"decoration": 20,
+	"rock_ground": 10,  # Painted Rocks terrain (no boulder) back to grass
+	"brush": 10,
 }
 
 func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.ZERO) -> void:
@@ -2128,6 +2086,29 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 		_bulldoze_drag_cost += cost
 		if not dragging:
 			EventBus.notify("Flower bed removed (-$%d)" % cost, "info")
+		return
+
+	# Painted rocky ground and brush clear back to natural grass (a boulder's
+	# own spot was handled above with the boulder).
+	if (tile_type == TerrainTypes.Type.ROCKS and entity_layer.get_rock_at(grid_pos) == null) \
+			or tile_type == TerrainTypes.Type.BRUSH:
+		var is_rock_ground: bool = tile_type == TerrainTypes.Type.ROCKS
+		var cost = BULLDOZER_COSTS["rock_ground" if is_rock_ground else "brush"]
+		var what := "rocky ground" if is_rock_ground else "brush"
+		if not GameManager.can_afford(cost):
+			if not dragging:
+				if GameManager.is_bankrupt():
+					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
+				else:
+					EventBus.notify("Not enough money to clear %s ($%d)" % [what, cost], "error")
+			return
+		GameManager.modify_money(-cost)
+		EventBus.log_transaction("Clear %s" % what, -cost)
+		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
+		_bulldoze_drag_count += 1
+		_bulldoze_drag_cost += cost
+		if not dragging:
+			EventBus.notify("Cleared %s (-$%d)" % [what, cost], "info")
 		return
 
 	# Nothing to remove at this position
@@ -2483,7 +2464,7 @@ func _is_valid_tee_position(pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(pos):
 		return false
 	var tile = terrain_grid.get_tile(pos)
-	if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
+	if TerrainTypes.is_water(tile) or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
 		return false
 	if entity_layer and entity_layer.is_tile_occupied_by_building(pos):
 		return false
@@ -2501,7 +2482,7 @@ func _is_valid_green_position(pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(pos):
 		return false
 	var tile = terrain_grid.get_tile(pos)
-	if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
+	if TerrainTypes.is_water(tile) or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
 		return false
 	if entity_layer and entity_layer.is_tile_occupied_by_building(pos):
 		return false
@@ -2639,7 +2620,7 @@ func _is_valid_secondary_tee_position(pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(pos):
 		return false
 	var tile = terrain_grid.get_tile(pos)
-	if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
+	if TerrainTypes.is_water(tile) or tile == TerrainTypes.Type.OUT_OF_BOUNDS:
 		return false
 	if entity_layer and entity_layer.is_tile_occupied_by_building(pos):
 		return false
@@ -2686,8 +2667,13 @@ var _suppress_tile_undo: bool = false  # Suppress tile change recording during e
 
 func _on_terrain_tile_changed_for_undo(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if _is_undoing or _suppress_tile_undo:
+		# Still keep tee UI in sync even while undoing or suppressing undo recording.
+		if old_type == TerrainTypes.Type.TEE_BOX or new_type == TerrainTypes.Type.TEE_BOX:
+			_refresh_hole_layout_ui()
 		return
 	undo_manager.record_tile_change(tile_pos, old_type, new_type)
+	if old_type == TerrainTypes.Type.TEE_BOX or new_type == TerrainTypes.Type.TEE_BOX:
+		_refresh_hole_layout_ui()
 
 func _perform_undo() -> void:
 	if not undo_manager.can_undo():

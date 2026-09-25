@@ -176,6 +176,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.20, 0.42, 0.20),
 				"flower_bed": Color(0.45, 0.32, 0.22),
 				"rocks": Color(0.48, 0.46, 0.42),
+				"firm_fairway": Color("9aad58"),          # Dry, fast-running fairway
+				"pot_bunker": Color("d8c690"),            # Shaded sand of a deep pot
+				"stream": Color("5aa3a6"),                # Clear running water
+				"deep_rough": Color("3e5a2e"),            # Unmown meadow grass
+				"waste_bunker": Color("c9b98e"),          # Coarse unraked sand
+				"brush": Color("58622e"),                 # Bramble and scrub
 			}
 		Type.DESERT:
 			return {
@@ -197,6 +203,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.35, 0.45, 0.28),        # Sage green
 				"flower_bed": Color(0.70, 0.50, 0.30),   # Terracotta
 				"rocks": Color(0.65, 0.55, 0.42),        # Sandstone
+				"firm_fairway": Color(0.58, 0.68, 0.38),  # Sun-baked fairway
+				"pot_bunker": Color(0.80, 0.68, 0.44),    # Deep desert pot
+				"stream": Color(0.36, 0.64, 0.76),        # Clear wash water
+				"deep_rough": Color(0.54, 0.46, 0.30),    # Tall dry bunchgrass
+				"waste_bunker": Color(0.82, 0.74, 0.56),  # Open desert wash
+				"brush": Color(0.46, 0.50, 0.36),         # Sagebrush
 			}
 		Type.LINKS:
 			return {
@@ -218,6 +230,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.30, 0.38, 0.25),        # Sparse scrub
 				"flower_bed": Color(0.50, 0.42, 0.30),   # Sea grass
 				"rocks": Color(0.55, 0.52, 0.48),        # Weathered stone
+				"firm_fairway": Color(0.60, 0.66, 0.40),  # Classic firm links turf
+				"pot_bunker": Color(0.80, 0.74, 0.54),    # Revetted pot bunker
+				"stream": Color(0.36, 0.56, 0.64),        # Burn
+				"deep_rough": Color(0.58, 0.52, 0.32),    # Wispy golden fescue
+				"waste_bunker": Color(0.80, 0.76, 0.60),  # Dune sand
+				"brush": Color(0.36, 0.40, 0.22),         # Gorse
 			}
 		Type.MOUNTAIN:
 			return {
@@ -239,6 +257,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.15, 0.35, 0.18),        # Dense pine
 				"flower_bed": Color(0.42, 0.30, 0.22),   # Mountain wildflowers
 				"rocks": Color(0.52, 0.50, 0.48),        # Granite
+				"firm_fairway": Color(0.50, 0.68, 0.38),  # Firm upland turf
+				"pot_bunker": Color(0.70, 0.64, 0.48),    # Deep gravelly pot
+				"stream": Color(0.30, 0.62, 0.82),        # Snowmelt creek
+				"deep_rough": Color(0.20, 0.34, 0.18),    # Alpine meadow grass
+				"waste_bunker": Color(0.66, 0.62, 0.52),  # Scree and grit
+				"brush": Color(0.24, 0.34, 0.20),         # Juniper scrub
 			}
 		Type.CITY:
 			return {
@@ -260,6 +284,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.25, 0.38, 0.22),
 				"flower_bed": Color(0.48, 0.35, 0.28),
 				"rocks": Color(0.50, 0.50, 0.48),
+				"firm_fairway": Color(0.54, 0.66, 0.38),  # Firm fairway
+				"pot_bunker": Color(0.76, 0.70, 0.52),    # Pot bunker sand
+				"stream": Color(0.34, 0.58, 0.74),        # Channelled brook
+				"deep_rough": Color(0.28, 0.38, 0.24),    # Unmown verge
+				"waste_bunker": Color(0.72, 0.68, 0.56),  # Sandy waste ground
+				"brush": Color(0.34, 0.40, 0.24),         # Hedge scrub
 			}
 		Type.RESORT:
 			return {
@@ -281,6 +311,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.18, 0.45, 0.22),        # Tropical foliage
 				"flower_bed": Color(0.55, 0.30, 0.35),   # Hibiscus red
 				"rocks": Color(0.55, 0.52, 0.45),        # Coral stone
+				"firm_fairway": Color(0.52, 0.76, 0.42),  # Firm resort fairway
+				"pot_bunker": Color(0.86, 0.82, 0.66),    # Deep white-sand pot
+				"stream": Color(0.26, 0.70, 0.86),        # Lagoon channel
+				"deep_rough": Color(0.24, 0.42, 0.22),    # Lush tall grass
+				"waste_bunker": Color(0.86, 0.82, 0.68),  # Beach sand
+				"brush": Color(0.22, 0.44, 0.24),         # Tropical shrubs
 			}
 		Type.HEATHLAND:
 			return {
@@ -302,6 +338,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.22, 0.38, 0.22),        # Scattered pine/birch
 				"flower_bed": Color(0.55, 0.35, 0.48),   # Heather purple accent
 				"rocks": Color(0.52, 0.50, 0.45),        # Sandy stone
+				"firm_fairway": Color(0.56, 0.66, 0.38),  # Firm heath turf
+				"pot_bunker": Color(0.80, 0.72, 0.50),    # Deep heath pot
+				"stream": Color(0.32, 0.58, 0.74),        # Heath brook
+				"deep_rough": Color(0.44, 0.40, 0.28),    # Tall wiry grass
+				"waste_bunker": Color(0.80, 0.74, 0.54),  # Sandy heath scrape
+				"brush": Color(0.32, 0.38, 0.20),         # Gorse thicket
 			}
 		Type.WOODLAND:
 			return {
@@ -323,6 +365,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.12, 0.30, 0.14),        # Dense pine canopy
 				"flower_bed": Color(0.38, 0.28, 0.18),   # Fern brown-green
 				"rocks": Color(0.42, 0.40, 0.38),        # Mossy stone
+				"firm_fairway": Color(0.46, 0.62, 0.34),  # Firm woodland fairway
+				"pot_bunker": Color(0.74, 0.68, 0.48),    # Deep shaded pot
+				"stream": Color(0.26, 0.52, 0.66),        # Forest brook
+				"deep_rough": Color(0.22, 0.30, 0.18),    # Tall forest grass
+				"waste_bunker": Color(0.70, 0.64, 0.50),  # Needle-strewn sand
+				"brush": Color(0.30, 0.34, 0.18),         # Bracken undergrowth
 			}
 		Type.TROPICAL:
 			return {
@@ -344,6 +392,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.15, 0.42, 0.20),        # Dense tropical canopy
 				"flower_bed": Color(0.65, 0.32, 0.28),   # Plumeria/orchid red
 				"rocks": Color(0.30, 0.28, 0.26),        # Volcanic basalt
+				"firm_fairway": Color(0.50, 0.72, 0.40),  # Firm tropical fairway
+				"pot_bunker": Color(0.84, 0.80, 0.70),    # Deep coral-sand pot
+				"stream": Color(0.22, 0.66, 0.84),        # Jungle stream
+				"deep_rough": Color(0.20, 0.38, 0.20),    # Tall jungle grass
+				"waste_bunker": Color(0.58, 0.54, 0.48),  # Volcanic sand
+				"brush": Color(0.18, 0.38, 0.20),         # Jungle scrub
 			}
 		Type.MARSHLAND:
 			return {
@@ -365,6 +419,12 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 				"trees": Color(0.28, 0.40, 0.25),        # Live oak with Spanish moss
 				"flower_bed": Color(0.52, 0.45, 0.30),   # Golden marsh reed
 				"rocks": Color(0.45, 0.42, 0.38),        # Weathered tabby/oyster
+				"firm_fairway": Color(0.54, 0.66, 0.40),  # Firm sandy fairway
+				"pot_bunker": Color(0.74, 0.70, 0.54),    # Deep muddy pot
+				"stream": Color(0.34, 0.52, 0.56),        # Tidal creek
+				"deep_rough": Color(0.46, 0.46, 0.26),    # Golden cordgrass
+				"waste_bunker": Color(0.72, 0.68, 0.56),  # Shell-sand flats
+				"brush": Color(0.30, 0.38, 0.24),         # Wax myrtle scrub
 			}
 	# Default fallback
 	return get_terrain_colors(Type.PARKLAND)

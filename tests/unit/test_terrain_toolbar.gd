@@ -11,59 +11,85 @@ func test_bottom_bar_fits_two_rows_of_course_tiles() -> void:
 	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT),
 		"Toolbar content must fit inside the bottom bar")
 
-func test_course_and_hazard_tiles_share_one_two_row_group() -> void:
-	var surfaces := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
-		TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX]
-	var hazards := [TerrainTypes.Type.BUNKER, TerrainTypes.Type.WATER,
-		TerrainTypes.Type.OUT_OF_BOUNDS]
-	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
-	assert_eq(grid.columns, TerrainToolbar.COURSE_TILE_COLUMNS)
-	for tool_type in surfaces + hazards:
+## The Course Terrain tiles in reading order: the top row runs from the tee to
+## the water, the bottom row pairs each playing surface with its trouble tiles.
+const TOP_ROW := [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN,
+	TerrainTypes.Type.BUNKER, TerrainTypes.Type.ROUGH, TerrainTypes.Type.POT_BUNKER,
+	TerrainTypes.Type.STREAM, TerrainTypes.Type.WATER]
+const BOTTOM_ROW := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
+	TerrainTypes.Type.DEEP_ROUGH, TerrainTypes.Type.WASTE_BUNKER, TerrainTypes.Type.BRUSH,
+	TerrainTypes.Type.ROCKS, TerrainTypes.Type.OUT_OF_BOUNDS]
+
+func test_course_tiles_share_one_group_in_top_and_bottom_rows() -> void:
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
+	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
+	assert_eq(grid.columns, TOP_ROW.size() + ceili(float(landscape_count) / 2.0))
+	assert_eq(grid.get_child_count(), TOP_ROW.size() + BOTTOM_ROW.size() + landscape_count,
+		"All course and landscape tiles share exactly two rows")
+	for tool_type in TOP_ROW + BOTTOM_ROW:
 		assert_eq(toolbar._tool_buttons[tool_type].get_parent(), grid,
-			"Course and hazard tiles should live in the same group")
-	for tool_type in surfaces:
-		assert_lt(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Surfaces on row 1")
-	for tool_type in hazards:
-		assert_gte(toolbar._tool_buttons[tool_type].get_index(), grid.columns, "Hazards on row 2")
+			"Course tiles should live in the same group")
 
-func test_hazard_row_is_shifted_right_into_the_notches_of_the_surface_row() -> void:
+	for slot in TOP_ROW.size():
+		assert_eq(toolbar._tool_buttons[TOP_ROW[slot]].get_index(), slot,
+			"%s is tile %d of the top row" % [TerrainTypes.get_type_name(TOP_ROW[slot]), slot])
+	for slot in BOTTOM_ROW.size():
+		assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot,
+			"%s is tile %d of the bottom row" % [TerrainTypes.get_type_name(BOTTOM_ROW[slot]), slot])
+
+	# The rows are drawn staggered: the bottom row sits half a tile below the top.
 	await _settle_layout()
-	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	var top_y: float = toolbar._tool_buttons[TOP_ROW[0]].position.y
+	for tool_type in TOP_ROW:
+		assert_almost_eq(toolbar._tool_buttons[tool_type].position.y, top_y, 0.01,
+			"%s sits on the top row" % TerrainTypes.get_type_name(tool_type))
+	for tool_type in BOTTOM_ROW:
+		assert_almost_eq(toolbar._tool_buttons[tool_type].position.y,
+			top_y + grid.tile_size.y * 0.5 + grid.v_separation, 0.01,
+			"%s sits on the bottom row" % TerrainTypes.get_type_name(tool_type))
+
+func test_bottom_row_is_shifted_right_into_the_notches_of_the_top_row() -> void:
+	await _settle_layout()
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var pitch := grid.tile_size.x + grid.h_separation
-	var hazard_count := grid.get_child_count() - grid.columns
+	var bottom_count := grid.get_child_count() - grid.columns
 
-	for i in hazard_count:
-		var hazard: Control = grid.get_child(grid.columns + i)
+	for i in bottom_count:
+		var below: Control = grid.get_child(grid.columns + i)
 		var above_left: Control = grid.get_child(i)
-		var above_right: Control = grid.get_child(i + 1)
 
-		# Half a tile to the right: centred on the gap between the tiles above.
-		assert_almost_eq(hazard.position.x, (above_left.position.x + above_right.position.x) * 0.5,
-			0.01, "Hazard %d should sit in the notch between two surfaces" % i)
-		assert_almost_eq(hazard.position.x - above_left.position.x, pitch * 0.5, 0.01,
-			"Hazard %d should be shifted half a tile to the right" % i)
+		# Half a tile to the right of the tile above: the row is staggered.
+		assert_almost_eq(below.position.x - above_left.position.x, pitch * 0.5, 0.01,
+			"Bottom row tile %d should be shifted half a tile to the right" % i)
+		if i + 1 < grid.columns:
+			# Centred on the gap between the two tiles above it.
+			var above_right: Control = grid.get_child(i + 1)
+			assert_almost_eq(below.position.x,
+				(above_left.position.x + above_right.position.x) * 0.5, 0.01,
+				"Bottom row tile %d should sit in the notch between two top row tiles" % i)
 
-		# Half a tile down: tucked up into the row above instead of stacked,
-		# below the breathing room kept above the first row.
-		assert_almost_eq(hazard.position.y,
+		# Half a tile down: tucked into the row above instead of stacked below
+		# it, while staying clear of the breathing room above the first row.
+		assert_almost_eq(below.position.y,
 			grid.v_padding + grid.tile_size.y * 0.5 + grid.v_separation, 0.01,
-			"Hazard %d should tuck up into the notches of the surface row" % i)
-		assert_lt(hazard.position.y, grid.tile_size.y,
-			"Hazard %d should rise into the row above, not sit below it" % i)
+			"Bottom row tile %d should tuck up into the notches of the top row" % i)
+		assert_lt(below.position.y, grid.v_padding + grid.tile_size.y,
+			"Bottom row tile %d should rise into the row above, not sit below it" % i)
 
 func test_interlocking_rows_never_overlap_each_others_diamonds() -> void:
 	await _settle_layout()
-	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.FAIRWAY].get_parent()
+	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var tile := grid.tile_size
 
-	# A row 2 tile's top vertex must stay outside both diamonds above it.
+	# A bottom row tile's top vertex must stay outside every diamond above it,
+	# including the last tile, which overhangs the end of the top row.
 	for i in grid.get_child_count() - grid.columns:
-		var hazard: Control = grid.get_child(grid.columns + i)
-		var vertex := hazard.position + Vector2(tile.x * 0.5, 0.0)
-		for j in [i, i + 1]:
-			var above: Control = grid.get_child(j)
+		var below: Control = grid.get_child(grid.columns + i)
+		var vertex := below.position + Vector2(tile.x * 0.5, 0.0)
+		for above in grid.get_children().slice(0, grid.columns):
 			assert_false(TerrainTileButton.point_on_tile(vertex - above.position),
-				"Hazard %d should not cover the diamond of row 1 tile %d" % [i, j])
+				"Bottom row tile %d should not cover the diamond of top row tile %d"
+					% [i, above.get_index()])
 
 func test_tile_buttons_only_answer_inside_the_diamond() -> void:
 	var tile := TerrainTileButton.TILE_SIZE
@@ -91,11 +117,7 @@ func test_two_rows_of_big_tiles_fill_the_toolbar_page_height() -> void:
 	# and the breathing room above and below the rows.
 	var two_rows := tile.y * 1.5 + TerrainToolbar.TILE_V_SEPARATION \
 			+ 2.0 * TerrainToolbar.TILE_V_PADDING
-	# Tab bar, panel margins and the horizontal scrollbar shown when a page overflows.
-	var page_height := float(UIConstants.BOTTOM_BAR_HEIGHT) - 39.0
 	assert_gt(tile.y, 42.0, "Tiles should be bigger than the old 84x42 cells")
-	assert_lte(two_rows + 2.0, page_height, "Two rows (plus drop shadow) fit the page")
-	assert_gte(two_rows, page_height - 8.0, "Two rows should fill the page height")
 
 	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))["buildings"]
 	toolbar.set_building_registry(registry)
@@ -104,6 +126,12 @@ func test_two_rows_of_big_tiles_fill_the_toolbar_page_height() -> void:
 	assert_almost_eq(course_grid.get_combined_minimum_size().y, two_rows, 0.01)
 	assert_almost_eq(toolbar._building_shelf.get_combined_minimum_size().y, two_rows, 0.01)
 	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT))
+
+	# The page the tiles sit on: the bottom bar less the tab bar, the panel
+	# margins and the horizontal scrollbar shown when a page overflows.
+	var page_height: float = toolbar._pages[TerrainToolbar.Tab.TERRAIN].size.y
+	assert_lte(two_rows + 2.0, page_height, "Two rows (plus drop shadow) fit the page")
+	assert_gte(two_rows, page_height - 8.0, "Two rows should fill the page height")
 
 func test_tile_rows_keep_space_above_below_and_between_them() -> void:
 	var padding: int = TerrainToolbar.TILE_V_PADDING
@@ -194,12 +222,10 @@ func test_tool_selection_and_signals() -> void:
 	toolbar._on_tool_button_pressed(TerrainTypes.Type.GREEN)
 	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.GREEN])
 	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.GREEN)
-	assert_true(toolbar._green_preset_group.visible, "Green presets should be visible when Green is selected")
 
 	toolbar.clear_selection()
 	assert_eq(toolbar.get_current_tool(), -1)
 	assert_false(toolbar.has_selection())
-	assert_false(toolbar._green_preset_group.visible, "Green presets should be hidden when cleared")
 
 func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 	var paint_tools := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
@@ -345,17 +371,24 @@ func test_brush_size_controls() -> void:
 	assert_eq(toolbar.get_brush_size(), 3)
 	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [3])
 
-func test_green_preset_toggle() -> void:
-	watch_signals(toolbar)
+func test_green_tile_flag_tracks_the_next_green_type() -> void:
+	var button: TerrainTileButton = toolbar._tool_buttons[TerrainTypes.Type.GREEN]
+	assert_true(toolbar.green_will_place_cup(), "A new course's first green carries a cup")
+	assert_true(button.shows_green_with_hole_flag(), "Green With Hole is marked with a flag")
+	assert_true(button._cup_flag.visible)
+	assert_string_contains(button.tool_description, "Green With Hole")
 
-	toolbar._on_green_preset_pressed("medium")
-	assert_eq(toolbar.get_active_green_preset(), "medium")
-	assert_signal_emitted_with_parameters(toolbar, "green_preset_selected", ["medium"])
+	toolbar.set_green_placement_state(false)
+	assert_false(toolbar.green_will_place_cup())
+	assert_false(button.shows_green_with_hole_flag(), "Green Without Hole has no flag")
+	assert_false(button._cup_flag.visible)
+	assert_string_contains(button.tool_description, "Green Without Hole")
+	assert_string_contains(button.accessibility_description, "selected brush")
 
-	# Toggle off when clicked again
-	toolbar._on_green_preset_pressed("medium")
-	assert_eq(toolbar.get_active_green_preset(), "")
-	assert_signal_emitted_with_parameters(toolbar, "green_preset_selected", [""])
+func test_course_terrain_tab_has_no_green_size_presets() -> void:
+	var terrain_content: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0)
+	assert_eq(terrain_content.get_child_count(), 3,
+		"The terrain tab contains the tools, separator, unified tile grid, with no extra separator or preset group")
 
 func test_holes_tab_has_hbox_hole_list() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
@@ -403,10 +436,11 @@ func test_action_signals() -> void:
 	assert_signal_emitted(toolbar, "open_hole_pressed")
 
 	toolbar._on_tool_button_pressed("tree")
-	assert_signal_emitted(toolbar, "tree_placement_pressed")
+	assert_signal_emitted_with_parameters(toolbar, "tree_selected", [
+		CourseTheme.get_tree_types(GameManager.current_theme)[0]])
 
 	toolbar._on_tool_button_pressed("rock")
-	assert_signal_emitted(toolbar, "rock_placement_pressed")
+	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["medium"])
 
 	toolbar._on_tool_button_pressed("building")
 	assert_signal_emitted(toolbar, "building_placement_pressed")
@@ -476,16 +510,6 @@ func test_brush_limit_caps_the_brush_for_the_selected_tool() -> void:
 	for button in toolbar._brush_buttons:
 		assert_false(button.disabled)
 
-func test_green_presets_hide_while_the_green_carries_a_cup() -> void:
-	toolbar._on_tool_button_pressed(TerrainTypes.Type.GREEN)
-	assert_true(toolbar._green_preset_group.visible)
-
-	toolbar.set_brush_limit(1)  # Green With Hole: one tile, no preset shape
-	assert_false(toolbar._green_preset_group.visible)
-
-	toolbar.set_brush_limit(HoleLayout.UNLIMITED_BRUSH)  # Green Without Hole
-	assert_true(toolbar._green_preset_group.visible)
-
 func test_staff_tab_embeds_staff_management() -> void:
 	assert_false(toolbar.has_signal("staff_pressed"),
 		"Staff management is inline in the tab; it should not open a popup")
@@ -527,3 +551,122 @@ func test_mouse_wheel_horizontal_scroll_input() -> void:
 	event_up.pressed = true
 	toolbar._on_scroll_gui_input(event_up, scroll)
 	assert_eq(scroll.scroll_horizontal, 100)
+
+func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab() -> void:
+	# Flower Bed is a TerrainTileButton in the Course Terrain tab
+	var fb_btn: ToolButton = toolbar._tool_buttons[TerrainTypes.Type.FLOWER_BED]
+	assert_true(fb_btn is TerrainTileButton, "Flower Bed should be a TerrainTileButton")
+	assert_eq(TerrainToolbar.TOOL_TAB_MAP[TerrainTypes.Type.FLOWER_BED], TerrainToolbar.Tab.TERRAIN,
+		"Flower Bed should belong to the Course Terrain tab")
+	assert_eq(fb_btn.tool_name, "Flower Bed")
+	assert_eq(fb_btn.get_parent(), toolbar._course_tiles,
+		"Flower Bed should live on the unified honeycomb in Course Terrain tab")
+
+	# Boulders are BoulderTileButtons (which inherit TerrainTileButton) in Course Terrain tab
+	for b_id in ["boulder_small", "rock", "boulder_large"]:
+		var b_btn: ToolButton = toolbar._tool_buttons[b_id]
+		assert_true(b_btn is BoulderTileButton, "%s should be a BoulderTileButton" % b_id)
+		assert_true(b_btn is TerrainTileButton, "%s should be a TerrainTileButton" % b_id)
+		assert_eq(b_btn.get_parent(), toolbar._course_tiles,
+			"%s should live on the unified honeycomb in Course Terrain tab" % b_id)
+
+	assert_eq(toolbar._tool_buttons["boulder_small"].tool_name, "Small Boulder")
+	assert_eq(toolbar._tool_buttons["rock"].tool_name, "Boulders")
+	assert_eq(toolbar._tool_buttons["boulder_large"].tool_name, "Large Boulder")
+
+	# Theme Trees for default theme (PARKLAND) are TreeTileButtons in Course Terrain tab
+	var theme_trees: Array = CourseTheme.get_tree_types(CourseTheme.Type.PARKLAND)
+	for tree_type in theme_trees:
+		var t_id: String = "tree_" + str(tree_type)
+		var t_btn: ToolButton = toolbar._tool_buttons[t_id]
+		assert_true(t_btn is TreeTileButton, "%s should be a TreeTileButton" % t_id)
+		assert_true(t_btn is TerrainTileButton, "%s should be a TerrainTileButton" % t_id)
+		assert_eq(t_btn.get_parent(), toolbar._course_tiles,
+			"%s should live on the unified honeycomb in Course Terrain tab" % t_id)
+
+	# The unified honeycomb itself sits inside Course Terrain page and has 2 interlocking rows
+	assert_not_null(toolbar._course_tiles)
+	assert_eq(toolbar._course_tiles.get_parent().get_parent(),
+		toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0),
+		"Unified honeycomb should live in Course Terrain tab")
+	var total_landscape_tiles: int = 1 + 3 + theme_trees.size()
+	assert_eq(toolbar._course_tiles.columns, TOP_ROW.size() + ceili(float(total_landscape_tiles) / 2.0),
+		"Unified honeycomb should be laid out in two interlocking rows")
+	var course_group: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent().get_parent()
+	var landscape_group: Control = toolbar._course_tiles.get_parent()
+	assert_eq(landscape_group, course_group,
+		"Nature & Landscaping should share the course tile group")
+
+func test_improvements_tab_only_contains_paths_and_decorations() -> void:
+	var imp_page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS]
+	var imp_hbox: HBoxContainer = imp_page.get_child(0)
+
+	# Verify Trees, Boulders, Flower Bed are NOT in Improvements tab
+	var tool_names: Array[String] = []
+	for btn in imp_hbox.find_children("*", "ToolButton", true, false):
+		tool_names.append(btn.tool_name)
+
+	assert_false(tool_names.has("Trees"), "Improvements tab must not contain Trees")
+	assert_false(tool_names.has("Boulders"), "Improvements tab must not contain Boulders")
+	assert_false(tool_names.has("Flower Bed"), "Improvements tab must not contain Flower Bed")
+	assert_true(tool_names.has("Path"), "Improvements tab should contain Path")
+	assert_true(tool_names.has("Decorations"), "Improvements tab should contain Decorations")
+
+func test_theme_change_updates_tree_tiles_in_course_terrain_tab() -> void:
+	# Switch theme to DESERT
+	GameManager.current_theme = CourseTheme.Type.DESERT
+	EventBus.theme_changed.emit(CourseTheme.Type.DESERT)
+
+	var desert_trees: Array = CourseTheme.get_tree_types(CourseTheme.Type.DESERT)
+	for tree_type in desert_trees:
+		var t_id: String = "tree_" + str(tree_type)
+		assert_true(toolbar._tool_buttons.has(t_id),
+			"Course Terrain tab should contain Desert tree %s" % tree_type)
+		assert_true(toolbar._tool_buttons[t_id] is TreeTileButton)
+
+	# Reset theme back to PARKLAND
+	GameManager.current_theme = CourseTheme.Type.PARKLAND
+	EventBus.theme_changed.emit(CourseTheme.Type.PARKLAND)
+
+func test_tree_and_boulder_tile_selection_signals() -> void:
+	watch_signals(toolbar)
+
+	# Selecting a tree tile emits tree_selected with the tree type
+	toolbar._on_tool_button_pressed("tree_oak")
+	assert_signal_emitted_with_parameters(toolbar, "tree_selected", ["oak"])
+	assert_true(toolbar.has_selection())
+
+	# Selecting a boulder tile emits rock_selected with the boulder size
+	toolbar._on_tool_button_pressed("boulder_small")
+	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["small"])
+	assert_true(toolbar.has_selection())
+
+	# Selecting Flower Bed selects tool TerrainTypes.Type.FLOWER_BED
+	toolbar._on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.FLOWER_BED])
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.FLOWER_BED)
+
+
+func test_theme_changes_keep_one_honeycomb_without_stale_tiles() -> void:
+	var original_theme: int = GameManager.current_theme
+	var tee: ToolButton = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]
+	var grid := toolbar._course_tiles
+	for theme in [CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND,
+			CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND]:
+		GameManager.current_theme = theme
+		EventBus.theme_changed.emit(theme)
+		var trees: Array = CourseTheme.get_tree_types(theme)
+		assert_eq(grid.get_child_count(), 18 + trees.size(),
+			"Theme refresh must immediately remove old tiles, even within one frame")
+		assert_eq(grid.columns, ceili(float(grid.get_child_count()) / 2.0))
+		assert_same(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX], tee,
+			"Theme changes must preserve course tile state")
+		for key in toolbar._tool_buttons:
+			if str(key).begins_with("tree_"):
+				assert_has(trees, str(key).trim_prefix("tree_"), "No stale tree tools")
+		for slot in BOTTOM_ROW.size():
+			assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot)
+		assert_eq(toolbar._pages[TerrainToolbar.Tab.TERRAIN].find_children(
+			"*", "TileHoneycomb", true, false).size(), 1)
+	GameManager.current_theme = original_theme
+	EventBus.theme_changed.emit(original_theme)
