@@ -35,7 +35,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	await get_tree().process_frame
-	GameManager.terrain_grid = _saved_terrain_grid
+	GameManager.terrain_grid = _saved_terrain_grid if is_instance_valid(_saved_terrain_grid) else null
 	GameManager.course_data = _saved_course_data
 	GameManager.wind_system = _saved_wind_system
 	_terrain_grid = null

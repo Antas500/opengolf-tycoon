@@ -31,7 +31,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	GameManager.current_course = _saved_course
-	GameManager.terrain_grid = _saved_grid
+	GameManager.terrain_grid = _saved_grid if is_instance_valid(_saved_grid) else null
 	GameManager.multi_tee_enabled = _saved_multi_tee
 
 func _paint_waiting_pair(tee: Vector2i = TEE, cup: Vector2i = CUP) -> void:
@@ -299,7 +299,7 @@ func test_a_curved_shaft_bows_towards_the_corner_it_turns_through() -> void:
 		var tail := shaft[0]
 		var tip := shaft[shaft.size() - 1]
 		var corner := tail + in_dir * ((tip - tail).cross(out_dir) / in_dir.cross(out_dir))
-		var bow := shaft[shaft.size() / 2] - (tail + tip) * 0.5
+		var bow := shaft[int(shaft.size() / 2.0)] - (tail + tip) * 0.5
 		assert_gt(bow.dot(corner - (tail + tip) * 0.5), 0.0,
 				"A turn of %d° bends toward its corner" % int(angle))
 

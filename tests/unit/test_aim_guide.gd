@@ -43,7 +43,7 @@ func test_arc_rises_over_the_ground_and_lands_on_carry() -> void:
 
 	# The apex sits above the straight line between the endpoints (screen y is down),
 	# and the arc rides above its own ground track.
-	var middle := arc.size() / 2
+	var middle := int(arc.size() / 2.0)
 	var chord_mid := origin_screen.lerp(carry_screen, 0.5)
 	assert_lt(arc[middle].y, chord_mid.y, "Arc rises above the aim line")
 	assert_lt(arc[middle].y, ground[middle].y, "Arc floats above the ground track")

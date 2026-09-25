@@ -441,7 +441,8 @@ func _on_bird_timer() -> void:
 
 	# Occasionally a second bird responds after a short delay (duet/call-response)
 	if randf() < 0.25:
-		await get_tree().create_timer(randf_range(0.3, 0.8)).timeout
+		# Timer-node delay: a pending SceneTreeTimer await would leak at quit.
+		await Delay.seconds(self, randf_range(0.3, 0.8))
 		if is_muted:
 			_schedule_next_bird()
 			return

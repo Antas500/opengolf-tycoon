@@ -30,7 +30,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	GameManager.terrain_grid = _saved_terrain_grid
+	GameManager.terrain_grid = _saved_terrain_grid if is_instance_valid(_saved_terrain_grid) else null
 	GameManager.course_data = _saved_course_data
 	_golfer = null
 	_terrain_grid = null

@@ -27,7 +27,7 @@ func before_each() -> void:
 	grid.add_cup_tile(CUP)
 
 func after_each() -> void:
-	GameManager.terrain_grid = _saved_grid
+	GameManager.terrain_grid = _saved_grid if is_instance_valid(_saved_grid) else null
 	GameManager.current_course = _saved_course
 
 func test_waiting_pair_is_ready_to_open() -> void:

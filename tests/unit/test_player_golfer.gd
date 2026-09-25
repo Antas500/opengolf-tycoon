@@ -68,7 +68,7 @@ func test_player_waits_off_green_but_putting_is_automatic() -> void:
 	grid._grid[golfer.ball_position] = TerrainTypes.Type.FAIRWAY
 	assert_false(golfer.awaits_player_shot())
 	assert_false(golfer.play_shot(Vector2i(15, 10)))
-	GameManager.terrain_grid = saved_grid
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
 func test_player_range_power_and_punch() -> void:
 	var saved_grid = GameManager.terrain_grid
@@ -85,7 +85,7 @@ func test_player_range_power_and_punch() -> void:
 	assert_gt(golfer.player_aim(target).x, normal)
 	golfer.player_punch = true
 	assert_lt(golfer.player_aim(target).x, normal)
-	GameManager.terrain_grid = saved_grid
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
 func _fill_fairway(grid: TerrainGrid, size: int = 60) -> void:
 	for x in range(size):
@@ -137,6 +137,7 @@ func test_shot_preview_is_deterministic_and_matches_execution() -> void:
 	# Out-of-range aim still shows the clamped shot, and the mouse target it came from.
 	assert_gt(preview.raw_target.distance_to(preview.origin), preview.aim.distance_to(preview.origin),
 		"Raw mouse target sits beyond the clamped aim point")
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
 func test_preview_ignores_shank_and_miss_tendency() -> void:
 	var saved_grid = GameManager.terrain_grid
@@ -151,7 +152,7 @@ func test_preview_ignores_shank_and_miss_tendency() -> void:
 	assert_almost_eq(float(shot.miss_angle_deg), 0.0, 0.0001, "Previewed shot carries no miss angle")
 	assert_false(shot.is_shank, "Previewed shot cannot be a shank")
 	assert_almost_eq(preview.carry.x, preview.origin.x, 0.05, "Preview lands on the aim line despite the slice tendency")
-	GameManager.terrain_grid = saved_grid
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
 func test_preview_reflects_shapes_punch_and_backspin() -> void:
 	var saved_grid = GameManager.terrain_grid
@@ -199,7 +200,7 @@ func test_preview_reflects_shapes_punch_and_backspin() -> void:
 	var punch_ratio: float = punch.rollout_tiles / punch.carry.distance_to(punch.origin)
 	assert_almost_eq(punch_ratio, straight_ratio * 1.5, 0.05, "Punch rolls out 150% of the normal roll")
 	GameManager.wind_system = saved_wind
-	GameManager.terrain_grid = saved_grid
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
 func test_preview_unavailable_outside_the_owner_turn() -> void:
 	var saved_grid = GameManager.terrain_grid
@@ -218,4 +219,4 @@ func test_preview_unavailable_outside_the_owner_turn() -> void:
 	golfer.player_shape = 1
 	assert_almost_eq(float(golfer.preview_shot(Vector2i(10, 20)).shape_bend_deg), 0.0, 0.001)
 	assert_eq(golfer.player_shape, 0, "Illegal shape resets on the guide preview")
-	GameManager.terrain_grid = saved_grid
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
