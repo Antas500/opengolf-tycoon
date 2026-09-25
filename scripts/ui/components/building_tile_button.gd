@@ -17,7 +17,7 @@ func configure_building(building_type: String, data: Dictionary) -> void:
 	var description := str(data.get("description", "Select this facility to place it."))
 	if description.is_empty():
 		description = "Select this facility to place it."
-	var cost := int(data.get("cost", 0))
+	var building_cost := int(data.get("cost", 0))
 	var upkeep := int(data.get("operating_cost", 0))
 	configure(
 		building_type,
@@ -25,11 +25,11 @@ func configure_building(building_type: String, data: Dictionary) -> void:
 		"",
 		"",
 		description,
-		cost,
+		building_cost,
 		upkeep)
 	tooltip_text = ""
 	accessibility_description = "%s. Build $%d. Upkeep $%d per day. %s" % [
-		tool_name, cost, upkeep, description]
+		tool_name, building_cost, upkeep, description]
 
 func _ready() -> void:
 	super._ready()

@@ -1117,11 +1117,11 @@ func _on_tool_button_pressed(tool_type) -> void:
 			var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
 			tree_selected.emit(first_tree)
 		elif s_tool.begins_with("boulder_"):
-			var size := s_tool.substr(8)
+			var boulder_size := s_tool.substr(8)
 			_current_tool = -1
 			_selected_string_tool = s_tool
 			_update_selection_highlight()
-			rock_selected.emit(size)
+			rock_selected.emit(boulder_size)
 		elif s_tool == "rock":
 			_current_tool = -1
 			_selected_string_tool = s_tool

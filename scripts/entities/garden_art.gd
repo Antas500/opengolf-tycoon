@@ -41,7 +41,7 @@ static func draw_piece(c: CanvasItem, type: String) -> void:
 			poly(c, [Vector2(-27,-7),Vector2(20,-7),Vector2(27,5),Vector2(-20,5)], "bd9c73")
 			poly(c, [Vector2(-24,-7),Vector2(19,-7),Vector2(24,2),Vector2(-19,2)], "574d35")
 			for i in range(13):
-				var p := Vector2(-21+(i%7)*6, -5+(i/7)*5)
+				var p := Vector2(-21+(i%7)*6, -5+(i // 7)*5)
 				var flower := "e7a7b5" if type == "rose_border" else "b7a4e4"
 				if type == "hydrangea":
 					oval(c,p-Vector2(0,4),Vector2(6,5),"487448")

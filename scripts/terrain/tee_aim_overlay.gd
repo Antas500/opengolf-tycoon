@@ -257,14 +257,14 @@ func marker_layout(tee: Vector2i) -> Dictionary:
 			{"points": head, "pen": 1.0},
 			{"points": balls, "pen": BALL_RADIUS},
 		], centre, SAFE_INSET)
-	var scale := clampf(fit, MIN_FIT_SCALE, 1.0)
-	if scale < 1.0:
+	var marker_scale := clampf(fit, MIN_FIT_SCALE, 1.0)
+	if marker_scale < 1.0:
 		for i in range(shaft.size()):
-			shaft[i] *= scale
+			shaft[i] *= marker_scale
 		for i in range(head.size()):
-			head[i] *= scale
+			head[i] *= marker_scale
 		for i in range(balls.size()):
-			balls[i] *= scale
+			balls[i] *= marker_scale
 
 	# 5. Local space, with the shaft stopped where the head takes over.
 	for i in range(shaft.size()):
@@ -274,10 +274,10 @@ func marker_layout(tee: Vector2i) -> Dictionary:
 	for i in range(balls.size()):
 		balls[i] += centre
 	return {
-		"shaft": trim_to_head(shaft, HEAD_LENGTH * HEAD_OVERLAP * scale),
+		"shaft": trim_to_head(shaft, HEAD_LENGTH * HEAD_OVERLAP * marker_scale),
 		"head": head,
 		"balls": balls,
-		"scale": scale,
+		"scale": marker_scale,
 		"fit": fit,
 		"floored": fit < MIN_FIT_SCALE,
 	}
@@ -293,15 +293,15 @@ func _draw() -> void:
 		var layout := marker_layout(tee)
 		if layout.is_empty():
 			continue
-		var scale: float = layout.scale
+		var marker_draw_scale: float = layout.scale
 		var shaft: PackedVector2Array = layout.shaft
 		var head: PackedVector2Array = layout.head
-		draw_polyline(shaft, PAINT_EDGE_COLOR, EDGE_WIDTH * scale, true)
-		draw_polyline(shaft, PAINT_COLOR, SHAFT_WIDTH * scale, true)
+		draw_polyline(shaft, PAINT_EDGE_COLOR, EDGE_WIDTH * marker_draw_scale, true)
+		draw_polyline(shaft, PAINT_COLOR, SHAFT_WIDTH * marker_draw_scale, true)
 		draw_colored_polygon(head, PAINT_COLOR)
-		draw_polyline(_closed(head), PAINT_EDGE_COLOR, 2.0 * scale, true)
+		draw_polyline(_closed(head), PAINT_EDGE_COLOR, 2.0 * marker_draw_scale, true)
 		for ball in layout.balls:
-			_draw_tee_marker(ball, BALL_RADIUS * scale)
+			_draw_tee_marker(ball, BALL_RADIUS * marker_draw_scale)
 
 ## A red tee marker ball: shadow on the grass, dark rim, red body, highlight.
 func _draw_tee_marker(centre: Vector2, radius: float) -> void:
@@ -411,7 +411,7 @@ static func _is_convex(outline: PackedVector2Array) -> bool:
 ## scales its own line widths), so a part reaches `normal·point + pen` toward an
 ## edge, where the room left is `gap`.
 static func fit_scale(edges: Array, parts: Array, centre: Vector2, inset: float) -> float:
-	var scale := 1.0
+	var best_scale := 1.0
 	for edge in edges:
 		var normal: Vector2 = edge.normal
 		var gap: float = -(normal.dot(centre) + edge.offset) - inset
@@ -422,8 +422,8 @@ static func fit_scale(edges: Array, parts: Array, centre: Vector2, inset: float)
 			for point in part.points:
 				var reach: float = normal.dot(point) + pen
 				if reach > 0.0:
-					scale = minf(scale, gap / reach)
-	return clampf(scale, 0.0, 1.0)
+					best_scale = minf(best_scale, gap / reach)
+	return clampf(best_scale, 0.0, 1.0)
 
 ## The outline of a tile as outward edge lines: {"normal": Vector2, "offset":
 ## float}, with the tile's inside at `normal·p + offset < 0`. Corner elevations

@@ -233,7 +233,7 @@ func _update_status() -> void:
 
 	var pace_pct: int = int((sm.get_pace_modifier() if sm else 0.6) * 100)
 	var cart_pct: int = int((sm.get_cart_modifier() if sm else 0.7) * 100)
-	var pro_bonus: int = int(sm.get_pro_shop_revenue_bonus() if sm else 0)
+	var pro_bonus: int = int((sm.get_pro_shop_revenue_bonus() if sm else 0.0))
 	_pace_label.text = "Pace: %d%%" % pace_pct
 	_cart_label.text = "Carts: %d%%" % cart_pct
 	_pro_shop_label.text = "Pro Shop: +$%d/golfer" % pro_bonus

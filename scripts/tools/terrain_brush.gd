@@ -26,7 +26,7 @@ static func centers_4_connected(from: Vector2i, to: Vector2i) -> Array[Vector2i]
 
 static func offsets(diameter: int, round_shape: bool = true) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var radius := (diameter - 1) / 2
+	var radius := (diameter - 1) // 2
 	for x in range(-radius, radius + 1):
 		for y in range(-radius, radius + 1):
 			if not round_shape or x*x + y*y <= radius*radius + radius*.5:

@@ -7,16 +7,16 @@ var rock_size: String = "medium"
 var rock_data: Dictionary = {}
 var _sprite: Sprite2D = null
 
-func configure_boulder(size: String, data: Dictionary) -> void:
-	rock_size = size
+func configure_boulder(p_size: String, data: Dictionary) -> void:
+	rock_size = p_size
 	rock_data = data.duplicate(true)
 	var r_name: String = str(data.get("name", "Boulders"))
-	var cost: int = int(data.get("cost", 15))
+	var boulder_cost: int = int(data.get("cost", 15))
 	var desc: String = "Decorative boulder obstacle. Places a %s." % r_name.to_lower()
-	var tool_id := "rock" if size == "medium" else ("boulder_" + size)
-	configure(tool_id, r_name, "", "", desc, cost, 0)
+	var tool_id := "rock" if p_size == "medium" else ("boulder_" + p_size)
+	configure(tool_id, r_name, "", "", desc, boulder_cost, 0)
 	tooltip_text = ""
-	accessibility_description = "%s. Build $%d. %s" % [tool_name, cost, desc]
+	accessibility_description = "%s. Build $%d. %s" % [tool_name, boulder_cost, desc]
 
 func _ready() -> void:
 	super._ready()

@@ -264,16 +264,16 @@ func _process(delta: float) -> void:
 		_show_results()
 		return
 
-	var ready := player.awaits_player_shot()
+	var is_player_ready := player.awaits_player_shot()
 	var terrain: int = GameManager.terrain_grid.get_tile(Vector2i(player.ball_position_precise.round())) if GameManager.terrain_grid else -1
 	for i in range(1, 4):
 		shapes.set_item_disabled(i, not Golfer.shape_allowed(i, terrain))
 	if not Golfer.shape_allowed(player.player_shape, terrain):
 		player.player_shape = 0
 		shapes.select(0)
-	shapes.disabled = not ready
-	punch.disabled = not ready
-	Input.set_default_cursor_shape(Input.CURSOR_CROSS if ready else Input.CURSOR_ARROW)
+	shapes.disabled = not is_player_ready
+	punch.disabled = not is_player_ready
+	Input.set_default_cursor_shape(Input.CURSOR_CROSS if is_player_ready else Input.CURSOR_ARROW)
 	update_aim_guide()
 
 	# Track active shooter in the group
@@ -284,15 +284,15 @@ func _process(delta: float) -> void:
 			break
 
 	# Focus camera on the player's character only when the user needs to aim their shot
-	if ready and not _was_aiming:
+	if is_player_ready and not _was_aiming:
 		if is_instance_valid(player) and is_instance_valid(camera):
 			camera.focus_on(player.global_position)
-	_was_aiming = ready
+	_was_aiming = is_player_ready
 
 	# Status text
 	var hole_num = mini(player.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
 	var action_text = ""
-	if ready:
+	if is_player_ready:
 		action_text = "Your turn — Aim and click to shoot"
 	elif active_shooter == player:
 		action_text = "Automatic putting..." if terrain == TerrainTypes.Type.GREEN else "Taking shot..."
@@ -355,7 +355,7 @@ func _show_results() -> void:
 		_label(scores)
 	_button("Return to management", leave_round)
 
-func leave_round(restore_mode: bool = true) -> void:
+func leave_round(_restore_mode: bool = true) -> void:
 	var had_round := busy
 	active = false
 	busy = false

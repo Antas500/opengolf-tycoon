@@ -53,7 +53,7 @@ func _layout_tiles() -> void:
 
 ## Top-left corner of slot `slot`, counting only visible Control children.
 func _position_for(slot: int) -> Vector2:
-	var row := slot / columns
+	var row := slot // columns
 	var column := slot % columns
 	return Vector2(column * _column_pitch() + row * _row_shift().x,
 		v_padding + row * _row_shift().y)
@@ -69,15 +69,15 @@ func _row_shift() -> Vector2:
 ## the breathing room above and below the rows.
 func _grid_size() -> Vector2:
 	var slot := 0
-	var size := Vector2.ZERO
+	var grid_size := Vector2.ZERO
 	var has_tiles := false
 	for child in get_children():
 		if child is Control and child.visible:
 			has_tiles = true
 			var bottom_right := _position_for(slot) + tile_size
-			size.x = maxf(size.x, bottom_right.x)
-			size.y = maxf(size.y, bottom_right.y)
+			grid_size.x = maxf(grid_size.x, bottom_right.x)
+			grid_size.y = maxf(grid_size.y, bottom_right.y)
 			slot += 1
 	if has_tiles:
-		size.y += v_padding  # The padding above row 1 is already in the positions.
-	return size
+		grid_size.y += v_padding  # The padding above row 1 is already in the positions.
+	return grid_size
