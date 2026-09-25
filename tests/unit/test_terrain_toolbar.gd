@@ -387,8 +387,8 @@ func test_green_tile_flag_tracks_the_next_green_type() -> void:
 
 func test_course_terrain_tab_has_no_green_size_presets() -> void:
 	var terrain_content: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0)
-	assert_eq(terrain_content.get_child_count(), 5,
-		"The terrain tab contains the tools, separator, tile grid, separator, and landscaping shelf, with no preset group")
+	assert_eq(terrain_content.get_child_count(), 4,
+		"The terrain tab contains the tools, separator, tile grid, and landscaping shelf, with no extra separator or preset group")
 
 func test_holes_tab_has_hbox_hole_list() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
@@ -436,10 +436,11 @@ func test_action_signals() -> void:
 	assert_signal_emitted(toolbar, "open_hole_pressed")
 
 	toolbar._on_tool_button_pressed("tree")
-	assert_signal_emitted(toolbar, "tree_placement_pressed")
+	assert_signal_emitted_with_parameters(toolbar, "tree_selected", [
+		CourseTheme.get_tree_types(GameManager.current_theme)[0]])
 
 	toolbar._on_tool_button_pressed("rock")
-	assert_signal_emitted(toolbar, "rock_placement_pressed")
+	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["medium"])
 
 	toolbar._on_tool_button_pressed("building")
 	assert_signal_emitted(toolbar, "building_placement_pressed")
@@ -591,6 +592,10 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 	var total_landscape_tiles: int = 1 + 3 + theme_trees.size()
 	assert_eq(toolbar._landscape_shelf.columns, ceili(float(total_landscape_tiles) / 2.0),
 		"Landscape shelf should be laid out in two interlocking rows")
+	var course_group: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent().get_parent()
+	var landscape_group: Control = toolbar._landscape_shelf.get_parent()
+	assert_eq(landscape_group.get_index(), course_group.get_index() + 1,
+		"Nature & Landscaping should sit directly after the course tiles without an extra separator")
 
 func test_improvements_tab_only_contains_paths_and_decorations() -> void:
 	var imp_page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS]
@@ -629,13 +634,11 @@ func test_tree_and_boulder_tile_selection_signals() -> void:
 	# Selecting a tree tile emits tree_selected with the tree type
 	toolbar._on_tool_button_pressed("tree_oak")
 	assert_signal_emitted_with_parameters(toolbar, "tree_selected", ["oak"])
-	assert_signal_emitted(toolbar, "tree_placement_pressed")
 	assert_true(toolbar.has_selection())
 
 	# Selecting a boulder tile emits rock_selected with the boulder size
 	toolbar._on_tool_button_pressed("boulder_small")
 	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["small"])
-	assert_signal_emitted(toolbar, "rock_placement_pressed")
 	assert_true(toolbar.has_selection())
 
 	# Selecting Flower Bed selects tool TerrainTypes.Type.FLOWER_BED

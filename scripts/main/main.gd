@@ -529,8 +529,6 @@ func _setup_terrain_toolbar() -> void:
 	# Build tool signals
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
 	terrain_toolbar.open_hole_pressed.connect(_on_open_hole_pressed)
-	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
-	terrain_toolbar.rock_placement_pressed.connect(_on_rock_placement_pressed)
 	terrain_toolbar.tree_selected.connect(_on_tree_type_selected_from_toolbar)
 	terrain_toolbar.rock_selected.connect(_on_rock_size_selected_from_toolbar)
 	terrain_toolbar.building_placement_pressed.connect(_on_building_placement_pressed)
@@ -1411,37 +1409,14 @@ func _rebuild_hole_list() -> void:
 			if not hole.is_open:
 				_on_hole_toggled(hole.hole_number, false)
 
-func _on_tree_placement_pressed() -> void:
-	"""Show tree selection menu and start tree placement mode"""
+func _prepare_for_nature_placement() -> void:
+	"""Leave other placement modes before starting a tree or boulder placement."""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
 	is_painting = false
-	if terrain_toolbar:
-		terrain_toolbar.clear_selection()
-
-	# Create tree selection dialog
-	var dialog = AcceptDialog.new()
-	dialog.title = "Select Tree Type"
-	dialog.size = Vector2i(350, 50 + CourseTheme.get_tree_types(GameManager.current_theme).size() * 50)
-
-	var vbox = VBoxContainer.new()
-
-	# Add button for each tree type available in the current theme
-	var theme_trees = CourseTheme.get_tree_types(GameManager.current_theme)
-	for tree_type in theme_trees:
-		var tree_data = TreeEntity.TREE_PROPERTIES.get(tree_type, {})
-		var btn = Button.new()
-		btn.text = "%s ($%d)" % [tree_data.get("name", tree_type.capitalize()), tree_data.get("cost", 20)]
-		btn.custom_minimum_size = Vector2(300, 40)
-		btn.pressed.connect(_on_tree_type_selected.bind(tree_type, dialog))
-		vbox.add_child(btn)
-
-	dialog.add_child(vbox)
-	get_tree().root.add_child(dialog)
-	dialog.popup_centered_ratio(0.3)
 
 func _on_building_type_selected_from_toolbar(building_type: String) -> void:
 	"""Start placement immediately for a building card in the Buildings tab."""
@@ -1466,82 +1441,19 @@ func _on_building_placement_pressed() -> void:
 	if terrain_toolbar:
 		terrain_toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
 
-func _on_tree_type_selected(tree_type: String, dialog: AcceptDialog) -> void:
-	"""Handle tree type selection"""
-	print("Selected tree: %s" % tree_type)
-	dialog.queue_free()
-	selected_tree_type = tree_type
-	placement_manager.start_tree_placement(tree_type)
-	print("Tree placement mode: %s" % tree_type)
-
 func _on_tree_type_selected_from_toolbar(tree_type: String) -> void:
 	"""Start placement immediately for a tree tile in the Course Terrain tab."""
-	_cancel_hole_move_mode()
-	_close_hole_context_menu()
-	_cancel_elevation_mode()
-	_cancel_bulldozer_mode()
-	_disable_terrain_painting_preview()
-	is_painting = false
+	_prepare_for_nature_placement()
 	selected_tree_type = tree_type
 	placement_manager.start_tree_placement(tree_type)
 	print("Tree placement mode from toolbar: %s" % tree_type)
 
 func _on_rock_size_selected_from_toolbar(rock_size: String) -> void:
 	"""Start placement immediately for a boulder tile in the Course Terrain tab."""
-	_cancel_hole_move_mode()
-	_close_hole_context_menu()
-	_cancel_elevation_mode()
-	_cancel_bulldozer_mode()
-	_disable_terrain_painting_preview()
-	is_painting = false
+	_prepare_for_nature_placement()
 	selected_rock_size = rock_size
 	placement_manager.start_rock_placement(rock_size)
 	print("Rock placement mode from toolbar: %s" % rock_size)
-
-func _on_rock_placement_pressed() -> void:
-	"""Show rock size selection menu and start rock placement mode"""
-	_cancel_hole_move_mode()
-	_close_hole_context_menu()
-	_cancel_elevation_mode()
-	_cancel_bulldozer_mode()
-	_disable_terrain_painting_preview()
-	is_painting = false
-	if terrain_toolbar:
-		terrain_toolbar.clear_selection()
-
-	# Create rock selection dialog
-	var dialog = AcceptDialog.new()
-	dialog.title = "Select Rock Size"
-	dialog.size = Vector2i(350, 200)
-
-	var vbox = VBoxContainer.new()
-
-	# Add button for each rock size
-	var rock_sizes = {
-		"small": {"name": "Small Rock", "cost": 10},
-		"medium": {"name": "Medium Rock", "cost": 15},
-		"large": {"name": "Large Rock", "cost": 20}
-	}
-
-	for rock_size in rock_sizes.keys():
-		var rock_data = rock_sizes[rock_size]
-		var btn = Button.new()
-		btn.text = "%s ($%d)" % [rock_data["name"], rock_data["cost"]]
-		btn.custom_minimum_size = Vector2(300, 40)
-		btn.pressed.connect(_on_rock_size_selected.bind(rock_size, dialog))
-		vbox.add_child(btn)
-
-	dialog.add_child(vbox)
-	get_tree().root.add_child(dialog)
-	dialog.popup_centered_ratio(0.3)
-
-func _on_rock_size_selected(rock_size: String, dialog: AcceptDialog) -> void:
-	"""Handle rock size selection"""
-	print("Selected rock size: %s" % rock_size)
-	dialog.queue_free()
-	selected_rock_size = rock_size
-	placement_manager.start_rock_placement(rock_size)
-	print("Rock placement mode: %s" % rock_size)
 
 func _on_decoration_placement_pressed() -> void:
 	"""Show decoration selection menu and start decoration placement mode"""

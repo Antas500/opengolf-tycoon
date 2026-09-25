@@ -19,8 +19,6 @@ class_name TerrainToolbar
 signal course_review_pressed
 signal tool_selected(tool_type: int)
 signal open_hole_pressed
-signal tree_placement_pressed
-signal rock_placement_pressed
 signal tree_selected(tree_type: String)
 signal rock_selected(rock_size: String)
 signal building_placement_pressed
@@ -361,8 +359,6 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	# The grid carries its own breathing room above and below the rows, so it
 	# keeps that spacing instead of stretching to fill the whole page height.
 	hbox.add_child(_make_tab_group("", tiles_grid, true))
-
-	hbox.add_child(_make_separator())
 
 	# Nature & landscaping honeycomb: Flower Bed, Boulders, and Theme Trees
 	_landscape_shelf = TileHoneycomb.new()
@@ -1095,7 +1091,6 @@ func _on_tool_button_pressed(tool_type) -> void:
 			_selected_string_tool = s_tool
 			_update_selection_highlight()
 			tree_selected.emit(tree_type)
-			tree_placement_pressed.emit()
 		elif s_tool == "tree":
 			_current_tool = -1
 			_selected_string_tool = s_tool
@@ -1103,20 +1098,17 @@ func _on_tool_button_pressed(tool_type) -> void:
 			var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else ["oak"]
 			var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
 			tree_selected.emit(first_tree)
-			tree_placement_pressed.emit()
 		elif s_tool.begins_with("boulder_"):
 			var size := s_tool.substr(8)
 			_current_tool = -1
 			_selected_string_tool = s_tool
 			_update_selection_highlight()
 			rock_selected.emit(size)
-			rock_placement_pressed.emit()
 		elif s_tool == "rock":
 			_current_tool = -1
 			_selected_string_tool = s_tool
 			_update_selection_highlight()
 			rock_selected.emit("medium")
-			rock_placement_pressed.emit()
 		else:
 			match tool_type:
 				"building":
