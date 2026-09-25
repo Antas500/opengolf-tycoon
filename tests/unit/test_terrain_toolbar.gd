@@ -387,8 +387,8 @@ func test_green_tile_flag_tracks_the_next_green_type() -> void:
 
 func test_course_terrain_tab_has_no_green_size_presets() -> void:
 	var terrain_content: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0)
-	assert_eq(terrain_content.get_child_count(), 3,
-		"The terrain tab contains the tools, separator and tile grid, with no preset group")
+	assert_eq(terrain_content.get_child_count(), 5,
+		"The terrain tab contains the tools, separator, tile grid, separator, and landscaping shelf, with no preset group")
 
 func test_holes_tab_has_hbox_hole_list() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
@@ -550,3 +550,96 @@ func test_mouse_wheel_horizontal_scroll_input() -> void:
 	event_up.pressed = true
 	toolbar._on_scroll_gui_input(event_up, scroll)
 	assert_eq(scroll.scroll_horizontal, 100)
+
+func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab() -> void:
+	# Flower Bed is a TerrainTileButton in the Course Terrain tab
+	var fb_btn: ToolButton = toolbar._tool_buttons[TerrainTypes.Type.FLOWER_BED]
+	assert_true(fb_btn is TerrainTileButton, "Flower Bed should be a TerrainTileButton")
+	assert_eq(TerrainToolbar.TOOL_TAB_MAP[TerrainTypes.Type.FLOWER_BED], TerrainToolbar.Tab.TERRAIN,
+		"Flower Bed should belong to the Course Terrain tab")
+	assert_eq(fb_btn.tool_name, "Flower Bed")
+	assert_eq(fb_btn.get_parent(), toolbar._landscape_shelf,
+		"Flower Bed should live on the landscape shelf in Course Terrain tab")
+
+	# Boulders are BoulderTileButtons (which inherit TerrainTileButton) in Course Terrain tab
+	for b_id in ["boulder_small", "rock", "boulder_large"]:
+		var b_btn: ToolButton = toolbar._tool_buttons[b_id]
+		assert_true(b_btn is BoulderTileButton, "%s should be a BoulderTileButton" % b_id)
+		assert_true(b_btn is TerrainTileButton, "%s should be a TerrainTileButton" % b_id)
+		assert_eq(b_btn.get_parent(), toolbar._landscape_shelf,
+			"%s should live on the landscape shelf in Course Terrain tab" % b_id)
+
+	assert_eq(toolbar._tool_buttons["boulder_small"].tool_name, "Small Boulder")
+	assert_eq(toolbar._tool_buttons["rock"].tool_name, "Boulders")
+	assert_eq(toolbar._tool_buttons["boulder_large"].tool_name, "Large Boulder")
+
+	# Theme Trees for default theme (PARKLAND) are TreeTileButtons in Course Terrain tab
+	var theme_trees: Array = CourseTheme.get_tree_types(CourseTheme.Type.PARKLAND)
+	for tree_type in theme_trees:
+		var t_id: String = "tree_" + str(tree_type)
+		var t_btn: ToolButton = toolbar._tool_buttons[t_id]
+		assert_true(t_btn is TreeTileButton, "%s should be a TreeTileButton" % t_id)
+		assert_true(t_btn is TerrainTileButton, "%s should be a TerrainTileButton" % t_id)
+		assert_eq(t_btn.get_parent(), toolbar._landscape_shelf,
+			"%s should live on the landscape shelf in Course Terrain tab" % t_id)
+
+	# The landscape shelf itself sits inside Course Terrain page and has 2 interlocking rows
+	assert_not_null(toolbar._landscape_shelf)
+	assert_eq(toolbar._landscape_shelf.get_parent().get_parent(),
+		toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0),
+		"Landscape shelf should live in Course Terrain tab")
+	var total_landscape_tiles: int = 1 + 3 + theme_trees.size()
+	assert_eq(toolbar._landscape_shelf.columns, ceili(float(total_landscape_tiles) / 2.0),
+		"Landscape shelf should be laid out in two interlocking rows")
+
+func test_improvements_tab_only_contains_paths_and_decorations() -> void:
+	var imp_page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS]
+	var imp_hbox: HBoxContainer = imp_page.get_child(0)
+
+	# Verify Trees, Boulders, Flower Bed are NOT in Improvements tab
+	var tool_names: Array[String] = []
+	for btn in imp_hbox.find_children("*", "ToolButton", true, false):
+		tool_names.append(btn.tool_name)
+
+	assert_false(tool_names.has("Trees"), "Improvements tab must not contain Trees")
+	assert_false(tool_names.has("Boulders"), "Improvements tab must not contain Boulders")
+	assert_false(tool_names.has("Flower Bed"), "Improvements tab must not contain Flower Bed")
+	assert_true(tool_names.has("Path"), "Improvements tab should contain Path")
+	assert_true(tool_names.has("Decorations"), "Improvements tab should contain Decorations")
+
+func test_theme_change_updates_tree_tiles_in_course_terrain_tab() -> void:
+	# Switch theme to DESERT
+	GameManager.current_theme = CourseTheme.Type.DESERT
+	EventBus.theme_changed.emit(CourseTheme.Type.DESERT)
+
+	var desert_trees: Array = CourseTheme.get_tree_types(CourseTheme.Type.DESERT)
+	for tree_type in desert_trees:
+		var t_id: String = "tree_" + str(tree_type)
+		assert_true(toolbar._tool_buttons.has(t_id),
+			"Course Terrain tab should contain Desert tree %s" % tree_type)
+		assert_true(toolbar._tool_buttons[t_id] is TreeTileButton)
+
+	# Reset theme back to PARKLAND
+	GameManager.current_theme = CourseTheme.Type.PARKLAND
+	EventBus.theme_changed.emit(CourseTheme.Type.PARKLAND)
+
+func test_tree_and_boulder_tile_selection_signals() -> void:
+	watch_signals(toolbar)
+
+	# Selecting a tree tile emits tree_selected with the tree type
+	toolbar._on_tool_button_pressed("tree_oak")
+	assert_signal_emitted_with_parameters(toolbar, "tree_selected", ["oak"])
+	assert_signal_emitted(toolbar, "tree_placement_pressed")
+	assert_true(toolbar.has_selection())
+
+	# Selecting a boulder tile emits rock_selected with the boulder size
+	toolbar._on_tool_button_pressed("boulder_small")
+	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["small"])
+	assert_signal_emitted(toolbar, "rock_placement_pressed")
+	assert_true(toolbar.has_selection())
+
+	# Selecting Flower Bed selects tool TerrainTypes.Type.FLOWER_BED
+	toolbar._on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.FLOWER_BED])
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.FLOWER_BED)
+

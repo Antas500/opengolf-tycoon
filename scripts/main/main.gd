@@ -531,6 +531,8 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.open_hole_pressed.connect(_on_open_hole_pressed)
 	terrain_toolbar.tree_placement_pressed.connect(_on_tree_placement_pressed)
 	terrain_toolbar.rock_placement_pressed.connect(_on_rock_placement_pressed)
+	terrain_toolbar.tree_selected.connect(_on_tree_type_selected_from_toolbar)
+	terrain_toolbar.rock_selected.connect(_on_rock_size_selected_from_toolbar)
 	terrain_toolbar.building_placement_pressed.connect(_on_building_placement_pressed)
 	terrain_toolbar.building_selected.connect(_on_building_type_selected_from_toolbar)
 	terrain_toolbar.set_building_registry(building_registry)
@@ -1471,6 +1473,30 @@ func _on_tree_type_selected(tree_type: String, dialog: AcceptDialog) -> void:
 	selected_tree_type = tree_type
 	placement_manager.start_tree_placement(tree_type)
 	print("Tree placement mode: %s" % tree_type)
+
+func _on_tree_type_selected_from_toolbar(tree_type: String) -> void:
+	"""Start placement immediately for a tree tile in the Course Terrain tab."""
+	_cancel_hole_move_mode()
+	_close_hole_context_menu()
+	_cancel_elevation_mode()
+	_cancel_bulldozer_mode()
+	_disable_terrain_painting_preview()
+	is_painting = false
+	selected_tree_type = tree_type
+	placement_manager.start_tree_placement(tree_type)
+	print("Tree placement mode from toolbar: %s" % tree_type)
+
+func _on_rock_size_selected_from_toolbar(rock_size: String) -> void:
+	"""Start placement immediately for a boulder tile in the Course Terrain tab."""
+	_cancel_hole_move_mode()
+	_close_hole_context_menu()
+	_cancel_elevation_mode()
+	_cancel_bulldozer_mode()
+	_disable_terrain_painting_preview()
+	is_painting = false
+	selected_rock_size = rock_size
+	placement_manager.start_rock_placement(rock_size)
+	print("Rock placement mode from toolbar: %s" % rock_size)
 
 func _on_rock_placement_pressed() -> void:
 	"""Show rock size selection menu and start rock placement mode"""

@@ -142,9 +142,51 @@ func _build_tile() -> void:
 		_cup_flag.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		_cup_flag.visible = _green_places_cup
 		add_child(_cup_flag)
+	elif tool_type is int and tool_type == TerrainTypes.Type.FLOWER_BED:
+		var flowers := _make_flower_bed_art()
+		add_child(flowers)
+		if _name_label:
+			move_child(flowers, _name_label.get_index())
 
 	_refresh_palette()
 	_update_visual_state()
+
+func _make_flower_bed_art() -> Node2D:
+	var art := Node2D.new()
+	art.name = "FlowerBedPreviewArt"
+	var flower_data: Array = [
+		[Vector2(36, 26), Color("f28b91"), 3.5],
+		[Vector2(52, 19), Color("ffca68"), 3.0],
+		[Vector2(68, 22), Color("f4b2c9"), 3.2],
+		[Vector2(84, 28), Color("bdb0de"), 3.2],
+		[Vector2(46, 36), Color("eddfad"), 3.0],
+		[Vector2(62, 38), Color("f18675"), 3.5],
+		[Vector2(76, 34), Color("f28b91"), 3.0],
+	]
+	for fd in flower_data:
+		var center: Vector2 = fd[0]
+		var col: Color = fd[1]
+		var sz: float = fd[2]
+		for i in 5:
+			var a: float = i * TAU / 5.0
+			var p := Polygon2D.new()
+			p.color = col
+			var petal_center: Vector2 = center + Vector2(cos(a), sin(a)) * sz * 0.5
+			var pts := PackedVector2Array()
+			for j in 6:
+				var ja: float = j * TAU / 6.0
+				pts.append(petal_center + Vector2(cos(ja), sin(ja)) * sz * 0.45)
+			p.polygon = pts
+			art.add_child(p)
+		var c_poly := Polygon2D.new()
+		c_poly.color = Color(0.95, 0.85, 0.3)
+		var c_pts := PackedVector2Array()
+		for j in 6:
+			var ja: float = j * TAU / 6.0
+			c_pts.append(center + Vector2(cos(ja), sin(ja)) * sz * 0.3)
+		c_poly.polygon = c_pts
+		art.add_child(c_poly)
+	return art
 
 ## Shrink oversized names so they stay inside the diamond.
 func _fit_name_label() -> void:

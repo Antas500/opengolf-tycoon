@@ -21,6 +21,8 @@ signal tool_selected(tool_type: int)
 signal open_hole_pressed
 signal tree_placement_pressed
 signal rock_placement_pressed
+signal tree_selected(tree_type: String)
+signal rock_selected(rock_size: String)
 signal building_placement_pressed
 signal building_selected(building_type: String)
 signal decoration_placement_pressed
@@ -82,10 +84,13 @@ const TOOL_TAB_MAP := {
 	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
 	"open_hole": Tab.TERRAIN,
 	"bulldozer": Tab.TERRAIN,
-	"tree": Tab.IMPROVEMENTS,
-	"rock": Tab.IMPROVEMENTS,
+	"tree": Tab.TERRAIN,
+	"rock": Tab.TERRAIN,
+	"boulder_small": Tab.TERRAIN,
+	"boulder_medium": Tab.TERRAIN,
+	"boulder_large": Tab.TERRAIN,
 	TerrainTypes.Type.PATH: Tab.IMPROVEMENTS,
-	TerrainTypes.Type.FLOWER_BED: Tab.IMPROVEMENTS,
+	TerrainTypes.Type.FLOWER_BED: Tab.TERRAIN,
 	"decoration": Tab.IMPROVEMENTS,
 	"building": Tab.BUILDINGS,
 	"mound": Tab.ELEVATION,
@@ -151,12 +156,19 @@ var _player_points_label: Label = null
 var _feed_button: Button = null
 var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
+var _landscape_shelf: TileHoneycomb = null
+var _selected_string_tool: String = ""
 var _feed_unread: int = 0
 var _refresh_timer: Timer = null
 var _staff_panel: StaffPanel = null
 
 func _ready() -> void:
 	_build_ui()
+	EventBus.theme_changed.connect(_on_theme_changed)
+
+func _exit_tree() -> void:
+	if EventBus.theme_changed.is_connected(_on_theme_changed):
+		EventBus.theme_changed.disconnect(_on_theme_changed)
 
 func _build_ui() -> void:
 	# Panel style — docked flush into the bottom bar corner
@@ -350,6 +362,20 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	# keeps that spacing instead of stretching to fill the whole page height.
 	hbox.add_child(_make_tab_group("", tiles_grid, true))
 
+	hbox.add_child(_make_separator())
+
+	# Nature & landscaping honeycomb: Flower Bed, Boulders, and Theme Trees
+	_landscape_shelf = TileHoneycomb.new()
+	_landscape_shelf.name = "LandscapeShelf"
+	_landscape_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
+	_landscape_shelf.h_separation = TILE_H_SEPARATION
+	_landscape_shelf.v_separation = TILE_V_SEPARATION
+	_landscape_shelf.v_padding = TILE_V_PADDING
+	_landscape_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_landscape_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	hbox.add_child(_make_tab_group("", _landscape_shelf, true))
+	_populate_landscape_shelf()
+
 ## Open Hole, Bulldozer and the brush controls stacked vertically. This column
 ## opens the Course Terrain tab so the tools sit before the tile honeycomb.
 ## Buttons use a compact 26px height (matching the brush stepper) so the whole
@@ -398,14 +424,11 @@ func _make_column_button_compact(btn: ToolButton, height: int) -> void:
 		)
 
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
-	var obj_box = HBoxContainer.new()
-	obj_box.add_theme_constant_override("separation", 4)
-	obj_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(obj_box, {"type": "tree", "name": "Trees", "icon": "[^]", "hotkey": "T", "desc": "Adds beauty and obstacles"})
-	_add_tool_button(obj_box, {"type": "rock", "name": "Boulders", "icon": "[*]", "hotkey": "R", "desc": "Decorative boulders (paint rocky ground with the Rocks course tile)"})
-	_add_tool_button(obj_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"})
-	_add_tool_button(obj_box, {"type": TerrainTypes.Type.FLOWER_BED, "name": "Flower Bed", "icon": "[f]", "hotkey": "F", "desc": "Colorful landscaping"})
-	hbox.add_child(_make_tab_group("OBJECTS", obj_box))
+	var path_box = HBoxContainer.new()
+	path_box.add_theme_constant_override("separation", 4)
+	path_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_tool_button(path_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"})
+	hbox.add_child(_make_tab_group("PATHS", path_box))
 
 	hbox.add_child(_make_separator())
 
@@ -417,7 +440,69 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 
 	hbox.add_child(_make_separator())
 
-	hbox.add_child(_make_tip_label("Decorations, trees & flower beds raise course aesthetics and golfer mood."))
+	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play."))
+
+func _on_theme_changed(_theme: int) -> void:
+	_populate_landscape_shelf()
+
+func _populate_landscape_shelf() -> void:
+	if not is_instance_valid(_landscape_shelf):
+		return
+	for child in _landscape_shelf.get_children():
+		child.queue_free()
+
+	var theme_id: int = CourseTheme.Type.PARKLAND
+	if GameManager:
+		theme_id = GameManager.current_theme
+	var theme_trees: Array = CourseTheme.get_tree_types(theme_id)
+	var total_tiles: int = 1 + 3 + theme_trees.size()
+	_landscape_shelf.columns = maxi(1, ceili(float(total_tiles) / float(TILE_ROWS)))
+
+	# 1. Flower Bed terrain tile
+	var fb_btn := _add_tool_button(_landscape_shelf, {
+		"type": TerrainTypes.Type.FLOWER_BED,
+		"name": "Flower Bed",
+		"hotkey": "Shift+F",
+		"desc": "Colorful landscaping",
+		"tile_preview": true
+	})
+	_tool_buttons[TerrainTypes.Type.FLOWER_BED] = fb_btn
+
+	# 2. Boulder tiles
+	var boulder_configs = [
+		{"size": "small", "name": "Small Boulder", "tool_id": "boulder_small"},
+		{"size": "medium", "name": "Boulders", "tool_id": "rock"},
+		{"size": "large", "name": "Large Boulder", "tool_id": "boulder_large"}
+	]
+	for b_cfg in boulder_configs:
+		var r_data: Dictionary = Rock.ROCK_PROPERTIES.get(b_cfg["size"], {}).duplicate(true)
+		r_data["name"] = b_cfg["name"]
+		var b_btn := BoulderTileButton.new()
+		b_btn.configure_boulder(b_cfg["size"], r_data)
+		b_btn.tool_pressed.connect(_on_tool_button_pressed)
+		_landscape_shelf.add_child(b_btn)
+		b_btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
+		b_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var b_tool_id: String = str(b_cfg["tool_id"])
+		_tool_buttons[b_tool_id] = b_btn
+		if b_cfg["size"] == "medium":
+			_tool_buttons["boulder_medium"] = b_btn
+
+	# 3. Theme Trees
+	var first_tree_btn: TreeTileButton = null
+	for tree_type in theme_trees:
+		var t_data: Dictionary = TreeEntity.TREE_PROPERTIES.get(tree_type, {}).duplicate(true)
+		var t_btn := TreeTileButton.new()
+		t_btn.configure_tree(str(tree_type), t_data)
+		t_btn.tool_pressed.connect(_on_tool_button_pressed)
+		_landscape_shelf.add_child(t_btn)
+		t_btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
+		t_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var tool_id: String = "tree_" + str(tree_type)
+		_tool_buttons[tool_id] = t_btn
+		if first_tree_btn == null:
+			first_tree_btn = t_btn
+			_tool_buttons["tree"] = t_btn
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	# Facilities use the same interlocking isometric buttons as Course & Hazards,
@@ -838,6 +923,8 @@ func select_tab(tab_index: int) -> void:
 		_show_page(tab_index)
 
 func _tab_index_for_tool(tool_type) -> int:
+	if tool_type is String and (tool_type.begins_with("tree_") or tool_type.begins_with("boulder_")):
+		return Tab.TERRAIN
 	return TOOL_TAB_MAP.get(tool_type, -1)
 
 func _reveal_tab_for_tool(tool_type) -> void:
@@ -997,50 +1084,81 @@ func _on_tool_button_pressed(tool_type) -> void:
 
 	if tool_type is int:
 		_current_tool = tool_type
+		_selected_string_tool = ""
 		_update_selection_highlight()
 		tool_selected.emit(tool_type)
 	else:
-		match tool_type:
-			"tree":
-				tree_placement_pressed.emit()
-			"rock":
-				rock_placement_pressed.emit()
-			"building":
-				building_placement_pressed.emit()
-			"decoration":
-				decoration_placement_pressed.emit()
-			"open_hole":
-				open_hole_pressed.emit()
-			"mound":
-				sculpt_terrain_pressed.emit(true)
-			"hollow":
-				sculpt_terrain_pressed.emit(false)
-			"raise":
-				raise_elevation_pressed.emit()
-			"lower":
-				lower_elevation_pressed.emit()
-			"bulldozer":
-				bulldozer_pressed.emit()
-			"play_course":
-				play_course_pressed.emit()
-			"tournaments":
-				tournaments_pressed.emit()
-			"land":
-				land_pressed.emit()
-			"marketing":
-				marketing_pressed.emit()
-			"milestones":
-				milestones_pressed.emit()
-			"feed":
-				feed_pressed.emit()
-			"scorecard":
-				scorecard_pressed.emit()
+		var s_tool := str(tool_type)
+		if s_tool.begins_with("tree_"):
+			var tree_type := s_tool.substr(5)
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			tree_selected.emit(tree_type)
+			tree_placement_pressed.emit()
+		elif s_tool == "tree":
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else ["oak"]
+			var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
+			tree_selected.emit(first_tree)
+			tree_placement_pressed.emit()
+		elif s_tool.begins_with("boulder_"):
+			var size := s_tool.substr(8)
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			rock_selected.emit(size)
+			rock_placement_pressed.emit()
+		elif s_tool == "rock":
+			_current_tool = -1
+			_selected_string_tool = s_tool
+			_update_selection_highlight()
+			rock_selected.emit("medium")
+			rock_placement_pressed.emit()
+		else:
+			match tool_type:
+				"building":
+					building_placement_pressed.emit()
+				"decoration":
+					decoration_placement_pressed.emit()
+				"open_hole":
+					open_hole_pressed.emit()
+				"mound":
+					sculpt_terrain_pressed.emit(true)
+				"hollow":
+					sculpt_terrain_pressed.emit(false)
+				"raise":
+					raise_elevation_pressed.emit()
+				"lower":
+					lower_elevation_pressed.emit()
+				"bulldozer":
+					bulldozer_pressed.emit()
+				"play_course":
+					play_course_pressed.emit()
+				"tournaments":
+					tournaments_pressed.emit()
+				"land":
+					land_pressed.emit()
+				"marketing":
+					marketing_pressed.emit()
+				"milestones":
+					milestones_pressed.emit()
+				"feed":
+					feed_pressed.emit()
+				"scorecard":
+					scorecard_pressed.emit()
 
 func _update_selection_highlight() -> void:
 	for tool_type in _tool_buttons.keys():
 		var btn = _tool_buttons[tool_type]
 		if is_instance_valid(btn) and btn is ToolButton:
-			var is_match = (typeof(tool_type) == typeof(_current_tool) and tool_type == _current_tool)
+			var is_match = false
+			if typeof(tool_type) == typeof(_current_tool) and tool_type == _current_tool:
+				is_match = true
+			elif not _selected_string_tool.is_empty() and str(tool_type) == _selected_string_tool:
+				is_match = true
 			btn.set_selected(is_match)
 
 func _input(event: InputEvent) -> void:
@@ -1114,11 +1232,17 @@ func _input(event: InputEvent) -> void:
 			KEY_0:
 				_on_tool_button_pressed(TerrainTypes.Type.WASTE_BUNKER)
 			KEY_T:
-				_on_tool_button_pressed("tree")
+				select_tab(Tab.TERRAIN)
+				var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else ["oak"]
+				var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
+				_on_tool_button_pressed("tree_" + first_tree)
 			KEY_R:
+				select_tab(Tab.TERRAIN)
 				_on_tool_button_pressed("rock")
 			KEY_F:
-				if event.shift_pressed: _on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
+				if event.shift_pressed:
+					select_tab(Tab.TERRAIN)
+					_on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
 			KEY_B:
 				_on_tool_button_pressed("building")
 			KEY_O:
@@ -1137,6 +1261,7 @@ func _input(event: InputEvent) -> void:
 
 func set_current_tool(tool_type: int) -> void:
 	_current_tool = tool_type
+	_selected_string_tool = ""
 	_update_selection_highlight()
 
 func get_current_tool() -> int:
@@ -1144,10 +1269,11 @@ func get_current_tool() -> int:
 
 func clear_selection() -> void:
 	_current_tool = -1
+	_selected_string_tool = ""
 	_update_selection_highlight()
 
 func has_selection() -> bool:
-	return _current_tool >= 0 and _current_tool in _tool_buttons
+	return (_current_tool >= 0 and _current_tool in _tool_buttons) or (not _selected_string_tool.is_empty() and _selected_string_tool in _tool_buttons)
 
 func get_brush_size() -> int:
 	return _brush_size
