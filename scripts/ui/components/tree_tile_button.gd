@@ -11,11 +11,11 @@ func configure_tree(type: String, data: Dictionary) -> void:
 	tree_type = type
 	tree_data = data.duplicate(true)
 	var t_name: String = str(data.get("name", type.capitalize()))
-	var cost: int = int(data.get("cost", 20))
+	var build_cost: int = int(data.get("cost", 20))
 	var desc: String = "Adds beauty and obstacles. Places a %s." % t_name.to_lower()
-	configure("tree_" + type, t_name, "", "", desc, cost, 0)
+	configure("tree_" + type, t_name, "", "", desc, build_cost, 0)
 	tooltip_text = ""
-	accessibility_description = "%s. Build $%d. %s" % [tool_name, cost, desc]
+	accessibility_description = "%s. Build $%d. %s" % [tool_name, build_cost, desc]
 
 func _ready() -> void:
 	super._ready()
@@ -65,10 +65,10 @@ func _get_sprite_path() -> String:
 		if key in TreeEntity.SEASONAL_SPRITE_PATHS and ResourceLoader.exists(TreeEntity.SEASONAL_SPRITE_PATHS[key]):
 			return TreeEntity.SEASONAL_SPRITE_PATHS[key]
 	if tree_type == "pine" and season_name == "winter":
-		var theme: int = CourseTheme.Type.PARKLAND
+		var current_theme: int = CourseTheme.Type.PARKLAND
 		if GameManager:
-			theme = GameManager.current_theme
-		if theme in TreeEntity.SNOWY_THEMES:
+			current_theme = GameManager.current_theme
+		if current_theme in TreeEntity.SNOWY_THEMES:
 			var key := "pine_winter"
 			if key in TreeEntity.SEASONAL_SPRITE_PATHS and ResourceLoader.exists(TreeEntity.SEASONAL_SPRITE_PATHS[key]):
 				return TreeEntity.SEASONAL_SPRITE_PATHS[key]

@@ -137,6 +137,7 @@ func test_shot_preview_is_deterministic_and_matches_execution() -> void:
 	# Out-of-range aim still shows the clamped shot, and the mouse target it came from.
 	assert_gt(preview.raw_target.distance_to(preview.origin), preview.aim.distance_to(preview.origin),
 		"Raw mouse target sits beyond the clamped aim point")
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
 func test_preview_ignores_shank_and_miss_tendency() -> void:
 	var saved_grid = GameManager.terrain_grid

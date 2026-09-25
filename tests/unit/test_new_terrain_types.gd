@@ -46,9 +46,9 @@ func test_every_type_has_properties_names_and_costs() -> void:
 	var names := {}
 	for type in T.values():
 		assert_true(TerrainTypes.PROPERTIES.has(type), "Type %d has properties" % type)
-		var name: String = TerrainTypes.get_type_name(type)
-		assert_false(names.has(name), "Terrain names are unique: %s" % name)
-		names[name] = true
+		var type_name: String = TerrainTypes.get_type_name(type)
+		assert_false(names.has(type_name), "Terrain names are unique: %s" % type_name)
+		names[type_name] = true
 	for type in NEW_TYPES:
 		assert_gt(TerrainTypes.get_placement_cost(type), 0, "%s costs money to paint" % TerrainTypes.get_type_name(type))
 	assert_eq(TerrainTypes.get_type_name(T.FIRM_FAIRWAY), "Firm Fairway")

@@ -266,11 +266,11 @@ func _draw_labels(geometry: Dictionary, roll_color: Color) -> void:
 		var line: Dictionary = caption_lines[i]
 		_draw_outlined_text(font, rest + Vector2(10.0, 18.0 + 17.0 * i), line.text, line.color, line.size)
 
-func _draw_outlined_text(font: Font, position: Vector2, text: String, color: Color,
+func _draw_outlined_text(font: Font, pos: Vector2, text: String, color: Color,
 		font_size: int = LABEL_FONT_SIZE) -> void:
-	font.draw_string_outline(get_canvas_item(), position, text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+	font.draw_string_outline(get_canvas_item(), pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1,
 		font_size, 4, LABEL_SHADOW_COLOR)
-	draw_string(font, position, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 func _to_local_many(points: PackedVector2Array) -> PackedVector2Array:
 	var local_points := PackedVector2Array()

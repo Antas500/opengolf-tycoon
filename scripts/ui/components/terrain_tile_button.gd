@@ -194,12 +194,12 @@ func _fit_name_label() -> void:
 	if font == null:
 		_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
 		return
-	var size := NAME_FONT_SIZE
-	while size > NAME_FONT_SIZE_MIN and \
-			font.get_string_size(tool_name, HORIZONTAL_ALIGNMENT_CENTER, -1, size).x \
+	var font_size := NAME_FONT_SIZE
+	while font_size > NAME_FONT_SIZE_MIN and \
+			font.get_string_size(tool_name, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size).x \
 			> BUTTON_SIZE.x * 0.7:
-		size -= 1
-	_name_label.add_theme_font_size_override("font_size", size)
+		font_size -= 1
+	_name_label.add_theme_font_size_override("font_size", font_size)
 
 func _make_surface_material() -> ShaderMaterial:
 	# The actual course shader operates on a 3x3 grid: the middle cell is this

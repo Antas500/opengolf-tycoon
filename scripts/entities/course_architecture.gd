@@ -421,7 +421,7 @@ static func draw_garden_facility(c: CanvasItem, type: String, size: Vector2, hou
 			var awning_y := base-24
 			for i in range(int(x)-3,int(x+w)+3,7):
 				var color := "b86469" if type == "ice_cream_kiosk" else "3e7866"
-				poly(c,[Vector2(i,awning_y-5),Vector2(i+7,awning_y-5),Vector2(i+10,awning_y+5),Vector2(i+3,awning_y+5)],color if (i-int(x)+3)/7%2==0 else "f3e3bd")
+				poly(c,[Vector2(i,awning_y-5),Vector2(i+7,awning_y-5),Vector2(i+10,awning_y+5),Vector2(i+3,awning_y+5)],color if int((i-int(x)+3)/7.0)%2==0 else "f3e3bd")
 			if type == "ice_cream_kiosk":
 				poly(c,[Vector2(x+w/2-4,base-53),Vector2(x+w/2+4,base-53),Vector2(x+w/2,base-43)],"d8a660")
 				c.draw_circle(Vector2(x+w/2,base-55),6,Color("eab3bd"))

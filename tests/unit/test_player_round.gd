@@ -143,22 +143,22 @@ func test_mode_change_cleans_up_round() -> void:
 
 func test_real_shot_rejects_double_click_and_round_can_finish() -> void:
 	_start(0)
-	var owner := rounds.player
-	owner.walk_speed = 120
-	assert_true(owner.play_shot(Vector2i(16, 10)))
-	assert_false(owner.play_shot(Vector2i(16, 10)))
-	assert_eq(owner.current_strokes, 1)
+	var player_golfer := rounds.player
+	player_golfer.walk_speed = 120
+	assert_true(player_golfer.play_shot(Vector2i(16, 10)))
+	assert_false(player_golfer.play_shot(Vector2i(16, 10)))
+	assert_eq(player_golfer.current_strokes, 1)
 	# Exercise real swing, ball flight, rollout, walking, putting and pickup.
 	Engine.time_scale = 3.0
 	for step in 160:
 		if not rounds.active:
 			break
-		if owner.awaits_player_shot():
-			owner.play_shot(Vector2i(16, 10))
+		if player_golfer.awaits_player_shot():
+			player_golfer.play_shot(Vector2i(16, 10))
 		await get_tree().create_timer(0.5).timeout
 	Engine.time_scale = 1.0
 	assert_false(rounds.active, "Real round reaches its results screen")
-	assert_eq(owner.hole_scores.size(), 1)
+	assert_eq(player_golfer.hole_scores.size(), 1)
 
 func test_player_round_plays_as_group_with_etiquette() -> void:
 	# Start a round vs a pro
