@@ -3,8 +3,8 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: tools column (open hole, bulldozer, brush) before the course & hazard tiles honeycomb
-##  - Improvements:   objects (trees, rocks, paths, flowers) and decorations
+##  - Course Terrain: tools column (open hole, bulldozer, brush) before one course, hazard & landscape tiles honeycomb
+##  - Improvements:   paths and decorations
 ##  - Buildings:      amenity buildings catalogue
 ##  - Elevation:      sculpting controls and brush size
 ##  - Holes:          course holes list (rows are filled by main.gd)
@@ -154,7 +154,8 @@ var _player_points_label: Label = null
 var _feed_button: Button = null
 var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
-var _landscape_shelf: TileHoneycomb = null
+var _course_tiles: TileHoneycomb = null
+var _landscape_buttons: Array[Node] = []
 var _selected_string_tool: String = ""
 var _feed_unread: int = 0
 var _refresh_timer: Timer = null
@@ -333,6 +334,7 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	# Water. Bottom row: Fairway, Firm Fairway, Deep Rough, Waste Bunker,
 	# Brush, Rocks, Out of Bounds.
 	var tiles_grid = TileHoneycomb.new()
+	_course_tiles = tiles_grid
 	tiles_grid.name = "CourseTilesGrid"
 	tiles_grid.columns = COURSE_TILE_COLUMNS
 	tiles_grid.tile_size = TerrainTileButton.BUTTON_SIZE
@@ -360,17 +362,7 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 	# keeps that spacing instead of stretching to fill the whole page height.
 	hbox.add_child(_make_tab_group("", tiles_grid, true))
 
-	# Nature & landscaping honeycomb: Flower Bed, Boulders, and Theme Trees
-	_landscape_shelf = TileHoneycomb.new()
-	_landscape_shelf.name = "LandscapeShelf"
-	_landscape_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
-	_landscape_shelf.h_separation = TILE_H_SEPARATION
-	_landscape_shelf.v_separation = TILE_V_SEPARATION
-	_landscape_shelf.v_padding = TILE_V_PADDING
-	_landscape_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_landscape_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	hbox.add_child(_make_tab_group("", _landscape_shelf, true))
-	_populate_landscape_shelf()
+	_populate_landscape_tiles()
 
 ## Open Hole, Bulldozer and the brush controls stacked vertically. This column
 ## opens the Course Terrain tab so the tools sit before the tile honeycomb.
@@ -439,23 +431,30 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play."))
 
 func _on_theme_changed(_theme: int) -> void:
-	_populate_landscape_shelf()
+	_populate_landscape_tiles()
 
-func _populate_landscape_shelf() -> void:
-	if not is_instance_valid(_landscape_shelf):
+func _populate_landscape_tiles() -> void:
+	if not is_instance_valid(_course_tiles):
 		return
-	for child in _landscape_shelf.get_children():
+	# Detach old landscape tiles immediately so repeated theme changes cannot
+	# leave duplicate tiles in the layout or stale entries in the tool lookup.
+	for key in _tool_buttons.keys():
+		if _tool_buttons[key] in _landscape_buttons:
+			_tool_buttons.erase(key)
+	for child in _landscape_buttons:
+		_course_tiles.remove_child(child)
 		child.queue_free()
+	_landscape_buttons.clear()
 
 	var theme_id: int = CourseTheme.Type.PARKLAND
 	if GameManager:
 		theme_id = GameManager.current_theme
 	var theme_trees: Array = CourseTheme.get_tree_types(theme_id)
 	var total_tiles: int = 1 + 3 + theme_trees.size()
-	_landscape_shelf.columns = maxi(1, ceili(float(total_tiles) / float(TILE_ROWS)))
+	_course_tiles.columns = COURSE_TILE_COLUMNS + ceili(float(total_tiles) / TILE_ROWS)
 
 	# 1. Flower Bed terrain tile
-	var fb_btn := _add_tool_button(_landscape_shelf, {
+	var fb_btn := _add_tool_button(_course_tiles, {
 		"type": TerrainTypes.Type.FLOWER_BED,
 		"name": "Flower Bed",
 		"hotkey": "Shift+F",
@@ -476,7 +475,7 @@ func _populate_landscape_shelf() -> void:
 		var b_btn := BoulderTileButton.new()
 		b_btn.configure_boulder(b_cfg["size"], r_data)
 		b_btn.tool_pressed.connect(_on_tool_button_pressed)
-		_landscape_shelf.add_child(b_btn)
+		_course_tiles.add_child(b_btn)
 		b_btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
 		b_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var b_tool_id: String = str(b_cfg["tool_id"])
@@ -491,7 +490,7 @@ func _populate_landscape_shelf() -> void:
 		var t_btn := TreeTileButton.new()
 		t_btn.configure_tree(str(tree_type), t_data)
 		t_btn.tool_pressed.connect(_on_tool_button_pressed)
-		_landscape_shelf.add_child(t_btn)
+		_course_tiles.add_child(t_btn)
 		t_btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
 		t_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var tool_id: String = "tree_" + str(tree_type)
@@ -499,6 +498,13 @@ func _populate_landscape_shelf() -> void:
 		if first_tree_btn == null:
 			first_tree_btn = t_btn
 			_tool_buttons["tree"] = t_btn
+
+	# Extend both existing course rows, rather than starting another honeycomb.
+	# Keeping the first seven tiles in each row preserves the course layout.
+	_landscape_buttons.assign(_course_tiles.get_children().slice(COURSE_TILE_COLUMNS * TILE_ROWS))
+	for i in _course_tiles.columns - COURSE_TILE_COLUMNS:
+		_course_tiles.move_child(_landscape_buttons[i], COURSE_TILE_COLUMNS + i)
+	_update_selection_highlight()
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	# Facilities use the same interlocking isometric buttons as Course & Hazards,

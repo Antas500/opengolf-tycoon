@@ -9,17 +9,21 @@ build and maintain, how well a golfer can strike a ball lying on it, how far a
 ball runs after landing on it, whether it is a penalty area, and how the course
 surface shader draws it.
 
-Fourteen of the types are painted from the **Course Terrain** tab. The top row
-holds playing surfaces and natural ground; the bottom row holds hazards and
-trouble. Each variant sits beside its parent:
+The **Course Terrain** tab combines course surfaces, hazards, Flower Bed,
+boulders, and theme-specific trees into one horizontally scrolling honeycomb.
+Two interlocking rows keep the course tiles first, with landscaping extending
+the right end of each row:
 
-| Row 1 | Fairway | Firm Fairway | Rough | Deep Rough | Green | Tee Box | Waste Bunker | Brush |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Row 2** | **Bunker** | **Pot Bunker** | **Water** | **Stream** | **Rocks** | **Out of Bounds** | | |
+| Row | Course tiles (left to right) |
+| --- | --- |
+| Top | Tee Box, Green, Bunker, Rough, Pot Bunker, Stream, Water |
+| Bottom | Fairway, Firm Fairway, Deep Rough, Waste Bunker, Brush, Rocks, Out of Bounds |
 
-Path and Flower Bed live on the Improvements tab. Grass, Heavy Rough, Trees and
-Empty are placed by generation or by entities (a tree stamps Trees, a boulder
-stamps Rocks).
+The honeycomb width adapts to the theme's tree catalogue while staying two rows
+high. Open Hole, Bulldozer, and brush controls remain in a column before it.
+Path lives on the Improvements tab alongside Decorations. Grass, Heavy Rough,
+Trees and Empty are placed by generation or by entities (a tree stamps Trees,
+a boulder stamps Rocks).
 
 ### The seven newer tiles
 

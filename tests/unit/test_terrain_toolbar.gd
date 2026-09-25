@@ -22,10 +22,10 @@ const BOTTOM_ROW := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
 
 func test_course_tiles_share_one_group_in_top_and_bottom_rows() -> void:
 	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
-	assert_eq(grid.columns, TerrainToolbar.COURSE_TILE_COLUMNS)
-	assert_eq(grid.columns, TOP_ROW.size(), "The top row is full")
-	assert_eq(grid.get_child_count(), TOP_ROW.size() + BOTTOM_ROW.size(),
-		"Course tiles fill exactly the two rows, each with seven tiles")
+	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
+	assert_eq(grid.columns, TOP_ROW.size() + ceili(float(landscape_count) / 2.0))
+	assert_eq(grid.get_child_count(), TOP_ROW.size() + BOTTOM_ROW.size() + landscape_count,
+		"All course and landscape tiles share exactly two rows")
 	for tool_type in TOP_ROW + BOTTOM_ROW:
 		assert_eq(toolbar._tool_buttons[tool_type].get_parent(), grid,
 			"Course tiles should live in the same group")
@@ -34,7 +34,7 @@ func test_course_tiles_share_one_group_in_top_and_bottom_rows() -> void:
 		assert_eq(toolbar._tool_buttons[TOP_ROW[slot]].get_index(), slot,
 			"%s is tile %d of the top row" % [TerrainTypes.get_type_name(TOP_ROW[slot]), slot])
 	for slot in BOTTOM_ROW.size():
-		assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), TOP_ROW.size() + slot,
+		assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot,
 			"%s is tile %d of the bottom row" % [TerrainTypes.get_type_name(BOTTOM_ROW[slot]), slot])
 
 	# The rows are drawn staggered: the bottom row sits half a tile below the top.
@@ -387,8 +387,8 @@ func test_green_tile_flag_tracks_the_next_green_type() -> void:
 
 func test_course_terrain_tab_has_no_green_size_presets() -> void:
 	var terrain_content: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0)
-	assert_eq(terrain_content.get_child_count(), 4,
-		"The terrain tab contains the tools, separator, tile grid, and landscaping shelf, with no extra separator or preset group")
+	assert_eq(terrain_content.get_child_count(), 3,
+		"The terrain tab contains the tools, separator, unified tile grid, with no extra separator or preset group")
 
 func test_holes_tab_has_hbox_hole_list() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
@@ -559,16 +559,16 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 	assert_eq(TerrainToolbar.TOOL_TAB_MAP[TerrainTypes.Type.FLOWER_BED], TerrainToolbar.Tab.TERRAIN,
 		"Flower Bed should belong to the Course Terrain tab")
 	assert_eq(fb_btn.tool_name, "Flower Bed")
-	assert_eq(fb_btn.get_parent(), toolbar._landscape_shelf,
-		"Flower Bed should live on the landscape shelf in Course Terrain tab")
+	assert_eq(fb_btn.get_parent(), toolbar._course_tiles,
+		"Flower Bed should live on the unified honeycomb in Course Terrain tab")
 
 	# Boulders are BoulderTileButtons (which inherit TerrainTileButton) in Course Terrain tab
 	for b_id in ["boulder_small", "rock", "boulder_large"]:
 		var b_btn: ToolButton = toolbar._tool_buttons[b_id]
 		assert_true(b_btn is BoulderTileButton, "%s should be a BoulderTileButton" % b_id)
 		assert_true(b_btn is TerrainTileButton, "%s should be a TerrainTileButton" % b_id)
-		assert_eq(b_btn.get_parent(), toolbar._landscape_shelf,
-			"%s should live on the landscape shelf in Course Terrain tab" % b_id)
+		assert_eq(b_btn.get_parent(), toolbar._course_tiles,
+			"%s should live on the unified honeycomb in Course Terrain tab" % b_id)
 
 	assert_eq(toolbar._tool_buttons["boulder_small"].tool_name, "Small Boulder")
 	assert_eq(toolbar._tool_buttons["rock"].tool_name, "Boulders")
@@ -581,21 +581,21 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 		var t_btn: ToolButton = toolbar._tool_buttons[t_id]
 		assert_true(t_btn is TreeTileButton, "%s should be a TreeTileButton" % t_id)
 		assert_true(t_btn is TerrainTileButton, "%s should be a TerrainTileButton" % t_id)
-		assert_eq(t_btn.get_parent(), toolbar._landscape_shelf,
-			"%s should live on the landscape shelf in Course Terrain tab" % t_id)
+		assert_eq(t_btn.get_parent(), toolbar._course_tiles,
+			"%s should live on the unified honeycomb in Course Terrain tab" % t_id)
 
-	# The landscape shelf itself sits inside Course Terrain page and has 2 interlocking rows
-	assert_not_null(toolbar._landscape_shelf)
-	assert_eq(toolbar._landscape_shelf.get_parent().get_parent(),
+	# The unified honeycomb itself sits inside Course Terrain page and has 2 interlocking rows
+	assert_not_null(toolbar._course_tiles)
+	assert_eq(toolbar._course_tiles.get_parent().get_parent(),
 		toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0),
-		"Landscape shelf should live in Course Terrain tab")
+		"Unified honeycomb should live in Course Terrain tab")
 	var total_landscape_tiles: int = 1 + 3 + theme_trees.size()
-	assert_eq(toolbar._landscape_shelf.columns, ceili(float(total_landscape_tiles) / 2.0),
-		"Landscape shelf should be laid out in two interlocking rows")
+	assert_eq(toolbar._course_tiles.columns, TOP_ROW.size() + ceili(float(total_landscape_tiles) / 2.0),
+		"Unified honeycomb should be laid out in two interlocking rows")
 	var course_group: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent().get_parent()
-	var landscape_group: Control = toolbar._landscape_shelf.get_parent()
-	assert_eq(landscape_group.get_index(), course_group.get_index() + 1,
-		"Nature & Landscaping should sit directly after the course tiles without an extra separator")
+	var landscape_group: Control = toolbar._course_tiles.get_parent()
+	assert_eq(landscape_group, course_group,
+		"Nature & Landscaping should share the course tile group")
 
 func test_improvements_tab_only_contains_paths_and_decorations() -> void:
 	var imp_page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS]
@@ -646,3 +646,27 @@ func test_tree_and_boulder_tile_selection_signals() -> void:
 	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.FLOWER_BED])
 	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.FLOWER_BED)
 
+
+func test_theme_changes_keep_one_honeycomb_without_stale_tiles() -> void:
+	var original_theme: int = GameManager.current_theme
+	var tee: ToolButton = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]
+	var grid := toolbar._course_tiles
+	for theme in [CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND,
+			CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND]:
+		GameManager.current_theme = theme
+		EventBus.theme_changed.emit(theme)
+		var trees: Array = CourseTheme.get_tree_types(theme)
+		assert_eq(grid.get_child_count(), 18 + trees.size(),
+			"Theme refresh must immediately remove old tiles, even within one frame")
+		assert_eq(grid.columns, ceili(float(grid.get_child_count()) / 2.0))
+		assert_same(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX], tee,
+			"Theme changes must preserve course tile state")
+		for key in toolbar._tool_buttons:
+			if str(key).begins_with("tree_"):
+				assert_has(trees, str(key).trim_prefix("tree_"), "No stale tree tools")
+		for slot in BOTTOM_ROW.size():
+			assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot)
+		assert_eq(toolbar._pages[TerrainToolbar.Tab.TERRAIN].find_children(
+			"*", "TileHoneycomb", true, false).size(), 1)
+	GameManager.current_theme = original_theme
+	EventBus.theme_changed.emit(original_theme)

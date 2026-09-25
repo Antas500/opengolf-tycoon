@@ -396,16 +396,18 @@ func test_toolbar_paints_all_course_tiles_in_two_rows() -> void:
 	var toolbar := TerrainToolbar.new()
 	add_child_autofree(toolbar)
 	var grid: TileHoneycomb = toolbar._tool_buttons[T.FAIRWAY].get_parent()
-	assert_eq(grid.get_child_count(), TerrainTypes.COURSE_PAINT_TYPES.size())
+	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
+	assert_eq(grid.get_child_count(), TerrainTypes.COURSE_PAINT_TYPES.size() + landscape_count)
 	for i in TerrainTypes.COURSE_PAINT_TYPES.size():
 		var type: int = TerrainTypes.COURSE_PAINT_TYPES[i]
 		var button: TerrainTileButton = toolbar._tool_buttons[type]
-		assert_eq(button.get_index(), i, "%s sits in toolbar order" % TerrainTypes.get_type_name(type))
+		var slot := i if i < TerrainToolbar.COURSE_TILE_COLUMNS else grid.columns + i - TerrainToolbar.COURSE_TILE_COLUMNS
+		assert_eq(button.get_index(), slot, "%s sits in toolbar order" % TerrainTypes.get_type_name(type))
 		assert_eq(button.tool_name, TerrainTypes.get_type_name(type))
 		assert_eq(TerrainToolbar.TOOL_TAB_MAP[type], TerrainToolbar.Tab.TERRAIN)
-	# Two full rows: tee-to-water on top, fairway-to-out-of-bounds below.
-	assert_eq(grid.columns * 2, TerrainTypes.COURSE_PAINT_TYPES.size(),
-		"The two rows hold every course tile")
+	# Two rows include both course and landscape tiles.
+	assert_eq(grid.columns, ceili(float(grid.get_child_count()) / 2.0),
+		"The two rows hold every course and landscape tile")
 	for type in [T.TEE_BOX, T.GREEN, T.BUNKER, T.ROUGH, T.POT_BUNKER, T.STREAM, T.WATER]:
 		assert_lt(toolbar._tool_buttons[type].get_index(), grid.columns,
 			"%s on the top row" % TerrainTypes.get_type_name(type))
