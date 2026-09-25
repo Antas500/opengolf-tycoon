@@ -145,7 +145,10 @@ var _brush_buttons: Array[Button] = []
 var _brush_shape_buttons: Array[OptionButton] = []
 var _open_hole_buttons: Array[ToolButton] = []
 var _green_tile_button: TerrainTileButton = null
+var _tee_tile_button: TerrainTileButton = null
 var _green_places_cup := true
+var _tee_box_can_place: bool = true
+var _tee_box_blocker: String = ""
 var _active_golfers_box: HBoxContainer = null
 var _recent_rounds_box: HBoxContainer = null
 var _recent_rounds: Array[Dictionary] = []
@@ -787,8 +790,11 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		_feed_button = btn
 	elif not (tool_type is String and _is_menu_action(tool_type)):
 		_tool_buttons[tool_type] = btn
-		if tool_type is int and tool_type == TerrainTypes.Type.GREEN:
-			_green_tile_button = btn as TerrainTileButton
+		if tool_type is int:
+			if tool_type == TerrainTypes.Type.GREEN:
+				_green_tile_button = btn as TerrainTileButton
+			elif tool_type == TerrainTypes.Type.TEE_BOX:
+				_tee_tile_button = btn as TerrainTileButton
 
 	return btn
 
@@ -1082,6 +1088,12 @@ func set_feed_unread(count: int) -> void:
 # =============================================================================
 
 func _on_tool_button_pressed(tool_type) -> void:
+	# Tee Box is unselectable while an unused tee waits on the course.
+	if tool_type is int and tool_type == TerrainTypes.Type.TEE_BOX and not _tee_box_can_place:
+		if _current_tool == TerrainTypes.Type.TEE_BOX:
+			clear_selection()
+		return
+
 	_reveal_tab_for_tool(tool_type)
 
 	if tool_type is int:
@@ -1258,6 +1270,10 @@ func _input(event: InputEvent) -> void:
 # =============================================================================
 
 func set_current_tool(tool_type: int) -> void:
+	# Prevent selecting Tee when an unused tee waits.
+	if tool_type == TerrainTypes.Type.TEE_BOX and not _tee_box_can_place:
+		clear_selection()
+		return
 	_current_tool = tool_type
 	_selected_string_tool = ""
 	_update_selection_highlight()
@@ -1361,6 +1377,42 @@ func set_open_hole_state(can_open: bool, reason: String = "") -> void:
 		button.disabled = not can_open
 		button.tool_description = OPEN_HOLE_TOOLTIP if can_open or reason.is_empty() \
 				else "%s. %s" % [OPEN_HOLE_BLOCKED_TOOLTIP, reason]
+
+## Grey out, unselect and make unselectable the Tee tile while an unused tee waits.
+func set_tee_box_state(can_place: bool, reason: String = "") -> void:
+	_tee_box_can_place = can_place
+	_tee_box_blocker = reason
+	var btn: ToolButton = _tool_buttons.get(TerrainTypes.Type.TEE_BOX, null) as ToolButton
+	if not is_instance_valid(btn):
+		btn = _tee_tile_button
+	if not is_instance_valid(btn):
+		return
+
+	# If the tee was selected and now becomes unavailable, unselect it.
+	if not can_place and _current_tool == TerrainTypes.Type.TEE_BOX:
+		clear_selection()
+
+	btn.disabled = not can_place
+
+	# Greyed out visual — modulate plus outline handled in TerrainTileButton,
+	# but also set here so the change is immediate even if _update_visual_state
+	# hasn't run yet.
+	if not can_place:
+		btn.modulate = Color(0.45, 0.45, 0.45, 0.65)
+		var base_desc := "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time"
+		if not reason.is_empty():
+			btn.tool_description = "%s (%s)" % [base_desc, reason]
+		else:
+			btn.tool_description = "%s (Blocked — a tee box is already waiting. Open the hole first (H).)" % base_desc
+	else:
+		btn.modulate = Color(1, 1, 1, 1)
+		btn.tool_description = "Tee for one hole — a single tile (1x1). Only one tee box may wait on the course at a time"
+
+	btn.accessibility_description = "%s Shortcut %s." % [btn.tool_description, btn.hotkey]
+
+	# Ensure the diamond outline reflects the disabled state immediately.
+	if btn.has_method("_update_visual_state"):
+		btn._update_visual_state()
 
 func set_view_state(_orientation: int, _isometric: bool) -> void:
 	pass

@@ -1129,6 +1129,15 @@ func _has_active_tool() -> bool:
 	return false
 
 func _on_tool_selected(tool_type: int) -> void:
+	# Tee Box is unselectable while an unused tee waits.
+	if tool_type == TerrainTypes.Type.TEE_BOX:
+		if not HoleLayout.can_place_tee_box(terrain_grid, GameManager.current_course):
+			if terrain_toolbar:
+				terrain_toolbar.clear_selection()
+			current_tool = -1
+			is_painting = false
+			return
+
 	# Cancel any building/tree placement, elevation mode, and bulldozer mode
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
@@ -1310,6 +1319,15 @@ func _refresh_hole_layout_ui() -> void:
 			str(request.get("reason", "")))
 	terrain_toolbar.set_brush_limit(HoleLayout.max_brush_size(current_tool, terrain_grid, course))
 	terrain_toolbar.set_green_placement_state(HoleLayout.green_places_cup(terrain_grid, course))
+
+	# Tee tile: unselected, unselectable and greyed out while an unused tee waits.
+	var can_place_tee := HoleLayout.can_place_tee_box(terrain_grid, course)
+	var tee_blocker := HoleLayout.tee_placement_blocker(terrain_grid, course)
+	terrain_toolbar.set_tee_box_state(can_place_tee, tee_blocker)
+	if not can_place_tee and current_tool == TerrainTypes.Type.TEE_BOX:
+		current_tool = -1
+		is_painting = false
+		terrain_toolbar.clear_selection()
 
 func _on_speed_selected(speed: int) -> void:
 	GameManager.set_speed(speed)
@@ -2649,8 +2667,13 @@ var _suppress_tile_undo: bool = false  # Suppress tile change recording during e
 
 func _on_terrain_tile_changed_for_undo(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if _is_undoing or _suppress_tile_undo:
+		# Still keep tee UI in sync even while undoing or suppressing undo recording.
+		if old_type == TerrainTypes.Type.TEE_BOX or new_type == TerrainTypes.Type.TEE_BOX:
+			_refresh_hole_layout_ui()
 		return
 	undo_manager.record_tile_change(tile_pos, old_type, new_type)
+	if old_type == TerrainTypes.Type.TEE_BOX or new_type == TerrainTypes.Type.TEE_BOX:
+		_refresh_hole_layout_ui()
 
 func _perform_undo() -> void:
 	if not undo_manager.can_undo():

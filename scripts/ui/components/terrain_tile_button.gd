@@ -259,6 +259,11 @@ func _on_mouse_exited() -> void:
 	super._on_mouse_exited()
 
 func set_selected(selected: bool) -> void:
+	# Disabled tiles (e.g. Tee while waiting) can never be selected.
+	if disabled and selected:
+		super.set_selected(false)
+		_update_visual_state()
+		return
 	super.set_selected(selected)
 	_update_visual_state()
 
@@ -276,6 +281,18 @@ func shows_green_with_hole_flag() -> bool:
 func _update_visual_state() -> void:
 	if _outline == null:
 		return
+	# Greyed out when disabled (unused tee waiting, etc.)
+	if disabled:
+		_outline.default_color = Color(0.35, 0.35, 0.35, 0.6)
+		_outline.width = 1.0
+		_name_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 0.75))
+		_name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.09, 0.07, 0.45))
+		modulate = Color(0.5, 0.5, 0.5, 0.65)
+		return
+
+	# Restore full opacity when enabled.
+	modulate = Color(1, 1, 1, 1)
+
 	if is_selected():
 		_outline.default_color = UIConstants.COLOR_GOLD
 		_outline.width = 2.5
