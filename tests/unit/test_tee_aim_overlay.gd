@@ -31,7 +31,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	GameManager.current_course = _saved_course
-	GameManager.terrain_grid = _saved_grid
+	GameManager.terrain_grid = _saved_grid if is_instance_valid(_saved_grid) else null
 	GameManager.multi_tee_enabled = _saved_multi_tee
 
 func _paint_waiting_pair(tee: Vector2i = TEE, cup: Vector2i = CUP) -> void:

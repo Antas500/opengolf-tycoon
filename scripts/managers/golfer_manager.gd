@@ -770,7 +770,8 @@ func spawn_initial_group() -> void:
 	for i in range(group_size):
 		spawn_random_golfer(new_group_id)
 		# Small delay between spawns in the same group
-		await get_tree().create_timer(0.5).timeout
+		# (Timer-node delay: a pending SceneTreeTimer await would leak at quit.)
+		await Delay.seconds(self, 0.5)
 		if not is_instance_valid(self):
 			return
 
@@ -878,7 +879,8 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 				if golfer.current_state != Golfer.State.FINISHED:
 					t_all_finished = false
 		if t_all_finished:
-			await get_tree().create_timer(1.0).timeout
+			# (Timer-node delay: a pending SceneTreeTimer await would leak at quit.)
+			await Delay.seconds(self, 1.0)
 			for golfer in t_group_golfers:
 				if is_instance_valid(golfer):
 					remove_golfer(golfer.golfer_id)
@@ -928,7 +930,8 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 
 	if all_finished:
 		# Wait a moment so players can see the group finish
-		await get_tree().create_timer(1.0).timeout
+		# (Timer-node delay: a pending SceneTreeTimer await would leak at quit.)
+		await Delay.seconds(self, 1.0)
 		# Remove all golfers in the group (check validity — golfers may have been freed by a save/load)
 		for golfer in group_golfers:
 			if is_instance_valid(golfer):

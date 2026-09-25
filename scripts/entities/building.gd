@@ -19,6 +19,7 @@ var _custom_shadow: Polygon2D = null  # Building-specific shadow shape
 ## Chimney smoke animation
 var _has_smoke: bool = false
 var _smoke_wisps: Array[Polygon2D] = []
+var _wisp_tweens: Dictionary = {}  # wisp index → active loop tween (see _animate_single_wisp)
 var _smoke_origin: Vector2 = Vector2.ZERO
 
 ## Window glow for dusk/night
@@ -97,6 +98,9 @@ func _exit_tree() -> void:
 			shadow_system.sun_direction_changed.disconnect(_on_sun_direction_changed)
 	if EventBus.hour_changed.is_connected(_on_hour_changed_for_glow):
 		EventBus.hour_changed.disconnect(_on_hour_changed_for_glow)
+	# Stop the smoke-wisp loop so no tween (and its self-rescheduling
+	# callback) is still pending while the tree is being torn down.
+	_stop_smoke_animation()
 
 func _on_click_area_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -175,6 +179,7 @@ func upgrade() -> bool:
 	upgrade_level += 1
 
 	# Clean up smoke/glow state before rebuilding visuals
+	_stop_smoke_animation()
 	_smoke_wisps.clear()
 	_window_glow_overlays.clear()
 
@@ -1434,6 +1439,15 @@ func _start_smoke_animation() -> void:
 		# Use a one-shot timer for initial stagger
 		get_tree().create_timer(i * 0.9).timeout.connect(_animate_single_wisp.bind(i))
 
+func _stop_smoke_animation() -> void:
+	"""Kill every tracked smoke-wisp tween (and with it the self-rescheduling
+	callback that keeps the loop alive)."""
+	for index in _wisp_tweens:
+		var wisp_tween: Tween = _wisp_tweens[index]
+		if wisp_tween != null and wisp_tween.is_valid():
+			wisp_tween.kill()
+	_wisp_tweens.clear()
+
 func _animate_single_wisp(index: int) -> void:
 	"""Animate a single smoke wisp rising and fading, then loop"""
 	if index < 0 or index >= _smoke_wisps.size():
@@ -1453,6 +1467,9 @@ func _animate_single_wisp(index: int) -> void:
 
 	# Movement tween (parallel): rise, drift, expand over full duration
 	var move_tween = create_tween().set_parallel(true)
+	# Track it so _exit_tree can kill the loop: a wisp tween still pending
+	# when the game quits is reported as a leaked RefCounted/GDScript at exit.
+	_wisp_tweens[index] = move_tween
 	move_tween.tween_property(wisp, "position:y", _smoke_origin.y - 18, duration).set_ease(Tween.EASE_OUT)
 	move_tween.tween_property(wisp, "position:x", _smoke_origin.x + drift_x, duration).set_ease(Tween.EASE_OUT)
 	move_tween.tween_property(wisp, "scale", Vector2(1.6, 1.6), duration).set_ease(Tween.EASE_OUT)

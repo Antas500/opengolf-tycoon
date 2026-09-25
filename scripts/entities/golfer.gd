@@ -181,6 +181,7 @@ var _group_badge: Label = null
 ## Sprite-based rendering (replaces polygon visuals when available)
 var _animated_sprite: AnimatedSprite2D = null
 var _use_sprites: bool = false
+var _swing_tween: Tween  # Active procedural swing tween (see _start_swing_tween)
 var _current_direction: String = "south"  # south, east, north, west + diagonals
 
 ## Tier-to-sprite-folder mapping
@@ -246,6 +247,10 @@ signal state_changed(old_state: State, new_state: State)
 signal shot_completed(distance: int, accuracy: float)
 signal hole_completed(strokes: int, par: int)
 signal golfer_selected(golfer: Golfer)
+## Fired when the procedural swing tween finishes (see _start_swing_tween).
+## The swing coroutine awaits this node signal instead of `tween.finished`
+## so a pending swing at quit can't leak the Tween instance.
+signal _swing_anim_done
 
 func _ready() -> void:
 	# Set up collision layers
@@ -599,6 +604,11 @@ func _add_body_shading() -> void:
 func _exit_tree() -> void:
 	if EventBus.green_fee_paid.is_connected(_on_green_fee_paid):
 		EventBus.green_fee_paid.disconnect(_on_green_fee_paid)
+	# Kill an in-progress swing tween explicitly: a tween still animating when
+	# the tree is torn down can be reported as a leaked RefCounted at exit.
+	if _swing_tween != null and _swing_tween.is_valid():
+		_swing_tween.kill()
+	_swing_tween = null
 
 ## Initialize golfer from a tier (sets skills and personality)
 func initialize_from_tier(tier: int) -> void:
@@ -872,7 +882,7 @@ func _play_swing_animation(is_putt: bool = false) -> void:
 			return
 		else:
 			# No swing sprite — just pause briefly as placeholder
-			await get_tree().create_timer(0.5).timeout
+			await Delay.seconds(self, 0.5)
 			if not is_instance_valid(self):
 				return
 			swing_animation_playing = false
@@ -885,6 +895,22 @@ func _play_swing_animation(is_putt: bool = false) -> void:
 	if golf_club:
 		golf_club.visible = true
 
+	# Build the tween in a helper frame so this suspended coroutine never
+	# holds a Tween reference — that would leak the Tween instance if the
+	# game quits mid-swing. Completion is relayed through the node signal.
+	_start_swing_tween(is_putt)
+	await _swing_anim_done
+	if not is_instance_valid(self):
+		return
+	swing_animation_playing = false
+
+
+## Build and start the procedural swing tween.
+## Deliberately a separate (non-coroutine) function: a pending `await
+## tween.finished` keeps the Tween referenced from the suspended frame and
+## leaks it when the game quits while a swing is mid-animation. Relaying
+## completion through the `_swing_anim_done` node signal avoids that.
+func _start_swing_tween(is_putt: bool) -> void:
 	# IMPORTANT: In Godot 4, tween.chain().set_parallel(true) is BROKEN.
 	# chain() sets parallel_enabled=false, but set_parallel(true) immediately
 	# re-enables it, so the next tweener joins the current step instead of
@@ -892,6 +918,7 @@ func _play_swing_animation(is_putt: bool = false) -> void:
 	#   tween.chain().tween_property(...)  — first tweener creates the new step
 	#   tween.tween_property(...)          — subsequent ones are parallel (default_parallel=true)
 	var tween = create_tween().set_parallel(true)
+	_swing_tween = tween
 
 	if is_putt:
 		# Putt: Gentle pendulum stroke — rotation only, no position change
@@ -990,10 +1017,12 @@ func _play_swing_animation(is_putt: bool = false) -> void:
 		if body:
 			tween.tween_property(body, "rotation", 0.0, 0.25).set_ease(Tween.EASE_IN_OUT)
 
-	await tween.finished
-	if not is_instance_valid(self):
-		return
-	swing_animation_playing = false
+	tween.finished.connect(_on_swing_tween_finished, CONNECT_ONE_SHOT)
+
+
+func _on_swing_tween_finished() -> void:
+	_swing_anim_done.emit()
+
 
 ## Start playing a hole
 func start_hole(hole_number: int, tee_position: Vector2i) -> void:
@@ -1296,13 +1325,13 @@ func take_shot(target: Vector2i) -> void:
 	_change_state(State.WATCHING)
 	var flight_time = _estimate_flight_duration(shot_result.distance)
 	var rollout_time = _estimate_rollout_duration(shot_result.get("rollout_tiles", 0.0))
-	await get_tree().create_timer(flight_time + rollout_time + 0.5).timeout
+	await Delay.seconds(self, flight_time + rollout_time + 0.5)
 	if not is_instance_valid(self):
 		return
 
 	# Check for hazards at landing position and apply penalties (skip if ball holed)
 	if not ball_holed and _handle_hazard_penalty(previous_position):
-		await get_tree().create_timer(1.0).timeout
+		await Delay.seconds(self, 1.0)
 		if not is_instance_valid(self):
 			return
 
@@ -2834,7 +2863,7 @@ func _on_green_fee_paid(paid_golfer_id: int, _paid_golfer_name: String, amount: 
 		var price_trigger = FeedbackTriggers.get_price_trigger(amount, GameManager.reputation)
 		if price_trigger != FeedbackTriggers.TriggerType.NONE:
 			# Delay price feedback slightly so it doesn't overlap with payment notification
-			await get_tree().create_timer(1.0).timeout
+			await Delay.seconds(self, 1.0)
 			if not is_instance_valid(self):
 				return
 			show_thought(price_trigger)

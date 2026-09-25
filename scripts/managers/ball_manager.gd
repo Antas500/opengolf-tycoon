@@ -110,7 +110,8 @@ func handle_water_penalty(golfer_id: int, previous_position: Vector2i) -> void:
 
 	# Ball visual already shows water state
 	# Wait a moment to show the splash, then drop at previous position
-	await get_tree().create_timer(1.5).timeout
+	# Timer-node delay: a pending SceneTreeTimer await would leak at quit.
+	await Delay.seconds(self, 1.5)
 
 	# Re-validate ball after await (may have been freed during timer)
 	ball = get_ball(golfer_id)
@@ -132,7 +133,8 @@ func handle_ob_penalty(golfer_id: int, previous_position: Vector2i) -> void:
 
 	# Ball visual already shows OB state
 	# Wait a moment, then reset to previous position
-	await get_tree().create_timer(1.5).timeout
+	# Timer-node delay: a pending SceneTreeTimer await would leak at quit.
+	await Delay.seconds(self, 1.5)
 
 	# Re-validate ball after await (may have been freed during timer)
 	ball = get_ball(golfer_id)
@@ -228,7 +230,8 @@ func _on_hazard_penalty(golfer_id: int, hazard_type: String, reset_position: Vec
 		return
 
 	# Wait to show the splash/hazard visual before resetting
-	await get_tree().create_timer(1.5).timeout
+	# Timer-node delay: a pending SceneTreeTimer await would leak at quit.
+	await Delay.seconds(self, 1.5)
 
 	# Re-fetch ball after await - it may have been freed during the delay
 	ball = get_ball(golfer_id)

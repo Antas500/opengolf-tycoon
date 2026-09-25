@@ -24,6 +24,7 @@ var _style_selected: StyleBoxFlat
 
 func _ready() -> void:
 	_create_styles()
+	_apply_styles()
 	_update_button()
 	_connect_signals()
 
@@ -96,9 +97,11 @@ func _create_styles() -> void:
 	_style_selected.border_width_bottom = 2
 	_style_selected.border_color = UIConstants.COLOR_GOLD
 
-	_apply_styles()
-
 func _apply_styles() -> void:
+	# Styles may be requested before _ready() runs (e.g. set_selected() on a
+	# freshly built button) — create them on demand so overrides are never null.
+	if _style_normal == null or _style_hover == null or _style_pressed == null or _style_selected == null:
+		_create_styles()
 	if disabled:
 		# Greyed out when disabled.
 		modulate = Color(0.5, 0.5, 0.5, 0.65)

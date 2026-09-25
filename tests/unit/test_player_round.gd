@@ -56,7 +56,7 @@ func after_each() -> void:
 	golfers.clear_all_golfers()
 	await get_tree().process_frame
 	GameManager.current_course = saved.course
-	GameManager.terrain_grid = saved.grid
+	GameManager.terrain_grid = saved.grid if is_instance_valid(saved.grid) else null
 	GameManager.player_profile = saved.profile
 	GameManager.tournament_manager = saved.tournament
 	GameManager.is_paused = saved.paused
