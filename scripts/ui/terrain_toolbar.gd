@@ -3,7 +3,7 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: brush controls column before one course, hazard & landscape tiles honeycomb; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
+##  - Course Terrain: one course, hazard & landscape tiles honeycomb, with the brush controls pinned to the page's bottom-left corner so they ride above the tiles instead of scrolling with them; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      sculpting controls and brush size
@@ -16,7 +16,10 @@ class_name TerrainToolbar
 ## Content within tabs is laid out horizontally and scrolls horizontally when
 ## overflowing the available tab width. The Bulldozer lives on the two tabs
 ## whose tiles it can remove (Improvements and Buildings), pinned to each
-## page's bottom-left corner so it stays put while the shelf scrolls.
+## page's bottom-left corner so it stays put while the shelf scrolls. The
+## Course Terrain brush controls are pinned to that same corner of their page
+## for the same reason: the brush belongs to every tile on the tab, so it sits
+## above the shelf rather than scrolling away with it.
 
 signal course_review_pressed
 signal tool_selected(tool_type: int)
@@ -133,6 +136,17 @@ const TILE_V_SEPARATION := 20
 const TILE_V_PADDING := 20
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
+## Brush controls pinned to the Course Terrain page's bottom-left corner: a
+## 2x2 plate of square cells (shape, size, smaller, bigger). The plate is held
+## this narrow so its right edge stops short of the tile diamonds beside it —
+## the staggered bottom row leaves that corner of the page empty, so the brush
+## floats above the shelf without ever covering a tile.
+const BRUSH_DOCK_CELL := 24.0
+const BRUSH_DOCK_GAP := 2.0
+const BRUSH_DOCK_PADDING := 1.0
+## Same corner margin the pinned Bulldozer keeps on the other two tabs.
+const BRUSH_DOCK_MARGIN := BulldozerButton.CORNER_MARGIN
+const BRUSH_DOCK_TOOLTIP := "Paint brush: shape, size, smaller and bigger. Stays put while the tiles scroll."
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
 const OPEN_HOLE_BLOCKED_TOOLTIP := "Needs exactly one unused tee box and one unused green with a hole"
 ## What the Bulldozer removes — improvements and buildings only. Course
@@ -147,6 +161,7 @@ var _tool_buttons: Dictionary = {}  # tool_type -> ToolButton
 var _tab_bar: TabBar = null
 var _pages: Array[Control] = []  # One wrapper per tab; the scroll + fixed chrome
 var _bulldozer_buttons: Array[BulldozerButton] = []  # Pinned to Improvements & Buildings
+var _brush_dock: PanelContainer = null  # Pinned to the Course Terrain corner
 var _brush_size: int = 1
 var _round_brush := true
 var _brush_limit: int = HoleLayout.UNLIMITED_BRUSH  # 1 = current tool paints a single tile
@@ -319,6 +334,7 @@ func _build_page(tab_index: int) -> Control:
 	match tab_index:
 		Tab.TERRAIN:
 			_build_terrain_tab(hbox)
+			_pin_brush_dock(page)
 		Tab.IMPROVEMENTS:
 			_build_improvements_tab(hbox)
 			_pin_bulldozer_button(page)
@@ -356,6 +372,64 @@ func _pin_bulldozer_button(page: Control) -> void:
 	btn.offset_bottom = -BulldozerButton.CORNER_MARGIN
 	_bulldozer_buttons.append(btn)
 
+## Pin the Course Terrain brush controls to the page's bottom-left corner: a
+## compact plate of four square cells — brush shape, brush size, smaller,
+## bigger. Anchored to the page (not the scrolling shelf) so the brush rides
+## above the tiles and stays put while the catalogue scrolls beneath it, the
+## same way the Bulldozer stays put on the two tabs it belongs to. The plate
+## fits the corner the staggered tile rows leave empty, so it floats over the
+## shelf without covering a single tile diamond.
+func _pin_brush_dock(page: Control) -> void:
+	var dock := PanelContainer.new()
+	dock.name = "BrushDock"
+	dock.tooltip_text = BRUSH_DOCK_TOOLTIP
+	dock.mouse_filter = Control.MOUSE_FILTER_STOP
+	dock.focus_mode = Control.FOCUS_NONE
+	var plate := StyleBoxFlat.new()
+	plate.bg_color = Color(UIConstants.COLOR_BG_PANEL, 0.9)
+	for corner in ["corner_radius_top_left", "corner_radius_top_right",
+			"corner_radius_bottom_right", "corner_radius_bottom_left"]:
+		plate.set(corner, 6)
+	for margin in ["content_margin_left", "content_margin_top",
+			"content_margin_right", "content_margin_bottom"]:
+		plate.set(margin, BRUSH_DOCK_PADDING)
+	dock.add_theme_stylebox_override("panel", plate)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", int(BRUSH_DOCK_GAP))
+	dock.add_child(stack)
+
+	# Shape and the size it paints with on top, the stepper underneath.
+	var shape_row := HBoxContainer.new()
+	shape_row.add_theme_constant_override("separation", int(BRUSH_DOCK_GAP))
+	stack.add_child(shape_row)
+	var shape := _create_brush_shape(Vector2(BRUSH_DOCK_CELL, BRUSH_DOCK_CELL))
+	_style_dock_cell(shape)
+	shape_row.add_child(shape)
+	shape_row.add_child(_create_brush_size_chip())
+
+	var step_row := HBoxContainer.new()
+	step_row.add_theme_constant_override("separation", int(BRUSH_DOCK_GAP))
+	stack.add_child(step_row)
+	step_row.add_child(_create_brush_step_button("-", "Smaller brush", _on_brush_decrease))
+	step_row.add_child(_create_brush_step_button("+", "Bigger brush", _on_brush_increase))
+
+	page.add_child(dock)
+	var side := brush_dock_side()
+	dock.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	dock.offset_left = BRUSH_DOCK_MARGIN
+	dock.offset_top = -BRUSH_DOCK_MARGIN - side
+	dock.offset_right = BRUSH_DOCK_MARGIN + side
+	dock.offset_bottom = -BRUSH_DOCK_MARGIN
+	_brush_dock = dock
+	_apply_brush_limit()
+
+## Edge of the square brush plate: two cells, the gap between them and the
+## plate's own padding. The plate is deliberately held this narrow so its right
+## edge stops before the staggered bottom row's first tile begins.
+static func brush_dock_side() -> float:
+	return BRUSH_DOCK_CELL * 2.0 + BRUSH_DOCK_GAP + BRUSH_DOCK_PADDING * 2.0
+
 ## Show on every pinned Bulldozer whether bulldozer mode is running.
 func set_bulldozer_active(active: bool) -> void:
 	for btn in _bulldozer_buttons:
@@ -384,14 +458,13 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	# The brush stack opens the tab so the course tools sit first, before the
-	# tiles. (Demolition is not a course tool: the Bulldozer is pinned to the
-	# Improvements and Buildings tabs, whose tiles it can remove. Open Hole is
-	# not a paint tool either — it nestles between the tee and green tiles it
-	# pairs, see _add_open_hole_notch.)
-	hbox.add_child(_make_terrain_tools_column())
-
-	hbox.add_child(_make_separator())
+	# The tab is nothing but the tile honeycomb: the brush controls it paints
+	# with are pinned to the page's bottom-left corner (see _pin_brush_dock) so
+	# they stay above the tiles instead of scrolling off with them. (Demolition
+	# is not a course tool: the Bulldozer is pinned to the Improvements and
+	# Buildings tabs, whose tiles it can remove. Open Hole is not a paint tool
+	# either — it nestles between the tee and green tiles it pairs, see
+	# _add_open_hole_notch.)
 
 	# The course tiles share one honeycomb of two rows, the bottom row shifted
 	# half a tile right so each diamond drops into a notch between the two tiles
@@ -449,33 +522,6 @@ func _add_open_hole_notch(tiles_grid: TileHoneycomb, left_slot: int) -> OpenHole
 	_open_hole_buttons.append(open_hole_btn)
 	_tool_buttons["open_hole"] = open_hole_btn
 	return open_hole_btn
-
-## The brush controls stacked vertically. This column opens the Course Terrain
-## tab so they sit before the tile honeycomb; the Open Hole action used to lead
-## it and now nestles between the tee and green tiles it pairs, and the Bulldozer
-## used to stack here too, but it never touches course terrain — it now lives
-## pinned to the Improvements and Buildings tabs (see _pin_bulldozer_button).
-func _make_terrain_tools_column() -> VBoxContainer:
-	var column = VBoxContainer.new()
-	column.name = "TerrainToolsColumn"
-	column.add_theme_constant_override("separation", 2)
-	# Centred like the tile rows beside it, now that the Open Hole button no
-	# longer tops the column out at the height of the page.
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	var shape := _create_brush_shape()
-	shape.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	shape.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_child(shape)
-
-	var brush_row := _create_brush_row()
-	brush_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	brush_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_child(brush_row)
-
-	_apply_brush_limit()
-	return column
 
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	# Every improvement — the walking path and each ornament in The Garden Shed —
@@ -989,8 +1035,9 @@ func _make_small_group_label(text: String) -> Label:
 	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	return lbl
 
-## Brush size stepper row ("-" label "+"). Shared by the Terrain tab's tools
-## column and the Elevation tab's brush group; the caller sets size flags.
+## Brush size stepper row ("-" label "+"), used by the Elevation tab's brush
+## group; the caller sets size flags. The Course Terrain tab's brush lives in
+## the pinned corner dock instead (see _pin_brush_dock).
 func _create_brush_row() -> HBoxContainer:
 	var brush_row = HBoxContainer.new()
 	brush_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -1022,18 +1069,84 @@ func _create_brush_row() -> HBoxContainer:
 	_brush_buttons.append(brush_increase)
 	return brush_row
 
-## Round/square brush shape picker. Shared like the brush row above.
-## Now a toggle button that swaps between Square and Circle icons.
-func _create_brush_shape() -> Button:
+## Round/square brush shape picker. Shared by the pinned Course Terrain brush
+## dock and the Elevation tab's brush group; the caller passes the cell it has
+## room for. A toggle button that swaps between Square and Circle icons.
+func _create_brush_shape(cell_size: Vector2 = Vector2(32, 26)) -> Button:
 	var shape := Button.new()
 	shape.focus_mode = Control.FOCUS_NONE
-	shape.custom_minimum_size = Vector2(32, 26)
+	shape.custom_minimum_size = cell_size
 	shape.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	shape.toggle_mode = true
 	_update_brush_shape_button(shape)
 	shape.pressed.connect(_on_brush_shape_toggled)
 	_brush_shape_buttons.append(shape)
 	return shape
+
+## The brush size readout in the pinned dock: one square cell showing the size
+## the selected tool actually paints with. It shares `_brush_labels` with the
+## Elevation tab's wider stepper, so both always read the same number.
+func _create_brush_size_chip() -> Label:
+	var chip := Label.new()
+	chip.name = "BrushSizeChip"
+	chip.text = "%dx%d" % [_brush_size, _brush_size]
+	chip.custom_minimum_size = Vector2(BRUSH_DOCK_CELL, BRUSH_DOCK_CELL)
+	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chip.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	chip.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var chip_style := StyleBoxFlat.new()
+	chip_style.bg_color = UIConstants.COLOR_BG_DARK
+	chip_style.corner_radius_top_left = 4
+	chip_style.corner_radius_top_right = 4
+	chip_style.corner_radius_bottom_right = 4
+	chip_style.corner_radius_bottom_left = 4
+	chip.add_theme_stylebox_override("normal", chip_style)
+	_brush_labels.append(chip)
+	return chip
+
+## One square step button of the pinned brush dock (smaller / bigger).
+func _create_brush_step_button(caption: String, tip: String, action: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = caption
+	btn.tooltip_text = tip
+	btn.accessibility_name = tip
+	btn.accessibility_description = tip
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	btn.pressed.connect(action)
+	_style_dock_cell(btn)
+	_brush_buttons.append(btn)
+	return btn
+
+## Give a brush dock cell its fixed square footprint. The theme's button
+## styleboxes carry content margins of their own, which would push the cell —
+## and so the whole plate — past the corner the tile rows leave clear, so the
+## dock draws its own flush cells instead.
+func _style_dock_cell(control: Control) -> void:
+	control.custom_minimum_size = Vector2(BRUSH_DOCK_CELL, BRUSH_DOCK_CELL)
+	if control is Button:
+		var faces := {
+			"normal": UIConstants.COLOR_BG_BUTTON,
+			"hover": UIConstants.COLOR_BG_HOVER,
+			"pressed": UIConstants.COLOR_PRIMARY_PRESSED,
+			"hover_pressed": UIConstants.COLOR_PRIMARY_PRESSED,
+			"focus": UIConstants.COLOR_BG_BUTTON,
+			"disabled": UIConstants.COLOR_BG_DARK,
+		}
+		for state in faces:
+			var box := StyleBoxFlat.new()
+			box.bg_color = faces[state]
+			box.corner_radius_top_left = 4
+			box.corner_radius_top_right = 4
+			box.corner_radius_bottom_right = 4
+			box.corner_radius_bottom_left = 4
+			for margin in ["content_margin_left", "content_margin_top",
+					"content_margin_right", "content_margin_bottom"]:
+				box.set(margin, 0.0)
+			control.add_theme_stylebox_override(state, box)
+		control.add_theme_color_override("font_disabled_color", UIConstants.COLOR_TEXT_MUTED)
 
 func _update_brush_shape_button(btn: Button) -> void:
 	if _round_brush:
@@ -1043,6 +1156,8 @@ func _update_brush_shape_button(btn: Button) -> void:
 		btn.text = "□"
 		btn.tooltip_text = "Square brush — click for Round (Circle)"
 	btn.button_pressed = _round_brush
+	btn.accessibility_name = "Brush shape"
+	btn.accessibility_description = btn.tooltip_text
 
 func _make_brush_group() -> VBoxContainer:
 	var group = VBoxContainer.new()
@@ -1519,9 +1634,11 @@ func _on_brush_increase() -> void:
 
 func _update_brush_label() -> void:
 	var shown: int = effective_brush_size()
+	var text := "%dx%d" % [shown, shown]
 	for label in _brush_labels:
 		if is_instance_valid(label):
-			label.text = "%dx%d" % [shown, shown]
+			label.text = text
+			label.tooltip_text = "Brush size %s" % text
 
 ## The brush size the selected tool actually paints with. Tee boxes, and a green
 ## that is about to become a Green With Hole, are capped at a single tile.

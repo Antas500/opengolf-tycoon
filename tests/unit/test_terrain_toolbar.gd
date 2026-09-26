@@ -490,8 +490,8 @@ func test_every_course_terrain_tile_says_it_replaces_the_others() -> void:
 
 func test_course_terrain_tab_has_no_green_size_presets() -> void:
 	var terrain_content: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.TERRAIN)
-	assert_eq(terrain_content.get_child_count(), 3,
-		"The terrain tab contains the tools, separator, unified tile grid, with no extra separator or preset group")
+	assert_eq(terrain_content.get_child_count(), 1,
+		"The scrolling terrain tab is just the unified tile grid — the brush is pinned to the page, and there is no extra separator or preset group")
 
 ## Open Hole pairs the tee box and the green, so the Course Terrain tab nestles
 ## the action into the notch between those two tiles instead of leaving it in the
@@ -611,23 +611,128 @@ func test_theme_changes_keep_the_open_hole_between_the_tee_and_green() -> void:
 	GameManager.current_theme = original_theme
 	EventBus.theme_changed.emit(original_theme)
 
-func test_course_terrain_tools_column_keeps_only_the_brush_controls() -> void:
-	var column: Control = toolbar.page_content(TerrainToolbar.Tab.TERRAIN).get_child(0)
-	assert_eq(column.name, "TerrainToolsColumn")
-	assert_eq(column.find_children("*", "OpenHoleNotchButton", true, false).size(), 0,
-		"The Open Hole action no longer stands in the column")
-	for button in column.find_children("*", "ToolButton", true, false):
-		assert_ne(button.tool_name, "Open Hole")
-	assert_eq(column.get_child_count(), 3,
-		"The column is the BRUSH label, the brush stepper and the brush shape picker")
-	assert_eq((column.get_child(0) as Label).text, "BRUSH")
-	var stepper: HBoxContainer = column.get_child(1)
-	assert_eq(stepper.get_child_count(), 3, "The stepper: -, the size it is set to, +")
-	for child in stepper.get_children():
-		if child is Button:
-			assert_has(toolbar._brush_buttons, child, "The toolbar drives this stepper")
-	assert_has(toolbar._brush_shape_buttons, column.get_child(2),
-		"And this round/square picker")
+## The Course Terrain brush controls no longer lead the scrolling shelf: they
+## are pinned to the page's bottom-left corner so they stay above the tiles.
+func test_brush_controls_pin_to_the_terrain_tabs_bottom_left_corner() -> void:
+	var page: Control = toolbar._pages[TerrainToolbar.Tab.TERRAIN]
+	var dock: PanelContainer = toolbar._brush_dock
+	assert_not_null(dock, "The Course Terrain tab pins a brush dock")
+	assert_eq(dock.name, "BrushDock")
+	assert_eq(dock.get_parent(), page, "Pinned to the page, not to the scrolling shelf")
+	assert_false(toolbar.page_scroll(TerrainToolbar.Tab.TERRAIN).is_ancestor_of(dock),
+		"The brush stays fixed while the tiles scroll beneath it")
+	assert_eq(page.find_children("*", "TerrainToolsColumn", true, false).size(), 0,
+		"The old tools column is gone")
+
+	# Anchored to the page's bottom-left corner, clear of the page edges.
+	assert_almost_eq(dock.anchor_left, 0.0, 0.001, "Anchored to the left edge")
+	assert_almost_eq(dock.anchor_top, 1.0, 0.001, "Anchored to the bottom edge")
+	assert_almost_eq(dock.anchor_right, 0.0, 0.001, "Anchored to the left edge")
+	assert_almost_eq(dock.anchor_bottom, 1.0, 0.001, "Anchored to the bottom edge")
+	assert_almost_eq(dock.offset_left, TerrainToolbar.BRUSH_DOCK_MARGIN, 0.01)
+	assert_almost_eq(dock.offset_bottom, -TerrainToolbar.BRUSH_DOCK_MARGIN, 0.01)
+
+	await _settle_layout()
+	var side := TerrainToolbar.brush_dock_side()
+	assert_eq(dock.size, Vector2(side, side), "A square plate of four cells")
+	assert_eq(dock.position, Vector2(TerrainToolbar.BRUSH_DOCK_MARGIN,
+		page.size.y - TerrainToolbar.BRUSH_DOCK_MARGIN - side),
+		"Held in the bottom-left corner of the tab")
+	assert_true(Rect2(Vector2.ZERO, page.size).encloses(Rect2(dock.position, dock.size)),
+		"The plate stays inside the tab")
+
+## "Fixed" means fixed: scrolling the catalogue moves the tiles, and the brush
+## stays where it was pinned.
+func test_pinned_brush_stays_put_while_the_tiles_scroll() -> void:
+	var scroll: ScrollContainer = toolbar.page_scroll(TerrainToolbar.Tab.TERRAIN)
+	var dock: PanelContainer = toolbar._brush_dock
+	await _settle_layout()
+	var dock_before: Vector2 = dock.get_global_transform_with_canvas().origin
+	var tee: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]
+	var tee_before: Vector2 = tee.get_global_transform_with_canvas().origin
+
+	scroll.scroll_horizontal = 200
+	await _settle_layout()
+	assert_gt(scroll.scroll_horizontal, 0, "The shelf scrolled")
+	assert_eq(dock.get_global_transform_with_canvas().origin, dock_before,
+		"The brush stays fixed in the corner of the tab")
+	assert_ne(tee.get_global_transform_with_canvas().origin, tee_before,
+		"The tiles scroll beneath it")
+
+	scroll.scroll_horizontal = 0
+	await _settle_layout()
+	assert_eq(dock.get_global_transform_with_canvas().origin, dock_before)
+
+## The pinned plate carries the whole brush — shape, the size it paints with,
+## and the two steps — and drives exactly the brush it used to.
+func test_pinned_brush_dock_carries_the_whole_brush() -> void:
+	var dock: PanelContainer = toolbar._brush_dock
+	var cell := Vector2(TerrainToolbar.BRUSH_DOCK_CELL, TerrainToolbar.BRUSH_DOCK_CELL)
+
+	var shapes: Array = dock.find_children("*", "Button", true, false).filter(
+		func(button): return button in toolbar._brush_shape_buttons)
+	assert_eq(shapes.size(), 1, "One round/square picker")
+	var shape: Button = shapes[0]
+	assert_true(shape.toggle_mode)
+	assert_eq(shape.custom_minimum_size, cell)
+
+	var chips := dock.find_children("BrushSizeChip", "Label", true, false)
+	assert_eq(chips.size(), 1, "One size readout")
+	var chip: Label = chips[0]
+	assert_has(toolbar._brush_labels, chip, "The toolbar writes the size into the chip")
+	assert_eq(chip.custom_minimum_size, cell)
+
+	var steps: Array = dock.find_children("*", "Button", true, false).filter(
+		func(button): return button in toolbar._brush_buttons)
+	assert_eq(steps.size(), 2, "Smaller and bigger")
+	for step in steps:
+		assert_eq(step.custom_minimum_size, cell)
+
+	# The dock is the terrain tab's brush: stepping it changes the real brush,
+	# and the chip reads back the size the selected tool paints with.
+	watch_signals(toolbar)
+	toolbar.set_brush_size(5)
+	assert_eq(chip.text, "5x5")
+	for step in steps:
+		if step.text == "+":
+			step.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [7])
+	assert_eq(toolbar.get_brush_size(), 7)
+	assert_eq(chip.text, "7x7")
+
+	# A tool capped at a single tile locks the dock, like every other brush UI.
+	toolbar.set_brush_limit(1)
+	assert_eq(chip.text, "1x1", "The chip shows the capped size")
+	assert_true(shape.disabled, "The shape picker is locked")
+	for step in steps:
+		assert_true(step.disabled, "The stepper is locked")
+	toolbar.set_brush_limit(HoleLayout.UNLIMITED_BRUSH)
+	assert_false(shape.disabled)
+	toolbar.set_brush_size(1)
+
+## The plate floats above the shelf in the corner the staggered rows leave
+## empty, so no tile loses a pixel of its clickable diamond to it.
+func test_pinned_brush_dock_leaves_every_tile_diamond_clear() -> void:
+	await _settle_layout()
+	var dock: PanelContainer = toolbar._brush_dock
+	var dock_origin: Vector2 = dock.get_global_transform_with_canvas().origin
+	var dock_rect := Rect2(dock_origin, dock.size)
+	assert_gt(dock_rect.size.x, 0.0, "The dock is laid out")
+
+	var checked := 0
+	for tile in toolbar._course_tiles.flow_children() + [toolbar._open_hole_buttons[0]]:
+		var covered := false
+		for offset_y in range(0, int(dock_rect.size.y) + 1, 2):
+			for offset_x in range(0, int(dock_rect.size.x) + 1, 2):
+				var local: Vector2 = dock_rect.position + Vector2(offset_x, offset_y) \
+						- tile.get_global_transform_with_canvas().origin
+				if TerrainTileButton.point_on_tile(local):
+					covered = true
+		assert_false(covered,
+			"%s keeps its diamond clear of the pinned brush" % (tile as ToolButton).tool_name)
+		checked += 1
+	assert_eq(checked, toolbar._course_tiles.flow_children().size() + 1,
+		"Every tile on the tab, plus the nestled Open Hole action, was checked")
 
 func test_holes_tab_has_hbox_hole_list() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
