@@ -147,6 +147,11 @@ func _build_tile() -> void:
 		add_child(flowers)
 		if _name_label:
 			move_child(flowers, _name_label.get_index())
+	elif tool_type is int and tool_type == TerrainTypes.Type.PATH:
+		var trail := _make_walking_path_art()
+		add_child(trail)
+		if _name_label:
+			move_child(trail, _name_label.get_index())
 
 	_refresh_palette()
 	_update_visual_state()
@@ -188,6 +193,34 @@ func _make_flower_bed_art() -> Node2D:
 		art.add_child(c_poly)
 	return art
 
+## The walking path as `WalkingPathOverlay` draws it on the course: a slim dirt
+## ribbon with a darker rim and a paler centre, running from one edge of the
+## tile to the other so neighbouring tiles read as one trail. The offsets are
+## half-widths in grid units along the tile's isometric axes, which puts the
+## ends of the ribbon exactly on the corners' shared edges.
+func _make_walking_path_art() -> Node2D:
+	var art := Node2D.new()
+	art.name = "WalkingPathPreviewArt"
+	var center := BUTTON_SIZE * 0.5
+	var along := Vector2(TILE_SIZE.x * 0.5, TILE_SIZE.y * 0.5)  # +x grid axis
+	var across := Vector2(-TILE_SIZE.x * 0.5, TILE_SIZE.y * 0.5)  # +y grid axis
+	var from := center - along * 0.5
+	var to := center + along * 0.5
+	var half_width := WalkingPathOverlay.DIRT_HALF_W
+	_add_trail_band(art, from, to, across * (half_width + 0.03), WalkingPathOverlay.DIRT_DARK)
+	_add_trail_band(art, from, to, across * half_width, WalkingPathOverlay.DIRT_COLOR)
+	_add_trail_band(art, from, to, across * half_width * 0.3, WalkingPathOverlay.DIRT_LIGHT)
+	return art
+
+## One parallelogram of trail between two tile-edge midpoints.
+static func _add_trail_band(art: Node2D, from: Vector2, to: Vector2, half_width: Vector2, color: Color) -> void:
+	var band := Polygon2D.new()
+	band.polygon = PackedVector2Array([from + half_width, to + half_width,
+		to - half_width, from - half_width])
+	band.color = color
+	band.antialiased = true
+	art.add_child(band)
+
 ## Shrink oversized names so they stay inside the diamond.
 func _fit_name_label() -> void:
 	var font := _name_label.get_theme_font("font")
@@ -211,9 +244,15 @@ func _make_surface_material() -> ShaderMaterial:
 	# natural-grass preview. Avoid coercing their string id to a terrain enum.
 	var preview_terrain: int = int(tool_type) if tool_type is int else TerrainTypes.Type.GRASS
 	terrain_data.set_pixel(1, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
+	# A walking path is a thin trail laid over the ground it crosses rather than
+	# a surface a player paints, so its tile shows a stretch of the rough a
+	# trail is usually cut through — filled edge to edge instead of inset like a
+	# patch — with the trail itself drawn on top (see _make_walking_path_art).
+	if preview_terrain == TerrainTypes.Type.PATH:
+		terrain_data.fill(Color(float(TerrainTypes.Type.ROUGH) / 255.0, 0, 0.5, 1))
 	# A stream is drawn as a channel between neighbouring stream tiles, so its
 	# preview runs one through the tile instead of showing a lone spring pool.
-	if preview_terrain == TerrainTypes.Type.STREAM:
+	elif preview_terrain == TerrainTypes.Type.STREAM:
 		terrain_data.set_pixel(0, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
 		terrain_data.set_pixel(2, 1, Color(float(preview_terrain) / 255.0, 0, 0.5, 1))
 	# Stones and shrubs keep clear of a lone tile's edges, so these previews

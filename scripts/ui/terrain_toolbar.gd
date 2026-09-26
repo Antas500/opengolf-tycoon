@@ -4,7 +4,7 @@ class_name TerrainToolbar
 ##
 ## Nine tabs:
 ##  - Course Terrain: tools column (open hole, bulldozer, brush) before one course, hazard & landscape tiles honeycomb
-##  - Improvements:   paths and the decoration tiles honeycomb (the garden shed catalogue)
+##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue)
 ##  - Buildings:      amenity buildings catalogue
 ##  - Elevation:      sculpting controls and brush size
 ##  - Holes:          course holes list (rows are filled by main.gd)
@@ -118,6 +118,10 @@ const SHIFT_TERRAIN_HOTKEYS := {
 const TOOL_ROW_HEIGHT := 30
 const COURSE_TILE_COLUMNS := 7  # Top row runs tee -> water, bottom row fairway -> out of bounds
 const TILE_ROWS := 2  # Course and building tiles always sit in two interlocking rows
+## Tiles that lead the Improvements honeycomb ahead of the decoration
+## catalogue — just the walking path, which opens the top row. The shelf's
+## width counts it, so adding the path keeps the two rows balanced.
+const IMPROVEMENTS_LEAD_TILES := 1
 ## Vertical rhythm of the tile rows: two rows of TerrainTileButton.BUTTON_SIZE
 ## tiles span 1.5 tiles, plus the gap where the lower row tucks into the
 ## notches of the row above, plus the breathing room kept above the first row
@@ -161,6 +165,7 @@ var _building_shelf: TileHoneycomb = null
 var _decoration_registry: Dictionary = {}
 var _decoration_shelf: TileHoneycomb = null
 var _decoration_tiles: Dictionary = {}  # decoration type -> DecorationTileButton
+var _path_tile: TerrainTileButton = null  # Walking path tile leading the shelf
 var _course_tiles: TileHoneycomb = null
 var _landscape_buttons: Array[Node] = []
 var _selected_string_tool: String = ""
@@ -419,34 +424,42 @@ func _make_column_button_compact(btn: ToolButton, height: int) -> void:
 		)
 
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
-	var path_box = HBoxContainer.new()
-	path_box.add_theme_constant_override("separation", 4)
-	path_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(path_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Thin dirt walking path laid over rough, deep rough, waste bunker, brush, rocks, streams, flower beds, boulders and trees. Each tile is a dot; edge-adjacent dots join into one trail, and a trail that reaches the clubhouse is paved."})
-	hbox.add_child(_make_tab_group("PATHS", path_box))
-
-	hbox.add_child(_make_separator())
-
-	# The whole decoration catalogue sits here as one honeycomb of the same
-	# interlocking isometric tiles used by Course Terrain and Buildings: two
-	# rows, no heading (the tiles carry their own captions), and a rich hover
-	# tooltip per tile with price, upkeep and unlock requirements. The page
-	# scrolls sideways when the catalogue is wider than the window.
+	# Every improvement — the walking path and each ornament in The Garden Shed —
+	# sits in one honeycomb of the same interlocking isometric tiles used by
+	# Course Terrain and Buildings: two rows, no heading (the tiles carry their
+	# own captions), and a rich hover tooltip per tile. The path leads the top
+	# row because it is the improvement players reach for while they shape the
+	# course, so it opens the tab instead of standing beside it in its own box.
+	# The page scrolls sideways when the catalogue is wider than the window.
 	_decoration_shelf = TileHoneycomb.new()
 	_decoration_shelf.name = "DecorationShelf"
-	_decoration_shelf.columns = tile_columns(_decoration_registry.size())
 	_decoration_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
 	_decoration_shelf.h_separation = TILE_H_SEPARATION
 	_decoration_shelf.v_separation = TILE_V_SEPARATION
 	_decoration_shelf.v_padding = TILE_V_PADDING
 	_decoration_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_decoration_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	hbox.add_child(_make_tab_group("", _decoration_shelf, true))
+	_add_path_tile()
 	_populate_decoration_shelf()
+	hbox.add_child(_make_tab_group("", _decoration_shelf, true))
 
 	hbox.add_child(_make_separator())
 
 	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play."))
+
+## The walking path drawn as a course tile and laid in the first slot of the
+## Improvements honeycomb. It is a painting tool rather than a catalogue entry,
+## so `_populate_decoration_shelf()` preserves it while it rebuilds the shelf.
+func _add_path_tile() -> void:
+	if is_instance_valid(_path_tile):
+		return
+	_path_tile = _add_tool_button(_decoration_shelf, {
+		"type": TerrainTypes.Type.PATH,
+		"name": "Path",
+		"hotkey": "8",
+		"desc": "Thin dirt walking path laid over rough, deep rough, waste bunker, brush, rocks, streams, flower beds, boulders and trees. Each tile is a dot; edge-adjacent dots join into one trail, and a trail that reaches the clubhouse is paved.",
+		"tile_preview": true,
+	}) as TerrainTileButton
 
 func _on_theme_changed(_theme: int) -> void:
 	_populate_landscape_tiles()
@@ -572,7 +585,7 @@ func _on_building_card_pressed(building_type: String) -> void:
 	building_selected.emit(building_type)
 
 # =============================================================================
-# Decoration shelf (Improvements tab)
+# Improvements shelf: the walking path tile plus the decoration catalogue
 # =============================================================================
 
 func set_decoration_registry(registry: Dictionary) -> void:
@@ -583,10 +596,12 @@ func _populate_decoration_shelf() -> void:
 	if not is_instance_valid(_decoration_shelf):
 		return
 	for child in _decoration_shelf.get_children():
+		if child == _path_tile:
+			continue  # The path leads the shelf; it is not part of the catalogue.
 		_decoration_shelf.remove_child(child)
 		child.queue_free()
 	_decoration_tiles.clear()
-	_decoration_shelf.columns = tile_columns(_decoration_registry.size())
+	_decoration_shelf.columns = tile_columns(_decoration_registry.size() + IMPROVEMENTS_LEAD_TILES)
 	for dec_type in ordered_decoration_types():
 		var data: Dictionary = _decoration_registry[dec_type]
 		var button := DecorationTileButton.new()
@@ -594,6 +609,10 @@ func _populate_decoration_shelf() -> void:
 		button.pressed.connect(_on_decoration_card_pressed.bind(str(dec_type)))
 		_decoration_shelf.add_child(button)
 		_decoration_tiles[str(dec_type)] = button
+	if is_instance_valid(_path_tile):
+		# Rebuilt rows append after the new catalogue tiles, so put the path back
+		# in slot 0: the first tile of the top row of the honeycomb.
+		_decoration_shelf.move_child(_path_tile, 0)
 	refresh_decoration_unlocks()
 
 ## Decoration types in the order The Garden Shed listed them: one category
