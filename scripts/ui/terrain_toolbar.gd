@@ -152,7 +152,7 @@ var _round_brush := true
 var _brush_limit: int = HoleLayout.UNLIMITED_BRUSH  # 1 = current tool paints a single tile
 var _brush_labels: Array[Label] = []
 var _brush_buttons: Array[Button] = []
-var _brush_shape_buttons: Array[OptionButton] = []
+var _brush_shape_buttons: Array[Button] = []
 var _open_hole_buttons: Array[ToolButton] = []
 var _green_tile_button: TerrainTileButton = null
 var _tee_tile_button: TerrainTileButton = null
@@ -464,17 +464,15 @@ func _make_terrain_tools_column() -> VBoxContainer:
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
-	column.add_child(_make_small_group_label("BRUSH"))
+	var shape := _create_brush_shape()
+	shape.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	shape.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(shape)
 
 	var brush_row := _create_brush_row()
 	brush_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	brush_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(brush_row)
-
-	var shape := _create_brush_shape()
-	shape.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	shape.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_child(shape)
 
 	_apply_brush_limit()
 	return column
@@ -1025,18 +1023,26 @@ func _create_brush_row() -> HBoxContainer:
 	return brush_row
 
 ## Round/square brush shape picker. Shared like the brush row above.
-func _create_brush_shape() -> OptionButton:
-	var shape := OptionButton.new()
-	shape.add_item("Round")
-	shape.add_item("Square")
-	shape.select(0 if _round_brush else 1)
-	shape.tooltip_text = "Round brush for natural contours, square for precise edges"
-	shape.custom_minimum_size = Vector2(78, 22)
+## Now a toggle button that swaps between Square and Circle icons.
+func _create_brush_shape() -> Button:
+	var shape := Button.new()
 	shape.focus_mode = Control.FOCUS_NONE
+	shape.custom_minimum_size = Vector2(32, 26)
 	shape.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	shape.item_selected.connect(_on_brush_shape_selected)
+	shape.toggle_mode = true
+	_update_brush_shape_button(shape)
+	shape.pressed.connect(_on_brush_shape_toggled)
 	_brush_shape_buttons.append(shape)
 	return shape
+
+func _update_brush_shape_button(btn: Button) -> void:
+	if _round_brush:
+		btn.text = "○"
+		btn.tooltip_text = "Round brush (Circle) — click for Square"
+	else:
+		btn.text = "□"
+		btn.tooltip_text = "Square brush — click for Round (Circle)"
+	btn.button_pressed = _round_brush
 
 func _make_brush_group() -> VBoxContainer:
 	var group = VBoxContainer.new()
@@ -1045,11 +1051,14 @@ func _make_brush_group() -> VBoxContainer:
 
 	group.add_child(_make_small_group_label("BRUSH"))
 
+	var shape := _create_brush_shape()
+	shape.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	group.add_child(shape)
+
 	var brush_row := _create_brush_row()
 	brush_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	group.add_child(brush_row)
 
-	group.add_child(_create_brush_shape())
 	_apply_brush_limit()
 	return group
 
@@ -1480,12 +1489,18 @@ func get_brush_size() -> int:
 	return _brush_size
 
 func _on_brush_shape_selected(index: int) -> void:
+	# Kept for compatibility; OptionButton no longer used — toggle maps 0=round, 1=square.
 	_round_brush = index == 0
 	for button in _brush_shape_buttons:
-		if is_instance_valid(button) and button.selected != index:
-			button.set_block_signals(true)
-			button.select(index)
-			button.set_block_signals(false)
+		if is_instance_valid(button):
+			_update_brush_shape_button(button)
+	brush_shape_changed.emit(_round_brush)
+
+func _on_brush_shape_toggled() -> void:
+	_round_brush = not _round_brush
+	for button in _brush_shape_buttons:
+		if is_instance_valid(button):
+			_update_brush_shape_button(button)
 	brush_shape_changed.emit(_round_brush)
 
 func _on_brush_decrease() -> void:
