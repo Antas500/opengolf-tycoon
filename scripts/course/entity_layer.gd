@@ -379,6 +379,14 @@ func is_tile_occupied_by_decoration(grid_pos: Vector2i) -> bool:
 	"""Check if a tile is occupied by any decoration (including multi-tile)"""
 	return get_decoration_at(grid_pos) != null
 
+## Keep a prop standing on the newly painted Course Terrain surface. This is
+## used for natural terrain (rough, brush, rocks, etc.), which intentionally
+## leaves the prop in place instead of treating it as a Bulldozer operation.
+## When the prop is eventually removed, the newly painted surface should remain.
+func update_entity_base_terrain(grid_pos: Vector2i, terrain_type: int) -> void:
+	if trees.has(grid_pos) or rocks.has(grid_pos):
+		_original_terrain[grid_pos] = terrain_type
+
 func _restore_terrain(grid_pos: Vector2i) -> void:
 	"""Restore the original terrain type after removing an entity"""
 	if not terrain_grid:

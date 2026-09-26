@@ -1056,6 +1056,11 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 			metadata["new_cup"] = will_place_cup
 			undo_manager.record_tile_change(tile_pos, original_type, current_tool, metadata)
 			terrain_grid.set_tile(tile_pos, current_tool)
+			# Natural terrain leaves an existing tree/boulder standing. Keep the
+			# replacement terrain as its base so a later prop removal cannot roll
+			# the tile back to the surface that was painted before it.
+			if entity_layer and not clears_obstacles:
+				entity_layer.update_entity_base_terrain(tile_pos, current_tool)
 			if will_place_cup and terrain_grid.add_cup_tile(tile_pos):
 				places_cup = false  # One cup per course, so this stroke is done.
 			# Apply theme-default bunker depth for newly placed bunkers
