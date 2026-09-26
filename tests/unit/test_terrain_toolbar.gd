@@ -450,6 +450,25 @@ func test_green_tile_flag_tracks_the_next_green_type() -> void:
 	assert_string_contains(button.tool_description, "Green Without Hole")
 	assert_string_contains(button.accessibility_description, "selected brush")
 
+func test_every_course_terrain_tile_says_it_replaces_the_others() -> void:
+	var sentence := TerrainTypes.REPLACES_ANY_COURSE_TILE
+	for tool_type in TOP_ROW + BOTTOM_ROW + [TerrainTypes.Type.FLOWER_BED]:
+		var button: TerrainTileButton = toolbar._tool_buttons[tool_type]
+		assert_string_contains(button.tool_description, sentence,
+			"%s tells the player it replaces any other Course Terrain tile" % button.tool_name)
+	for key in ["boulder_small", "rock", "boulder_large"]:
+		assert_string_contains(toolbar._tool_buttons[key].tool_description, sentence,
+			"Boulder tiles replace any other Course Terrain tile")
+	for tree_type in CourseTheme.get_tree_types(GameManager.current_theme):
+		assert_string_contains(toolbar._tool_buttons["tree_" + str(tree_type)].tool_description, sentence,
+			"Tree tiles replace any other Course Terrain tile")
+	# The Path tool is an improvement laid over ground, not a Course Terrain tile.
+	assert_false(toolbar._tool_buttons[TerrainTypes.Type.PATH].tool_description.contains(sentence),
+		"The walking path does not replace course terrain")
+	toolbar.set_green_placement_state(false)
+	assert_string_contains(toolbar._tool_buttons[TerrainTypes.Type.GREEN].tool_description, sentence,
+		"Switching the green between with-hole and without keeps the replacement note")
+
 func test_course_terrain_tab_has_no_green_size_presets() -> void:
 	var terrain_content: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.TERRAIN)
 	assert_eq(terrain_content.get_child_count(), 3,

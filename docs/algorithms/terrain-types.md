@@ -49,9 +49,9 @@ Grass, Heavy Rough, Trees and Empty are placed by generation or by entities
   distance) and costs nothing to maintain.
 - **Rocks** — Stony ground: the worst lie on the course (0.25), wedge only. A
   boulder standing on other ground also plays as Rocks but keeps its grass look.
-  Painting Rocks around a boulder merges it into the rocky ground. Like every
-  course tile it is ground paint: replace it by painting another terrain over
-  it — the bulldozer never touches course terrain.
+  Painting any other Course Terrain tile over a boulder replaces it, Rocks
+  included. Like every course tile it is ground paint: the bulldozer never
+  touches course terrain.
 - **Brush** — Dense scrub (gorse, heather, sagebrush): 0.3 lie, 50% distance,
   wedge only, and it swallows rolling balls. Golfers wade through it slowly.
   Replace it by painting another terrain tile over it; the bulldozer ignores it.
@@ -137,18 +137,22 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 
 ### 5. Painting
 
-- Built surfaces (fairways, bunkers, water, stream, tee, green) clear trees and
-  boulders they're painted over; natural ground (rough, deep rough, brush, rocks)
-  grows around them.
+- Every Course Terrain tile replaces every other one. Painting fairway, rough,
+  brush, rocks, flower bed, water or any other tab tile clears the tree or
+  boulder on that spot (a clearing fee on top of the new tile's cost) and
+  `TerrainGrid.set_tile` swaps the ground, dropping the tile's cup, tee and
+  walking-path state when the new ground can't keep them. Placing a tree or
+  boulder does the same in reverse: it overwrites water, sand, greens, other
+  trees and other boulders. Buildings and decorations are not course terrain —
+  the bulldozer removes those, and a course tile will not paint over them.
 - Stream strokes are 4-connected (`TerrainBrush.centers_4_connected()`) so the
   channel never breaks at a diagonal step.
-- Boulders can stand on grass, fairways, roughs and unoccupied painted Rocks.
-  Trees can stand on grass, fairways, roughs and path. Both keep off sand, brush
-  and water, because their spot draws native grass.
-- Course terrain tiles replace each other when painted (`TerrainGrid.set_tile`
-  swaps the ground and clears the tile's cup/tee/path state as needed). The
-  bulldozer never touches them — its button lives on the Improvements and
-  Buildings tabs and only demolishes paths, decorations and buildings.
+- A tree or boulder keeps the look of its toolbar tile wherever it is placed
+  (a tree stamps Trees, which draws as turf under the sprite; a boulder on
+  ground that isn't painted Rocks keeps that turf look via its footprint).
+- The bulldozer never touches course terrain — its button lives on the
+  Improvements and Buildings tabs and only demolishes paths, decorations and
+  buildings.
 
 ### 6. Rendering
 

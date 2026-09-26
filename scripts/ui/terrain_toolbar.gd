@@ -3,7 +3,7 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: tools column (open hole, brush) before one course, hazard & landscape tiles honeycomb. Its tiles paint ground that replaces other ground and is never touched by the Bulldozer.
+##  - Course Terrain: tools column (open hole, brush) before one course, hazard & landscape tiles honeycomb. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      sculpting controls and brush size
@@ -137,7 +137,7 @@ const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with
 const OPEN_HOLE_BLOCKED_TOOLTIP := "Needs exactly one unused tee box and one unused green with a hole"
 ## What the Bulldozer removes — improvements and buildings only. Course
 ## Terrain tiles are ground paint: repaint them with another tile instead.
-const BULLDOZER_TOOLTIP := "Demolish decorations, walking paths and buildings. Click or drag over them. Fees: $5 per path tile, $20 per decoration or building. Course Terrain tiles are not affected — repaint the ground with another tile instead."
+const BULLDOZER_TOOLTIP := "Demolish decorations, walking paths and buildings. Click or drag over them. Fees: $5 per path tile, $20 per decoration or building. Course Terrain tiles are not affected — any Course Terrain tile replaces any other, including trees and boulders."
 
 var hole_list: HBoxContainer = null  # Course holes rows (filled by main.gd)
 var golfer_data_provider: Callable = Callable()  # -> Array of golfer row dicts
@@ -938,13 +938,17 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		maintenance = costs.get("maintenance", 0)
 
 	var btn: ToolButton
+	var desc := str(tool_def.get("desc", ""))
+	# Every Course Terrain paint tile overwrites every other tile on the tab.
+	if tool_type is int and TOOL_TAB_MAP.get(tool_type, -1) == Tab.TERRAIN:
+		desc = _with_course_tile_replacement(desc)
 	if tool_def.get("tile_preview", false):
 		btn = TerrainTileButton.new()
 		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
-			tool_def.get("desc", ""), cost, maintenance)
+			desc, cost, maintenance)
 	else:
 		btn = ToolButton.create(tool_type, tool_def["name"], tool_def.get("icon", ""),
-			tool_def.get("hotkey", ""), tool_def.get("desc", ""), cost, maintenance)
+			tool_def.get("hotkey", ""), desc, cost, maintenance)
 	btn.tool_pressed.connect(_on_tool_button_pressed)
 	parent.add_child(btn)
 
@@ -1533,13 +1537,22 @@ func set_green_placement_state(places_cup: bool) -> void:
 		return
 	_green_tile_button.set_green_places_cup(places_cup)
 	if places_cup:
-		_green_tile_button.tool_description = \
-				"The next placement will be a Green With Hole: one tile with a cup and flag."
+		_green_tile_button.tool_description = _with_course_tile_replacement(
+				"The next placement will be a Green With Hole: one tile with a cup and flag.")
 	else:
-		_green_tile_button.tool_description = \
-				"The next placement will be a Green Without Hole. It uses the selected brush and adds no cup."
+		_green_tile_button.tool_description = _with_course_tile_replacement(
+				"The next placement will be a Green Without Hole. It uses the selected brush and adds no cup.")
 	_green_tile_button.accessibility_description = "%s Shortcut %s." % [
 		_green_tile_button.tool_description, _green_tile_button.hotkey]
+
+## Append the shared replacement sentence without doubling it.
+func _with_course_tile_replacement(desc: String) -> String:
+	var sentence := TerrainTypes.REPLACES_ANY_COURSE_TILE
+	if desc.contains(sentence):
+		return desc
+	if desc.is_empty():
+		return sentence
+	return desc + " " + sentence
 
 func green_will_place_cup() -> bool:
 	return _green_places_cup

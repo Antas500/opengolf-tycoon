@@ -83,6 +83,84 @@ func _run() -> void:
 	_check(grid.get_tile(water_tile) == TerrainTypes.Type.STREAM,
 			"painting Stream over Water replaces it")
 
+	# Every Course Terrain tile replaces every other one — natural ground
+	# clears trees and boulders, and trees and boulders overwrite hazards.
+	var tree_over_rough := Vector2i(52, 62)
+	var boulder_over_flowers := Vector2i(53, 62)
+	var tree_on_water := Vector2i(61, 50)
+	var boulder_on_bunker := Vector2i(62, 50)
+	var tree_on_boulder := Vector2i(63, 50)
+	_prep(tree_over_rough, TerrainTypes.Type.GRASS)
+	_prep(boulder_over_flowers, TerrainTypes.Type.GRASS)
+	_prep(tree_on_water, TerrainTypes.Type.WATER)
+	_prep(boulder_on_bunker, TerrainTypes.Type.BUNKER)
+	_prep(tree_on_boulder, TerrainTypes.Type.GRASS)
+	main.entity_layer.place_tree(tree_over_rough, "oak")
+	main.entity_layer.place_rock(boulder_over_flowers, "small")
+	main.entity_layer.place_rock(tree_on_boulder, "large")
+	await _frames(1)
+
+	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.ROUGH)
+	main.undo_manager.begin_stroke()
+	main._paint_terrain_stamp(tree_over_rough)
+	main.undo_manager.end_stroke()
+	_check(grid.get_tile(tree_over_rough) == TerrainTypes.Type.ROUGH,
+			"painting Rough over a tree replaces it")
+	_check(main.entity_layer.get_tree_at(tree_over_rough) == null,
+			"the tree is gone after Rough replaces it")
+	main._perform_undo()
+	_check(main.entity_layer.get_tree_at(tree_over_rough) != null,
+			"undo restores the tree Rough replaced")
+	_check(grid.get_tile(tree_over_rough) == TerrainTypes.Type.TREES,
+			"undo restores the tree tile")
+	main._perform_redo()
+	_check(main.entity_layer.get_tree_at(tree_over_rough) == null,
+			"redo replaces the tree with Rough again")
+	_check(grid.get_tile(tree_over_rough) == TerrainTypes.Type.ROUGH,
+			"redo paints Rough back")
+
+	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
+	main._paint_terrain_stamp(boulder_over_flowers)
+	_check(grid.get_tile(boulder_over_flowers) == TerrainTypes.Type.FLOWER_BED,
+			"painting Flower Bed over a boulder replaces it")
+	_check(main.entity_layer.get_rock_at(boulder_over_flowers) == null,
+			"the boulder is gone after Flower Bed replaces it")
+
+	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.ROCKS)
+	main._paint_terrain_stamp(tree_on_boulder)
+	_check(grid.get_tile(tree_on_boulder) == TerrainTypes.Type.ROCKS,
+			"painting Rocks over a boulder replaces it")
+	_check(main.entity_layer.get_rock_at(tree_on_boulder) == null,
+			"the boulder does not merge into the Rocks tile")
+	_check(not grid.is_object_footprint(tree_on_boulder),
+			"replaced boulder ground renders as painted Rocks")
+
+	main.selected_tree_type = "pine"
+	main.placement_manager.start_tree_placement("pine")
+	main._place_tree(tree_on_water, main.placement_manager.get_placement_cost())
+	_check(main.entity_layer.get_tree_at(tree_on_water) != null,
+			"a tree can be placed on water")
+	_check(grid.get_tile(tree_on_water) == TerrainTypes.Type.TREES,
+			"the tree replaces the water tile")
+
+	main.selected_rock_size = "medium"
+	main.placement_manager.start_rock_placement("medium")
+	main._place_rock(boulder_on_bunker, main.placement_manager.get_placement_cost())
+	_check(main.entity_layer.get_rock_at(boulder_on_bunker) != null,
+			"a boulder can be placed on a bunker")
+	_check(grid.get_tile(boulder_on_bunker) == TerrainTypes.Type.ROCKS,
+			"the boulder replaces the bunker tile")
+
+	main.selected_tree_type = "oak"
+	main.placement_manager.start_tree_placement("oak")
+	main._place_tree(boulder_on_bunker, main.placement_manager.get_placement_cost())
+	_check(main.entity_layer.get_tree_at(boulder_on_bunker) != null,
+			"a tree replaces a boulder")
+	_check(main.entity_layer.get_rock_at(boulder_on_bunker) == null,
+			"the boulder is gone after the tree replaces it")
+	_check(grid.get_tile(boulder_on_bunker) == TerrainTypes.Type.TREES,
+			"the tree tile is what remains")
+
 	# ------------------------------------------------------------------
 	# 2. The Bulldozer never touches Course Terrain tiles.
 	# ------------------------------------------------------------------

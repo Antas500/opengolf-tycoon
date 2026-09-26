@@ -82,9 +82,48 @@ func get_placement_error(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> Strin
 			if entities.is_tile_occupied_by_decoration(tile):
 				return "Remove the decoration in this footprint first."
 			if entities.get_tree_at(tile) or entities.get_rock_at(tile):
-				return "Clear the tree or rock first: paint built terrain (e.g. Fairway) over its tile."
+				return "Clear the tree or rock first: paint another Course Terrain tile over it."
+		elif placement_mode in [PlacementMode.TREE, PlacementMode.ROCK] and _improvement_blocks(tile):
+			return _improvement_blocker(tile)
 	if not _terrain_allows_at(grid_pos, terrain_grid):
-		return "Use grass, rough, fairway or path; keep greens, tees, sand and water clear." if placement_mode == PlacementMode.BUILDING else "This item needs compatible ground across its entire footprint."
+		if placement_mode == PlacementMode.BUILDING:
+			return "Use grass, rough, fairway or path; keep greens, tees, sand and water clear."
+		if placement_mode in [PlacementMode.TREE, PlacementMode.ROCK]:
+			if is_same_course_tile(grid_pos, terrain_grid):
+				return "This tile is already that one."
+			return "Outside the course."
+		return "This item needs compatible ground across its entire footprint."
+	return ""
+
+## True when this click would lay the Course Terrain tile that is already here.
+## The click is a no-op; the preview shows it as invalid so it doesn't look free.
+func is_same_course_tile(grid_pos: Vector2i, _terrain_grid: TerrainGrid) -> bool:
+	var entities = GameManager.entity_layer
+	if entities == null:
+		return false
+	if placement_mode == PlacementMode.TREE:
+		var tree = entities.get_tree_at(grid_pos)
+		return tree != null and tree.tree_type == selected_tree_type
+	if placement_mode == PlacementMode.ROCK:
+		var rock = entities.get_rock_at(grid_pos)
+		return rock != null and rock.rock_size == selected_rock_size
+	return false
+
+func _improvement_blocks(grid_pos: Vector2i) -> bool:
+	var entities = GameManager.entity_layer
+	if entities == null:
+		return false
+	return entities.is_tile_occupied_by_building(grid_pos) \
+			or entities.is_tile_occupied_by_decoration(grid_pos)
+
+func _improvement_blocker(grid_pos: Vector2i) -> String:
+	var entities = GameManager.entity_layer
+	if entities == null:
+		return ""
+	if entities.is_tile_occupied_by_building(grid_pos):
+		return "Bulldoze the building first. Course Terrain tiles replace each other, not buildings."
+	if entities.is_tile_occupied_by_decoration(grid_pos):
+		return "Bulldoze the decoration first. Course Terrain tiles replace each other, not decorations."
 	return ""
 
 func _terrain_allows_at(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
@@ -103,42 +142,24 @@ func _terrain_allows_at(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 	return false
 
 func _can_place_tree(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
-	# Trees can be placed on grassy ground (grass, fairways, rough) and path.
-	# A tree's spot draws as natural grass, so sandy or scrubby ground is out.
-	if not terrain_grid.is_valid_position(grid_pos):
-		return false
-	
-	var tile_type = terrain_grid.get_tile(grid_pos)
-	return tile_type in [
-		TerrainTypes.Type.GRASS,
-		TerrainTypes.Type.FAIRWAY,
-		TerrainTypes.Type.FIRM_FAIRWAY,
-		TerrainTypes.Type.ROUGH,
-		TerrainTypes.Type.HEAVY_ROUGH,
-		TerrainTypes.Type.DEEP_ROUGH,
-		TerrainTypes.Type.PATH
-	]
+	# A tree is a Course Terrain tile: it replaces any other tile on that tab
+	# (water, sand, greens, other trees, boulders). Buildings and decorations
+	# are improvements, so they stay until the Bulldozer takes them.
+	return _can_replace_course_tile(grid_pos, terrain_grid)
 
 func _can_place_rock(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
-	# Boulders can be placed on grassy ground (grass, fairways, rough) and on
-	# painted Rocks ground that has no boulder yet.
+	# A boulder replaces any other Course Terrain tile, including a different
+	# boulder. The same boulder already on the tile is not a new placement.
+	return _can_replace_course_tile(grid_pos, terrain_grid)
+
+func _can_replace_course_tile(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 	if not terrain_grid.is_valid_position(grid_pos):
 		return false
-
-	var tile_type = terrain_grid.get_tile(grid_pos)
-	if tile_type == TerrainTypes.Type.ROCKS:
-		# A boulder's own spot is Rocks terrain too — one boulder per tile.
-		if terrain_grid.is_object_footprint(grid_pos):
-			return false
-		return GameManager.entity_layer == null or GameManager.entity_layer.get_rock_at(grid_pos) == null
-	return tile_type in [
-		TerrainTypes.Type.GRASS,
-		TerrainTypes.Type.FAIRWAY,
-		TerrainTypes.Type.FIRM_FAIRWAY,
-		TerrainTypes.Type.ROUGH,
-		TerrainTypes.Type.HEAVY_ROUGH,
-		TerrainTypes.Type.DEEP_ROUGH
-	]
+	if _improvement_blocks(grid_pos):
+		return false
+	if is_same_course_tile(grid_pos, terrain_grid):
+		return false
+	return true
 
 func _can_place_building(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 	if not terrain_grid.is_valid_position(grid_pos):

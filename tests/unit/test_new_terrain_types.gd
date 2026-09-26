@@ -308,7 +308,7 @@ func test_boulders_keep_native_turf_but_painted_rocks_render_as_stone() -> void:
 	entities.remove_rock(Vector2i(5, 5))
 	assert_eq(grid.get_tile(Vector2i(5, 5)), T.ROCKS, "Removing it leaves the painted Rocks")
 
-func test_painting_rocks_around_a_boulder_merges_it_into_the_ground() -> void:
+func test_merging_a_boulder_footprint_into_painted_rocks_keeps_it_on_stone() -> void:
 	var grid: TerrainGrid = TerrainGrid.new()
 	grid.grid_width = 8
 	grid.grid_height = 8
@@ -352,17 +352,92 @@ func test_saved_boulders_reload_with_their_footprints() -> void:
 func test_boulder_placement_rules() -> void:
 	var grid := _grid(8)
 	var placement := PlacementManager.new()
+	placement.start_rock_placement("medium")
 	grid._grid[Vector2i(1, 1)] = T.ROCKS
 	assert_true(placement._can_place_rock(Vector2i(1, 1), grid), "Boulders can sit on painted Rocks")
+	# A footprint mark alone is not a second boulder — the entity is what a
+	# different boulder replaces. Same-size refusal is covered below.
 	grid.set_object_footprint(Vector2i(1, 1), true)
-	assert_false(placement._can_place_rock(Vector2i(1, 1), grid), "One boulder per tile")
+	assert_true(placement._can_place_rock(Vector2i(1, 1), grid),
+		"A boulder tile replaces rocky ground, footprint or not")
 	grid._grid[Vector2i(2, 2)] = T.DEEP_ROUGH
 	assert_true(placement._can_place_rock(Vector2i(2, 2), grid))
+	placement.start_tree_placement("oak")
 	assert_true(placement._can_place_tree(Vector2i(2, 2), grid))
-	for type in [T.WASTE_BUNKER, T.BRUSH, T.STREAM, T.POT_BUNKER]:
+	for type in [T.WASTE_BUNKER, T.BRUSH, T.STREAM, T.POT_BUNKER, T.WATER,
+			T.GREEN, T.TEE_BOX, T.FLOWER_BED, T.OUT_OF_BOUNDS, T.BUNKER]:
 		grid._grid[Vector2i(3, 3)] = type
-		assert_false(placement._can_place_rock(Vector2i(3, 3), grid))
-		assert_false(placement._can_place_tree(Vector2i(3, 3), grid))
+		assert_true(placement._can_place_rock(Vector2i(3, 3), grid),
+			"A boulder replaces %s" % TerrainTypes.get_type_name(type))
+		assert_true(placement._can_place_tree(Vector2i(3, 3), grid),
+			"A tree replaces %s" % TerrainTypes.get_type_name(type))
+
+func test_course_terrain_tiles_replace_each_other() -> void:
+	var grid := _grid(8)
+	var entities := EntityLayer.new()
+	add_child_autofree(entities)
+	entities.set_terrain_grid(grid)
+	var saved_entities = GameManager.entity_layer
+	var saved_land = GameManager.land_manager
+	GameManager.entity_layer = entities
+	GameManager.land_manager = null
+	var placement := PlacementManager.new()
+
+	# Every ground type on the tab, plus the tiles generation leaves behind.
+	for type in T.values():
+		grid._grid[Vector2i(1, 1)] = type
+		placement.start_tree_placement("pine")
+		assert_true(placement._can_place_tree(Vector2i(1, 1), grid),
+			"Pine replaces %s" % TerrainTypes.get_type_name(type))
+		placement.start_rock_placement("large")
+		assert_true(placement._can_place_rock(Vector2i(1, 1), grid),
+			"A large boulder replaces %s" % TerrainTypes.get_type_name(type))
+
+	entities.place_tree(Vector2i(2, 2), "oak")
+	placement.start_tree_placement("oak")
+	assert_false(placement._can_place_tree(Vector2i(2, 2), grid), "The same tree is already there")
+	assert_eq(placement.get_placement_error(Vector2i(2, 2), grid), "This tile is already that one.")
+	placement.start_tree_placement("pine")
+	assert_true(placement._can_place_tree(Vector2i(2, 2), grid), "A different tree replaces the oak")
+	placement.start_rock_placement("small")
+	assert_true(placement._can_place_rock(Vector2i(2, 2), grid), "A boulder replaces a tree")
+
+	entities.place_rock(Vector2i(4, 4), "medium")
+	placement.start_rock_placement("medium")
+	assert_false(placement._can_place_rock(Vector2i(4, 4), grid), "The same boulder is already there")
+	placement.start_rock_placement("large")
+	assert_true(placement._can_place_rock(Vector2i(4, 4), grid), "A larger boulder replaces it")
+	placement.start_tree_placement("oak")
+	assert_true(placement._can_place_tree(Vector2i(4, 4), grid), "A tree replaces a boulder")
+
+	# Improvements are not Course Terrain tiles.
+	var shed := entities.place_building("cart_shed", Vector2i(6, 6), {
+		"cart_shed": {"size": [1, 1], "cost": 10, "name": "Cart Shed"},
+	})
+	assert_not_null(shed, "The shed placed on open ground")
+	placement.start_tree_placement("oak")
+	assert_false(placement._can_place_tree(Vector2i(6, 6), grid), "A tree does not replace a building")
+	assert_string_contains(placement.get_placement_error(Vector2i(6, 6), grid), "Bulldoze the building")
+	placement.start_rock_placement("small")
+	assert_false(placement._can_place_rock(Vector2i(6, 6), grid), "A boulder does not replace a building")
+
+	# Lifting a boulder reports the ground it stood on and leaves the Rocks stamp
+	# so a paint can finish the replacement. Restoring puts the boulder back.
+	var taken := entities.take_course_terrain_entity(Vector2i(4, 4))
+	assert_eq(taken.get("type"), "rock")
+	assert_eq(taken.get("subtype"), "medium")
+	assert_eq(int(taken.get("original_terrain")), T.GRASS)
+	assert_null(entities.get_rock_at(Vector2i(4, 4)))
+	assert_eq(grid.get_tile(Vector2i(4, 4)), T.ROCKS, "The stamp stays until the new tile is painted")
+	assert_false(grid.is_object_footprint(Vector2i(4, 4)), "Painted Rocks, not a boulder footprint")
+	entities.restore_course_terrain_entity(Vector2i(4, 4), "rock", "medium", T.GRASS)
+	assert_not_null(entities.get_rock_at(Vector2i(4, 4)))
+	assert_true(grid.is_object_footprint(Vector2i(4, 4)), "The restored boulder keeps its turf look")
+	entities.remove_rock(Vector2i(4, 4))
+	assert_eq(grid.get_tile(Vector2i(4, 4)), T.GRASS, "Removing it still restores the ground it stood on")
+
+	GameManager.entity_layer = saved_entities
+	GameManager.land_manager = saved_land
 
 func test_every_theme_colors_every_palette_key() -> void:
 	assert_eq(CourseSurface.PALETTE_KEYS.size(), T.values().size(), "One palette entry per terrain id")

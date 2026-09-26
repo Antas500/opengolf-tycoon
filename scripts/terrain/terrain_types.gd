@@ -101,10 +101,15 @@ static func is_fairway(type: int) -> bool:
 static func is_rough(type: int) -> bool:
 	return type == Type.ROUGH or type == Type.HEAVY_ROUGH or type == Type.DEEP_ROUGH
 
+## Tooltip sentence shared by every Course Terrain tile. Each one overwrites
+## every other tile on that tab — ground, flower beds, trees and boulders.
+const REPLACES_ANY_COURSE_TILE := "Replaces any other Course Terrain tile."
+
 ## Every terrain type the player can paint from the Course Terrain tab, in
 ## toolbar order: row 1 (tee box, green, bunker, rough, pot bunker, stream,
 ## water) then row 2 (fairway, firm fairway, deep rough, waste bunker, brush,
-## rocks, out of bounds).
+## rocks, out of bounds). Flower beds, trees and boulders share the tab and
+## the same replacement rule; they are appended beside this list.
 const COURSE_PAINT_TYPES: Array[int] = [
 	Type.TEE_BOX, Type.GREEN, Type.BUNKER, Type.ROUGH, Type.POT_BUNKER,
 	Type.STREAM, Type.WATER,
