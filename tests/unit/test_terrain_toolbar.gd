@@ -734,9 +734,21 @@ func test_pinned_brush_dock_leaves_every_tile_diamond_clear() -> void:
 	assert_eq(checked, toolbar._course_tiles.flow_children().size() + 1,
 		"Every tile on the tab, plus the nestled Open Hole action, was checked")
 
-func test_holes_tab_has_hbox_hole_list() -> void:
+func test_holes_tab_has_hole_list_without_duplicate_action_or_heading() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
 	assert_true(toolbar.hole_list is HBoxContainer, "hole_list should be an HBoxContainer")
+
+	var page_content := toolbar.page_content(TerrainToolbar.Tab.HOLES)
+	assert_eq(page_content.get_child_count(), 1,
+		"The Holes tab contains only the hole list")
+	assert_same(page_content.get_child(0), toolbar.hole_list,
+		"The hole list is the tab's direct content")
+	var page: Control = toolbar._pages[TerrainToolbar.Tab.HOLES]
+	assert_eq(page.find_children("*", "ToolButton", true, false).size(), 0,
+		"The Open Hole action is not duplicated on the Holes tab")
+	assert_false(page.find_children("*", "Label", true, false)
+		.any(func(label): return label.text == "COURSE HOLES"),
+		"The redundant COURSE HOLES heading is removed")
 
 	# Add a sample hole row and verify containment
 	var row = HBoxContainer.new()

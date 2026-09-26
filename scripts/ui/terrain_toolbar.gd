@@ -797,34 +797,15 @@ func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_brush_group())
 
 func _build_holes_tab(hbox: HBoxContainer) -> void:
-	var actions_box = HBoxContainer.new()
-	actions_box.add_theme_constant_override("separation", 4)
-	actions_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var open_hole_btn := _add_tool_button(actions_box, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
-	_open_hole_buttons.append(open_hole_btn)
-	hbox.add_child(_make_tab_group("ACTIONS", actions_box))
-
-	hbox.add_child(_make_separator())
-
-	var holes_group = VBoxContainer.new()
-	holes_group.add_theme_constant_override("separation", 2)
-	holes_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	holes_group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var lbl = Label.new()
-	lbl.text = "COURSE HOLES"
-	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-	holes_group.add_child(lbl)
-
+	# The Course Terrain tab owns the Open Hole action. Keep this tab focused on
+	# the course's hole list without a duplicate action button or group heading.
 	hole_list = HBoxContainer.new()
 	hole_list.name = "HoleList"
 	hole_list.add_theme_constant_override("separation", 6)
 	hole_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hole_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hole_list.alignment = BoxContainer.ALIGNMENT_BEGIN
-	holes_group.add_child(hole_list)
-
-	hbox.add_child(holes_group)
+	hbox.add_child(hole_list)
 
 func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	var on_course_group = VBoxContainer.new()
