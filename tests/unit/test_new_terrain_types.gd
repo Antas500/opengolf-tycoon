@@ -472,22 +472,25 @@ func test_toolbar_paints_all_course_tiles_in_two_rows() -> void:
 	add_child_autofree(toolbar)
 	var grid: TileHoneycomb = toolbar._tool_buttons[T.FAIRWAY].get_parent()
 	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
-	assert_eq(grid.get_child_count(), TerrainTypes.COURSE_PAINT_TYPES.size() + landscape_count)
+	# The nestled Open Hole action is not a tile and takes no slot, so the flow
+	# children are exactly the course and landscape tiles.
+	var tiles: Array[Control] = grid.flow_children()
+	assert_eq(tiles.size(), TerrainTypes.COURSE_PAINT_TYPES.size() + landscape_count)
 	for i in TerrainTypes.COURSE_PAINT_TYPES.size():
 		var type: int = TerrainTypes.COURSE_PAINT_TYPES[i]
 		var button: TerrainTileButton = toolbar._tool_buttons[type]
 		var slot := i if i < TerrainToolbar.COURSE_TILE_COLUMNS else grid.columns + i - TerrainToolbar.COURSE_TILE_COLUMNS
-		assert_eq(button.get_index(), slot, "%s sits in toolbar order" % TerrainTypes.get_type_name(type))
+		assert_eq(tiles.find(button), slot, "%s sits in toolbar order" % TerrainTypes.get_type_name(type))
 		assert_eq(button.tool_name, TerrainTypes.get_type_name(type))
 		assert_eq(TerrainToolbar.TOOL_TAB_MAP[type], TerrainToolbar.Tab.TERRAIN)
 	# Two rows include both course and landscape tiles.
-	assert_eq(grid.columns, ceili(float(grid.get_child_count()) / 2.0),
+	assert_eq(grid.columns, ceili(float(tiles.size()) / 2.0),
 		"The two rows hold every course and landscape tile")
 	for type in [T.TEE_BOX, T.GREEN, T.BUNKER, T.ROUGH, T.POT_BUNKER, T.STREAM, T.WATER]:
-		assert_lt(toolbar._tool_buttons[type].get_index(), grid.columns,
+		assert_lt(tiles.find(toolbar._tool_buttons[type]), grid.columns,
 			"%s on the top row" % TerrainTypes.get_type_name(type))
 	for type in [T.FAIRWAY, T.FIRM_FAIRWAY, T.DEEP_ROUGH, T.WASTE_BUNKER, T.BRUSH, T.ROCKS, T.OUT_OF_BOUNDS]:
-		assert_gte(toolbar._tool_buttons[type].get_index(), grid.columns,
+		assert_gte(tiles.find(toolbar._tool_buttons[type]), grid.columns,
 			"%s on the bottom row" % TerrainTypes.get_type_name(type))
 	assert_eq(toolbar._tool_buttons["rock"].tool_name, "Boulders", "The boulder tool isn't a second 'Rocks'")
 

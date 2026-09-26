@@ -117,6 +117,13 @@ func _apply_styles() -> void:
 		add_theme_stylebox_override("hover", _style_hover)
 		add_theme_stylebox_override("pressed", _style_pressed)
 
+## Repaint whatever this button draws for its current state. Buttons that draw
+## their own art instead of using the flat styleboxes override this — changing
+## `disabled` does not repaint artwork by itself, so the toolbar calls it after
+## switching an action on or off (see TerrainToolbar.set_open_hole_state).
+func _update_visual_state() -> void:
+	pass
+
 func _update_button() -> void:
 	# Build button text: Name [hotkey]
 	text = tool_name

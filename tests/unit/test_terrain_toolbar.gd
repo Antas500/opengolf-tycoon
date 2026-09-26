@@ -24,17 +24,22 @@ func test_course_tiles_share_one_group_in_top_and_bottom_rows() -> void:
 	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
 	assert_eq(grid.columns, TOP_ROW.size() + ceili(float(landscape_count) / 2.0))
-	assert_eq(grid.get_child_count(), TOP_ROW.size() + BOTTOM_ROW.size() + landscape_count,
+	assert_eq(grid.flow_children().size(),
+		TOP_ROW.size() + BOTTOM_ROW.size() + landscape_count,
 		"All course and landscape tiles share exactly two rows")
 	for tool_type in TOP_ROW + BOTTOM_ROW:
 		assert_eq(toolbar._tool_buttons[tool_type].get_parent(), grid,
 			"Course tiles should live in the same group")
 
+	# Reading order: the tiles take slots in the order they are children. The
+	# nestled Open Hole button is not a tile, so it holds no slot (see
+	# test_open_hole_nests_into_the_notch_between_the_tee_and_green_tiles).
+	var tiles: Array[Control] = grid.flow_children()
 	for slot in TOP_ROW.size():
-		assert_eq(toolbar._tool_buttons[TOP_ROW[slot]].get_index(), slot,
+		assert_eq(tiles.find(toolbar._tool_buttons[TOP_ROW[slot]]), slot,
 			"%s is tile %d of the top row" % [TerrainTypes.get_type_name(TOP_ROW[slot]), slot])
 	for slot in BOTTOM_ROW.size():
-		assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot,
+		assert_eq(tiles.find(toolbar._tool_buttons[BOTTOM_ROW[slot]]), grid.columns + slot,
 			"%s is tile %d of the bottom row" % [TerrainTypes.get_type_name(BOTTOM_ROW[slot]), slot])
 
 	# The rows are drawn staggered: the bottom row sits half a tile below the top.
@@ -52,18 +57,19 @@ func test_bottom_row_is_shifted_right_into_the_notches_of_the_top_row() -> void:
 	await _settle_layout()
 	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var pitch := grid.tile_size.x + grid.h_separation
-	var bottom_count := grid.get_child_count() - grid.columns
+	var tiles: Array[Control] = grid.flow_children()
+	var bottom_count := tiles.size() - grid.columns
 
 	for i in bottom_count:
-		var below: Control = grid.get_child(grid.columns + i)
-		var above_left: Control = grid.get_child(i)
+		var below: Control = tiles[grid.columns + i]
+		var above_left: Control = tiles[i]
 
 		# Half a tile to the right of the tile above: the row is staggered.
 		assert_almost_eq(below.position.x - above_left.position.x, pitch * 0.5, 0.01,
 			"Bottom row tile %d should be shifted half a tile to the right" % i)
 		if i + 1 < grid.columns:
 			# Centred on the gap between the two tiles above it.
-			var above_right: Control = grid.get_child(i + 1)
+			var above_right: Control = tiles[i + 1]
 			assert_almost_eq(below.position.x,
 				(above_left.position.x + above_right.position.x) * 0.5, 0.01,
 				"Bottom row tile %d should sit in the notch between two top row tiles" % i)
@@ -83,10 +89,11 @@ func test_interlocking_rows_never_overlap_each_others_diamonds() -> void:
 
 	# A bottom row tile's top vertex must stay outside every diamond above it,
 	# including the last tile, which overhangs the end of the top row.
-	for i in grid.get_child_count() - grid.columns:
-		var below: Control = grid.get_child(grid.columns + i)
+	var tiles: Array[Control] = grid.flow_children()
+	for i in tiles.size() - grid.columns:
+		var below: Control = tiles[grid.columns + i]
 		var vertex := below.position + Vector2(tile.x * 0.5, 0.0)
-		for above in grid.get_children().slice(0, grid.columns):
+		for above in tiles.slice(0, grid.columns):
 			assert_false(TerrainTileButton.point_on_tile(vertex - above.position),
 				"Bottom row tile %d should not cover the diamond of top row tile %d"
 					% [i, above.get_index()])
@@ -172,6 +179,18 @@ func test_tile_rows_keep_space_above_below_and_between_them() -> void:
 ## Containers lay their children out over the next frame.
 func _settle_layout() -> void:
 	await wait_frames(2)
+
+## The diamond's four vertices plus the midpoints of its edges: enough points to
+## show a nestled button is clear of the tiles either side of it.
+func _diamond_samples(box: Vector2) -> Array[Vector2]:
+	var points: Array[Vector2] = []
+	for corner in OpenHoleNotchButton.diamond_corners(box):
+		points.append(corner)
+	points.append(box * Vector2(0.25, 0.25))
+	points.append(box * Vector2(0.75, 0.25))
+	points.append(box * Vector2(0.75, 0.75))
+	points.append(box * Vector2(0.25, 0.75))
+	return points
 
 ## The improvement shelf's decoration tiles, in shelf order: the leading path
 ## tile is a painting tool rather than a catalogue entry, so catalogue
@@ -473,6 +492,142 @@ func test_course_terrain_tab_has_no_green_size_presets() -> void:
 	var terrain_content: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.TERRAIN)
 	assert_eq(terrain_content.get_child_count(), 3,
 		"The terrain tab contains the tools, separator, unified tile grid, with no extra separator or preset group")
+
+## Open Hole pairs the tee box and the green, so the Course Terrain tab nestles
+## the action into the notch between those two tiles instead of leaving it in the
+## tools column at the far edge of the tab.
+func test_open_hole_nests_into_the_notch_between_the_tee_and_green_tiles() -> void:
+	await _settle_layout()
+	var grid: TileHoneycomb = toolbar._course_tiles
+	var tee: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]
+	var green: Control = toolbar._tool_buttons[TerrainTypes.Type.GREEN]
+	var open_hole: OpenHoleNotchButton = toolbar._open_hole_buttons[0]
+
+	assert_true(open_hole is OpenHoleNotchButton, "Open Hole is drawn as a notch cell, not a wide button")
+	assert_eq(open_hole.get_parent(), grid, "Open Hole lives on the Course Terrain honeycomb")
+	assert_true(grid.is_notch_child(open_hole), "The action fills a notch instead of a tile slot")
+	assert_false(grid.flow_children().has(open_hole),
+		"A nestled child takes no slot, so the tiles keep their rows")
+	assert_eq(open_hole.tool_name, "Open Hole")
+	assert_eq(open_hole.hotkey, "H")
+	assert_eq(open_hole.caption(), "[H]",
+		"A notch cell is too small for the name: it carries the hotkey chip")
+	assert_string_contains(open_hole.tool_description, "tee box",
+		"The hover tooltip still explains what the action does")
+
+	# Tucked between the two tiles' facing edges, its bottom point on the point
+	# where those edges meet and its top point level with the top of the row.
+	var tee_centre := tee.position + tee.size * 0.5
+	var green_centre := green.position + green.size * 0.5
+	var centre := open_hole.position + open_hole.size * 0.5
+	# Where the two tiles meet: the tee box's right vertex and the green's left
+	# vertex face each other across the honeycomb's gap.
+	var meet := (tee.position + Vector2(tee.size.x, tee.size.y * 0.5)
+		+ green.position + Vector2(0.0, green.size.y * 0.5)) * 0.5
+	assert_almost_eq(centre.x, (tee_centre.x + green_centre.x) * 0.5, 0.01,
+		"The diamond is centred between the tee box and the green")
+	assert_almost_eq(centre.x, meet.x, 0.01, "Centred on the point where the two tiles meet")
+	assert_almost_eq(centre.y + open_hole.size.y * 0.5, meet.y, 0.01,
+		"Its bottom point sits on the point where the tee box and the green meet")
+	assert_almost_eq(centre.y - open_hole.size.y * 0.5, tee.position.y, 0.01,
+		"Its top point is level with the top of the tiles' row")
+	# Half a course cell: an isometric diamond narrower than the notch cell, so
+	# it keeps daylight from the tiles, and exactly as tall, so its points line
+	# up with the grid it drops into.
+	assert_almost_eq(open_hole.size.x, open_hole.size.y * 2.0, 0.01,
+		"The notch cell is an isometric diamond, like the tiles")
+	var notch := grid.notch_cell_size()
+	assert_lt(open_hole.size.x, notch.x, "Narrower than the notch, so it clears the tiles")
+	assert_almost_eq(open_hole.size.y, notch.y, 0.01, "As tall as the notch: its points meet the grid")
+	assert_almost_eq((grid.notch_centre(0) - centre).length(), 0.0, 0.01,
+		"The honeycomb centres the action in the tee/green notch")
+	for tile in [tee, green]:
+		for point in _diamond_samples(open_hole.size):
+			assert_false(TerrainTileButton.point_on_tile(open_hole.position + point - tile.position),
+				"The Open Hole diamond stays clear of the %s tile" % tile.tool_name)
+
+	# Only the diamond answers to the mouse.
+	assert_true(open_hole._has_point(open_hole.size * 0.5), "The middle of the diamond is clickable")
+	assert_false(open_hole._has_point(Vector2(1, 1)),
+		"The empty corner of its bounding box falls through to the tiles underneath")
+
+	# Pressing it still opens the hole.
+	watch_signals(toolbar)
+	open_hole.pressed.emit()
+	assert_signal_emitted(toolbar, "open_hole_pressed")
+
+func test_open_hole_notch_does_not_shift_the_course_tiles() -> void:
+	await _settle_layout()
+	var tiles: Array[Control] = toolbar._course_tiles.flow_children()
+	assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]), 0,
+		"The tee box still opens the top row")
+	assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.GREEN]), 1,
+		"The green still follows it, with nothing wedged between them")
+	assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.BUNKER]), 2,
+		"The rest of the top row is untouched")
+	for slot in BOTTOM_ROW.size():
+		assert_eq(tiles.find(toolbar._tool_buttons[BOTTOM_ROW[slot]]),
+			toolbar._course_tiles.columns + slot,
+			"%s keeps its bottom row slot" % TerrainTypes.get_type_name(BOTTOM_ROW[slot]))
+
+## The nestled diamond reports the action's availability in its own ring: gold
+## while a tee box and a cup are waiting to be paired, grey while they are not.
+func test_open_hole_notch_ring_tracks_whether_a_hole_can_be_opened() -> void:
+	var open_hole: OpenHoleNotchButton = toolbar._open_hole_buttons[0]
+
+	toolbar.set_open_hole_state(false, "Paint a tee box to go with the waiting green.")
+	assert_true(open_hole.disabled)
+	assert_eq(open_hole._ring_color(), OpenHoleNotchButton.COLOR_RING_DISABLED,
+		"The ring is grey while no hole can be opened")
+	assert_string_contains(open_hole.tool_description, "Paint a tee box")
+
+	toolbar.set_open_hole_state(true, "")
+	assert_false(open_hole.disabled)
+	assert_eq(open_hole._ring_color(), UIConstants.COLOR_GOLD,
+		"The ring turns gold the moment the pair is ready")
+	assert_string_contains(open_hole.tool_description, "waiting tee box")
+
+## Switching themes rebuilds the landscape catalogue around the nestled action:
+## the tile flow is reshuffled, and the Open Hole button must not be moved into
+## a row with it.
+func test_theme_changes_keep_the_open_hole_between_the_tee_and_green() -> void:
+	var original_theme: int = GameManager.current_theme
+	var open_hole: OpenHoleNotchButton = toolbar._open_hole_buttons[0]
+	for theme in [CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND,
+			CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND]:
+		GameManager.current_theme = theme
+		EventBus.theme_changed.emit(theme)
+		await _settle_layout()
+
+		var grid: TileHoneycomb = toolbar._course_tiles
+		assert_true(grid.is_notch_child(open_hole), "The action stays nestled, never a tile")
+		assert_almost_eq(
+			(open_hole.position + open_hole.size * 0.5).distance_to(grid.notch_centre(0)), 0.0, 0.01,
+			"A rebuilt catalogue leaves the action in the tee/green notch")
+		var tiles: Array[Control] = grid.flow_children()
+		assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]), 0)
+		assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.GREEN]), 1)
+		assert_false(tiles.has(open_hole), "The catalogue rebuild never turns it into a tile")
+	GameManager.current_theme = original_theme
+	EventBus.theme_changed.emit(original_theme)
+
+func test_course_terrain_tools_column_keeps_only_the_brush_controls() -> void:
+	var column: Control = toolbar.page_content(TerrainToolbar.Tab.TERRAIN).get_child(0)
+	assert_eq(column.name, "TerrainToolsColumn")
+	assert_eq(column.find_children("*", "OpenHoleNotchButton", true, false).size(), 0,
+		"The Open Hole action no longer stands in the column")
+	for button in column.find_children("*", "ToolButton", true, false):
+		assert_ne(button.tool_name, "Open Hole")
+	assert_eq(column.get_child_count(), 3,
+		"The column is the BRUSH label, the brush stepper and the brush shape picker")
+	assert_eq((column.get_child(0) as Label).text, "BRUSH")
+	var stepper: HBoxContainer = column.get_child(1)
+	assert_eq(stepper.get_child_count(), 3, "The stepper: -, the size it is set to, +")
+	for child in stepper.get_children():
+		if child is Button:
+			assert_has(toolbar._brush_buttons, child, "The toolbar drives this stepper")
+	assert_has(toolbar._brush_shape_buttons, column.get_child(2),
+		"And this round/square picker")
 
 func test_holes_tab_has_hbox_hole_list() -> void:
 	assert_not_null(toolbar.hole_list, "hole_list should exist")
@@ -962,16 +1117,17 @@ func test_theme_changes_keep_one_honeycomb_without_stale_tiles() -> void:
 		GameManager.current_theme = theme
 		EventBus.theme_changed.emit(theme)
 		var trees: Array = CourseTheme.get_tree_types(theme)
-		assert_eq(grid.get_child_count(), 18 + trees.size(),
+		assert_eq(grid.flow_children().size(), 18 + trees.size(),
 			"Theme refresh must immediately remove old tiles, even within one frame")
-		assert_eq(grid.columns, ceili(float(grid.get_child_count()) / 2.0))
+		assert_eq(grid.columns, ceili(float(grid.flow_children().size()) / 2.0))
 		assert_same(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX], tee,
 			"Theme changes must preserve course tile state")
 		for key in toolbar._tool_buttons:
 			if str(key).begins_with("tree_"):
 				assert_has(trees, str(key).trim_prefix("tree_"), "No stale tree tools")
+		var tiles: Array[Control] = grid.flow_children()
 		for slot in BOTTOM_ROW.size():
-			assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot)
+			assert_eq(tiles.find(toolbar._tool_buttons[BOTTOM_ROW[slot]]), grid.columns + slot)
 		assert_eq(toolbar._pages[TerrainToolbar.Tab.TERRAIN].find_children(
 			"*", "TileHoneycomb", true, false).size(), 1)
 	GameManager.current_theme = original_theme

@@ -3,7 +3,7 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: tools column (open hole, brush) before one course, hazard & landscape tiles honeycomb. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
+##  - Course Terrain: brush controls column before one course, hazard & landscape tiles honeycomb; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      sculpting controls and brush size
@@ -384,10 +384,11 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	# The Open Hole action and the brush stack in one column before the tiles
-	# so the most-used course tools sit first in the tab. (Demolition is not
-	# a course tool: the Bulldozer is pinned to the Improvements and Buildings
-	# tabs, whose tiles it can remove.)
+	# The brush stack opens the tab so the course tools sit first, before the
+	# tiles. (Demolition is not a course tool: the Bulldozer is pinned to the
+	# Improvements and Buildings tabs, whose tiles it can remove. Open Hole is
+	# not a paint tool either — it nestles between the tee and green tiles it
+	# pairs, see _add_open_hole_notch.)
 	hbox.add_child(_make_terrain_tools_column())
 
 	hbox.add_child(_make_separator())
@@ -428,23 +429,40 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 
 	_populate_landscape_tiles()
 
-## Open Hole and the brush controls stacked vertically. This column opens the
-## Course Terrain tab so the tools sit before the tile honeycomb. The Bulldozer
+	# Open Hole pairs the tee box and the green, which share the top row's first
+	# two slots: nestle the action into the notch between them. Added after the
+	# catalogue tiles so the honeycomb's tile flow (course tiles first, tree and
+	# boulder catalogue behind them) is exactly as it was — a nestled child takes
+	# no slot.
+	_add_open_hole_notch(tiles_grid, 0)
+
+## The Open Hole action as a half-size course cell nestled into the notch
+## between the tab's Tee Box and Green tiles — the pair it opens. `left_slot` is
+## the flow slot of the tile to the left of the notch, so slot 0 puts it between
+## the tee box and the green.
+func _add_open_hole_notch(tiles_grid: TileHoneycomb, left_slot: int) -> OpenHoleNotchButton:
+	var open_hole_btn := OpenHoleNotchButton.new()
+	open_hole_btn.name = "OpenHoleButton"
+	open_hole_btn.configure("open_hole", "Open Hole", "[H]", "H", OPEN_HOLE_TOOLTIP)
+	open_hole_btn.tool_pressed.connect(_on_tool_button_pressed)
+	tiles_grid.set_notch_child(open_hole_btn, left_slot)
+	_open_hole_buttons.append(open_hole_btn)
+	_tool_buttons["open_hole"] = open_hole_btn
+	return open_hole_btn
+
+## The brush controls stacked vertically. This column opens the Course Terrain
+## tab so they sit before the tile honeycomb; the Open Hole action used to lead
+## it and now nestles between the tee and green tiles it pairs, and the Bulldozer
 ## used to stack here too, but it never touches course terrain — it now lives
 ## pinned to the Improvements and Buildings tabs (see _pin_bulldozer_button).
-## Buttons use a compact 26px height (matching the brush stepper) so the whole
-## column still fits inside the 190px bottom bar. ToolButton._ready() resets
-## custom_minimum_size, so the compact height is applied on ready instead.
 func _make_terrain_tools_column() -> VBoxContainer:
-	const COLUMN_BUTTON_HEIGHT := 26
 	var column = VBoxContainer.new()
 	column.name = "TerrainToolsColumn"
 	column.add_theme_constant_override("separation", 2)
+	# Centred like the tile rows beside it, now that the Open Hole button no
+	# longer tops the column out at the height of the page.
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	var open_hole_btn := _add_tool_button(column, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
-	_open_hole_buttons.append(open_hole_btn)
-	_make_column_button_compact(open_hole_btn, COLUMN_BUTTON_HEIGHT)
 
 	column.add_child(_make_small_group_label("BRUSH"))
 
@@ -460,19 +478,6 @@ func _make_terrain_tools_column() -> VBoxContainer:
 
 	_apply_brush_limit()
 	return column
-
-## Size a ToolButton for vertical stacking in the tools column: full width,
-## compact height. Applied on ready so ToolButton._ready() cannot overwrite it.
-func _make_column_button_compact(btn: ToolButton, height: int) -> void:
-	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if btn.is_node_ready():
-		btn.custom_minimum_size = Vector2(0, height)
-	else:
-		btn.ready.connect(
-			func() -> void: btn.custom_minimum_size = Vector2(0, height),
-			CONNECT_ONE_SHOT
-		)
 
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	# Every improvement — the walking path and each ornament in The Garden Shed —
@@ -582,8 +587,11 @@ func _populate_landscape_tiles() -> void:
 			_tool_buttons["tree"] = t_btn
 
 	# Extend both existing course rows, rather than starting another honeycomb.
-	# Keeping the first seven tiles in each row preserves the course layout.
-	_landscape_buttons.assign(_course_tiles.get_children().slice(COURSE_TILE_COLUMNS * TILE_ROWS))
+	# Keeping the first seven tiles in each row preserves the course layout. A
+	# child nestled into a notch (the Open Hole button) is not a tile, so it is
+	# not part of this flow and keeps its place between the tee and the green.
+	var tiles: Array[Control] = _course_tiles.flow_children()
+	_landscape_buttons.assign(tiles.slice(COURSE_TILE_COLUMNS * TILE_ROWS))
 	for i in _course_tiles.columns - COURSE_TILE_COLUMNS:
 		_course_tiles.move_child(_landscape_buttons[i], COURSE_TILE_COLUMNS + i)
 	_update_selection_highlight()
@@ -1557,7 +1565,9 @@ func _with_course_tile_replacement(desc: String) -> String:
 func green_will_place_cup() -> bool:
 	return _green_places_cup
 
-## Enable/disable the Open Hole buttons and explain what is still missing.
+## Enable/disable the Open Hole buttons and explain what is still missing. The
+## nestled diamond draws its ring from the button's state — gold while a tee and
+## a cup are waiting — so it is repainted here, after the switch.
 func set_open_hole_state(can_open: bool, reason: String = "") -> void:
 	for button in _open_hole_buttons:
 		if not is_instance_valid(button):
@@ -1565,6 +1575,7 @@ func set_open_hole_state(can_open: bool, reason: String = "") -> void:
 		button.disabled = not can_open
 		button.tool_description = OPEN_HOLE_TOOLTIP if can_open or reason.is_empty() \
 				else "%s. %s" % [OPEN_HOLE_BLOCKED_TOOLTIP, reason]
+		button._update_visual_state()
 
 ## Grey out, unselect and make unselectable the Tee tile while an unused tee waits.
 func set_tee_box_state(can_place: bool, reason: String = "") -> void:
@@ -1599,8 +1610,7 @@ func set_tee_box_state(can_place: bool, reason: String = "") -> void:
 	btn.accessibility_description = "%s Shortcut %s." % [btn.tool_description, btn.hotkey]
 
 	# Ensure the diamond outline reflects the disabled state immediately.
-	if btn.has_method("_update_visual_state"):
-		btn._update_visual_state()
+	btn._update_visual_state()
 
 func set_view_state(_orientation: int, _isometric: bool) -> void:
 	pass

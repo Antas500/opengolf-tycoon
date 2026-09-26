@@ -13,7 +13,9 @@ the ordinary terrain brushes and then opens the hole:
    the red pins of open holes. Once a cup is waiting, the same Green tool becomes a
    **Green Without Hole** brush and paints with the normal terrain brush size
    and shape, so the player can widen the putting surface around the cup.
-3. **Open Hole** (`H` or the toolbar button, enabled only when a pair is ready)
+3. **Open Hole** (`H`, or the `[H]` tile nestled into the notch between the tee
+   box and the green on the Course Terrain tab — those are the two tiles it
+   pairs — enabled only when a pair is ready)
    pairs the single unused tee box with the single unused Green With Hole and
    creates the hole: yardage, par, forward/middle tees, pin rotation set and
    difficulty rating all follow from those two tiles.
