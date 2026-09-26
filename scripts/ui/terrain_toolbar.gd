@@ -4,7 +4,7 @@ class_name TerrainToolbar
 ##
 ## Nine tabs:
 ##  - Course Terrain: tools column (open hole, bulldozer, brush) before one course, hazard & landscape tiles honeycomb
-##  - Improvements:   paths and decorations
+##  - Improvements:   paths and the decoration tiles honeycomb (the garden shed catalogue)
 ##  - Buildings:      amenity buildings catalogue
 ##  - Elevation:      sculpting controls and brush size
 ##  - Holes:          course holes list (rows are filled by main.gd)
@@ -24,6 +24,7 @@ signal rock_selected(rock_size: String)
 signal building_placement_pressed
 signal building_selected(building_type: String)
 signal decoration_placement_pressed
+signal decoration_selected(decoration_type: String)
 signal raise_elevation_pressed
 signal sculpt_terrain_pressed(raising: bool)
 signal lower_elevation_pressed
@@ -157,6 +158,9 @@ var _player_points_label: Label = null
 var _feed_button: Button = null
 var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
+var _decoration_registry: Dictionary = {}
+var _decoration_shelf: TileHoneycomb = null
+var _decoration_tiles: Dictionary = {}  # decoration type -> DecorationTileButton
 var _course_tiles: TileHoneycomb = null
 var _landscape_buttons: Array[Node] = []
 var _selected_string_tool: String = ""
@@ -423,11 +427,22 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 
 	hbox.add_child(_make_separator())
 
-	var dec_box = HBoxContainer.new()
-	dec_box.add_theme_constant_override("separation", 4)
-	dec_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(dec_box, {"type": "decoration", "name": "Decorations", "icon": "[✦]", "hotkey": "O", "desc": "Aesthetic decorations for course rating"})
-	hbox.add_child(_make_tab_group("DECORATIONS", dec_box))
+	# The whole decoration catalogue sits here as one honeycomb of the same
+	# interlocking isometric tiles used by Course Terrain and Buildings: two
+	# rows, no heading (the tiles carry their own captions), and a rich hover
+	# tooltip per tile with price, upkeep and unlock requirements. The page
+	# scrolls sideways when the catalogue is wider than the window.
+	_decoration_shelf = TileHoneycomb.new()
+	_decoration_shelf.name = "DecorationShelf"
+	_decoration_shelf.columns = tile_columns(_decoration_registry.size())
+	_decoration_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
+	_decoration_shelf.h_separation = TILE_H_SEPARATION
+	_decoration_shelf.v_separation = TILE_V_SEPARATION
+	_decoration_shelf.v_padding = TILE_V_PADDING
+	_decoration_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_decoration_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	hbox.add_child(_make_tab_group("", _decoration_shelf, true))
+	_populate_decoration_shelf()
 
 	hbox.add_child(_make_separator())
 
@@ -516,7 +531,7 @@ func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	# page scrolls sideways when the catalogue is wider than the window.
 	_building_shelf = TileHoneycomb.new()
 	_building_shelf.name = "BuildingShelf"
-	_building_shelf.columns = building_tile_columns(_building_registry.size())
+	_building_shelf.columns = tile_columns(_building_registry.size())
 	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
 	_building_shelf.h_separation = TILE_H_SEPARATION
 	_building_shelf.v_separation = TILE_V_SEPARATION
@@ -540,7 +555,7 @@ func _populate_building_shelf() -> void:
 	for child in _building_shelf.get_children():
 		_building_shelf.remove_child(child)
 		child.queue_free()
-	_building_shelf.columns = building_tile_columns(_building_registry.size())
+	_building_shelf.columns = tile_columns(_building_registry.size())
 	for building_type in _building_registry:
 		var data: Dictionary = _building_registry[building_type]
 		var button := BuildingTileButton.new()
@@ -548,13 +563,99 @@ func _populate_building_shelf() -> void:
 		button.pressed.connect(_on_building_card_pressed.bind(str(building_type)))
 		_building_shelf.add_child(button)
 
-## Columns needed to lay `count` building tiles out in TILE_ROWS rows.
-static func building_tile_columns(count: int) -> int:
+## Columns needed to lay `count` catalogue tiles out in TILE_ROWS rows.
+static func tile_columns(count: int) -> int:
 	return maxi(1, ceili(float(count) / TILE_ROWS))
 
 func _on_building_card_pressed(building_type: String) -> void:
 	_reveal_tab_for_tool("building")
 	building_selected.emit(building_type)
+
+# =============================================================================
+# Decoration shelf (Improvements tab)
+# =============================================================================
+
+func set_decoration_registry(registry: Dictionary) -> void:
+	_decoration_registry = registry.duplicate(true)
+	_populate_decoration_shelf()
+
+func _populate_decoration_shelf() -> void:
+	if not is_instance_valid(_decoration_shelf):
+		return
+	for child in _decoration_shelf.get_children():
+		_decoration_shelf.remove_child(child)
+		child.queue_free()
+	_decoration_tiles.clear()
+	_decoration_shelf.columns = tile_columns(_decoration_registry.size())
+	for dec_type in ordered_decoration_types():
+		var data: Dictionary = _decoration_registry[dec_type]
+		var button := DecorationTileButton.new()
+		button.configure_decoration(str(dec_type), data)
+		button.pressed.connect(_on_decoration_card_pressed.bind(str(dec_type)))
+		_decoration_shelf.add_child(button)
+		_decoration_tiles[str(dec_type)] = button
+	refresh_decoration_unlocks()
+
+## Decoration types in the order The Garden Shed listed them: one category
+## after another, each keeping the catalogue's own order. Types with an
+## unknown category trail the shelf in catalogue order.
+func ordered_decoration_types() -> Array:
+	var ordered: Array = []
+	for category in DecorationTileButton.CATEGORY_ORDER:
+		for dec_type in _decoration_registry:
+			if str(_decoration_registry[dec_type].get("category", "")) == category:
+				ordered.append(dec_type)
+	for dec_type in _decoration_registry:
+		if not ordered.has(dec_type):
+			ordered.append(dec_type)
+	return ordered
+
+func _on_decoration_card_pressed(decoration_type: String) -> void:
+	var button: DecorationTileButton = _decoration_tiles.get(decoration_type, null)
+	if button and button.disabled:
+		return  # Locked ornaments stay on the shelf but cannot be placed.
+	_reveal_tab_for_tool("decoration")
+	decoration_selected.emit(decoration_type)
+
+## Re-check every ornament against the current rating, reputation and hole
+## count: the shelf opens with what the course has unlocked so far.
+func refresh_decoration_unlocks() -> void:
+	for dec_type in _decoration_tiles:
+		var button: DecorationTileButton = _decoration_tiles[dec_type]
+		if not is_instance_valid(button):
+			continue
+		button.set_locked(not is_decoration_unlocked(button.decoration_data),
+			decoration_unlock_text(button.decoration_data))
+
+func is_decoration_unlocked(decoration_data: Dictionary) -> bool:
+	if not GameManager:
+		return true
+	var unlock = decoration_data.get("unlock")
+	if unlock == null or not unlock is Dictionary or unlock.is_empty():
+		return true
+	match str(unlock.get("type", "")):
+		"star_rating":
+			return GameManager.course_rating.get("stars", 0) >= int(unlock.get("value", 99))
+		"reputation":
+			return GameManager.reputation >= int(unlock.get("value", 999))
+		"holes_built":
+			var hole_count: int = GameManager.current_course.holes.size() if GameManager.current_course else 0
+			return hole_count >= int(unlock.get("value", 99))
+	return false
+
+## Human-readable form of a decoration's unlock requirement ("" when it has none).
+func decoration_unlock_text(decoration_data: Dictionary) -> String:
+	var unlock = decoration_data.get("unlock")
+	if unlock == null or not unlock is Dictionary or unlock.is_empty():
+		return ""
+	match str(unlock.get("type", "")):
+		"star_rating":
+			return "%d★ rating" % int(unlock.get("value", 0))
+		"reputation":
+			return "%d reputation" % int(unlock.get("value", 0))
+		"holes_built":
+			return "%d holes" % int(unlock.get("value", 0))
+	return ""
 
 func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	var sculpt_box = HBoxContainer.new()
@@ -917,6 +1018,8 @@ func _show_page(tab_index: int) -> void:
 	for i in _pages.size():
 		_pages[i].visible = (i == tab_index)
 	match tab_index:
+		Tab.IMPROVEMENTS:
+			refresh_decoration_unlocks()
 		Tab.GOLFERS:
 			_refresh_golfer_lists()
 		Tab.PLAYER:
@@ -947,6 +1050,10 @@ func _on_refresh_tick() -> void:
 		_refresh_golfer_lists()
 	elif _tab_bar and _tab_bar.current_tab == Tab.PLAYER:
 		_refresh_player_skills()
+	elif _tab_bar and _tab_bar.current_tab == Tab.IMPROVEMENTS:
+		# Star rating, reputation and hole count all move during play, so the
+		# open decoration shelf keeps up with what has been unlocked.
+		refresh_decoration_unlocks()
 
 # =============================================================================
 # Golfer tab

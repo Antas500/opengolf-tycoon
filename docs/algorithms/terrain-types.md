@@ -21,7 +21,7 @@ the right end of each row:
 
 The honeycomb width adapts to the theme's tree catalogue while staying two rows
 high. Open Hole, Bulldozer, and brush controls remain in a column before it.
-Path lives on the Improvements tab alongside Decorations. Grass, Heavy Rough,
+Path lives on the Improvements tab alongside the decoration tile shelf. Grass, Heavy Rough,
 Trees and Empty are placed by generation or by entities (a tree stamps Trees,
 a boulder stamps Rocks).
 

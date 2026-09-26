@@ -263,7 +263,7 @@ func test_building_choices_use_the_course_tile_design() -> void:
 	toolbar.set_building_registry(registry)
 
 	assert_true(toolbar._building_shelf is TileHoneycomb)
-	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.building_tile_columns(registry.size()))
+	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.tile_columns(registry.size()))
 	assert_eq(toolbar._building_shelf.get_child_count(), registry.size())
 	for button in toolbar._building_shelf.get_children():
 		assert_true(button is BuildingTileButton, "Building choices should use isometric tile buttons")
@@ -597,7 +597,11 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 	assert_eq(landscape_group, course_group,
 		"Nature & Landscaping should share the course tile group")
 
-func test_improvements_tab_only_contains_paths_and_decorations() -> void:
+func test_improvements_tab_holds_paths_and_every_decoration_tile() -> void:
+	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/decorations.json"))["decorations"]
+	toolbar.set_decoration_registry(registry)
+
 	var imp_page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS]
 	var imp_hbox: HBoxContainer = imp_page.get_child(0)
 
@@ -610,7 +614,149 @@ func test_improvements_tab_only_contains_paths_and_decorations() -> void:
 	assert_false(tool_names.has("Boulders"), "Improvements tab must not contain Boulders")
 	assert_false(tool_names.has("Flower Bed"), "Improvements tab must not contain Flower Bed")
 	assert_true(tool_names.has("Path"), "Improvements tab should contain Path")
-	assert_true(tool_names.has("Decorations"), "Improvements tab should contain Decorations")
+	assert_false(tool_names.has("Decorations"),
+		"The Garden Shed's Decorations button is replaced by the decoration tiles")
+
+	# The garden shed catalogue now lives in the tab as tiles.
+	assert_eq(toolbar._decoration_shelf.get_child_count(), registry.size(),
+		"Every decoration from the garden shed should be a tile")
+	for dec_type in registry:
+		var tile: DecorationTileButton = toolbar._decoration_tiles[dec_type]
+		assert_not_null(tile, "%s should have a tile" % dec_type)
+		assert_eq(tile.get_parent(), toolbar._decoration_shelf)
+		assert_eq(tile.decoration_type, dec_type)
+		assert_eq(tile.tool_name, registry[dec_type]["name"])
+		assert_eq(tile.get_parent().get_parent().get_parent(), imp_hbox,
+			"The decoration shelf should sit in the Improvements tab")
+
+func test_decoration_tiles_use_the_course_tile_design() -> void:
+	var registry := {
+		"rose_border": {"name": "Rose Border", "category": "landscaping", "cost": 120,
+			"daily_upkeep": 3, "description": "Roses for the walks."},
+		"fountain": {"name": "Fountain", "category": "water", "cost": 500,
+			"daily_upkeep": 15, "description": "A sparkling water feature.",
+			"unlock": {"type": "reputation", "value": 99}},
+	}
+	toolbar.set_decoration_registry(registry)
+
+	assert_true(toolbar._decoration_shelf is TileHoneycomb)
+	assert_eq(toolbar._decoration_shelf.columns, TerrainToolbar.tile_columns(registry.size()))
+	assert_eq(toolbar._decoration_shelf.get_child_count(), registry.size())
+	assert_eq(toolbar._decoration_shelf.v_padding, TerrainToolbar.TILE_V_PADDING,
+		"The decoration shelf keeps the same breathing room as the other tile tabs")
+
+	for button in toolbar._decoration_shelf.get_children():
+		assert_true(button is DecorationTileButton, "Decorations should use isometric tile buttons")
+		assert_true(button is TerrainTileButton, "Decoration tiles share the Course Terrain button base")
+		assert_eq(button.custom_minimum_size, TerrainTileButton.BUTTON_SIZE)
+		assert_eq(button.text, "", "Decoration names should be drawn on the tile")
+		assert_eq(button._name_label.size, TerrainTileButton.BUTTON_SIZE)
+		assert_eq(button.tooltip_text, "", "Only the rich TooltipManager popup should appear")
+		assert_not_null(button._decoration_art, "Each tile previews the artwork used on the course")
+		assert_false(button.accessibility_description.is_empty())
+
+	var roses: DecorationTileButton = toolbar._decoration_tiles["rose_border"]
+	assert_eq(roses.cost, 120)
+	assert_eq(roses.maintenance, 3, "Daily upkeep reaches the tooltip footer")
+	assert_string_contains(roses.tool_description, "Landscaping")
+	assert_string_contains(roses.tool_description, "Roses for the walks.")
+
+	watch_signals(toolbar)
+	roses.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "decoration_selected", ["rose_border"])
+
+func test_decoration_shelf_keeps_the_garden_shed_category_order() -> void:
+	var registry := {
+		"statue": {"name": "Statue", "category": "sculptures"},
+		"bench": {"name": "Bench", "category": "furniture"},
+		"bed": {"name": "Bed", "category": "landscaping"},
+		"pool": {"name": "Pool", "category": "water"},
+		"unknown": {"name": "Oddity"},
+	}
+	toolbar.set_decoration_registry(registry)
+
+	var order: Array[String] = []
+	for child in toolbar._decoration_shelf.get_children():
+		order.append(child.decoration_type)
+	assert_eq(order, ["bed", "pool", "bench", "statue", "unknown"],
+		"Decorations should be listed category by category, in shed order")
+
+func test_locked_decorations_stay_on_the_shelf_until_earned() -> void:
+	var registry := {
+		"topiary": {"name": "Topiary", "category": "landscaping", "cost": 200, "daily_upkeep": 8},
+		"statue": {"name": "Golfer Statue", "category": "sculptures", "cost": 1000,
+			"daily_upkeep": 10, "unlock": {"type": "star_rating", "value": 5}},
+	}
+	toolbar.set_decoration_registry(registry)
+
+	var open_tile: DecorationTileButton = toolbar._decoration_tiles["topiary"]
+	var locked_tile: DecorationTileButton = toolbar._decoration_tiles["statue"]
+	assert_false(open_tile.disabled, "Decorations without a requirement are selectable")
+	assert_true(locked_tile.disabled, "Locked decorations stay on the shelf, greyed out")
+	assert_true(locked_tile.locked, "The tile knows it is locked")
+	assert_almost_eq(locked_tile.modulate.a, 0.65, 0.001, "A locked tile is dimmed like a disabled tool")
+	assert_string_contains(locked_tile.tool_description, "Locked")
+	assert_string_contains(locked_tile.tool_description, "5★ rating")
+	assert_string_contains(locked_tile.tool_description, "Sculptures")
+
+	# Clicking a locked tile never starts a placement.
+	watch_signals(toolbar)
+	toolbar._on_decoration_card_pressed("statue")
+	assert_signal_not_emitted(toolbar, "decoration_selected")
+
+	# A course that earns the fifth star unlocks it on the next refresh.
+	var stars: int = GameManager.course_rating.get("stars", 0)
+	GameManager.course_rating["stars"] = 5
+	toolbar.refresh_decoration_unlocks()
+	assert_false(locked_tile.disabled, "Meeting the requirement unlocks the tile")
+	assert_false(locked_tile.tool_description.contains("Locked"))
+	GameManager.course_rating["stars"] = stars
+	toolbar.refresh_decoration_unlocks()
+	assert_true(locked_tile.disabled, "Losing the rating locks the tile again")
+
+func test_decoration_unlocks_follow_the_live_course_state() -> void:
+	var registry := {
+		"bench": {"name": "Bench", "category": "furniture", "unlock":
+			{"type": "holes_built", "value": 99}},
+	}
+	toolbar.set_decoration_registry(registry)
+	var tile: DecorationTileButton = toolbar._decoration_tiles["bench"]
+	assert_true(tile.disabled, "A course with fewer than 99 holes starts locked")
+	assert_string_contains(tile.tool_description, "99 holes")
+
+func test_improvements_decorations_fill_the_page_without_overflowing() -> void:
+	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/decorations.json"))["decorations"]
+	toolbar.set_decoration_registry(registry)
+	toolbar.select_tab(TerrainToolbar.Tab.IMPROVEMENTS)
+	await _settle_layout()
+
+	var tile := TerrainTileButton.BUTTON_SIZE
+	var two_rows := tile.y * 1.5 + TerrainToolbar.TILE_V_SEPARATION \
+			+ 2.0 * TerrainToolbar.TILE_V_PADDING
+	assert_almost_eq(toolbar._decoration_shelf.get_combined_minimum_size().y, two_rows, 0.01,
+		"28 decorations should fill exactly two interlocking rows")
+	assert_eq(toolbar._decoration_shelf.columns, ceili(float(registry.size()) / 2.0))
+	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT),
+		"The Improvements tab must fit inside the bottom bar")
+
+func test_every_decoration_tile_shows_course_artwork() -> void:
+	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/decorations.json"))["decorations"]
+	for dec_type in registry:
+		assert_true(DecorationTileArt.has_art(dec_type),
+			"%s should have artwork for its tile" % dec_type)
+
+func test_decoration_shelf_rebuild_leaves_no_stale_tiles() -> void:
+	var first := {"a": {"name": "A", "category": "landscaping"}}
+	var second := {"b": {"name": "B", "category": "water"}, "c": {"name": "C", "category": "water"}}
+	toolbar.set_decoration_registry(first)
+	toolbar.set_decoration_registry(second)
+
+	assert_eq(toolbar._decoration_shelf.get_child_count(), 2,
+		"Replacing the catalogue should immediately drop the old tiles")
+	assert_false(toolbar._decoration_tiles.has("a"))
+	assert_eq(toolbar._decoration_shelf.columns, 1)
 
 func test_theme_change_updates_tree_tiles_in_course_terrain_tab() -> void:
 	# Switch theme to DESERT

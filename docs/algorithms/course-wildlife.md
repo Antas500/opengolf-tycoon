@@ -12,7 +12,8 @@ gardens remain colorful in winter.
 These are cosmetic residents. They do not block shots, incur upkeep, grant rating
 bonuses, consume simulation randomness, or add fields to saved games. The
 existing costs, unlocks, and aesthetics values of decorations still apply. The
-garden-shed picker shows their actual artwork, price, upkeep, and unlock status.
+decoration tiles on the Improvements tab show their actual artwork, and their hover
+popup carries price, upkeep, and unlock status.
 
 ## Algorithm
 

@@ -535,6 +535,8 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.building_selected.connect(_on_building_type_selected_from_toolbar)
 	terrain_toolbar.set_building_registry(building_registry)
 	terrain_toolbar.decoration_placement_pressed.connect(_on_decoration_placement_pressed)
+	terrain_toolbar.decoration_selected.connect(_on_decoration_type_selected_from_toolbar)
+	terrain_toolbar.set_decoration_registry(decoration_registry)
 	terrain_toolbar.sculpt_terrain_pressed.connect(_on_sculpt_terrain_pressed)
 	terrain_toolbar.raise_elevation_pressed.connect(_on_raise_elevation_pressed)
 	terrain_toolbar.lower_elevation_pressed.connect(_on_lower_elevation_pressed)
@@ -1474,140 +1476,25 @@ func _on_rock_size_selected_from_toolbar(rock_size: String) -> void:
 	print("Rock placement mode from toolbar: %s" % rock_size)
 
 func _on_decoration_placement_pressed() -> void:
-	"""Show decoration selection menu and start decoration placement mode"""
+	"""Open the Improvements tab; decoration tiles there start placement directly."""
+	if terrain_toolbar:
+		terrain_toolbar.select_tab(TerrainToolbar.Tab.IMPROVEMENTS)
+
+func _on_decoration_type_selected_from_toolbar(decoration_type: String) -> void:
+	"""Start placement immediately for a decoration tile in the Improvements tab."""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
 	is_painting = false
+	if decoration_type not in decoration_registry:
+		EventBus.notify("Decoration type not found: %s" % decoration_type, "error")
+		return
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
-
-	if decoration_registry.is_empty():
-		EventBus.notify("Decoration system not initialized!", "error")
-		return
-
-	var dialog = AcceptDialog.new()
-	dialog.title = "The garden shed"
-	dialog.size = Vector2i(680, 560)
-	dialog.theme = preload("res://assets/themes/game_theme.tres")
-
-	var scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(640, 480)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var vbox = VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 12)
-
-	# Group by category
-	var categories = {"landscaping": "Landscaping", "water": "Water Features", "structures": "Structures", "furniture": "Furniture", "sculptures": "Sculptures"}
-	for cat_id in categories:
-		var cat_name = categories[cat_id]
-		var has_items = false
-		for dec_type in decoration_registry:
-			if decoration_registry[dec_type].get("category", "") == cat_id:
-				has_items = true
-				break
-		if not has_items:
-			continue
-
-		# Category header
-		var header = Label.new()
-		header.text = cat_name
-		header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		header.add_theme_font_size_override("font_size", 16)
-		header.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
-		vbox.add_child(header)
-		var shelf := GridContainer.new()
-		shelf.columns = 2
-		shelf.add_theme_constant_override("h_separation", 10)
-		shelf.add_theme_constant_override("v_separation", 8)
-		vbox.add_child(shelf)
-
-		for dec_type in decoration_registry:
-			var dec_data = decoration_registry[dec_type]
-			if dec_data.get("category", "") != cat_id:
-				continue
-
-			var dec_name = dec_data.get("name", dec_type.capitalize())
-			var cost_val = dec_data.get("cost", 0)
-			var upkeep = dec_data.get("daily_upkeep", 0)
-			var unlocked = _is_decoration_unlocked(dec_data)
-
-			var btn = Button.new()
-			if upkeep > 0:
-				btn.text = "%s\n$%d  ·  $%d/day" % [dec_name, cost_val, upkeep]
-			else:
-				btn.text = "%s\n$%d" % [dec_name, cost_val]
-			btn.custom_minimum_size = Vector2(305, 78)
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			btn.add_theme_font_size_override("font_size", 14)
-			btn.add_theme_constant_override("h_separation", 12)
-			btn.add_theme_constant_override("icon_max_width", 48)
-			btn.expand_icon = true
-			var sprite_path: String = Decoration.SPRITE_PATHS.get(dec_type, "")
-			if not sprite_path.is_empty() and ResourceLoader.exists(sprite_path):
-				btn.icon = load(sprite_path)
-			btn.tooltip_text = dec_data.get("description", "")
-
-			if not unlocked:
-				btn.disabled = true
-				var unlock = dec_data.get("unlock", {})
-				var req_text = _get_unlock_requirement_text(unlock)
-				btn.text = "%s\n%s" % [dec_name, req_text]
-				btn.tooltip_text = "Requires: %s" % req_text
-			else:
-				btn.pressed.connect(_on_decoration_type_selected.bind(dec_type, dialog))
-
-			CatalogArtwork.decorate_button(btn, dec_type, dec_data, false)
-			shelf.add_child(btn)
-
-	scroll.add_child(vbox)
-	dialog.add_child(scroll)
-	dialog.confirmed.connect(dialog.queue_free)
-	dialog.canceled.connect(dialog.queue_free)
-	add_child(dialog)
-	dialog.popup_centered()
-
-func _on_decoration_type_selected(dec_type: String, dialog: AcceptDialog) -> void:
-	"""Handle decoration type selection"""
-	dialog.queue_free()
-	if dec_type in decoration_registry:
-		var dec_data = decoration_registry[dec_type]
-		placement_manager.start_decoration_placement(dec_type, dec_data)
-		print("Decoration placement mode: %s" % dec_type)
-
-func _is_decoration_unlocked(dec_data: Dictionary) -> bool:
-	"""Check if a decoration meets its unlock requirements"""
-	var unlock = dec_data.get("unlock")
-	if unlock == null or (unlock is Dictionary and unlock.is_empty()):
-		return true
-	if not unlock is Dictionary:
-		return true
-	match unlock.get("type", ""):
-		"star_rating":
-			return GameManager.course_rating.get("stars", 0) >= unlock.get("value", 99)
-		"reputation":
-			return GameManager.reputation >= unlock.get("value", 999)
-		"holes_built":
-			var hole_count = GameManager.current_course.holes.size() if GameManager.current_course else 0
-			return hole_count >= unlock.get("value", 99)
-	return false
-
-func _get_unlock_requirement_text(unlock) -> String:
-	"""Get human-readable text for unlock requirement"""
-	if unlock == null or not unlock is Dictionary:
-		return "Unknown"
-	match unlock.get("type", ""):
-		"star_rating":
-			return "%d★ rating" % unlock.get("value", 0)
-		"reputation":
-			return "%d reputation" % unlock.get("value", 0)
-		"holes_built":
-			return "%d holes" % unlock.get("value", 0)
-	return "Unknown"
+	placement_manager.start_decoration_placement(decoration_type, decoration_registry[decoration_type])
+	print("Decoration placement mode from toolbar: %s" % decoration_type)
 
 func _on_sculpt_terrain_pressed(raising: bool) -> void:
 	if raising:

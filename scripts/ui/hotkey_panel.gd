@@ -67,6 +67,7 @@ func _build_ui() -> void:
 		["T", "Trees"],
 		["R", "Boulders"],
 		["B", "Buildings"],
+		["O", "Decorations (Improvements tab)"],
 		["H", "Open Hole"],
 		["X", "Bulldozer"],
 	])
