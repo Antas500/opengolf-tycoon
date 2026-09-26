@@ -82,7 +82,7 @@ func get_placement_error(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> Strin
 			if entities.is_tile_occupied_by_decoration(tile):
 				return "Remove the decoration in this footprint first."
 			if entities.get_tree_at(tile) or entities.get_rock_at(tile):
-				return "Clear the tree or rock with the bulldozer (X) first."
+				return "Clear the tree or rock first: paint built terrain (e.g. Fairway) over its tile."
 	if not _terrain_allows_at(grid_pos, terrain_grid):
 		return "Use grass, rough, fairway or path; keep greens, tees, sand and water clear." if placement_mode == PlacementMode.BUILDING else "This item needs compatible ground across its entire footprint."
 	return ""

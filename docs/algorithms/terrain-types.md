@@ -49,11 +49,12 @@ Grass, Heavy Rough, Trees and Empty are placed by generation or by entities
   distance) and costs nothing to maintain.
 - **Rocks** — Stony ground: the worst lie on the course (0.25), wedge only. A
   boulder standing on other ground also plays as Rocks but keeps its grass look.
-  Painting Rocks around a boulder merges it into the rocky ground. The bulldozer
-  clears painted Rocks back to grass.
+  Painting Rocks around a boulder merges it into the rocky ground. Like every
+  course tile it is ground paint: replace it by painting another terrain over
+  it — the bulldozer never touches course terrain.
 - **Brush** — Dense scrub (gorse, heather, sagebrush): 0.3 lie, 50% distance,
-  wedge only, and it swallows rolling balls. Golfers wade through it slowly. The
-  bulldozer clears it back to grass.
+  wedge only, and it swallows rolling balls. Golfers wade through it slowly.
+  Replace it by painting another terrain tile over it; the bulldozer ignores it.
 
 ---
 
@@ -144,7 +145,10 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 - Boulders can stand on grass, fairways, roughs and unoccupied painted Rocks.
   Trees can stand on grass, fairways, roughs and path. Both keep off sand, brush
   and water, because their spot draws native grass.
-- The bulldozer removes painted Rocks and Brush for $10 a tile, leaving grass.
+- Course terrain tiles replace each other when painted (`TerrainGrid.set_tile`
+  swaps the ground and clears the tile's cup/tee/path state as needed). The
+  bulldozer never touches them — its button lives on the Improvements and
+  Buildings tabs and only demolishes paths, decorations and buildings.
 
 ### 6. Rendering
 

@@ -193,16 +193,18 @@ func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.CLUB), "Club")
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.STAFF), "Staff")
 
-func test_all_pages_are_horizontal_scroll_containers() -> void:
+func test_all_pages_scroll_horizontally_behind_fixed_chrome() -> void:
 	for i in toolbar._pages.size():
 		var page = toolbar._pages[i]
 		assert_not_null(page, "Page %d should not be null" % i)
-		assert_eq(page.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO,
+		var scroll: ScrollContainer = toolbar.page_scroll(i)
+		assert_not_null(scroll, "Page %d should hold a scroll container" % i)
+		assert_eq(scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO,
 			"Page %d should have horizontal scroll mode AUTO" % i)
-		assert_eq(page.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED,
+		assert_eq(scroll.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED,
 			"Page %d should have vertical scroll mode DISABLED" % i)
-		assert_gt(page.get_child_count(), 0, "Page %d should have content child" % i)
-		var content = page.get_child(0)
+		assert_gt(scroll.get_child_count(), 0, "Page %d should have content child" % i)
+		var content = scroll.get_child(0)
 		assert_true(content is HBoxContainer, "Page %d content container should be HBoxContainer" % i)
 
 func test_tab_selection_toggles_visibility() -> void:
@@ -217,6 +219,59 @@ func test_tab_selection_toggles_visibility() -> void:
 	toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
 	assert_false(toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS].visible)
 	assert_true(toolbar._pages[TerrainToolbar.Tab.BUILDINGS].visible)
+
+func test_bulldozer_pins_to_the_removal_tabs_bottom_left_corners() -> void:
+	assert_eq(toolbar._bulldozer_buttons.size(), 2,
+		"One pinned Bulldozer per tab whose tiles it can remove")
+	for tab in [TerrainToolbar.Tab.IMPROVEMENTS, TerrainToolbar.Tab.BUILDINGS]:
+		var page: Control = toolbar._pages[tab]
+		var found := page.find_children("*", "BulldozerButton", false, false)
+		assert_eq(found.size(), 1, "%s page pins exactly one Bulldozer" % toolbar._tab_bar.get_tab_title(tab))
+		var btn: BulldozerButton = found[0]
+		# Anchored to the page's bottom-left corner, clear of the page edges.
+		assert_almost_eq(btn.anchor_left, 0.0, 0.001, "Anchored to the left edge")
+		assert_almost_eq(btn.anchor_top, 1.0, 0.001, "Anchored to the bottom edge")
+		assert_almost_eq(btn.anchor_right, 0.0, 0.001, "Anchored to the left edge")
+		assert_almost_eq(btn.anchor_bottom, 1.0, 0.001, "Anchored to the bottom edge")
+		assert_almost_eq(btn.offset_left, BulldozerButton.CORNER_MARGIN, 0.01)
+		assert_almost_eq(btn.offset_bottom, -BulldozerButton.CORNER_MARGIN, 0.01)
+		# A round button: square bounds of the fixed diameter, circular hit face.
+		assert_eq(btn.custom_minimum_size,
+			Vector2(BulldozerButton.BUTTON_DIAMETER, BulldozerButton.BUTTON_DIAMETER))
+		assert_true(btn._has_point(btn.size * 0.5), "The circle face is clickable")
+		assert_false(btn._has_point(Vector2(1, 1)),
+			"The bounding box corners fall through to the tiles underneath")
+		assert_string_contains(btn.accessibility_description, "Course Terrain tiles are not affected",
+			"The tooltip explains the Bulldozer's scope")
+	# The Course Terrain page pins nothing: ground tiles are never bulldozed.
+	assert_eq(toolbar._pages[TerrainToolbar.Tab.TERRAIN].find_children(
+		"*", "BulldozerButton", true, false).size(), 0,
+		"Course Terrain has no Bulldozer button")
+
+func test_bulldozer_buttons_trigger_and_share_the_mode_state() -> void:
+	watch_signals(toolbar)
+	var buttons: Array = toolbar._bulldozer_buttons
+
+	# Pressing a pinned button stays on its own tab and starts bulldozer mode.
+	toolbar.select_tab(TerrainToolbar.Tab.IMPROVEMENTS)
+	buttons[0].pressed.emit()
+	assert_signal_emitted(toolbar, "bulldozer_pressed")
+	assert_true(toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS].visible,
+		"Pressing the pinned Bulldozer keeps its tab open")
+
+	toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
+	buttons[1].pressed.emit()
+	assert_signal_emitted(toolbar, "bulldozer_pressed")
+	assert_true(toolbar._pages[TerrainToolbar.Tab.BUILDINGS].visible,
+		"Pressing the pinned Bulldozer keeps its tab open")
+
+	# Both circles report the mode: gold ring while it runs, quiet when it ends.
+	toolbar.set_bulldozer_active(true)
+	for btn in buttons:
+		assert_true(btn.is_active(), "The pinned Bulldozer shows the mode is on")
+	toolbar.set_bulldozer_active(false)
+	for btn in buttons:
+		assert_false(btn.is_active(), "The pinned Bulldozer shows the mode is off")
 
 func test_tool_selection_and_signals() -> void:
 	watch_signals(toolbar)
@@ -259,8 +314,10 @@ func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 			"The shortcut still reaches assistive tech")
 		assert_eq(button.cost, TerrainTypes.get_placement_cost(tool_type))
 
-	# Non-painting actions retain their familiar ToolButtons.
-	assert_false(toolbar._tool_buttons["bulldozer"] is TerrainTileButton)
+	# Non-painting actions retain their familiar ToolButtons. The Bulldozer is
+	# no longer a Course Terrain tool at all — it is pinned to the Improvements
+	# and Buildings tabs, whose tiles it can remove.
+	assert_false(toolbar._tool_buttons.has("bulldozer"), "The Bulldozer is not a Course Terrain tool")
 	assert_false(toolbar._open_hole_buttons[0] is TerrainTileButton)
 
 func test_building_choices_use_the_course_tile_design() -> void:
@@ -292,7 +349,7 @@ func test_building_choices_use_the_course_tile_design() -> void:
 	assert_signal_emitted_with_parameters(toolbar, "building_selected", ["bench"])
 
 func test_buildings_tab_has_no_heading_or_info_section() -> void:
-	var page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.BUILDINGS]
+	var page: Control = toolbar._pages[TerrainToolbar.Tab.BUILDINGS]
 	var texts: Array[String] = []
 	for label in page.find_children("*", "Label", true, false):
 		if label.get_parent() is TerrainTileButton:
@@ -394,7 +451,7 @@ func test_green_tile_flag_tracks_the_next_green_type() -> void:
 	assert_string_contains(button.accessibility_description, "selected brush")
 
 func test_course_terrain_tab_has_no_green_size_presets() -> void:
-	var terrain_content: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0)
+	var terrain_content: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.TERRAIN)
 	assert_eq(terrain_content.get_child_count(), 3,
 		"The terrain tab contains the tools, separator, unified tile grid, with no extra separator or preset group")
 
@@ -525,7 +582,7 @@ func test_staff_tab_embeds_staff_management() -> void:
 		"Staff tab should not keep a Staff Management launcher button")
 	assert_not_null(toolbar._staff_panel, "Staff tab should embed a StaffPanel")
 	assert_true(toolbar._staff_panel is StaffPanel)
-	assert_eq(toolbar._staff_panel.get_parent().get_parent(), toolbar._pages[TerrainToolbar.Tab.STAFF],
+	assert_eq(toolbar._staff_panel.get_parent().get_parent(), toolbar.page_scroll(TerrainToolbar.Tab.STAFF),
 		"StaffPanel should live on the Staff tab page")
 
 	var labels: Array[String] = []
@@ -543,7 +600,7 @@ func test_staff_tab_embeds_staff_management() -> void:
 	assert_true(toolbar._staff_panel.visible)
 
 func test_mouse_wheel_horizontal_scroll_input() -> void:
-	var scroll: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN]
+	var scroll: ScrollContainer = toolbar.page_scroll(TerrainToolbar.Tab.TERRAIN)
 	scroll.scroll_horizontal = 100
 
 	# Mouse wheel down -> scroll right (increase horizontal offset)
@@ -595,7 +652,7 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 	# The unified honeycomb itself sits inside Course Terrain page and has 2 interlocking rows
 	assert_not_null(toolbar._course_tiles)
 	assert_eq(toolbar._course_tiles.get_parent().get_parent(),
-		toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0),
+		toolbar.page_content(TerrainToolbar.Tab.TERRAIN),
 		"Unified honeycomb should live in Course Terrain tab")
 	var total_landscape_tiles: int = 1 + 3 + theme_trees.size()
 	assert_eq(toolbar._course_tiles.columns, TOP_ROW.size() + ceili(float(total_landscape_tiles) / 2.0),
@@ -610,8 +667,7 @@ func test_improvements_tab_holds_paths_and_every_decoration_tile() -> void:
 		"res://data/decorations.json"))["decorations"]
 	toolbar.set_decoration_registry(registry)
 
-	var imp_page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS]
-	var imp_hbox: HBoxContainer = imp_page.get_child(0)
+	var imp_hbox: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.IMPROVEMENTS)
 
 	# Verify Trees, Boulders, Flower Bed are NOT in Improvements tab
 	var tool_names: Array[String] = []
@@ -663,7 +719,7 @@ func test_path_tile_leads_the_improvements_honeycomb() -> void:
 	assert_gt(shelf.get_child(3).position.y, top_row_y,
 		"The row below sits in the notches under the path's row")
 
-	var imp_hbox: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS].get_child(0)
+	var imp_hbox: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.IMPROVEMENTS)
 	assert_false(imp_hbox.find_children("*", "Label", true, false)
 		.any(func(label): return label.text == "PATHS"),
 		"The path has no box of its own now it shares the tile shelf")

@@ -1590,7 +1590,7 @@ func _on_lower_elevation_pressed() -> void:
 	print("Elevation mode: LOWERING")
 
 func _on_bulldozer_pressed() -> void:
-	"""Activate bulldozer mode to remove trees, rocks, and flower beds"""
+	"""Activate bulldozer mode to demolish improvements and buildings"""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
@@ -1603,13 +1603,17 @@ func _on_bulldozer_pressed() -> void:
 	if placement_preview:
 		placement_preview.set_bulldozer_mode(true)
 		placement_preview.set_brush_size(brush_size)
-	EventBus.notify("Bulldozer mode - Click to remove objects", "info")
+	if terrain_toolbar:
+		terrain_toolbar.set_bulldozer_active(true)
+	EventBus.notify("Bulldozer mode - click decorations, paths or buildings to remove them", "info")
 	print("Bulldozer mode: ACTIVE")
 
 func _cancel_bulldozer_mode() -> void:
 	bulldozer_mode = false
 	if placement_preview:
 		placement_preview.set_bulldozer_mode(false)
+	if terrain_toolbar:
+		terrain_toolbar.set_bulldozer_active(false)
 
 func _disable_terrain_painting_preview() -> void:
 	"""Disable terrain painting preview when switching to other modes"""
@@ -1880,20 +1884,6 @@ func _play_placement_feedback(grid_pos: Vector2i, placement_type: String) -> voi
 	# Sound hook (placeholder for future audio)
 	PlacementFeedback.play_placement_sound(placement_type)
 
-func _is_mouse_over_entity(mouse_world: Vector2, entity: Node2D, entity_data: Dictionary) -> bool:
-	"""Check if mouse world position overlaps the entity's visual bounding box."""
-	var vh = entity_data.get("visual_height", 32.0)
-	var bw = entity_data.get("base_width", 24.0)
-	var scale_mult = 1.0
-	if entity.has_meta("_variation") or "_variation" in entity:
-		var variation = entity.get("_variation")
-		if variation:
-			scale_mult = variation.scale
-	var half_w = bw * scale_mult * 0.5
-	var local = mouse_world - entity.global_position
-	# Visual polygons: x centered at 0 (±half_w), y from -vh*0.7 (canopy top) to +vh*0.6 (trunk base)
-	return local.x >= -half_w and local.x <= half_w and local.y >= -vh * scale_mult * 0.7 and local.y <= vh * scale_mult * 0.6
-
 func _bulldoze_at_mouse() -> void:
 	var mouse_world = camera.get_mouse_world_position()
 	var grid_pos = terrain_grid.screen_to_grid(mouse_world)
@@ -1902,19 +1892,27 @@ func _bulldoze_at_mouse() -> void:
 	if not terrain_grid.is_valid_position(grid_pos): return
 	_handle_bulldozer_click(grid_pos, mouse_world)
 
-# Bulldozer removal costs
+# Bulldozer removal fees (Improvements & Buildings only: decorations, walking
+# paths, buildings). Course Terrain tiles are ground paint — the bulldozer
+# never touches them; repaint the ground with another tile instead. The tree
+# and rock charges double as the obstacle-clearing fees applied when built
+# course terrain is painted over trees and boulders.
 const BULLDOZER_COSTS = {
 	"tree": 15,
 	"rock": 10,
-	"flower_bed": 20,
 	"decoration": 20,
-	"rock_ground": 10,  # Painted Rocks terrain (no boulder) back to grass
-	"brush": 10,
+	"building": 20,  # Flat demolition fee, whatever the facility cost
 	"walking_path": 5,  # The Path improvement (thin walking trail)
 }
 
 func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.ZERO) -> void:
-	"""Handle bulldozer removal at a single tile. Supports both single-click and drag."""
+	"""Handle bulldozer removal at a single tile. Supports both single-click and drag.
+
+	The Bulldozer only demolishes Improvements and Buildings — decorations,
+	walking paths and facility buildings. Course Terrain tiles (every ground
+	paint, trees and boulders included) are untouched: replace the ground by
+	painting another terrain tile over it.
+	"""
 	var dragging = is_painting
 	# Check land ownership
 	if GameManager.land_manager and not GameManager.land_manager.is_tile_owned(grid_pos):
@@ -1922,68 +1920,7 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 			EventBus.notify("You don't own this land! Press L to buy parcels.", "error")
 		return
 
-	# Search clicked tile + neighbors for entities whose visual bounds contain the mouse.
-	# Entities visually extend beyond their grid tile, so exact-tile lookup misses clicks
-	# on the visible trunk/canopy that overflow into adjacent tiles.
-	var hit_tree_pos: Vector2i = Vector2i(-1, -1)
-	var hit_rock_pos: Vector2i = Vector2i(-1, -1)
-	for dx in range(-1, 2):
-		for dy in range(-1, 2):
-			var check_pos = grid_pos + Vector2i(dx, dy)
-			if not terrain_grid.is_valid_position(check_pos):
-				continue
-			if hit_tree_pos == Vector2i(-1, -1):
-				var t = entity_layer.get_tree_at(check_pos)
-				if t and _is_mouse_over_entity(mouse_world, t, t.tree_data):
-					hit_tree_pos = check_pos
-			if hit_rock_pos == Vector2i(-1, -1):
-				var r = entity_layer.get_rock_at(check_pos)
-				if r and _is_mouse_over_entity(mouse_world, r, r.rock_data):
-					hit_rock_pos = check_pos
-
-	# Remove hit tree (prefer tree over rock when overlapping)
-	if hit_tree_pos != Vector2i(-1, -1):
-		var cost = BULLDOZER_COSTS["tree"]
-		if not GameManager.can_afford(cost):
-			if not dragging:
-				if GameManager.is_bankrupt():
-					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
-				else:
-					EventBus.notify("Not enough money to remove tree ($%d)" % cost, "error")
-			return
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Remove tree", -cost)
-		_suppress_tile_undo = true
-		entity_layer.remove_tree(hit_tree_pos)
-		_suppress_tile_undo = false
-		_bulldoze_drag_count += 1
-		_bulldoze_drag_cost += cost
-		if not dragging:
-			EventBus.notify("Tree removed (-$%d)" % cost, "info")
-		return
-
-	# Remove hit rock
-	if hit_rock_pos != Vector2i(-1, -1):
-		var cost = BULLDOZER_COSTS["rock"]
-		if not GameManager.can_afford(cost):
-			if not dragging:
-				if GameManager.is_bankrupt():
-					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
-				else:
-					EventBus.notify("Not enough money to remove rock ($%d)" % cost, "error")
-			return
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Remove rock", -cost)
-		_suppress_tile_undo = true
-		entity_layer.remove_rock(hit_rock_pos)
-		_suppress_tile_undo = false
-		_bulldoze_drag_count += 1
-		_bulldoze_drag_cost += cost
-		if not dragging:
-			EventBus.notify("Rock removed (-$%d)" % cost, "info")
-		return
-
-	# Remove decoration at this tile
+	# Remove decoration at this tile (Improvements tab)
 	var hit_decoration = entity_layer.get_decoration_at(grid_pos)
 	if hit_decoration:
 		var cost = BULLDOZER_COSTS.get("decoration", 20)
@@ -2003,52 +1940,35 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 			EventBus.notify("Decoration removed (-$%d)" % cost, "info")
 		return
 
-	# Check for flower bed terrain (exact tile only — flower beds fill their tile)
-	var tile_type = terrain_grid.get_tile(grid_pos)
-	if tile_type == TerrainTypes.Type.FLOWER_BED:
-		var cost = BULLDOZER_COSTS["flower_bed"]
+	# Demolish the building covering this tile (Buildings tab). Buildings may
+	# span several tiles — clicking any footprint tile demolishes the whole
+	# facility for a flat fee.
+	var hit_building = entity_layer.get_building_containing(grid_pos)
+	if hit_building:
+		var cost = BULLDOZER_COSTS["building"]
 		if not GameManager.can_afford(cost):
 			if not dragging:
 				if GameManager.is_bankrupt():
 					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
 				else:
-					EventBus.notify("Not enough money to remove flower bed ($%d)" % cost, "error")
+					EventBus.notify("Not enough money to demolish the building ($%d)" % cost, "error")
 			return
+		var building_name: String = str(hit_building.building_data.get("name", "")) \
+				if not hit_building.building_data.is_empty() else ""
+		if building_name.is_empty():
+			building_name = hit_building.building_type.replace("_", " ").capitalize()
 		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Remove flower bed", -cost)
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
+		EventBus.log_transaction("Demolish %s" % building_name, -cost)
+		entity_layer.remove_building(hit_building.grid_position)
 		_bulldoze_drag_count += 1
 		_bulldoze_drag_cost += cost
 		if not dragging:
-			EventBus.notify("Flower bed removed (-$%d)" % cost, "info")
-		return
-
-	# Painted rocky ground and brush clear back to natural grass (a boulder's
-	# own spot was handled above with the boulder).
-	if (tile_type == TerrainTypes.Type.ROCKS and entity_layer.get_rock_at(grid_pos) == null) \
-			or tile_type == TerrainTypes.Type.BRUSH:
-		var is_rock_ground: bool = tile_type == TerrainTypes.Type.ROCKS
-		var cost = BULLDOZER_COSTS["rock_ground" if is_rock_ground else "brush"]
-		var what := "rocky ground" if is_rock_ground else "brush"
-		if not GameManager.can_afford(cost):
-			if not dragging:
-				if GameManager.is_bankrupt():
-					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
-				else:
-					EventBus.notify("Not enough money to clear %s ($%d)" % [what, cost], "error")
-			return
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Clear %s" % what, -cost)
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
-		_bulldoze_drag_count += 1
-		_bulldoze_drag_cost += cost
-		if not dragging:
-			EventBus.notify("Cleared %s (-$%d)" % [what, cost], "info")
+			EventBus.notify("%s demolished (-$%d)" % [building_name, cost], "info")
 		return
 
 	# The Path improvement: a thin walking trail laid over the ground.
-	# (Clearing the ground itself above would have removed it too, but a trail
-	# on plain hostable ground needs its own pass.)
+	# (Course terrain paints replace the ground itself; a trail on plain
+	# hostable ground needs its own pass.)
 	if terrain_grid.has_walking_path(grid_pos):
 		var cost = BULLDOZER_COSTS["walking_path"]
 		if not GameManager.can_afford(cost):
@@ -2068,7 +1988,7 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 			EventBus.notify("Walking path removed (-$%d)" % cost, "info")
 		return
 
-	# Nothing to remove at this position
+	# Nothing to remove at this position — course terrain is never bulldozed.
 	if not dragging:
 		EventBus.notify("Nothing to bulldoze here", "info")
 

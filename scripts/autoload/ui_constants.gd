@@ -129,7 +129,6 @@ const TOOL_ICONS := {
 	"rock": "[*]",
 	"flower": "[f]",
 	"building": "[B]",
-	"bulldozer": "[D]",
 	"raise": "[+]",
 	"lower": "[-]",
 	"open_hole": "[H]",

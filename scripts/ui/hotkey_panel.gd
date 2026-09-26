@@ -69,7 +69,7 @@ func _build_ui() -> void:
 		["B", "Buildings"],
 		["O", "Decorations (Improvements tab)"],
 		["H", "Open Hole"],
-		["X", "Bulldozer"],
+		["X", "Bulldozer (improvements & buildings)"],
 	])
 
 	_add_section(vbox, "Toolbar Tabs", [

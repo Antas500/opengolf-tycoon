@@ -3,9 +3,9 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: tools column (open hole, bulldozer, brush) before one course, hazard & landscape tiles honeycomb
-##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue)
-##  - Buildings:      amenity buildings catalogue
+##  - Course Terrain: tools column (open hole, brush) before one course, hazard & landscape tiles honeycomb. Its tiles paint ground that replaces other ground and is never touched by the Bulldozer.
+##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
+##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      sculpting controls and brush size
 ##  - Holes:          course holes list (rows are filled by main.gd)
 ##  - Golfers:        who is on the course and recent rounds
@@ -14,7 +14,9 @@ class_name TerrainToolbar
 ##  - Staff:          hire/fire staff, course condition, payroll, and effects
 ##
 ## Content within tabs is laid out horizontally and scrolls horizontally when
-## overflowing the available tab width.
+## overflowing the available tab width. The Bulldozer lives on the two tabs
+## whose tiles it can remove (Improvements and Buildings), pinned to each
+## page's bottom-left corner so it stays put while the shelf scrolls.
 
 signal course_review_pressed
 signal tool_selected(tool_type: int)
@@ -82,7 +84,6 @@ const TOOL_TAB_MAP := {
 	TerrainTypes.Type.ROCKS: Tab.TERRAIN,
 	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
 	"open_hole": Tab.TERRAIN,
-	"bulldozer": Tab.TERRAIN,
 	"tree": Tab.TERRAIN,
 	"rock": Tab.TERRAIN,
 	"boulder_small": Tab.TERRAIN,
@@ -134,6 +135,9 @@ const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
 const OPEN_HOLE_BLOCKED_TOOLTIP := "Needs exactly one unused tee box and one unused green with a hole"
+## What the Bulldozer removes — improvements and buildings only. Course
+## Terrain tiles are ground paint: repaint them with another tile instead.
+const BULLDOZER_TOOLTIP := "Demolish decorations, walking paths and buildings. Click or drag over them. Fees: $5 per path tile, $20 per decoration or building. Course Terrain tiles are not affected — repaint the ground with another tile instead."
 
 var hole_list: HBoxContainer = null  # Course holes rows (filled by main.gd)
 var golfer_data_provider: Callable = Callable()  # -> Array of golfer row dicts
@@ -141,7 +145,8 @@ var golfer_data_provider: Callable = Callable()  # -> Array of golfer row dicts
 var _current_tool: int = -1
 var _tool_buttons: Dictionary = {}  # tool_type -> ToolButton
 var _tab_bar: TabBar = null
-var _pages: Array[ScrollContainer] = []
+var _pages: Array[Control] = []  # One wrapper per tab; the scroll + fixed chrome
+var _bulldozer_buttons: Array[BulldozerButton] = []  # Pinned to Improvements & Buildings
 var _brush_size: int = 1
 var _round_brush := true
 var _brush_limit: int = HoleLayout.UNLIMITED_BRUSH  # 1 = current tool paints a single tile
@@ -279,13 +284,26 @@ func _build_tab_bar(parent: VBoxContainer) -> void:
 	_tab_bar.tab_changed.connect(_on_tab_changed)
 	parent.add_child(_tab_bar)
 
-func _build_page(tab_index: int) -> ScrollContainer:
+func _build_page(tab_index: int) -> Control:
+	# Each page is a plain wrapper Control holding the horizontally-scrollable
+	# content plus any chrome pinned to the page itself (the Bulldozer on the
+	# Improvements and Buildings tabs) so it never scrolls away with the shelf.
+	var page = Control.new()
+	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var scroll = ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.gui_input.connect(_on_scroll_gui_input.bind(scroll))
+	# A plain Control does not inherit its children's minimum size, so keep the
+	# page at least as tall as its scrolling shelf — the same height contract
+	# the scroll-only pages used to hand the toolbar.
+	scroll.minimum_size_changed.connect(
+		func() -> void: page.custom_minimum_size = scroll.get_combined_minimum_size())
+	page.add_child(scroll)
+	page.custom_minimum_size = scroll.get_combined_minimum_size()
 
 	var h_bar = scroll.get_h_scroll_bar()
 	if h_bar:
@@ -303,8 +321,10 @@ func _build_page(tab_index: int) -> ScrollContainer:
 			_build_terrain_tab(hbox)
 		Tab.IMPROVEMENTS:
 			_build_improvements_tab(hbox)
+			_pin_bulldozer_button(page)
 		Tab.BUILDINGS:
 			_build_buildings_tab(hbox)
+			_pin_bulldozer_button(page)
 		Tab.ELEVATION:
 			_build_elevation_tab(hbox)
 		Tab.HOLES:
@@ -318,7 +338,37 @@ func _build_page(tab_index: int) -> ScrollContainer:
 		Tab.STAFF:
 			_build_staff_tab(hbox)
 
-	return scroll
+	return page
+
+## Pin the round Bulldozer button to a page's bottom-left corner. Anchored to
+## the page (not the scrolling shelf) so it stays put while tiles scroll by.
+func _pin_bulldozer_button(page: Control) -> void:
+	var btn := BulldozerButton.new()
+	btn.name = "BulldozerButton"
+	btn.accessibility_name = "Bulldozer"
+	btn.accessibility_description = BULLDOZER_TOOLTIP
+	btn.pressed.connect(_on_tool_button_pressed.bind("bulldozer"))
+	page.add_child(btn)
+	btn.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	btn.offset_left = BulldozerButton.CORNER_MARGIN
+	btn.offset_top = -BulldozerButton.CORNER_MARGIN - BulldozerButton.BUTTON_DIAMETER
+	btn.offset_right = BulldozerButton.CORNER_MARGIN + BulldozerButton.BUTTON_DIAMETER
+	btn.offset_bottom = -BulldozerButton.CORNER_MARGIN
+	_bulldozer_buttons.append(btn)
+
+## Show on every pinned Bulldozer whether bulldozer mode is running.
+func set_bulldozer_active(active: bool) -> void:
+	for btn in _bulldozer_buttons:
+		if is_instance_valid(btn):
+			btn.set_active(active)
+
+## The horizontally-scrollable shelf of a tab page (the wrapper's full-rect child).
+func page_scroll(tab_index: int) -> ScrollContainer:
+	return _pages[tab_index].get_child(0) as ScrollContainer
+
+## The content row a tab builder laid its groups into.
+func page_content(tab_index: int) -> HBoxContainer:
+	return page_scroll(tab_index).get_child(0) as HBoxContainer
 
 func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 	if event is InputEventMouseButton and event.pressed:
@@ -334,8 +384,10 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	# The Open Hole action, the Bulldozer and the brush stack in one column
-	# before the tiles so the most-used course tools sit first in the tab.
+	# The Open Hole action and the brush stack in one column before the tiles
+	# so the most-used course tools sit first in the tab. (Demolition is not
+	# a course tool: the Bulldozer is pinned to the Improvements and Buildings
+	# tabs, whose tiles it can remove.)
 	hbox.add_child(_make_terrain_tools_column())
 
 	hbox.add_child(_make_separator())
@@ -376,8 +428,10 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 
 	_populate_landscape_tiles()
 
-## Open Hole, Bulldozer and the brush controls stacked vertically. This column
-## opens the Course Terrain tab so the tools sit before the tile honeycomb.
+## Open Hole and the brush controls stacked vertically. This column opens the
+## Course Terrain tab so the tools sit before the tile honeycomb. The Bulldozer
+## used to stack here too, but it never touches course terrain — it now lives
+## pinned to the Improvements and Buildings tabs (see _pin_bulldozer_button).
 ## Buttons use a compact 26px height (matching the brush stepper) so the whole
 ## column still fits inside the 190px bottom bar. ToolButton._ready() resets
 ## custom_minimum_size, so the compact height is applied on ready instead.
@@ -391,9 +445,6 @@ func _make_terrain_tools_column() -> VBoxContainer:
 	var open_hole_btn := _add_tool_button(column, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
 	_open_hole_buttons.append(open_hole_btn)
 	_make_column_button_compact(open_hole_btn, COLUMN_BUTTON_HEIGHT)
-
-	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, boulders, rocky ground, brush, flowers, decorations, walking paths"})
-	_make_column_button_compact(bulldozer_btn, COLUMN_BUTTON_HEIGHT)
 
 	column.add_child(_make_small_group_label("BRUSH"))
 
@@ -1022,8 +1073,6 @@ func _get_special_tool_costs(tool_type: String) -> Dictionary:
 			return {"cost": 20, "maintenance": 0}
 		"rock":
 			return {"cost": 15, "maintenance": 0}
-		"bulldozer":
-			return {"cost": 5, "maintenance": 0}
 	return {"cost": 0, "maintenance": 0}
 
 # =============================================================================
