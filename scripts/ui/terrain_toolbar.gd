@@ -8,7 +8,7 @@ class_name TerrainToolbar
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      sculpting controls and brush size
 ##  - Holes:          one button per course hole, three to a column, each opening that hole's context menu (the buttons are filled by main.gd)
-##  - Golfers:        who is on the course and recent rounds
+##  - Golfers:        who is on the course, four golfers to a column, beside the recent rounds, six rounds to a column
 ##  - Player:         play the course, tournaments, player skills
 ##  - Club:           land, marketing, milestones, feed, scorecard
 ##  - Staff:          hire/fire staff, course condition, payroll, and effects
@@ -151,6 +151,17 @@ const BRUSH_DOCK_TOOLTIP := "Paint brush: shape, size, smaller and bigger. Stays
 ## the tab grows along the axis the page already scrolls on and never past the
 ## bottom bar's height.
 const HOLE_COLUMN_HEIGHT := 3
+## Golfers on the course stack four deep per column, for the same reason: the
+## columns run off to the right where the page scrolls, so a busy course grows
+## sideways instead of downwards past the bottom bar's height.
+const GOLFER_COLUMN_HEIGHT := 4
+const GOLFER_COLUMN_GAP := 10  # Between two columns of golfers
+const GOLFER_ROW_GAP := 4  # Between two golfers in the same column
+## Recent rounds stack six deep per column — they are one-line labels, so six of
+## them still sit under the tab bar while the columns run off to the right.
+const RECENT_ROUND_COLUMN_HEIGHT := 6
+const RECENT_ROUND_COLUMN_GAP := 14  # Between two columns of rounds
+const RECENT_ROUND_ROW_GAP := 4  # Between two rounds in the same column
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
 const OPEN_HOLE_BLOCKED_TOOLTIP := "Needs exactly one unused tee box and one unused green with a hole"
 ## What the Bulldozer removes — improvements and buildings only. Course
@@ -178,8 +189,8 @@ var _tee_tile_button: TerrainTileButton = null
 var _green_places_cup := true
 var _tee_box_can_place: bool = true
 var _tee_box_blocker: String = ""
-var _active_golfers_box: HBoxContainer = null
-var _recent_rounds_box: HBoxContainer = null
+var _active_golfers_box: HBoxContainer = null  # Shelf of columns, four golfers deep
+var _recent_rounds_box: HBoxContainer = null  # Shelf of columns, six rounds deep
 var _recent_rounds: Array[Dictionary] = []
 var _skill_labels: Array[Label] = []
 var _player_points_label: Label = null
@@ -852,9 +863,11 @@ func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	on_course_group.add_child(lbl1)
 
 	_active_golfers_box = HBoxContainer.new()
-	_active_golfers_box.add_theme_constant_override("separation", 4)
+	_active_golfers_box.name = "ActiveGolfersShelf"
+	# The gap between columns: the rows inside a column keep their own tighter
+	# rhythm, so this is the breathing room that tells two columns apart.
+	_active_golfers_box.add_theme_constant_override("separation", GOLFER_COLUMN_GAP)
 	_active_golfers_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_active_golfers_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	on_course_group.add_child(_active_golfers_box)
 	hbox.add_child(on_course_group)
 
@@ -871,9 +884,9 @@ func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	recent_group.add_child(lbl2)
 
 	_recent_rounds_box = HBoxContainer.new()
-	_recent_rounds_box.add_theme_constant_override("separation", 6)
+	_recent_rounds_box.name = "RecentRoundsShelf"
+	_recent_rounds_box.add_theme_constant_override("separation", RECENT_ROUND_COLUMN_GAP)
 	_recent_rounds_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_recent_rounds_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	recent_group.add_child(_recent_rounds_box)
 	hbox.add_child(recent_group)
 
@@ -1284,26 +1297,57 @@ func _refresh_golfer_lists() -> void:
 	if _active_golfers_box == null or _recent_rounds_box == null:
 		return
 
-	for child in _active_golfers_box.get_children():
-		child.queue_free()
-	for child in _recent_rounds_box.get_children():
-		child.queue_free()
+	# The old columns leave their shelves straight away. A child waiting on
+	# queue_free() is still in the tree, so it would still take up shelf space
+	# and sit beside the fresh columns until the end of the frame.
+	_clear_shelf(_active_golfers_box)
+	_clear_shelf(_recent_rounds_box)
 
 	var rows: Array = []
 	if golfer_data_provider.is_valid():
 		rows = golfer_data_provider.call()
 
+	var golfer_rows: Array[Control] = []
 	if rows.is_empty():
-		_active_golfers_box.add_child(_make_empty_label("No golfers on the course."))
+		golfer_rows.append(_make_empty_label("No golfers on the course."))
 	else:
 		for row_data in rows:
-			_active_golfers_box.add_child(_make_golfer_row(row_data))
+			golfer_rows.append(_make_golfer_row(row_data))
+	_stack_in_columns(_active_golfers_box, golfer_rows, GOLFER_COLUMN_HEIGHT, GOLFER_ROW_GAP)
 
+	var round_rows: Array[Control] = []
 	if _recent_rounds.is_empty():
-		_recent_rounds_box.add_child(_make_empty_label("No rounds played yet."))
+		round_rows.append(_make_empty_label("No rounds played yet."))
 	else:
 		for round_data in _recent_rounds:
-			_recent_rounds_box.add_child(_make_round_row(round_data))
+			round_rows.append(_make_round_row(round_data))
+	_stack_in_columns(_recent_rounds_box, round_rows, RECENT_ROUND_COLUMN_HEIGHT,
+		RECENT_ROUND_ROW_GAP)
+
+## Take every column off a shelf. The columns are only removed here and freed at
+## the end of the frame, so a refresh can never free a row out from under a
+## signal it is still emitting.
+func _clear_shelf(shelf: HBoxContainer) -> void:
+	for child in shelf.get_children():
+		shelf.remove_child(child)
+		child.queue_free()
+
+## Fill a shelf with items stacked column_height deep: the first column takes
+## the first column_height items, the next column takes the next, and so on.
+## Each column is a VBox of its own, so a short last column never pulls the
+## items above it across — the way a GridContainer, which counts its rows off
+## the children it is given, would. The columns run off to the right where the
+## page already scrolls, so the tab never grows past the bottom bar's height.
+func _stack_in_columns(shelf: HBoxContainer, items: Array[Control], column_height: int,
+		row_gap: int) -> void:
+	var column: VBoxContainer = null
+	for index in items.size():
+		if index % column_height == 0:
+			column = VBoxContainer.new()
+			column.add_theme_constant_override("separation", row_gap)
+			column.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			shelf.add_child(column)
+		column.add_child(items[index])
 
 func _make_empty_label(text: String) -> Label:
 	var label = Label.new()

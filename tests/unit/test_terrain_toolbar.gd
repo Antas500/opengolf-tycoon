@@ -825,11 +825,16 @@ func test_hole_buttons_reseat_when_a_hole_goes() -> void:
 		assert_eq(int(grid.get_child(slot).get_meta("hole_number")), reading_order[slot],
 			"Slot %d reads down the columns after hole 4 went" % slot)
 
-func test_golfers_tab_lists_are_horizontal_and_populate() -> void:
+## Both Golfers tab lists are shelves of columns: the golfers on the course
+## stack four deep, the recent rounds six deep, and the columns run off to the
+## right where the page already scrolls — the same rhythm the Holes tab keeps.
+func test_golfers_tab_lists_are_shelves_of_columns_and_populate() -> void:
 	assert_not_null(toolbar._active_golfers_box, "_active_golfers_box should exist")
-	assert_true(toolbar._active_golfers_box is HBoxContainer, "_active_golfers_box should be HBoxContainer")
+	assert_true(toolbar._active_golfers_box is HBoxContainer,
+		"_active_golfers_box should be HBoxContainer")
 	assert_not_null(toolbar._recent_rounds_box, "_recent_rounds_box should exist")
-	assert_true(toolbar._recent_rounds_box is HBoxContainer, "_recent_rounds_box should be HBoxContainer")
+	assert_true(toolbar._recent_rounds_box is HBoxContainer,
+		"_recent_rounds_box should be HBoxContainer")
 
 	# Test data provider
 	toolbar.golfer_data_provider = func() -> Array:
@@ -843,8 +848,182 @@ func test_golfers_tab_lists_are_horizontal_and_populate() -> void:
 	})
 
 	toolbar._refresh_golfer_lists()
-	assert_eq(toolbar._active_golfers_box.get_child_count(), 2, "Should have 2 active golfer rows")
-	assert_eq(toolbar._recent_rounds_box.get_child_count(), 1, "Should have 1 recent round row")
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 1,
+		"Two golfers need one column")
+	assert_eq(toolbar._active_golfers_box.get_child(0).get_child_count(), 2,
+		"That column holds both golfer rows")
+	assert_true(toolbar._active_golfers_box.get_child(0) is VBoxContainer,
+		"A column stacks its rows vertically")
+	assert_eq(toolbar._recent_rounds_box.get_child_count(), 1,
+		"One round needs one column")
+	assert_eq(toolbar._recent_rounds_box.get_child(0).get_child_count(), 1,
+		"That column holds the round")
+
+## Golfers on the course named Golfer1, Golfer2 ... so the column layout can be
+## read back off the buttons the tab builds.
+func _provide_golfers(count: int) -> void:
+	toolbar.golfer_data_provider = func() -> Array:
+		var rows: Array = []
+		for number in count:
+			rows.append({"id": number + 1, "name": "Golfer%d" % (number + 1), "tier": 1,
+				"hole": number + 1, "strokes": number, "mood": 0.5})
+		return rows
+
+## The golfers in one column, top to bottom, named by their button text.
+func _golfers_in_column(column: Control) -> Array[String]:
+	var names: Array[String] = []
+	for row in column.get_children():
+		for child in row.get_children():
+			if child is Button:
+				names.append((child as Button).text.get_slice(" ", 0))
+	return names
+
+## The rounds in one column, top to bottom, named by their label text.
+func _rounds_in_column(column: Control) -> Array[String]:
+	var names: Array[String] = []
+	for label in column.get_children():
+		names.append((label as Label).text.get_slice(":", 0))
+	return names
+
+func _assert_column_holds(column: Control, expected: Array[String], what: String) -> void:
+	var found := _golfers_in_column(column) if what == "golfer" else _rounds_in_column(column)
+	assert_eq(found.size(), expected.size(),
+		"The column holds %d %ss" % [expected.size(), what])
+	for slot in expected.size():
+		assert_eq(found[slot], expected[slot],
+			"%s %d of the column reads %s" % [what.capitalize(), slot + 1, expected[slot]])
+
+## Golfers on the course stack four deep and the columns run off to the right,
+## so a busy course grows along the axis the page already scrolls on.
+func test_golfers_on_the_course_stack_four_to_a_column() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(6)
+	toolbar._refresh_golfer_lists()
+
+	var shelf := toolbar._active_golfers_box
+	assert_eq(shelf.get_child_count(), 2,
+		"Six golfers fill one column of four and spill into a second")
+	_assert_column_holds(shelf.get_child(0),
+		["Golfer1", "Golfer2", "Golfer3", "Golfer4"], "golfer")
+	_assert_column_holds(shelf.get_child(1), ["Golfer5", "Golfer6"], "golfer")
+
+	await _settle_layout()
+	var first: Control = shelf.get_child(0)
+	var second: Control = shelf.get_child(1)
+	var rows: Array[float] = []
+	for row in first.get_children():
+		if not rows.has(row.position.y):
+			rows.append(row.position.y)
+	assert_eq(rows.size(), TerrainToolbar.GOLFER_COLUMN_HEIGHT,
+		"The first column runs exactly four deep")
+	assert_gt(second.position.x, first.position.x,
+		"The second column sits to the right of the first, not under it")
+	assert_almost_eq(second.get_child(0).global_position.y,
+		first.get_child(0).global_position.y, 0.01,
+		"The short second column starts level with the top of the first")
+
+## A course at full tilt keeps stacking four to a column for as long as golfers
+## keep arriving: the columns run off to the right, where the page scrolls.
+func test_a_busy_course_fills_one_column_of_four_after_another() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(9)
+	toolbar._refresh_golfer_lists()
+
+	var shelf := toolbar._active_golfers_box
+	assert_eq(shelf.get_child_count(), 3, "Nine golfers fill two columns and start a third")
+	_assert_column_holds(shelf.get_child(0),
+		["Golfer1", "Golfer2", "Golfer3", "Golfer4"], "golfer")
+	_assert_column_holds(shelf.get_child(1),
+		["Golfer5", "Golfer6", "Golfer7", "Golfer8"], "golfer")
+	_assert_column_holds(shelf.get_child(2), ["Golfer9"], "golfer")
+
+## Recent rounds stack six deep for the same reason: they are one-line labels,
+## so six of them still sit under the tab bar while the columns run sideways.
+func test_recent_rounds_stack_six_to_a_column() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	# Each round is pushed to the front of the history, so record the oldest
+	# first and the list reads R1 (newest) down to R7.
+	for round_number in 7:
+		toolbar.record_completed_round({
+			"name": "R%d" % (7 - round_number), "strokes": 70 + round_number,
+			"par": 72, "day": 1, "tier": 1, "owner": false,
+		})
+	toolbar._refresh_golfer_lists()
+
+	var shelf := toolbar._recent_rounds_box
+	assert_eq(shelf.get_child_count(), 2,
+		"Seven rounds fill one column of six and spill into a second")
+	_assert_column_holds(shelf.get_child(0),
+		["R1", "R2", "R3", "R4", "R5", "R6"], "round")
+	_assert_column_holds(shelf.get_child(1), ["R7"], "round")
+
+	await _settle_layout()
+	var first: Control = shelf.get_child(0)
+	var rows: Array[float] = []
+	for label in first.get_children():
+		if not rows.has(label.position.y):
+			rows.append(label.position.y)
+	assert_eq(rows.size(), TerrainToolbar.RECENT_ROUND_COLUMN_HEIGHT,
+		"The first column runs exactly six deep")
+	assert_gt(shelf.get_child(1).position.x, first.position.x,
+		"The seventh round starts a column beside the first, not a row below it")
+
+## The Golfers tab has no vertical scroll, so a full column of each list has to
+## fit under the tab bar inside the bottom bar's height.
+func test_golfer_and_round_columns_stay_inside_the_bottom_bar() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(8)
+	for round_number in 12:
+		toolbar.record_completed_round({
+			"name": "R%d" % (12 - round_number), "strokes": 70 + round_number,
+			"par": 72, "day": 1, "tier": 1, "owner": false,
+		})
+	toolbar._refresh_golfer_lists()
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 2,
+		"Eight golfers fill two columns of four")
+	assert_eq(toolbar._recent_rounds_box.get_child_count(), 2,
+		"Twelve rounds fill two columns of six")
+
+	await _settle_layout()
+	var available := float(UIConstants.BOTTOM_BAR_HEIGHT) \
+			- toolbar._tab_bar.get_combined_minimum_size().y
+	var content := toolbar.page_content(TerrainToolbar.Tab.GOLFERS)
+	assert_gt(content.get_combined_minimum_size().y, 0.0, "The Golfers tab is measured")
+	assert_lte(content.get_combined_minimum_size().y, available,
+		"Four golfers and six rounds deep fit under the tab bar")
+
+## A refresh replaces the columns it drew last time instead of stacking the
+## fresh ones beside them: the tab refreshes once a second while it is open, so
+## a stale column would crowd out the golfers actually on the course.
+func test_golfer_refresh_replaces_the_columns_it_drew_last_time() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(6)
+	toolbar._refresh_golfer_lists()
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 2, "Six golfers take two columns")
+
+	_provide_golfers(2)
+	toolbar._refresh_golfer_lists()
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 1,
+		"The column from the previous refresh is gone")
+	_assert_column_holds(toolbar._active_golfers_box.get_child(0),
+		["Golfer1", "Golfer2"], "golfer")
+
+## With nobody on the course and no rounds played, each list keeps its single
+## column and shows its empty message in it.
+func test_empty_golfer_lists_keep_one_column() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	toolbar.golfer_data_provider = func() -> Array:
+		return []
+	toolbar._refresh_golfer_lists()
+
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 1,
+		"The empty message takes a single column")
+	assert_eq(toolbar._active_golfers_box.get_child(0).get_child_count(), 1,
+		"That column holds only the message")
+	assert_eq(toolbar._recent_rounds_box.get_child_count(), 1,
+		"The empty message takes a single column")
+	assert_eq(toolbar._recent_rounds_box.get_child(0).get_child_count(), 1,
+		"That column holds only the message")
 
 func test_feed_unread_badge() -> void:
 	toolbar.set_feed_unread(5)
