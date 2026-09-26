@@ -267,6 +267,63 @@ func remove_rock(grid_pos: Vector2i) -> void:
 		_restore_terrain(grid_pos)
 		rock_removed.emit(grid_pos)
 
+## Lift a tree or boulder off a tile without putting its ground back.
+## Course Terrain replacement uses this so the new tile stays, instead of the
+## stamp the entity left behind. Returns {} when nothing stood here, otherwise
+## {type, position, subtype, original_terrain}. original_terrain is -1 when the
+## entity never recorded the ground it stood on.
+func take_course_terrain_entity(grid_pos: Vector2i) -> Dictionary:
+	var original := int(_original_terrain.get(grid_pos, -1))
+	if trees.has(grid_pos):
+		var tree: TreeEntity = trees[grid_pos]
+		var subtype := tree.tree_type
+		tree.destroy()
+		trees.erase(grid_pos)
+		_original_terrain.erase(grid_pos)
+		tree_removed.emit(grid_pos)
+		return {
+			"type": "tree",
+			"position": grid_pos,
+			"subtype": subtype,
+			"original_terrain": original,
+		}
+	if rocks.has(grid_pos):
+		var rock: Rock = rocks[grid_pos]
+		var subtype := rock.rock_size
+		rock.destroy()
+		rocks.erase(grid_pos)
+		_original_terrain.erase(grid_pos)
+		if terrain_grid:
+			terrain_grid.set_object_footprint(grid_pos, false)
+		rock_removed.emit(grid_pos)
+		return {
+			"type": "rock",
+			"position": grid_pos,
+			"subtype": subtype,
+			"original_terrain": original,
+		}
+	return {}
+
+## Remember the ground under a tile that is about to receive a new tree or
+## boulder, without changing the tile. place_tree / place_rock only snapshot
+## the current tile when nothing is remembered, so this keeps the real ground
+## (and any walking path the new tile can still host).
+func remember_original_terrain(grid_pos: Vector2i, terrain_type: int) -> void:
+	if terrain_type >= 0:
+		_original_terrain[grid_pos] = terrain_type
+
+## Put back a tree or boulder lifted by take_course_terrain_entity, including
+## the ground it stood on so a later removal restores that ground.
+func restore_course_terrain_entity(grid_pos: Vector2i, kind: String, subtype: String, original_terrain: int = -1) -> void:
+	if trees.has(grid_pos) or rocks.has(grid_pos):
+		take_course_terrain_entity(grid_pos)
+	if original_terrain >= 0:
+		_original_terrain[grid_pos] = original_terrain
+	if kind == "tree":
+		place_tree(grid_pos, subtype)
+	elif kind == "rock":
+		place_rock(grid_pos, subtype)
+
 func place_decoration(dec_type: String, grid_pos: Vector2i, dec_registry: Dictionary) -> Decoration:
 	"""Place a decoration at the specified grid position"""
 	var dec_data = dec_registry.get(dec_type, {})
@@ -419,14 +476,18 @@ func has_building_of_type(building_type: String) -> bool:
 
 func is_tile_occupied_by_building(grid_pos: Vector2i) -> bool:
 	## Check if a tile is occupied by any building (including multi-tile buildings)
+	return get_building_containing(grid_pos) != null
+
+func get_building_containing(grid_pos: Vector2i) -> Building:
+	## Get the building whose footprint covers this tile (multi-tile aware).
+	## Buildings are keyed by their top-left placement tile, so demolition from
+	## any tile of the facility looks the footprint up like this.
 	for building in buildings.values():
 		var b_pos = building.grid_position
-		var b_width = building.width
-		var b_height = building.height
-		if grid_pos.x >= b_pos.x and grid_pos.x < b_pos.x + b_width and \
-		   grid_pos.y >= b_pos.y and grid_pos.y < b_pos.y + b_height:
-			return true
-	return false
+		if grid_pos.x >= b_pos.x and grid_pos.x < b_pos.x + building.width and \
+		   grid_pos.y >= b_pos.y and grid_pos.y < b_pos.y + building.height:
+			return building
+	return null
 
 func get_all_trees() -> Array:
 	return trees.values()

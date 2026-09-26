@@ -12,7 +12,7 @@ func configure_tree(type: String, data: Dictionary) -> void:
 	tree_data = data.duplicate(true)
 	var t_name: String = str(data.get("name", type.capitalize()))
 	var build_cost: int = int(data.get("cost", 20))
-	var desc: String = "Adds beauty and obstacles. Places a %s." % t_name.to_lower()
+	var desc: String = "Adds beauty and obstacles. Places a %s. %s" % [t_name.to_lower(), TerrainTypes.REPLACES_ANY_COURSE_TILE]
 	configure("tree_" + type, t_name, "", "", desc, build_cost, 0)
 	tooltip_text = ""
 	accessibility_description = "%s. Build $%d. %s" % [tool_name, build_cost, desc]

@@ -84,49 +84,47 @@ layout_mode = 2
 alignment = 1
 
 [node name="RotateCCWBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=778451209]
-layout_mode = 2
-text = "⟲"
-tooltip_text = "Rotate course counter-clockwise (Q)"
 custom_minimum_size = Vector2(28, 24)
+layout_mode = 2
+tooltip_text = "Rotate course counter-clockwise (Q)"
+text = "⟲"
 
 [node name="OrientationLabel" type="Label" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=334192875]
-layout_mode = 2
-text = "N"
-tooltip_text = "Which way the course is facing"
 custom_minimum_size = Vector2(18, 0)
+layout_mode = 2
+tooltip_text = "Which way the course is facing"
+text = "N"
 horizontal_alignment = 1
 
 [node name="RotateCWBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=556283914]
-layout_mode = 2
-text = "⟳"
-tooltip_text = "Rotate course clockwise (Shift+Q)"
 custom_minimum_size = Vector2(28, 24)
+layout_mode = 2
+tooltip_text = "Rotate course clockwise (Shift+Q)"
+text = "⟳"
 
 [node name="IsoBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=667941285]
-layout_mode = 2
-text = "Iso"
-tooltip_text = "Toggle isometric diamonds / top-down squares (I)"
 custom_minimum_size = Vector2(42, 24)
+layout_mode = 2
+tooltip_text = "Toggle isometric diamonds / top-down squares (I)"
 toggle_mode = true
 button_pressed = true
+text = "Iso"
 
 [node name="SpeedControls" type="HBoxContainer" parent="UI/HUD/BottomBar/LeftControls" unique_id=1574521636]
 layout_mode = 2
 alignment = 1
 
 [node name="PauseBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=1287478317]
+custom_minimum_size = Vector2(28, 24)
 layout_mode = 2
 text = "||"
-custom_minimum_size = Vector2(28, 24)
 
 [node name="PlayBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=1738357492]
+custom_minimum_size = Vector2(28, 24)
 layout_mode = 2
 text = ">"
-custom_minimum_size = Vector2(28, 24)
 
 [node name="FastBtn" type="Button" parent="UI/HUD/BottomBar/LeftControls/SpeedControls" unique_id=811286996]
+custom_minimum_size = Vector2(28, 24)
 layout_mode = 2
 text = ">>"
-custom_minimum_size = Vector2(28, 24)
-
-

@@ -52,7 +52,7 @@ func _build_ui() -> void:
 		["5", "Bunker"],
 		["6", "Water"],
 		["7", "Out of Bounds"],
-		["8", "Path"],
+		["8", "Path (Improvements tab)"],
 		["9", "Firm Fairway"],
 		["0", "Waste Bunker"],
 		["Shift+2", "Deep Rough"],
@@ -67,8 +67,9 @@ func _build_ui() -> void:
 		["T", "Trees"],
 		["R", "Boulders"],
 		["B", "Buildings"],
+		["O", "Decorations (Improvements tab)"],
 		["H", "Open Hole"],
-		["X", "Bulldozer"],
+		["X", "Bulldozer (improvements & buildings)"],
 	])
 
 	_add_section(vbox, "Toolbar Tabs", [

@@ -61,7 +61,7 @@ Main (Node2D) ← main.gd
 ├── Holes (Node2D)
 ├── IsometricCamera (Camera2D)
 └── UI (CanvasLayer)
-    └── HUD (Control) → HUDStatusColumn (top-right stats column), BottomBar (view/speed controls + tabbed TerrainToolbar: Terrain / Improve / Build / Elev / Holes / Golfers / Player / Club / Staff). The Staff tab embeds hire/fire, course condition, payroll, and effects (no separate Staff Management window).
+    └── HUD (Control) → HUDStatusColumn (top-right stats column), BottomBar (view/speed controls + tabbed TerrainToolbar: Terrain / Improve / Build / Elev / Holes / Golfers / Player / Club / Staff). The Staff tab embeds hire/fire, course condition, payroll, and effects (no separate Staff Management window). The Improvements tab holds one honeycomb of isometric tiles — the Path tool leading the top row, then the decoration catalogue (no separate Garden Shed window): `scripts/ui/components/decoration_tile_button.gd` + `decoration_tile_art.gd`, filled from `data/decorations.json` by `TerrainToolbar.set_decoration_registry()`. The Improvements and Buildings tabs each pin a round Bulldozer button (`scripts/ui/components/bulldozer_button.gd`) to their bottom-left corner; it only demolishes paths, decorations and buildings — every Course Terrain tile (ground, flower beds, trees and boulders) replaces every other and ignores it. The Course Terrain tab pins its brush controls to that same corner (`TerrainToolbar._pin_brush_dock`): a square plate of four cells — shape, size, smaller, bigger — held narrow enough to sit in the gap the staggered tile rows leave, so it floats above the shelf without covering a tile and never scrolls away with it. The Course Terrain tab's Open Hole action is a half-size course cell (`scripts/ui/components/open_hole_notch_button.gd`) nestled into the notch between the Tee Box and Green tiles it pairs (`TileHoneycomb.set_notch_child`), so it takes no slot along either row; its gold ring appears while a tee and a cup are waiting. The Holes tab is one button per hole, stacked three to a column (`TerrainToolbar.layout_hole_buttons`, filled by `main.gd._on_hole_created`), and a button opens that hole's context menu — the same one the course's tee, green and flag open, holding the pin, tee, green, par, open/closed toggle, statistics and Delete Hole (behind a `ConfirmDialog`) — so no Open/Close or Delete button sits beside it.
 ```
 
 ## Algorithm Documentation
@@ -126,7 +126,7 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 - **Theme-aware components**: TilesetGenerator, WaterOverlay, GrassOverlay, terrain shader parameters.
 
 ### Holes
-- **HoleCreationTool**: opens a hole from the two tiles the player painted — one unused Tee Box and one unused **Green With Hole** — via **H** or the toolbar's Open Hole button. See [hole-creation docs](docs/algorithms/hole-creation.md).
+- **HoleCreationTool**: opens a hole from the two tiles the player painted — one unused Tee Box and one unused **Green With Hole** — via **H** or the Open Hole tile on the Course Terrain tab, which is nestled into the notch between those two tiles (`scripts/ui/components/open_hole_notch_button.gd`, placed with `TileHoneycomb.set_notch_child`). See [hole-creation docs](docs/algorithms/hole-creation.md).
 - **HoleLayout** (`scripts/tools/hole_layout.gd`): single source of truth for the rules. Tee Box always paints 1x1 and is blocked while an unused tee box waits. The Green tool paints a 1x1 **Green With Hole** (cup cut into the tile) while no cup is waiting, and an ordinary **Green Without Hole** at the normal brush size once one is. `open_hole_request()` reports whether a pair is ready and why not.
 - **TerrainGrid cup tiles**: `_cup_tiles` marks greens carrying a cup; dropped when the tile stops being green, restored by undo/redo, saved as `cup_tiles`. `_tee_box_tiles` indexes tee tiles so the placement rule is a lookup.
 - **CupOverlay**: renders the cup and a gold waiting pin on every Green With Hole that is not part of a hole yet.
@@ -187,6 +187,12 @@ Unit tests use **GUT** (Godot Unit Test) framework. Tests are in `tests/unit/`.
 ```bash
 make test          # Using Makefile
 ./test.sh          # Using shell script
+```
+
+**Headless integration harnesses** (real main scene, quick-start course):
+```bash
+godot --headless --path . res://tests/harness/walking_path_harness.tscn
+godot --headless --path . res://tests/harness/bulldozer_harness.tscn   # Bulldozer remit: demolishes improvements/buildings, never course terrain
 ```
 
 **Test coverage:** GameManager, SaveManager, CourseRatingSystem, CourseRecords, DailyStatistics, GolferTier.

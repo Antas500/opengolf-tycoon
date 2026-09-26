@@ -171,6 +171,7 @@ func _build_save_data() -> Dictionary:
 		data["player_placed"] = terrain_grid.serialize_player_placed()
 		data["bunker_depth"] = terrain_grid.serialize_bunker_depth()
 		data["cup_tiles"] = terrain_grid.serialize_cup_tiles()
+		data["walking_paths"] = terrain_grid.serialize_walking_paths()
 		data["view"] = {
 			"orientation": terrain_grid.get_view_orientation(),
 			"isometric": terrain_grid.is_view_isometric(),
@@ -334,6 +335,8 @@ func _apply_save_data(data: Dictionary) -> void:
 		terrain_grid.deserialize_bunker_depth(data.get("bunker_depth", {}))
 		# Greens that carry a cup but are not part of a hole yet.
 		terrain_grid.deserialize_cup_tiles(data.get("cup_tiles", []))
+		# Walking paths (the Path improvement) laid over hostable ground.
+		terrain_grid.deserialize_walking_paths(data.get("walking_paths", []))
 		terrain_grid.queue_redraw()
 	if terrain_grid and data.has("view"):
 		var view: Dictionary = data["view"]

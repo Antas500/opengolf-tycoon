@@ -12,7 +12,7 @@ func configure_boulder(p_size: String, data: Dictionary) -> void:
 	rock_data = data.duplicate(true)
 	var r_name: String = str(data.get("name", "Boulders"))
 	var build_cost: int = int(data.get("cost", 15))
-	var desc: String = "Decorative boulder obstacle. Places a %s." % r_name.to_lower()
+	var desc: String = "Decorative boulder obstacle. Places a %s. %s" % [r_name.to_lower(), TerrainTypes.REPLACES_ANY_COURSE_TILE]
 	var tool_id := "rock" if p_size == "medium" else ("boulder_" + p_size)
 	configure(tool_id, r_name, "", "", desc, build_cost, 0)
 	tooltip_text = ""

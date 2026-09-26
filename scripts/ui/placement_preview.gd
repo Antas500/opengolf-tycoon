@@ -179,6 +179,10 @@ func _update_preview(delta: float) -> void:
 		if current_terrain_tool == TerrainTypes.Type.TEE_BOX:
 			current_preview_valid = current_preview_valid \
 					and HoleLayout.can_place_tee_box(terrain_grid, course)
+		elif current_terrain_tool == TerrainTypes.Type.PATH:
+			# The trail only sits on hostable ground (see TerrainTypes.
+			# WALKING_PATH_TERRAINS), so validity is per ground type.
+			current_preview_valid = terrain_grid.can_place_walking_path(grid_pos)
 
 	_update_potential_hole(grid_pos)
 	queue_redraw()
@@ -243,6 +247,10 @@ func _draw() -> void:
 	var pulse = 0.85 + sin(_pulse_time) * 0.15
 	var alpha_mod = _current_alpha * pulse
 
+	# The Path tool paints a thin trail over hostable ground, so its preview
+	# shows per-tile validity colors plus a ghost dot instead of a paint fill.
+	var path_tool := is_terrain_mode and current_terrain_tool == TerrainTypes.Type.PATH
+
 	# Draw footprint tiles
 	for i in range(current_preview_positions.size()):
 		var grid_pos = current_preview_positions[i]
@@ -250,9 +258,14 @@ func _draw() -> void:
 			var tile_valid: bool
 			if is_entity_mode:
 				tile_valid = _is_tile_valid_for_placement(grid_pos)
+			elif path_tool:
+				tile_valid = terrain_grid.can_place_walking_path(grid_pos)
 			else:
 				tile_valid = true  # Terrain/elevation/bulldozer painting is always valid on valid tiles
-			_draw_isometric_tile(grid_pos, tile_valid, alpha_mod, i == 0, is_special_mode)
+			_draw_isometric_tile(grid_pos, tile_valid, alpha_mod, i == 0, is_special_mode and not path_tool)
+
+	if path_tool:
+		_draw_path_ghost(alpha_mod)
 
 	if not potential_hole.is_empty():
 		_draw_potential_hole(_current_alpha)
@@ -312,6 +325,29 @@ func _draw_vertex_marker(vertex: Vector2i, color: Color, marker_scale: float) ->
 	draw_colored_polygon(PackedVector2Array([
 		center - axis_x, center - axis_y, center + axis_x, center + axis_y,
 	]), color)
+
+## Ghost of the dirt dot the Path tool would lay on the hovered tile.
+func _draw_path_ghost(alpha_mod: float) -> void:
+	if current_preview_positions.is_empty():
+		return
+	var pos: Vector2i = current_preview_positions[0]
+	if not terrain_grid.is_valid_position(pos) or not terrain_grid.can_place_walking_path(pos):
+		return
+	var c := OverlayGeometry.point_in_tile(terrain_grid, self, pos, Vector2(0.5, 0.5))
+	var xd := OverlayGeometry.point_in_tile(terrain_grid, self, pos, Vector2(1.5, 0.5)) - c
+	var yd := OverlayGeometry.point_in_tile(terrain_grid, self, pos, Vector2(0.5, 1.5)) - c
+	var scale := WalkingPathOverlay.DIRT_DOT
+	var dot := PackedVector2Array([
+		c + (xd + yd) * scale,
+		c + (-xd + yd) * scale,
+		c + (-xd - yd) * scale,
+		c + (xd - yd) * scale,
+	])
+	var fill := WalkingPathOverlay.DIRT_COLOR
+	fill.a *= alpha_mod
+	draw_colored_polygon(dot, fill)
+	dot.append(dot[0])
+	draw_polyline(dot, Color(1.0, 1.0, 1.0, 0.8 * alpha_mod), 1.5)
 
 func _is_tile_valid_for_placement(_grid_pos: Vector2i) -> bool:
 	# The preview and click use one footprint-level validation result.

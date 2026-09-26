@@ -88,8 +88,9 @@ static func tee_placement_blocker(grid: TerrainGrid, course: GameManager.CourseD
 		return ""
 	return "A tee box is already waiting to be paired with a green. Open the hole first (H)."
 
-## Largest brush the tool may use: 1x1 for a tee box and for a green that is
-## about to become a green with a hole; no restriction otherwise.
+## Largest brush the tool may use: 1x1 for a tee box, for a green that is
+## about to become a green with a hole, and for the Path improvement (a thin
+## trail is laid tile by tile); no restriction otherwise.
 static func max_brush_size(tool_type: int, grid: TerrainGrid,
 		course: GameManager.CourseData = null) -> int:
 	match tool_type:
@@ -97,6 +98,8 @@ static func max_brush_size(tool_type: int, grid: TerrainGrid,
 			return 1
 		TerrainTypes.Type.GREEN:
 			return 1 if green_places_cup(grid, course) else UNLIMITED_BRUSH
+		TerrainTypes.Type.PATH:
+			return 1
 	return UNLIMITED_BRUSH
 
 ## Is a hole ready to be opened, and from which tiles?

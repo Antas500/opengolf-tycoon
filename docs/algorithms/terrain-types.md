@@ -20,10 +20,22 @@ the right end of each row:
 | Bottom | Fairway, Firm Fairway, Deep Rough, Waste Bunker, Brush, Rocks, Out of Bounds |
 
 The honeycomb width adapts to the theme's tree catalogue while staying two rows
-high. Open Hole, Bulldozer, and brush controls remain in a column before it.
-Path lives on the Improvements tab alongside Decorations. Grass, Heavy Rough,
-Trees and Empty are placed by generation or by entities (a tree stamps Trees,
-a boulder stamps Rocks).
+high. The brush controls stay in a column before it. **Open Hole** is a tile too:
+a half-size course cell (`OpenHoleNotchButton`) nestled into the notch between
+the Tee Box and Green tiles (see `TileHoneycomb.set_notch_child`), the pair the
+action opens. It takes no slot, so no tile moves along the rows, and it keeps
+the plain `[H]` chip for its caption — a cell that small has no room for the
+name, which the tooltip and assistive tech carry. Its ring is gold while a tee
+and a cup are waiting to be paired and grey while they are not, so the chip
+reports whether a hole can be opened. The Bulldozer is not a course tool at all:
+it is pinned to the Improvements and Buildings tabs, whose tiles it can remove.
+The Path improvement lives on the Improvements tab instead, drawn as a course
+tile in the same honeycomb as the decoration tiles and placed first in the top
+row, because it is the improvement players reach for most. Its tile previews
+the rough a trail is cut through with the dirt ribbon across it — a path lies on
+top of the ground rather than replacing it (see [garden catalog](garden-catalog.md)).
+Grass, Heavy Rough, Trees and Empty are placed by generation or by entities
+(a tree stamps Trees, a boulder stamps Rocks).
 
 ### The seven newer tiles
 
@@ -45,11 +57,12 @@ a boulder stamps Rocks).
   distance) and costs nothing to maintain.
 - **Rocks** — Stony ground: the worst lie on the course (0.25), wedge only. A
   boulder standing on other ground also plays as Rocks but keeps its grass look.
-  Painting Rocks around a boulder merges it into the rocky ground. The bulldozer
-  clears painted Rocks back to grass.
+  Painting any other Course Terrain tile over a boulder replaces it, Rocks
+  included. Like every course tile it is ground paint: the bulldozer never
+  touches course terrain.
 - **Brush** — Dense scrub (gorse, heather, sagebrush): 0.3 lie, 50% distance,
-  wedge only, and it swallows rolling balls. Golfers wade through it slowly. The
-  bulldozer clears it back to grass.
+  wedge only, and it swallows rolling balls. Golfers wade through it slowly.
+  Replace it by painting another terrain tile over it; the bulldozer ignores it.
 
 ---
 
@@ -132,15 +145,22 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 
 ### 5. Painting
 
-- Built surfaces (fairways, bunkers, water, stream, tee, green) clear trees and
-  boulders they're painted over; natural ground (rough, deep rough, brush, rocks)
-  grows around them.
+- Every Course Terrain tile replaces every other one. Painting fairway, rough,
+  brush, rocks, flower bed, water or any other tab tile clears the tree or
+  boulder on that spot (a clearing fee on top of the new tile's cost) and
+  `TerrainGrid.set_tile` swaps the ground, dropping the tile's cup, tee and
+  walking-path state when the new ground can't keep them. Placing a tree or
+  boulder does the same in reverse: it overwrites water, sand, greens, other
+  trees and other boulders. Buildings and decorations are not course terrain —
+  the bulldozer removes those, and a course tile will not paint over them.
 - Stream strokes are 4-connected (`TerrainBrush.centers_4_connected()`) so the
   channel never breaks at a diagonal step.
-- Boulders can stand on grass, fairways, roughs and unoccupied painted Rocks.
-  Trees can stand on grass, fairways, roughs and path. Both keep off sand, brush
-  and water, because their spot draws native grass.
-- The bulldozer removes painted Rocks and Brush for $10 a tile, leaving grass.
+- A tree or boulder keeps the look of its toolbar tile wherever it is placed
+  (a tree stamps Trees, which draws as turf under the sprite; a boulder on
+  ground that isn't painted Rocks keeps that turf look via its footprint).
+- The bulldozer never touches course terrain — its button lives on the
+  Improvements and Buildings tabs and only demolishes paths, decorations and
+  buildings.
 
 ### 6. Rendering
 

@@ -3,18 +3,23 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: tools column (open hole, bulldozer, brush) before one course, hazard & landscape tiles honeycomb
-##  - Improvements:   paths and decorations
-##  - Buildings:      amenity buildings catalogue
+##  - Course Terrain: one course, hazard & landscape tiles honeycomb, with the brush controls pinned to the page's bottom-left corner so they ride above the tiles instead of scrolling with them; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
+##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
+##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      sculpting controls and brush size
-##  - Holes:          course holes list (rows are filled by main.gd)
-##  - Golfers:        who is on the course and recent rounds
+##  - Holes:          one button per course hole, three to a column, each opening that hole's context menu (the buttons are filled by main.gd)
+##  - Golfers:        who is on the course, four golfers to a column, beside the recent rounds, six rounds to a column
 ##  - Player:         play the course, tournaments, player skills
 ##  - Club:           land, marketing, milestones, feed, scorecard
 ##  - Staff:          hire/fire staff, course condition, payroll, and effects
 ##
 ## Content within tabs is laid out horizontally and scrolls horizontally when
-## overflowing the available tab width.
+## overflowing the available tab width. The Bulldozer lives on the two tabs
+## whose tiles it can remove (Improvements and Buildings), pinned to each
+## page's bottom-left corner so it stays put while the shelf scrolls. The
+## Course Terrain brush controls are pinned to that same corner of their page
+## for the same reason: the brush belongs to every tile on the tab, so it sits
+## above the shelf rather than scrolling away with it.
 
 signal course_review_pressed
 signal tool_selected(tool_type: int)
@@ -24,6 +29,7 @@ signal rock_selected(rock_size: String)
 signal building_placement_pressed
 signal building_selected(building_type: String)
 signal decoration_placement_pressed
+signal decoration_selected(decoration_type: String)
 signal raise_elevation_pressed
 signal sculpt_terrain_pressed(raising: bool)
 signal lower_elevation_pressed
@@ -81,7 +87,6 @@ const TOOL_TAB_MAP := {
 	TerrainTypes.Type.ROCKS: Tab.TERRAIN,
 	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
 	"open_hole": Tab.TERRAIN,
-	"bulldozer": Tab.TERRAIN,
 	"tree": Tab.TERRAIN,
 	"rock": Tab.TERRAIN,
 	"boulder_small": Tab.TERRAIN,
@@ -117,6 +122,10 @@ const SHIFT_TERRAIN_HOTKEYS := {
 const TOOL_ROW_HEIGHT := 30
 const COURSE_TILE_COLUMNS := 7  # Top row runs tee -> water, bottom row fairway -> out of bounds
 const TILE_ROWS := 2  # Course and building tiles always sit in two interlocking rows
+## Tiles that lead the Improvements honeycomb ahead of the decoration
+## catalogue — just the walking path, which opens the top row. The shelf's
+## width counts it, so adding the path keeps the two rows balanced.
+const IMPROVEMENTS_LEAD_TILES := 1
 ## Vertical rhythm of the tile rows: two rows of TerrainTileButton.BUTTON_SIZE
 ## tiles span 1.5 tiles, plus the gap where the lower row tucks into the
 ## notches of the row above, plus the breathing room kept above the first row
@@ -127,36 +136,71 @@ const TILE_V_SEPARATION := 20
 const TILE_V_PADDING := 20
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
+## Brush controls pinned to the Course Terrain page's bottom-left corner: a
+## 2x2 plate of square cells (shape, size, smaller, bigger). The plate is held
+## this narrow so its right edge stops short of the tile diamonds beside it —
+## the staggered bottom row leaves that corner of the page empty, so the brush
+## floats above the shelf without ever covering a tile.
+const BRUSH_DOCK_CELL := 24.0
+const BRUSH_DOCK_GAP := 2.0
+const BRUSH_DOCK_PADDING := 1.0
+## Same corner margin the pinned Bulldozer keeps on the other two tabs.
+const BRUSH_DOCK_MARGIN := BulldozerButton.CORNER_MARGIN
+const BRUSH_DOCK_TOOLTIP := "Paint brush: shape, size, smaller and bigger. Stays put while the tiles scroll."
+## Holes stack three deep per column and the columns run off to the right, so
+## the tab grows along the axis the page already scrolls on and never past the
+## bottom bar's height.
+const HOLE_COLUMN_HEIGHT := 3
+## Golfers on the course stack four deep per column, for the same reason: the
+## columns run off to the right where the page scrolls, so a busy course grows
+## sideways instead of downwards past the bottom bar's height.
+const GOLFER_COLUMN_HEIGHT := 4
+const GOLFER_COLUMN_GAP := 10  # Between two columns of golfers
+const GOLFER_ROW_GAP := 4  # Between two golfers in the same column
+## Recent rounds stack six deep per column — they are one-line labels, so six of
+## them still sit under the tab bar while the columns run off to the right.
+const RECENT_ROUND_COLUMN_HEIGHT := 6
+const RECENT_ROUND_COLUMN_GAP := 14  # Between two columns of rounds
+const RECENT_ROUND_ROW_GAP := 4  # Between two rounds in the same column
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
 const OPEN_HOLE_BLOCKED_TOOLTIP := "Needs exactly one unused tee box and one unused green with a hole"
+## What the Bulldozer removes — improvements and buildings only. Course
+## Terrain tiles are ground paint: repaint them with another tile instead.
+const BULLDOZER_TOOLTIP := "Demolish decorations, walking paths and buildings. Click or drag over them. Fees: $5 per path tile, $20 per decoration or building. Course Terrain tiles are not affected — any Course Terrain tile replaces any other, including trees and boulders."
 
-var hole_list: HBoxContainer = null  # Course holes rows (filled by main.gd)
+var hole_grid: GridContainer = null  # Course holes buttons, three to a column (filled by main.gd)
 var golfer_data_provider: Callable = Callable()  # -> Array of golfer row dicts
 
 var _current_tool: int = -1
 var _tool_buttons: Dictionary = {}  # tool_type -> ToolButton
 var _tab_bar: TabBar = null
-var _pages: Array[ScrollContainer] = []
+var _pages: Array[Control] = []  # One wrapper per tab; the scroll + fixed chrome
+var _bulldozer_buttons: Array[BulldozerButton] = []  # Pinned to Improvements & Buildings
+var _brush_dock: PanelContainer = null  # Pinned to the Course Terrain corner
 var _brush_size: int = 1
 var _round_brush := true
 var _brush_limit: int = HoleLayout.UNLIMITED_BRUSH  # 1 = current tool paints a single tile
 var _brush_labels: Array[Label] = []
 var _brush_buttons: Array[Button] = []
-var _brush_shape_buttons: Array[OptionButton] = []
+var _brush_shape_buttons: Array[Button] = []
 var _open_hole_buttons: Array[ToolButton] = []
 var _green_tile_button: TerrainTileButton = null
 var _tee_tile_button: TerrainTileButton = null
 var _green_places_cup := true
 var _tee_box_can_place: bool = true
 var _tee_box_blocker: String = ""
-var _active_golfers_box: HBoxContainer = null
-var _recent_rounds_box: HBoxContainer = null
+var _active_golfers_box: HBoxContainer = null  # Shelf of columns, four golfers deep
+var _recent_rounds_box: HBoxContainer = null  # Shelf of columns, six rounds deep
 var _recent_rounds: Array[Dictionary] = []
 var _skill_labels: Array[Label] = []
 var _player_points_label: Label = null
 var _feed_button: Button = null
 var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
+var _decoration_registry: Dictionary = {}
+var _decoration_shelf: TileHoneycomb = null
+var _decoration_tiles: Dictionary = {}  # decoration type -> DecorationTileButton
+var _path_tile: TerrainTileButton = null  # Walking path tile leading the shelf
 var _course_tiles: TileHoneycomb = null
 var _landscape_buttons: Array[Node] = []
 var _selected_string_tool: String = ""
@@ -270,13 +314,26 @@ func _build_tab_bar(parent: VBoxContainer) -> void:
 	_tab_bar.tab_changed.connect(_on_tab_changed)
 	parent.add_child(_tab_bar)
 
-func _build_page(tab_index: int) -> ScrollContainer:
+func _build_page(tab_index: int) -> Control:
+	# Each page is a plain wrapper Control holding the horizontally-scrollable
+	# content plus any chrome pinned to the page itself (the Bulldozer on the
+	# Improvements and Buildings tabs) so it never scrolls away with the shelf.
+	var page = Control.new()
+	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var scroll = ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.gui_input.connect(_on_scroll_gui_input.bind(scroll))
+	# A plain Control does not inherit its children's minimum size, so keep the
+	# page at least as tall as its scrolling shelf — the same height contract
+	# the scroll-only pages used to hand the toolbar.
+	scroll.minimum_size_changed.connect(
+		func() -> void: page.custom_minimum_size = scroll.get_combined_minimum_size())
+	page.add_child(scroll)
+	page.custom_minimum_size = scroll.get_combined_minimum_size()
 
 	var h_bar = scroll.get_h_scroll_bar()
 	if h_bar:
@@ -292,10 +349,13 @@ func _build_page(tab_index: int) -> ScrollContainer:
 	match tab_index:
 		Tab.TERRAIN:
 			_build_terrain_tab(hbox)
+			_pin_brush_dock(page)
 		Tab.IMPROVEMENTS:
 			_build_improvements_tab(hbox)
+			_pin_bulldozer_button(page)
 		Tab.BUILDINGS:
 			_build_buildings_tab(hbox)
+			_pin_bulldozer_button(page)
 		Tab.ELEVATION:
 			_build_elevation_tab(hbox)
 		Tab.HOLES:
@@ -309,7 +369,95 @@ func _build_page(tab_index: int) -> ScrollContainer:
 		Tab.STAFF:
 			_build_staff_tab(hbox)
 
-	return scroll
+	return page
+
+## Pin the round Bulldozer button to a page's bottom-left corner. Anchored to
+## the page (not the scrolling shelf) so it stays put while tiles scroll by.
+func _pin_bulldozer_button(page: Control) -> void:
+	var btn := BulldozerButton.new()
+	btn.name = "BulldozerButton"
+	btn.accessibility_name = "Bulldozer"
+	btn.accessibility_description = BULLDOZER_TOOLTIP
+	btn.pressed.connect(_on_tool_button_pressed.bind("bulldozer"))
+	page.add_child(btn)
+	btn.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	btn.offset_left = BulldozerButton.CORNER_MARGIN
+	btn.offset_top = -BulldozerButton.CORNER_MARGIN - BulldozerButton.BUTTON_DIAMETER
+	btn.offset_right = BulldozerButton.CORNER_MARGIN + BulldozerButton.BUTTON_DIAMETER
+	btn.offset_bottom = -BulldozerButton.CORNER_MARGIN
+	_bulldozer_buttons.append(btn)
+
+## Pin the Course Terrain brush controls to the page's bottom-left corner: a
+## compact plate of four square cells — brush shape, brush size, smaller,
+## bigger. Anchored to the page (not the scrolling shelf) so the brush rides
+## above the tiles and stays put while the catalogue scrolls beneath it, the
+## same way the Bulldozer stays put on the two tabs it belongs to. The plate
+## fits the corner the staggered tile rows leave empty, so it floats over the
+## shelf without covering a single tile diamond.
+func _pin_brush_dock(page: Control) -> void:
+	var dock := PanelContainer.new()
+	dock.name = "BrushDock"
+	dock.tooltip_text = BRUSH_DOCK_TOOLTIP
+	dock.mouse_filter = Control.MOUSE_FILTER_STOP
+	dock.focus_mode = Control.FOCUS_NONE
+	var plate := StyleBoxFlat.new()
+	plate.bg_color = Color(UIConstants.COLOR_BG_PANEL, 0.9)
+	for corner in ["corner_radius_top_left", "corner_radius_top_right",
+			"corner_radius_bottom_right", "corner_radius_bottom_left"]:
+		plate.set(corner, 6)
+	for margin in ["content_margin_left", "content_margin_top",
+			"content_margin_right", "content_margin_bottom"]:
+		plate.set(margin, BRUSH_DOCK_PADDING)
+	dock.add_theme_stylebox_override("panel", plate)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", int(BRUSH_DOCK_GAP))
+	dock.add_child(stack)
+
+	# Shape and the size it paints with on top, the stepper underneath.
+	var shape_row := HBoxContainer.new()
+	shape_row.add_theme_constant_override("separation", int(BRUSH_DOCK_GAP))
+	stack.add_child(shape_row)
+	var shape := _create_brush_shape(Vector2(BRUSH_DOCK_CELL, BRUSH_DOCK_CELL))
+	_style_dock_cell(shape)
+	shape_row.add_child(shape)
+	shape_row.add_child(_create_brush_size_chip())
+
+	var step_row := HBoxContainer.new()
+	step_row.add_theme_constant_override("separation", int(BRUSH_DOCK_GAP))
+	stack.add_child(step_row)
+	step_row.add_child(_create_brush_step_button("-", "Smaller brush", _on_brush_decrease))
+	step_row.add_child(_create_brush_step_button("+", "Bigger brush", _on_brush_increase))
+
+	page.add_child(dock)
+	var side := brush_dock_side()
+	dock.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	dock.offset_left = BRUSH_DOCK_MARGIN
+	dock.offset_top = -BRUSH_DOCK_MARGIN - side
+	dock.offset_right = BRUSH_DOCK_MARGIN + side
+	dock.offset_bottom = -BRUSH_DOCK_MARGIN
+	_brush_dock = dock
+	_apply_brush_limit()
+
+## Edge of the square brush plate: two cells, the gap between them and the
+## plate's own padding. The plate is deliberately held this narrow so its right
+## edge stops before the staggered bottom row's first tile begins.
+static func brush_dock_side() -> float:
+	return BRUSH_DOCK_CELL * 2.0 + BRUSH_DOCK_GAP + BRUSH_DOCK_PADDING * 2.0
+
+## Show on every pinned Bulldozer whether bulldozer mode is running.
+func set_bulldozer_active(active: bool) -> void:
+	for btn in _bulldozer_buttons:
+		if is_instance_valid(btn):
+			btn.set_active(active)
+
+## The horizontally-scrollable shelf of a tab page (the wrapper's full-rect child).
+func page_scroll(tab_index: int) -> ScrollContainer:
+	return _pages[tab_index].get_child(0) as ScrollContainer
+
+## The content row a tab builder laid its groups into.
+func page_content(tab_index: int) -> HBoxContainer:
+	return page_scroll(tab_index).get_child(0) as HBoxContainer
 
 func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 	if event is InputEventMouseButton and event.pressed:
@@ -325,11 +473,13 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	# The Open Hole action, the Bulldozer and the brush stack in one column
-	# before the tiles so the most-used course tools sit first in the tab.
-	hbox.add_child(_make_terrain_tools_column())
-
-	hbox.add_child(_make_separator())
+	# The tab is nothing but the tile honeycomb: the brush controls it paints
+	# with are pinned to the page's bottom-left corner (see _pin_brush_dock) so
+	# they stay above the tiles instead of scrolling off with them. (Demolition
+	# is not a course tool: the Bulldozer is pinned to the Improvements and
+	# Buildings tabs, whose tiles it can remove. Open Hole is not a paint tool
+	# either — it nestles between the tee and green tiles it pairs, see
+	# _add_open_hole_notch.)
 
 	# The course tiles share one honeycomb of two rows, the bottom row shifted
 	# half a tile right so each diamond drops into a notch between the two tiles
@@ -367,71 +517,60 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 
 	_populate_landscape_tiles()
 
-## Open Hole, Bulldozer and the brush controls stacked vertically. This column
-## opens the Course Terrain tab so the tools sit before the tile honeycomb.
-## Buttons use a compact 26px height (matching the brush stepper) so the whole
-## column still fits inside the 190px bottom bar. ToolButton._ready() resets
-## custom_minimum_size, so the compact height is applied on ready instead.
-func _make_terrain_tools_column() -> VBoxContainer:
-	const COLUMN_BUTTON_HEIGHT := 26
-	var column = VBoxContainer.new()
-	column.name = "TerrainToolsColumn"
-	column.add_theme_constant_override("separation", 2)
-	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Open Hole pairs the tee box and the green, which share the top row's first
+	# two slots: nestle the action into the notch between them. Added after the
+	# catalogue tiles so the honeycomb's tile flow (course tiles first, tree and
+	# boulder catalogue behind them) is exactly as it was — a nestled child takes
+	# no slot.
+	_add_open_hole_notch(tiles_grid, 0)
 
-	var open_hole_btn := _add_tool_button(column, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
+## The Open Hole action as a half-size course cell nestled into the notch
+## between the tab's Tee Box and Green tiles — the pair it opens. `left_slot` is
+## the flow slot of the tile to the left of the notch, so slot 0 puts it between
+## the tee box and the green.
+func _add_open_hole_notch(tiles_grid: TileHoneycomb, left_slot: int) -> OpenHoleNotchButton:
+	var open_hole_btn := OpenHoleNotchButton.new()
+	open_hole_btn.name = "OpenHoleButton"
+	open_hole_btn.configure("open_hole", "Open Hole", "[H]", "H", OPEN_HOLE_TOOLTIP)
+	open_hole_btn.tool_pressed.connect(_on_tool_button_pressed)
+	tiles_grid.set_notch_child(open_hole_btn, left_slot)
 	_open_hole_buttons.append(open_hole_btn)
-	_make_column_button_compact(open_hole_btn, COLUMN_BUTTON_HEIGHT)
-
-	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, boulders, rocky ground, brush, flowers, decorations"})
-	_make_column_button_compact(bulldozer_btn, COLUMN_BUTTON_HEIGHT)
-
-	column.add_child(_make_small_group_label("BRUSH"))
-
-	var brush_row := _create_brush_row()
-	brush_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	brush_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_child(brush_row)
-
-	var shape := _create_brush_shape()
-	shape.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	shape.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_child(shape)
-
-	_apply_brush_limit()
-	return column
-
-## Size a ToolButton for vertical stacking in the tools column: full width,
-## compact height. Applied on ready so ToolButton._ready() cannot overwrite it.
-func _make_column_button_compact(btn: ToolButton, height: int) -> void:
-	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if btn.is_node_ready():
-		btn.custom_minimum_size = Vector2(0, height)
-	else:
-		btn.ready.connect(
-			func() -> void: btn.custom_minimum_size = Vector2(0, height),
-			CONNECT_ONE_SHOT
-		)
+	_tool_buttons["open_hole"] = open_hole_btn
+	return open_hole_btn
 
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
-	var path_box = HBoxContainer.new()
-	path_box.add_theme_constant_override("separation", 4)
-	path_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(path_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"})
-	hbox.add_child(_make_tab_group("PATHS", path_box))
+	# Every improvement — the walking path and each ornament in The Garden Shed —
+	# sits in one honeycomb of the same interlocking isometric tiles used by
+	# Course Terrain and Buildings: two rows, no heading (the tiles carry their
+	# own captions), and a rich hover tooltip per tile. The path leads the top
+	# row because it is the improvement players reach for while they shape the
+	# course, so it opens the tab instead of standing beside it in its own box.
+	# The page scrolls sideways when the catalogue is wider than the window.
+	_decoration_shelf = TileHoneycomb.new()
+	_decoration_shelf.name = "DecorationShelf"
+	_decoration_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
+	_decoration_shelf.h_separation = TILE_H_SEPARATION
+	_decoration_shelf.v_separation = TILE_V_SEPARATION
+	_decoration_shelf.v_padding = TILE_V_PADDING
+	_decoration_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_decoration_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_add_path_tile()
+	_populate_decoration_shelf()
+	hbox.add_child(_make_tab_group("", _decoration_shelf, true))
 
-	hbox.add_child(_make_separator())
-
-	var dec_box = HBoxContainer.new()
-	dec_box.add_theme_constant_override("separation", 4)
-	dec_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(dec_box, {"type": "decoration", "name": "Decorations", "icon": "[✦]", "hotkey": "O", "desc": "Aesthetic decorations for course rating"})
-	hbox.add_child(_make_tab_group("DECORATIONS", dec_box))
-
-	hbox.add_child(_make_separator())
-
-	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play."))
+## The walking path drawn as a course tile and laid in the first slot of the
+## Improvements honeycomb. It is a painting tool rather than a catalogue entry,
+## so `_populate_decoration_shelf()` preserves it while it rebuilds the shelf.
+func _add_path_tile() -> void:
+	if is_instance_valid(_path_tile):
+		return
+	_path_tile = _add_tool_button(_decoration_shelf, {
+		"type": TerrainTypes.Type.PATH,
+		"name": "Path",
+		"hotkey": "8",
+		"desc": "Thin dirt walking path laid over rough, deep rough, waste bunker, brush, rocks, streams, flower beds, boulders and trees. Each tile is a dot; edge-adjacent dots join into one trail, and a trail that reaches the clubhouse is paved.",
+		"tile_preview": true,
+	}) as TerrainTileButton
 
 func _on_theme_changed(_theme: int) -> void:
 	_populate_landscape_tiles()
@@ -503,8 +642,11 @@ func _populate_landscape_tiles() -> void:
 			_tool_buttons["tree"] = t_btn
 
 	# Extend both existing course rows, rather than starting another honeycomb.
-	# Keeping the first seven tiles in each row preserves the course layout.
-	_landscape_buttons.assign(_course_tiles.get_children().slice(COURSE_TILE_COLUMNS * TILE_ROWS))
+	# Keeping the first seven tiles in each row preserves the course layout. A
+	# child nestled into a notch (the Open Hole button) is not a tile, so it is
+	# not part of this flow and keeps its place between the tee and the green.
+	var tiles: Array[Control] = _course_tiles.flow_children()
+	_landscape_buttons.assign(tiles.slice(COURSE_TILE_COLUMNS * TILE_ROWS))
 	for i in _course_tiles.columns - COURSE_TILE_COLUMNS:
 		_course_tiles.move_child(_landscape_buttons[i], COURSE_TILE_COLUMNS + i)
 	_update_selection_highlight()
@@ -516,7 +658,7 @@ func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	# page scrolls sideways when the catalogue is wider than the window.
 	_building_shelf = TileHoneycomb.new()
 	_building_shelf.name = "BuildingShelf"
-	_building_shelf.columns = building_tile_columns(_building_registry.size())
+	_building_shelf.columns = tile_columns(_building_registry.size())
 	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
 	_building_shelf.h_separation = TILE_H_SEPARATION
 	_building_shelf.v_separation = TILE_V_SEPARATION
@@ -540,7 +682,7 @@ func _populate_building_shelf() -> void:
 	for child in _building_shelf.get_children():
 		_building_shelf.remove_child(child)
 		child.queue_free()
-	_building_shelf.columns = building_tile_columns(_building_registry.size())
+	_building_shelf.columns = tile_columns(_building_registry.size())
 	for building_type in _building_registry:
 		var data: Dictionary = _building_registry[building_type]
 		var button := BuildingTileButton.new()
@@ -548,13 +690,105 @@ func _populate_building_shelf() -> void:
 		button.pressed.connect(_on_building_card_pressed.bind(str(building_type)))
 		_building_shelf.add_child(button)
 
-## Columns needed to lay `count` building tiles out in TILE_ROWS rows.
-static func building_tile_columns(count: int) -> int:
+## Columns needed to lay `count` catalogue tiles out in TILE_ROWS rows.
+static func tile_columns(count: int) -> int:
 	return maxi(1, ceili(float(count) / TILE_ROWS))
 
 func _on_building_card_pressed(building_type: String) -> void:
 	_reveal_tab_for_tool("building")
 	building_selected.emit(building_type)
+
+# =============================================================================
+# Improvements shelf: the walking path tile plus the decoration catalogue
+# =============================================================================
+
+func set_decoration_registry(registry: Dictionary) -> void:
+	_decoration_registry = registry.duplicate(true)
+	_populate_decoration_shelf()
+
+func _populate_decoration_shelf() -> void:
+	if not is_instance_valid(_decoration_shelf):
+		return
+	for child in _decoration_shelf.get_children():
+		if child == _path_tile:
+			continue  # The path leads the shelf; it is not part of the catalogue.
+		_decoration_shelf.remove_child(child)
+		child.queue_free()
+	_decoration_tiles.clear()
+	_decoration_shelf.columns = tile_columns(_decoration_registry.size() + IMPROVEMENTS_LEAD_TILES)
+	for dec_type in ordered_decoration_types():
+		var data: Dictionary = _decoration_registry[dec_type]
+		var button := DecorationTileButton.new()
+		button.configure_decoration(str(dec_type), data)
+		button.pressed.connect(_on_decoration_card_pressed.bind(str(dec_type)))
+		_decoration_shelf.add_child(button)
+		_decoration_tiles[str(dec_type)] = button
+	if is_instance_valid(_path_tile):
+		# Rebuilt rows append after the new catalogue tiles, so put the path back
+		# in slot 0: the first tile of the top row of the honeycomb.
+		_decoration_shelf.move_child(_path_tile, 0)
+	refresh_decoration_unlocks()
+
+## Decoration types in the order The Garden Shed listed them: one category
+## after another, each keeping the catalogue's own order. Types with an
+## unknown category trail the shelf in catalogue order.
+func ordered_decoration_types() -> Array:
+	var ordered: Array = []
+	for category in DecorationTileButton.CATEGORY_ORDER:
+		for dec_type in _decoration_registry:
+			if str(_decoration_registry[dec_type].get("category", "")) == category:
+				ordered.append(dec_type)
+	for dec_type in _decoration_registry:
+		if not ordered.has(dec_type):
+			ordered.append(dec_type)
+	return ordered
+
+func _on_decoration_card_pressed(decoration_type: String) -> void:
+	var button: DecorationTileButton = _decoration_tiles.get(decoration_type, null)
+	if button and button.disabled:
+		return  # Locked ornaments stay on the shelf but cannot be placed.
+	_reveal_tab_for_tool("decoration")
+	decoration_selected.emit(decoration_type)
+
+## Re-check every ornament against the current rating, reputation and hole
+## count: the shelf opens with what the course has unlocked so far.
+func refresh_decoration_unlocks() -> void:
+	for dec_type in _decoration_tiles:
+		var button: DecorationTileButton = _decoration_tiles[dec_type]
+		if not is_instance_valid(button):
+			continue
+		button.set_locked(not is_decoration_unlocked(button.decoration_data),
+			decoration_unlock_text(button.decoration_data))
+
+func is_decoration_unlocked(decoration_data: Dictionary) -> bool:
+	if not GameManager:
+		return true
+	var unlock = decoration_data.get("unlock")
+	if unlock == null or not unlock is Dictionary or unlock.is_empty():
+		return true
+	match str(unlock.get("type", "")):
+		"star_rating":
+			return GameManager.course_rating.get("stars", 0) >= int(unlock.get("value", 99))
+		"reputation":
+			return GameManager.reputation >= int(unlock.get("value", 999))
+		"holes_built":
+			var hole_count: int = GameManager.current_course.holes.size() if GameManager.current_course else 0
+			return hole_count >= int(unlock.get("value", 99))
+	return false
+
+## Human-readable form of a decoration's unlock requirement ("" when it has none).
+func decoration_unlock_text(decoration_data: Dictionary) -> String:
+	var unlock = decoration_data.get("unlock")
+	if unlock == null or not unlock is Dictionary or unlock.is_empty():
+		return ""
+	match str(unlock.get("type", "")):
+		"star_rating":
+			return "%d★ rating" % int(unlock.get("value", 0))
+		"reputation":
+			return "%d reputation" % int(unlock.get("value", 0))
+		"holes_built":
+			return "%d holes" % int(unlock.get("value", 0))
+	return ""
 
 func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	var sculpt_box = HBoxContainer.new()
@@ -578,34 +812,44 @@ func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_brush_group())
 
 func _build_holes_tab(hbox: HBoxContainer) -> void:
-	var actions_box = HBoxContainer.new()
-	actions_box.add_theme_constant_override("separation", 4)
-	actions_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var open_hole_btn := _add_tool_button(actions_box, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
-	_open_hole_buttons.append(open_hole_btn)
-	hbox.add_child(_make_tab_group("ACTIONS", actions_box))
+	# The Course Terrain tab owns the Open Hole action, and each hole's context
+	# menu owns that hole's open/closed toggle and its statistics. Keep this tab
+	# to the holes themselves — one button each, three to a column, no per-hole
+	# toggle or delete buttons and no group heading.
+	hole_grid = GridContainer.new()
+	hole_grid.name = "HoleGrid"
+	hole_grid.columns = 1
+	hole_grid.add_theme_constant_override("h_separation", 6)
+	hole_grid.add_theme_constant_override("v_separation", 4)
+	hole_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hbox.add_child(hole_grid)
 
-	hbox.add_child(_make_separator())
-
-	var holes_group = VBoxContainer.new()
-	holes_group.add_theme_constant_override("separation", 2)
-	holes_group.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	holes_group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var lbl = Label.new()
-	lbl.text = "COURSE HOLES"
-	lbl.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-	holes_group.add_child(lbl)
-
-	hole_list = HBoxContainer.new()
-	hole_list.name = "HoleList"
-	hole_list.add_theme_constant_override("separation", 6)
-	hole_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hole_list.alignment = BoxContainer.ALIGNMENT_BEGIN
-	holes_group.add_child(hole_list)
-
-	hbox.add_child(holes_group)
+## Re-seat the hole buttons so they read three deep down each column before the
+## next column starts. main.gd adds and removes one button per hole, but the
+## grid fills row-major, so the children are put back into column-major order
+## after every change and the grid is widened to exactly the columns they need.
+## Each button carries its hole number as metadata.
+func layout_hole_buttons() -> void:
+	if not hole_grid:
+		return
+	var buttons: Array[Control] = []
+	for child in hole_grid.get_children():
+		if child is Control and not child.is_queued_for_deletion():
+			buttons.append(child)
+	buttons.sort_custom(func(a: Control, b: Control) -> bool:
+		return int(a.get_meta("hole_number", 0)) < int(b.get_meta("hole_number", 0)))
+	if buttons.is_empty():
+		hole_grid.columns = 1
+		return
+	var column_count := int(ceil(float(buttons.size()) / float(HOLE_COLUMN_HEIGHT)))
+	hole_grid.columns = column_count
+	var slot := 0
+	for row in HOLE_COLUMN_HEIGHT:
+		for column in column_count:
+			var index := column * HOLE_COLUMN_HEIGHT + row
+			if index < buttons.size():
+				hole_grid.move_child(buttons[index], slot)
+				slot += 1
 
 func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	var on_course_group = VBoxContainer.new()
@@ -619,9 +863,11 @@ func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	on_course_group.add_child(lbl1)
 
 	_active_golfers_box = HBoxContainer.new()
-	_active_golfers_box.add_theme_constant_override("separation", 4)
+	_active_golfers_box.name = "ActiveGolfersShelf"
+	# The gap between columns: the rows inside a column keep their own tighter
+	# rhythm, so this is the breathing room that tells two columns apart.
+	_active_golfers_box.add_theme_constant_override("separation", GOLFER_COLUMN_GAP)
 	_active_golfers_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_active_golfers_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	on_course_group.add_child(_active_golfers_box)
 	hbox.add_child(on_course_group)
 
@@ -638,9 +884,9 @@ func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	recent_group.add_child(lbl2)
 
 	_recent_rounds_box = HBoxContainer.new()
-	_recent_rounds_box.add_theme_constant_override("separation", 6)
+	_recent_rounds_box.name = "RecentRoundsShelf"
+	_recent_rounds_box.add_theme_constant_override("separation", RECENT_ROUND_COLUMN_GAP)
 	_recent_rounds_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_recent_rounds_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	recent_group.add_child(_recent_rounds_box)
 	hbox.add_child(recent_group)
 
@@ -767,13 +1013,17 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		maintenance = costs.get("maintenance", 0)
 
 	var btn: ToolButton
+	var desc := str(tool_def.get("desc", ""))
+	# Every Course Terrain paint tile overwrites every other tile on the tab.
+	if tool_type is int and TOOL_TAB_MAP.get(tool_type, -1) == Tab.TERRAIN:
+		desc = _with_course_tile_replacement(desc)
 	if tool_def.get("tile_preview", false):
 		btn = TerrainTileButton.new()
 		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
-			tool_def.get("desc", ""), cost, maintenance)
+			desc, cost, maintenance)
 	else:
 		btn = ToolButton.create(tool_type, tool_def["name"], tool_def.get("icon", ""),
-			tool_def.get("hotkey", ""), tool_def.get("desc", ""), cost, maintenance)
+			tool_def.get("hotkey", ""), desc, cost, maintenance)
 	btn.tool_pressed.connect(_on_tool_button_pressed)
 	parent.add_child(btn)
 
@@ -808,8 +1058,9 @@ func _make_small_group_label(text: String) -> Label:
 	lbl.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	return lbl
 
-## Brush size stepper row ("-" label "+"). Shared by the Terrain tab's tools
-## column and the Elevation tab's brush group; the caller sets size flags.
+## Brush size stepper row ("-" label "+"), used by the Elevation tab's brush
+## group; the caller sets size flags. The Course Terrain tab's brush lives in
+## the pinned corner dock instead (see _pin_brush_dock).
 func _create_brush_row() -> HBoxContainer:
 	var brush_row = HBoxContainer.new()
 	brush_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -841,19 +1092,95 @@ func _create_brush_row() -> HBoxContainer:
 	_brush_buttons.append(brush_increase)
 	return brush_row
 
-## Round/square brush shape picker. Shared like the brush row above.
-func _create_brush_shape() -> OptionButton:
-	var shape := OptionButton.new()
-	shape.add_item("Round")
-	shape.add_item("Square")
-	shape.select(0 if _round_brush else 1)
-	shape.tooltip_text = "Round brush for natural contours, square for precise edges"
-	shape.custom_minimum_size = Vector2(78, 22)
+## Round/square brush shape picker. Shared by the pinned Course Terrain brush
+## dock and the Elevation tab's brush group; the caller passes the cell it has
+## room for. A toggle button that swaps between Square and Circle icons.
+func _create_brush_shape(cell_size: Vector2 = Vector2(32, 26)) -> Button:
+	var shape := Button.new()
 	shape.focus_mode = Control.FOCUS_NONE
+	shape.custom_minimum_size = cell_size
 	shape.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	shape.item_selected.connect(_on_brush_shape_selected)
+	shape.toggle_mode = true
+	_update_brush_shape_button(shape)
+	shape.pressed.connect(_on_brush_shape_toggled)
 	_brush_shape_buttons.append(shape)
 	return shape
+
+## The brush size readout in the pinned dock: one square cell showing the size
+## the selected tool actually paints with. It shares `_brush_labels` with the
+## Elevation tab's wider stepper, so both always read the same number.
+func _create_brush_size_chip() -> Label:
+	var chip := Label.new()
+	chip.name = "BrushSizeChip"
+	chip.text = "%dx%d" % [_brush_size, _brush_size]
+	chip.custom_minimum_size = Vector2(BRUSH_DOCK_CELL, BRUSH_DOCK_CELL)
+	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chip.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	chip.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var chip_style := StyleBoxFlat.new()
+	chip_style.bg_color = UIConstants.COLOR_BG_DARK
+	chip_style.corner_radius_top_left = 4
+	chip_style.corner_radius_top_right = 4
+	chip_style.corner_radius_bottom_right = 4
+	chip_style.corner_radius_bottom_left = 4
+	chip.add_theme_stylebox_override("normal", chip_style)
+	_brush_labels.append(chip)
+	return chip
+
+## One square step button of the pinned brush dock (smaller / bigger).
+func _create_brush_step_button(caption: String, tip: String, action: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = caption
+	btn.tooltip_text = tip
+	btn.accessibility_name = tip
+	btn.accessibility_description = tip
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	btn.pressed.connect(action)
+	_style_dock_cell(btn)
+	_brush_buttons.append(btn)
+	return btn
+
+## Give a brush dock cell its fixed square footprint. The theme's button
+## styleboxes carry content margins of their own, which would push the cell —
+## and so the whole plate — past the corner the tile rows leave clear, so the
+## dock draws its own flush cells instead.
+func _style_dock_cell(control: Control) -> void:
+	control.custom_minimum_size = Vector2(BRUSH_DOCK_CELL, BRUSH_DOCK_CELL)
+	if control is Button:
+		var faces := {
+			"normal": UIConstants.COLOR_BG_BUTTON,
+			"hover": UIConstants.COLOR_BG_HOVER,
+			"pressed": UIConstants.COLOR_PRIMARY_PRESSED,
+			"hover_pressed": UIConstants.COLOR_PRIMARY_PRESSED,
+			"focus": UIConstants.COLOR_BG_BUTTON,
+			"disabled": UIConstants.COLOR_BG_DARK,
+		}
+		for state in faces:
+			var box := StyleBoxFlat.new()
+			box.bg_color = faces[state]
+			box.corner_radius_top_left = 4
+			box.corner_radius_top_right = 4
+			box.corner_radius_bottom_right = 4
+			box.corner_radius_bottom_left = 4
+			for margin in ["content_margin_left", "content_margin_top",
+					"content_margin_right", "content_margin_bottom"]:
+				box.set(margin, 0.0)
+			control.add_theme_stylebox_override(state, box)
+		control.add_theme_color_override("font_disabled_color", UIConstants.COLOR_TEXT_MUTED)
+
+func _update_brush_shape_button(btn: Button) -> void:
+	if _round_brush:
+		btn.text = "○"
+		btn.tooltip_text = "Round brush (Circle) — click for Square"
+	else:
+		btn.text = "□"
+		btn.tooltip_text = "Square brush — click for Round (Circle)"
+	btn.button_pressed = _round_brush
+	btn.accessibility_name = "Brush shape"
+	btn.accessibility_description = btn.tooltip_text
 
 func _make_brush_group() -> VBoxContainer:
 	var group = VBoxContainer.new()
@@ -862,11 +1189,14 @@ func _make_brush_group() -> VBoxContainer:
 
 	group.add_child(_make_small_group_label("BRUSH"))
 
+	var shape := _create_brush_shape()
+	shape.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	group.add_child(shape)
+
 	var brush_row := _create_brush_row()
 	brush_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	group.add_child(brush_row)
 
-	group.add_child(_create_brush_shape())
 	_apply_brush_limit()
 	return group
 
@@ -902,8 +1232,6 @@ func _get_special_tool_costs(tool_type: String) -> Dictionary:
 			return {"cost": 20, "maintenance": 0}
 		"rock":
 			return {"cost": 15, "maintenance": 0}
-		"bulldozer":
-			return {"cost": 5, "maintenance": 0}
 	return {"cost": 0, "maintenance": 0}
 
 # =============================================================================
@@ -917,6 +1245,8 @@ func _show_page(tab_index: int) -> void:
 	for i in _pages.size():
 		_pages[i].visible = (i == tab_index)
 	match tab_index:
+		Tab.IMPROVEMENTS:
+			refresh_decoration_unlocks()
 		Tab.GOLFERS:
 			_refresh_golfer_lists()
 		Tab.PLAYER:
@@ -947,6 +1277,10 @@ func _on_refresh_tick() -> void:
 		_refresh_golfer_lists()
 	elif _tab_bar and _tab_bar.current_tab == Tab.PLAYER:
 		_refresh_player_skills()
+	elif _tab_bar and _tab_bar.current_tab == Tab.IMPROVEMENTS:
+		# Star rating, reputation and hole count all move during play, so the
+		# open decoration shelf keeps up with what has been unlocked.
+		refresh_decoration_unlocks()
 
 # =============================================================================
 # Golfer tab
@@ -963,26 +1297,57 @@ func _refresh_golfer_lists() -> void:
 	if _active_golfers_box == null or _recent_rounds_box == null:
 		return
 
-	for child in _active_golfers_box.get_children():
-		child.queue_free()
-	for child in _recent_rounds_box.get_children():
-		child.queue_free()
+	# The old columns leave their shelves straight away. A child waiting on
+	# queue_free() is still in the tree, so it would still take up shelf space
+	# and sit beside the fresh columns until the end of the frame.
+	_clear_shelf(_active_golfers_box)
+	_clear_shelf(_recent_rounds_box)
 
 	var rows: Array = []
 	if golfer_data_provider.is_valid():
 		rows = golfer_data_provider.call()
 
+	var golfer_rows: Array[Control] = []
 	if rows.is_empty():
-		_active_golfers_box.add_child(_make_empty_label("No golfers on the course."))
+		golfer_rows.append(_make_empty_label("No golfers on the course."))
 	else:
 		for row_data in rows:
-			_active_golfers_box.add_child(_make_golfer_row(row_data))
+			golfer_rows.append(_make_golfer_row(row_data))
+	_stack_in_columns(_active_golfers_box, golfer_rows, GOLFER_COLUMN_HEIGHT, GOLFER_ROW_GAP)
 
+	var round_rows: Array[Control] = []
 	if _recent_rounds.is_empty():
-		_recent_rounds_box.add_child(_make_empty_label("No rounds played yet."))
+		round_rows.append(_make_empty_label("No rounds played yet."))
 	else:
 		for round_data in _recent_rounds:
-			_recent_rounds_box.add_child(_make_round_row(round_data))
+			round_rows.append(_make_round_row(round_data))
+	_stack_in_columns(_recent_rounds_box, round_rows, RECENT_ROUND_COLUMN_HEIGHT,
+		RECENT_ROUND_ROW_GAP)
+
+## Take every column off a shelf. The columns are only removed here and freed at
+## the end of the frame, so a refresh can never free a row out from under a
+## signal it is still emitting.
+func _clear_shelf(shelf: HBoxContainer) -> void:
+	for child in shelf.get_children():
+		shelf.remove_child(child)
+		child.queue_free()
+
+## Fill a shelf with items stacked column_height deep: the first column takes
+## the first column_height items, the next column takes the next, and so on.
+## Each column is a VBox of its own, so a short last column never pulls the
+## items above it across — the way a GridContainer, which counts its rows off
+## the children it is given, would. The columns run off to the right where the
+## page already scrolls, so the tab never grows past the bottom bar's height.
+func _stack_in_columns(shelf: HBoxContainer, items: Array[Control], column_height: int,
+		row_gap: int) -> void:
+	var column: VBoxContainer = null
+	for index in items.size():
+		if index % column_height == 0:
+			column = VBoxContainer.new()
+			column.add_theme_constant_override("separation", row_gap)
+			column.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			shelf.add_child(column)
+		column.add_child(items[index])
 
 func _make_empty_label(text: String) -> Label:
 	var label = Label.new()
@@ -1293,12 +1658,18 @@ func get_brush_size() -> int:
 	return _brush_size
 
 func _on_brush_shape_selected(index: int) -> void:
+	# Kept for compatibility; OptionButton no longer used — toggle maps 0=round, 1=square.
 	_round_brush = index == 0
 	for button in _brush_shape_buttons:
-		if is_instance_valid(button) and button.selected != index:
-			button.set_block_signals(true)
-			button.select(index)
-			button.set_block_signals(false)
+		if is_instance_valid(button):
+			_update_brush_shape_button(button)
+	brush_shape_changed.emit(_round_brush)
+
+func _on_brush_shape_toggled() -> void:
+	_round_brush = not _round_brush
+	for button in _brush_shape_buttons:
+		if is_instance_valid(button):
+			_update_brush_shape_button(button)
 	brush_shape_changed.emit(_round_brush)
 
 func _on_brush_decrease() -> void:
@@ -1317,9 +1688,11 @@ func _on_brush_increase() -> void:
 
 func _update_brush_label() -> void:
 	var shown: int = effective_brush_size()
+	var text := "%dx%d" % [shown, shown]
 	for label in _brush_labels:
 		if is_instance_valid(label):
-			label.text = "%dx%d" % [shown, shown]
+			label.text = text
+			label.tooltip_text = "Brush size %s" % text
 
 ## The brush size the selected tool actually paints with. Tee boxes, and a green
 ## that is about to become a Green With Hole, are capped at a single tile.
@@ -1358,18 +1731,29 @@ func set_green_placement_state(places_cup: bool) -> void:
 		return
 	_green_tile_button.set_green_places_cup(places_cup)
 	if places_cup:
-		_green_tile_button.tool_description = \
-				"The next placement will be a Green With Hole: one tile with a cup and flag."
+		_green_tile_button.tool_description = _with_course_tile_replacement(
+				"The next placement will be a Green With Hole: one tile with a cup and flag.")
 	else:
-		_green_tile_button.tool_description = \
-				"The next placement will be a Green Without Hole. It uses the selected brush and adds no cup."
+		_green_tile_button.tool_description = _with_course_tile_replacement(
+				"The next placement will be a Green Without Hole. It uses the selected brush and adds no cup.")
 	_green_tile_button.accessibility_description = "%s Shortcut %s." % [
 		_green_tile_button.tool_description, _green_tile_button.hotkey]
+
+## Append the shared replacement sentence without doubling it.
+func _with_course_tile_replacement(desc: String) -> String:
+	var sentence := TerrainTypes.REPLACES_ANY_COURSE_TILE
+	if desc.contains(sentence):
+		return desc
+	if desc.is_empty():
+		return sentence
+	return desc + " " + sentence
 
 func green_will_place_cup() -> bool:
 	return _green_places_cup
 
-## Enable/disable the Open Hole buttons and explain what is still missing.
+## Enable/disable the Open Hole buttons and explain what is still missing. The
+## nestled diamond draws its ring from the button's state — gold while a tee and
+## a cup are waiting — so it is repainted here, after the switch.
 func set_open_hole_state(can_open: bool, reason: String = "") -> void:
 	for button in _open_hole_buttons:
 		if not is_instance_valid(button):
@@ -1377,6 +1761,7 @@ func set_open_hole_state(can_open: bool, reason: String = "") -> void:
 		button.disabled = not can_open
 		button.tool_description = OPEN_HOLE_TOOLTIP if can_open or reason.is_empty() \
 				else "%s. %s" % [OPEN_HOLE_BLOCKED_TOOLTIP, reason]
+		button._update_visual_state()
 
 ## Grey out, unselect and make unselectable the Tee tile while an unused tee waits.
 func set_tee_box_state(can_place: bool, reason: String = "") -> void:
@@ -1411,8 +1796,7 @@ func set_tee_box_state(can_place: bool, reason: String = "") -> void:
 	btn.accessibility_description = "%s Shortcut %s." % [btn.tool_description, btn.hotkey]
 
 	# Ensure the diamond outline reflects the disabled state immediately.
-	if btn.has_method("_update_visual_state"):
-		btn._update_visual_state()
+	btn._update_visual_state()
 
 func set_view_state(_orientation: int, _isometric: bool) -> void:
 	pass

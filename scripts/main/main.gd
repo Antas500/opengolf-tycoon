@@ -8,7 +8,7 @@ extends Node2D
 @onready var golfer_manager: GolferManager = $GolferManager
 @onready var bottom_bar: HBoxContainer = $UI/HUD/BottomBar
 var terrain_toolbar: TerrainToolbar = null
-var hole_list: HBoxContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
+var hole_grid: GridContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
 @onready var left_controls: VBoxContainer = $UI/HUD/BottomBar/LeftControls
 @onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
 @onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
@@ -21,6 +21,9 @@ var hole_list: HBoxContainer = null  # Lives in the toolbar's Holes tab (set up 
 var ultra_btn: Button = null
 @onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/SpeedControls
 const VIEW_ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
+## Every hole button opens that hole's context menu, so they all read at one
+## width instead of following each hole's par and yardage text.
+const HOLE_BUTTON_WIDTH := 132
 
 # New UI components
 var player_round: PlayerRoundManager
@@ -38,6 +41,7 @@ var round_brush := true
 var brush_size: int = 1
 var is_painting: bool = false
 var _tee_block_notified: bool = false  # One "tee box is waiting" notice per stroke
+var _path_block_notified: bool = false  # One "no room for a walking path" notice per stroke
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
 var last_paint_vertex: Vector2i = Vector2i(-1, -1)
 
@@ -477,6 +481,8 @@ func _connect_signals() -> void:
 	EventBus.hole_created.connect(_on_hole_created)
 	EventBus.hole_deleted.connect(_on_hole_deleted)
 	EventBus.hole_toggled.connect(_on_hole_toggled)
+	# The hole menu can re-par a hole, so its button re-reads the hole.
+	EventBus.hole_updated.connect(_refresh_hole_button)
 	EventBus.end_of_day.connect(_on_end_of_day)
 	EventBus.load_completed.connect(_on_load_completed)
 	EventBus.new_game_started.connect(_on_new_game_started)
@@ -523,8 +529,8 @@ func _setup_terrain_toolbar() -> void:
 	# Keep the toolbar as the last child so it sits immediately after the separator
 	bottom_bar.move_child(terrain_toolbar, bottom_bar.get_child_count() - 1)
 
-	# The course holes list now lives in the toolbar's Holes tab
-	hole_list = terrain_toolbar.hole_list
+	# The course holes buttons now live in the toolbar's Holes tab
+	hole_grid = terrain_toolbar.hole_grid
 
 	# Build tool signals
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
@@ -535,6 +541,8 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.building_selected.connect(_on_building_type_selected_from_toolbar)
 	terrain_toolbar.set_building_registry(building_registry)
 	terrain_toolbar.decoration_placement_pressed.connect(_on_decoration_placement_pressed)
+	terrain_toolbar.decoration_selected.connect(_on_decoration_type_selected_from_toolbar)
+	terrain_toolbar.set_decoration_registry(decoration_registry)
 	terrain_toolbar.sculpt_terrain_pressed.connect(_on_sculpt_terrain_pressed)
 	terrain_toolbar.raise_elevation_pressed.connect(_on_raise_elevation_pressed)
 	terrain_toolbar.lower_elevation_pressed.connect(_on_lower_elevation_pressed)
@@ -927,6 +935,7 @@ func _start_painting() -> void:
 
 	is_painting = true
 	_tee_block_notified = false
+	_path_block_notified = false
 	undo_manager.begin_stroke()
 	_paint_at_mouse()
 
@@ -936,6 +945,7 @@ func _stop_painting() -> void:
 		EventBus.notify("Cleared %d item%s (-$%d)" % [_bulldoze_drag_count, "s" if _bulldoze_drag_count != 1 else "", _bulldoze_drag_cost], "info")
 	is_painting = false
 	_tee_block_notified = false
+	_path_block_notified = false
 	last_paint_pos = Vector2i(-1, -1)
 	last_paint_vertex = Vector2i(-1, -1)
 	if not elevation_tool.is_active():
@@ -956,6 +966,12 @@ func _paint_at_mouse() -> void:
 	last_paint_pos = grid_pos
 
 func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
+	# The Path improvement is laid on top of the terrain instead of replacing
+	# it, so it has its own stamp.
+	if current_tool == TerrainTypes.Type.PATH:
+		_paint_walking_path_stamp(grid_pos)
+		return
+
 	var cost = TerrainTypes.get_placement_cost(current_tool)
 	if cost > 0 and not GameManager.can_afford(cost):
 		if GameManager.is_bankrupt():
@@ -989,14 +1005,11 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	var total_cost = 0
 	var obstacle_removal_cost = 0
 	var blocked_by_land = false
-	# Built course terrain auto-removes trees and rocks when placed; natural
-	# ground (rough, deep rough, brush, rocks) grows around them.
-	var clears_obstacles = current_tool in [
-		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
-		TerrainTypes.Type.BUNKER, TerrainTypes.Type.POT_BUNKER, TerrainTypes.Type.WASTE_BUNKER,
-		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM,
-		TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN
-	]
+	var blocked_by_money = false
+	# Every Course Terrain paint replaces the tile it lands on, including a
+	# tree or boulder standing there. Rough, brush, rocks and flower beds used
+	# to grow around them; they replace them now, the same as fairway does.
+	# Buildings and decorations are improvements — the Bulldozer removes those.
 	_suppress_tile_undo = true
 	# Batch tile changes to avoid per-tile overlay redraw cascade
 	if tiles_to_paint.size() > 1:
@@ -1006,38 +1019,44 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 		if GameManager.land_manager and not GameManager.land_manager.is_tile_owned(tile_pos):
 			blocked_by_land = true
 			continue
-		# Skip tiles occupied by buildings
+		# Improvements are not Course Terrain tiles.
 		if entity_layer and (entity_layer.is_tile_occupied_by_building(tile_pos) or entity_layer.is_tile_occupied_by_decoration(tile_pos)):
 			continue
-		# A boulder's spot is already Rocks terrain; painting Rocks around it
-		# makes the boulder stand on the new rocky ground.
-		if current_tool == TerrainTypes.Type.ROCKS and entity_layer:
-			entity_layer.merge_rock_into_painted_rocks(tile_pos)
-		if terrain_grid.get_tile(tile_pos) != current_tool:
-			# Auto-remove trees and rocks when placing course terrain
-			var tile_removal_cost = 0
-			if clears_obstacles and entity_layer:
-				if entity_layer.get_tree_at(tile_pos):
-					tile_removal_cost += BULLDOZER_COSTS["tree"]
-				if entity_layer.get_rock_at(tile_pos):
-					tile_removal_cost += BULLDOZER_COSTS["rock"]
-			# Check affordability including removal costs
-			var tile_total = cost + tile_removal_cost
-			if tile_total > 0 and not GameManager.can_afford(total_cost + obstacle_removal_cost + tile_total):
-				continue
-			var original_type: int = terrain_grid.get_tile(tile_pos)
-			var metadata := {"old_depth":terrain_grid.get_bunker_depth(tile_pos), "old_player_placed":terrain_grid._player_placed_tiles.has(tile_pos), "old_cup":terrain_grid.has_cup_tile(tile_pos)}
-			# Perform removals (suppress tile undo since the paint will set the final tile)
-			if tile_removal_cost > 0:
-				_suppress_tile_undo = true
-				if entity_layer.get_tree_at(tile_pos):
-					undo_manager.record_stroke_removal("tree", tile_pos, entity_layer.get_tree_at(tile_pos).tree_type)
-					entity_layer.remove_tree(tile_pos)
-				if entity_layer.get_rock_at(tile_pos):
-					undo_manager.record_stroke_removal("rock", tile_pos, entity_layer.get_rock_at(tile_pos).rock_size)
-					entity_layer.remove_rock(tile_pos)
-				_suppress_tile_undo = true
-				obstacle_removal_cost += tile_removal_cost
+		var has_tree := entity_layer != null and entity_layer.get_tree_at(tile_pos) != null
+		var has_rock := entity_layer != null and entity_layer.get_rock_at(tile_pos) != null
+		var terrain_changes := terrain_grid.get_tile(tile_pos) != current_tool
+		# Already this tile, and nothing standing on it to replace.
+		if not terrain_changes and not has_tree and not has_rock:
+			continue
+		var tile_removal_cost := 0
+		if has_tree:
+			tile_removal_cost += BULLDOZER_COSTS["tree"]
+		if has_rock:
+			tile_removal_cost += BULLDOZER_COSTS["rock"]
+		# The paint cost applies when the ground type changes. Replacing a
+		# boulder by painting Rocks (the tile is already Rocks) only charges
+		# the clearing fee.
+		var tile_paint_cost: int = cost if terrain_changes else 0
+		var tile_total: int = tile_paint_cost + tile_removal_cost
+		if tile_total > 0 and not GameManager.can_afford(total_cost + obstacle_removal_cost + tile_total):
+			blocked_by_money = true
+			continue
+		var original_type: int = terrain_grid.get_tile(tile_pos)
+		var metadata := {"old_depth":terrain_grid.get_bunker_depth(tile_pos), "old_player_placed":terrain_grid._player_placed_tiles.has(tile_pos), "old_cup":terrain_grid.has_cup_tile(tile_pos)}
+		# Lift trees and boulders without restoring their stamp — the paint
+		# (or the Rocks tile they already stood on) is the ground that stays.
+		if has_tree or has_rock:
+			var lifts := 0
+			while entity_layer.get_tree_at(tile_pos) or entity_layer.get_rock_at(tile_pos):
+				var taken := entity_layer.take_course_terrain_entity(tile_pos)
+				if taken.is_empty():
+					break
+				undo_manager.record_stroke_removal(str(taken.get("type", "")), tile_pos, str(taken.get("subtype", "")), int(taken.get("original_terrain", -1)))
+				lifts += 1
+				if lifts > 2:
+					break
+			obstacle_removal_cost += tile_removal_cost
+		if terrain_changes:
 			metadata["new_depth"] = CourseTheme.get_gameplay_modifiers(GameManager.current_theme).get("default_bunker_depth", 0) if current_tool == TerrainTypes.Type.BUNKER else 0
 			# A green painted while no cup is waiting becomes a Green With Hole.
 			var will_place_cup := places_cup and current_tool == TerrainTypes.Type.GREEN
@@ -1059,8 +1078,10 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 
 	_suppress_tile_undo = false
 	undo_manager.record_stroke_cost(total_cost + obstacle_removal_cost)
-	if blocked_by_land and total_cost == 0:
+	if blocked_by_land and total_cost == 0 and obstacle_removal_cost == 0:
 		EventBus.notify("You don't own this land! Press L to buy parcels.", "error")
+	elif blocked_by_money and total_cost == 0 and obstacle_removal_cost == 0:
+		_notify_cant_afford()
 
 	if obstacle_removal_cost > 0:
 		GameManager.modify_money(-obstacle_removal_cost)
@@ -1072,6 +1093,44 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	# Painting a tee box or a green changes what may be placed next, and whether a
 	# hole is ready to open.
 	_refresh_hole_layout_ui()
+
+## The Path improvement: lay a thin walking path ON TOP of the tile instead of
+## repainting its terrain. Hostable ground is TerrainTypes.WALKING_PATH_TERRAINS
+## (rough, deep rough, waste bunker, brush, rocks/boulders, stream, flower bed,
+## trees). One tile per stamp; the brush is capped at 1x1 by HoleLayout.
+func _paint_walking_path_stamp(grid_pos: Vector2i) -> void:
+	if not terrain_grid.is_valid_position(grid_pos):
+		return
+	# Land must be owned before anything is laid on it.
+	if GameManager.land_manager and not GameManager.land_manager.is_tile_owned(grid_pos):
+		if not _path_block_notified:
+			_path_block_notified = true
+			EventBus.notify("You don't own this land! Press L to buy parcels.", "error")
+		return
+	# Buildings and decorations occupy their tiles; a trail cannot run under them.
+	if entity_layer and (entity_layer.is_tile_occupied_by_building(grid_pos) \
+			or entity_layer.is_tile_occupied_by_decoration(grid_pos)):
+		return
+	if not terrain_grid.can_place_walking_path(grid_pos):
+		if not _path_block_notified:
+			_path_block_notified = true
+			EventBus.notify(terrain_grid.walking_path_placement_error(grid_pos), "error")
+		return
+	if terrain_grid.has_walking_path(grid_pos):
+		return  # Already has a trail — no double charge.
+	var cost := TerrainTypes.get_placement_cost(TerrainTypes.Type.PATH)
+	if cost > 0 and not GameManager.can_afford(cost):
+		if GameManager.is_bankrupt():
+			EventBus.notify("Spending blocked! Balance below -$1,000", "error")
+		else:
+			EventBus.notify("Not enough money!", "error")
+		return
+	if not terrain_grid.set_walking_path(grid_pos, true):
+		return
+	undo_manager.record_walking_path(grid_pos, true)
+	undo_manager.record_stroke_cost(cost)
+	GameManager.modify_money(-cost)
+	EventBus.log_transaction("Walking path", -cost)
 
 func _update_measure_overlay() -> void:
 	if _measure_overlay:
@@ -1345,87 +1404,78 @@ func _on_day_changed(_new_day: int) -> void:
 
 func _on_hole_created(hole_number: int, par: int, distance_yards: int) -> void:
 	StrokeIndexCalculator.recalculate_for_course()
-	var row = HBoxContainer.new()
-	row.name = "HoleRow%d" % hole_number
-	row.add_theme_constant_override("separation", 3)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-
-	# Make hole label a clickable button
+	if not hole_grid:
+		return
 	var hole_btn = Button.new()
-	hole_btn.name = "HoleBtn"
+	hole_btn.name = "HoleBtn%d" % hole_number
 	hole_btn.text = "H%d: P%d (%d yds)" % [hole_number, par, distance_yards]
 	hole_btn.flat = false
 	hole_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hole_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	hole_btn.tooltip_text = "Hole %d (Par %d, %d yds) - Click to view statistics" % [hole_number, par, distance_yards]
 	hole_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	hole_btn.custom_minimum_size = Vector2(0, 26)
-	hole_btn.pressed.connect(_show_hole_stats.bind(hole_number))
-	row.add_child(hole_btn)
-
-	var toggle_btn = Button.new()
-	toggle_btn.name = "ToggleBtn"
-	toggle_btn.text = "Open"
-	toggle_btn.custom_minimum_size = Vector2(44, 26)
-	toggle_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	toggle_btn.pressed.connect(_on_hole_toggle_pressed.bind(hole_number))
-	row.add_child(toggle_btn)
-
-	var delete_btn = Button.new()
-	delete_btn.name = "DeleteBtn"
-	delete_btn.text = "X"
-	delete_btn.custom_minimum_size = Vector2(24, 26)
-	delete_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	delete_btn.pressed.connect(_on_hole_delete_pressed.bind(hole_number))
-	row.add_child(delete_btn)
-
-	hole_list.add_child(row)
+	hole_btn.custom_minimum_size = Vector2(HOLE_BUTTON_WIDTH, 26)
+	hole_btn.set_meta("hole_number", hole_number)
+	# One button per hole. Everything else about that hole — its pin, tees and
+	# green, its par, whether it is open, its statistics — sits behind the same
+	# context menu as clicking the hole out on the course.
+	hole_btn.pressed.connect(_on_hole_button_pressed.bind(hole_number))
+	hole_grid.add_child(hole_btn)
+	# Three holes to a column, so the buttons are re-seated after every change.
+	terrain_toolbar.layout_hole_buttons()
+	# The signal payload seeds the label; the course data owns the open state.
+	_refresh_hole_button(hole_number)
 	_update_status_rating()
 
-func _on_hole_toggle_pressed(hole_number: int) -> void:
-	if not GameManager.current_course:
+## A hole button opens the hole's context menu — the same one the course's tee,
+## green and flag open — rather than the statistics screen.
+func _on_hole_button_pressed(hole_number: int) -> void:
+	var hole = _find_hole_data(hole_number)
+	if not hole:
 		return
-	var is_open = GameManager.current_course.toggle_hole_open(hole_number)
-	var status = "opened" if is_open else "closed"
-	EventBus.notify("Hole %d %s" % [hole_number, status], "info")
+	_open_hole_context_menu(hole)
 
-func _on_hole_delete_pressed(hole_number: int) -> void:
-	hole_tool.delete_hole(hole_number)
+## Re-read one hole button from the course data: its par, its yardage and
+## whether it is open. A closed hole plays nowhere, so its button dims the way
+## the row's Open/Closed toggle used to.
+func _refresh_hole_button(hole_number: int) -> void:
+	var hole_btn := _find_hole_button(hole_number)
+	if not hole_btn:
+		return
+	var hole := _find_hole_data(hole_number)
+	if not hole:
+		return
+	hole_btn.text = "H%d: P%d (%d yds)" % [hole_number, hole.par, hole.distance_yards]
+	hole_btn.tooltip_text = "Hole %d (Par %d, %d yds)%s - Click for the hole menu" % [
+			hole_number, hole.par, hole.distance_yards, "" if hole.is_open else " - Closed"]
+	hole_btn.modulate = Color(1, 1, 1) if hole.is_open else Color(0.5, 0.5, 0.5)
 
-func _on_hole_deleted(hole_number: int) -> void:
-	# Remove the hole row from the UI
-	var row_name = "HoleRow%d" % hole_number
-	if hole_list.has_node(row_name):
-		hole_list.get_node(row_name).queue_free()
-	# Rebuild the hole list to reflect renumbered holes
+func _find_hole_button(hole_number: int) -> Button:
+	if not hole_grid:
+		return null
+	return hole_grid.get_node_or_null("HoleBtn%d" % hole_number) as Button
+
+func _on_hole_deleted(_hole_number: int) -> void:
+	# Rebuild the buttons so they follow the renumbered holes
 	_rebuild_hole_list()
 	_update_status_rating()
 	StrokeIndexCalculator.recalculate_for_course()
 
-func _on_hole_toggled(hole_number: int, is_open: bool) -> void:
+func _on_hole_toggled(hole_number: int, _is_open: bool) -> void:
 	StrokeIndexCalculator.recalculate_for_course()
-	var row_name = "HoleRow%d" % hole_number
-	if hole_list.has_node(row_name):
-		var row = hole_list.get_node(row_name)
-		var toggle_btn = row.get_node("ToggleBtn") as Button
-		var hole_btn = row.get_node("HoleBtn") as Button
-		if toggle_btn:
-			toggle_btn.text = "Open" if is_open else "Closed"
-			toggle_btn.modulate = Color(1, 1, 1) if is_open else Color(0.6, 0.6, 0.6)
-		if hole_btn:
-			hole_btn.modulate = Color(1, 1, 1) if is_open else Color(0.5, 0.5, 0.5)
+	_refresh_hole_button(hole_number)
 
 func _rebuild_hole_list() -> void:
-	# Clear existing hole rows
-	for child in hole_list.get_children():
+	if not hole_grid:
+		return
+	# Drop the old buttons outright: leaving them queued for deletion would keep
+	# them counted in the column layout for the rest of this frame.
+	for child in hole_grid.get_children():
+		hole_grid.remove_child(child)
 		child.queue_free()
-	# Re-add from course data
+	# Re-add from course data, which also restores each hole's open state
 	if GameManager.current_course:
 		for hole in GameManager.current_course.holes:
 			_on_hole_created(hole.hole_number, hole.par, hole.distance_yards)
-			# Re-apply closed state
-			if not hole.is_open:
-				_on_hole_toggled(hole.hole_number, false)
 
 func _prepare_for_nature_placement() -> void:
 	"""Leave other placement modes before starting a tree or boulder placement."""
@@ -1474,140 +1524,25 @@ func _on_rock_size_selected_from_toolbar(rock_size: String) -> void:
 	print("Rock placement mode from toolbar: %s" % rock_size)
 
 func _on_decoration_placement_pressed() -> void:
-	"""Show decoration selection menu and start decoration placement mode"""
+	"""Open the Improvements tab; decoration tiles there start placement directly."""
+	if terrain_toolbar:
+		terrain_toolbar.select_tab(TerrainToolbar.Tab.IMPROVEMENTS)
+
+func _on_decoration_type_selected_from_toolbar(decoration_type: String) -> void:
+	"""Start placement immediately for a decoration tile in the Improvements tab."""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
 	_disable_terrain_painting_preview()
 	is_painting = false
+	if decoration_type not in decoration_registry:
+		EventBus.notify("Decoration type not found: %s" % decoration_type, "error")
+		return
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
-
-	if decoration_registry.is_empty():
-		EventBus.notify("Decoration system not initialized!", "error")
-		return
-
-	var dialog = AcceptDialog.new()
-	dialog.title = "The garden shed"
-	dialog.size = Vector2i(680, 560)
-	dialog.theme = preload("res://assets/themes/game_theme.tres")
-
-	var scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(640, 480)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var vbox = VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 12)
-
-	# Group by category
-	var categories = {"landscaping": "Landscaping", "water": "Water Features", "structures": "Structures", "furniture": "Furniture", "sculptures": "Sculptures"}
-	for cat_id in categories:
-		var cat_name = categories[cat_id]
-		var has_items = false
-		for dec_type in decoration_registry:
-			if decoration_registry[dec_type].get("category", "") == cat_id:
-				has_items = true
-				break
-		if not has_items:
-			continue
-
-		# Category header
-		var header = Label.new()
-		header.text = cat_name
-		header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		header.add_theme_font_size_override("font_size", 16)
-		header.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
-		vbox.add_child(header)
-		var shelf := GridContainer.new()
-		shelf.columns = 2
-		shelf.add_theme_constant_override("h_separation", 10)
-		shelf.add_theme_constant_override("v_separation", 8)
-		vbox.add_child(shelf)
-
-		for dec_type in decoration_registry:
-			var dec_data = decoration_registry[dec_type]
-			if dec_data.get("category", "") != cat_id:
-				continue
-
-			var dec_name = dec_data.get("name", dec_type.capitalize())
-			var cost_val = dec_data.get("cost", 0)
-			var upkeep = dec_data.get("daily_upkeep", 0)
-			var unlocked = _is_decoration_unlocked(dec_data)
-
-			var btn = Button.new()
-			if upkeep > 0:
-				btn.text = "%s\n$%d  ·  $%d/day" % [dec_name, cost_val, upkeep]
-			else:
-				btn.text = "%s\n$%d" % [dec_name, cost_val]
-			btn.custom_minimum_size = Vector2(305, 78)
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			btn.add_theme_font_size_override("font_size", 14)
-			btn.add_theme_constant_override("h_separation", 12)
-			btn.add_theme_constant_override("icon_max_width", 48)
-			btn.expand_icon = true
-			var sprite_path: String = Decoration.SPRITE_PATHS.get(dec_type, "")
-			if not sprite_path.is_empty() and ResourceLoader.exists(sprite_path):
-				btn.icon = load(sprite_path)
-			btn.tooltip_text = dec_data.get("description", "")
-
-			if not unlocked:
-				btn.disabled = true
-				var unlock = dec_data.get("unlock", {})
-				var req_text = _get_unlock_requirement_text(unlock)
-				btn.text = "%s\n%s" % [dec_name, req_text]
-				btn.tooltip_text = "Requires: %s" % req_text
-			else:
-				btn.pressed.connect(_on_decoration_type_selected.bind(dec_type, dialog))
-
-			CatalogArtwork.decorate_button(btn, dec_type, dec_data, false)
-			shelf.add_child(btn)
-
-	scroll.add_child(vbox)
-	dialog.add_child(scroll)
-	dialog.confirmed.connect(dialog.queue_free)
-	dialog.canceled.connect(dialog.queue_free)
-	add_child(dialog)
-	dialog.popup_centered()
-
-func _on_decoration_type_selected(dec_type: String, dialog: AcceptDialog) -> void:
-	"""Handle decoration type selection"""
-	dialog.queue_free()
-	if dec_type in decoration_registry:
-		var dec_data = decoration_registry[dec_type]
-		placement_manager.start_decoration_placement(dec_type, dec_data)
-		print("Decoration placement mode: %s" % dec_type)
-
-func _is_decoration_unlocked(dec_data: Dictionary) -> bool:
-	"""Check if a decoration meets its unlock requirements"""
-	var unlock = dec_data.get("unlock")
-	if unlock == null or (unlock is Dictionary and unlock.is_empty()):
-		return true
-	if not unlock is Dictionary:
-		return true
-	match unlock.get("type", ""):
-		"star_rating":
-			return GameManager.course_rating.get("stars", 0) >= unlock.get("value", 99)
-		"reputation":
-			return GameManager.reputation >= unlock.get("value", 999)
-		"holes_built":
-			var hole_count = GameManager.current_course.holes.size() if GameManager.current_course else 0
-			return hole_count >= unlock.get("value", 99)
-	return false
-
-func _get_unlock_requirement_text(unlock) -> String:
-	"""Get human-readable text for unlock requirement"""
-	if unlock == null or not unlock is Dictionary:
-		return "Unknown"
-	match unlock.get("type", ""):
-		"star_rating":
-			return "%d★ rating" % unlock.get("value", 0)
-		"reputation":
-			return "%d reputation" % unlock.get("value", 0)
-		"holes_built":
-			return "%d holes" % unlock.get("value", 0)
-	return "Unknown"
+	placement_manager.start_decoration_placement(decoration_type, decoration_registry[decoration_type])
+	print("Decoration placement mode from toolbar: %s" % decoration_type)
 
 func _on_sculpt_terrain_pressed(raising: bool) -> void:
 	if raising:
@@ -1656,7 +1591,7 @@ func _on_lower_elevation_pressed() -> void:
 	print("Elevation mode: LOWERING")
 
 func _on_bulldozer_pressed() -> void:
-	"""Activate bulldozer mode to remove trees, rocks, and flower beds"""
+	"""Activate bulldozer mode to demolish improvements and buildings"""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
@@ -1669,13 +1604,17 @@ func _on_bulldozer_pressed() -> void:
 	if placement_preview:
 		placement_preview.set_bulldozer_mode(true)
 		placement_preview.set_brush_size(brush_size)
-	EventBus.notify("Bulldozer mode - Click to remove objects", "info")
+	if terrain_toolbar:
+		terrain_toolbar.set_bulldozer_active(true)
+	EventBus.notify("Bulldozer mode - click decorations, paths or buildings to remove them", "info")
 	print("Bulldozer mode: ACTIVE")
 
 func _cancel_bulldozer_mode() -> void:
 	bulldozer_mode = false
 	if placement_preview:
 		placement_preview.set_bulldozer_mode(false)
+	if terrain_toolbar:
+		terrain_toolbar.set_bulldozer_active(false)
 
 func _disable_terrain_painting_preview() -> void:
 	"""Disable terrain painting preview when switching to other modes"""
@@ -1830,6 +1769,11 @@ func _handle_placement_click(grid_pos: Vector2i) -> void:
 		EventBus.notify("You don't own this land! Press L to buy parcels.", "error")
 		return
 
+	# Clicking the Course Terrain tile that is already here is a no-op, not an error
+	# (a drag across a row of oaks should not toast on every oak).
+	if placement_manager.is_same_course_tile(grid_pos, terrain_grid):
+		return
+
 	if not placement_manager.can_place_at(grid_pos, terrain_grid):
 		EventBus.notify(placement_manager.get_placement_error(grid_pos, terrain_grid), "error")
 		return
@@ -1852,14 +1796,21 @@ func _handle_placement_click(grid_pos: Vector2i) -> void:
 		_place_decoration(grid_pos, cost)
 
 func _place_tree(grid_pos: Vector2i, cost: int) -> void:
-	"""Place a tree at the grid position"""
+	"""Place a tree at the grid position, replacing any Course Terrain tile there."""
+	if placement_manager.is_same_course_tile(grid_pos, terrain_grid):
+		return
+	var total := cost + _course_entity_removal_fee(grid_pos)
+	if total > 0 and not GameManager.can_afford(total):
+		_notify_cant_afford()
+		return
 	_suppress_tile_undo = true
+	var replaced := _displace_course_terrain_entity(grid_pos)
 	var tree = entity_layer.place_tree(grid_pos, selected_tree_type)
 	_suppress_tile_undo = false
 	if tree:
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Tree: %s" % selected_tree_type.capitalize(), -cost)
-		undo_manager.record_entity_placement("tree", grid_pos, selected_tree_type, cost)
+		GameManager.modify_money(-total)
+		EventBus.log_transaction("Tree: %s" % selected_tree_type.capitalize(), -total)
+		undo_manager.record_entity_placement("tree", grid_pos, selected_tree_type, total, replaced)
 		print("Placed %s tree at %s" % [selected_tree_type, grid_pos])
 		# Placement feedback
 		_play_placement_feedback(grid_pos, "tree")
@@ -1894,19 +1845,58 @@ func _place_building(grid_pos: Vector2i, cost: int) -> void:
 	placement_manager.cancel_placement()
 
 func _place_rock(grid_pos: Vector2i, cost: int) -> void:
-	"""Place a rock at the grid position"""
+	"""Place a boulder at the grid position, replacing any Course Terrain tile there."""
+	if placement_manager.is_same_course_tile(grid_pos, terrain_grid):
+		return
+	var total := cost + _course_entity_removal_fee(grid_pos)
+	if total > 0 and not GameManager.can_afford(total):
+		_notify_cant_afford()
+		return
 	_suppress_tile_undo = true
+	var replaced := _displace_course_terrain_entity(grid_pos)
 	var rock = entity_layer.place_rock(grid_pos, selected_rock_size)
 	_suppress_tile_undo = false
 	if rock:
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Rock: %s" % selected_rock_size.capitalize(), -cost)
-		undo_manager.record_entity_placement("rock", grid_pos, selected_rock_size, cost)
+		GameManager.modify_money(-total)
+		EventBus.log_transaction("Rock: %s" % selected_rock_size.capitalize(), -total)
+		undo_manager.record_entity_placement("rock", grid_pos, selected_rock_size, total, replaced)
 		print("Placed %s rock at %s" % [selected_rock_size, grid_pos])
 		# Placement feedback
 		_play_placement_feedback(grid_pos, "rock")
 	else:
 		EventBus.notify("Failed to place rock!", "error")
+
+## Clearing fee for the tree or boulder a Course Terrain tile is about to replace.
+func _course_entity_removal_fee(grid_pos: Vector2i) -> int:
+	if entity_layer == null:
+		return 0
+	var fee := 0
+	if entity_layer.get_tree_at(grid_pos):
+		fee += BULLDOZER_COSTS["tree"]
+	if entity_layer.get_rock_at(grid_pos):
+		fee += BULLDOZER_COSTS["rock"]
+	return fee
+
+## Lift the Course Terrain entity on this tile and remember the ground it stood
+## on, so the tree or boulder about to be placed snapshots that ground without
+## a detour through it (that detour would drop a walking path the new tile can
+## still host). Returns the lifted entity ({} when the tile was empty).
+func _displace_course_terrain_entity(grid_pos: Vector2i) -> Dictionary:
+	if entity_layer == null:
+		return {}
+	var taken := entity_layer.take_course_terrain_entity(grid_pos)
+	if taken.is_empty():
+		return {}
+	var ground := int(taken.get("original_terrain", -1))
+	if ground >= 0:
+		entity_layer.remember_original_terrain(grid_pos, ground)
+	return taken
+
+func _notify_cant_afford() -> void:
+	if GameManager.is_bankrupt():
+		EventBus.notify("Spending blocked! Balance below -$1,000", "error")
+	else:
+		EventBus.notify("Not enough money!", "error")
 
 func _place_decoration(grid_pos: Vector2i, cost: int) -> void:
 	"""Place a decoration at the grid position"""
@@ -1946,20 +1936,6 @@ func _play_placement_feedback(grid_pos: Vector2i, placement_type: String) -> voi
 	# Sound hook (placeholder for future audio)
 	PlacementFeedback.play_placement_sound(placement_type)
 
-func _is_mouse_over_entity(mouse_world: Vector2, entity: Node2D, entity_data: Dictionary) -> bool:
-	"""Check if mouse world position overlaps the entity's visual bounding box."""
-	var vh = entity_data.get("visual_height", 32.0)
-	var bw = entity_data.get("base_width", 24.0)
-	var scale_mult = 1.0
-	if entity.has_meta("_variation") or "_variation" in entity:
-		var variation = entity.get("_variation")
-		if variation:
-			scale_mult = variation.scale
-	var half_w = bw * scale_mult * 0.5
-	var local = mouse_world - entity.global_position
-	# Visual polygons: x centered at 0 (±half_w), y from -vh*0.7 (canopy top) to +vh*0.6 (trunk base)
-	return local.x >= -half_w and local.x <= half_w and local.y >= -vh * scale_mult * 0.7 and local.y <= vh * scale_mult * 0.6
-
 func _bulldoze_at_mouse() -> void:
 	var mouse_world = camera.get_mouse_world_position()
 	var grid_pos = terrain_grid.screen_to_grid(mouse_world)
@@ -1968,18 +1944,26 @@ func _bulldoze_at_mouse() -> void:
 	if not terrain_grid.is_valid_position(grid_pos): return
 	_handle_bulldozer_click(grid_pos, mouse_world)
 
-# Bulldozer removal costs
+# Bulldozer removal fees (Improvements & Buildings only: decorations, walking
+# paths, buildings). Course Terrain tiles replace each other — the bulldozer
+# never touches them. The tree and rock charges are the clearing fees when any
+# Course Terrain tile replaces a tree or boulder.
 const BULLDOZER_COSTS = {
 	"tree": 15,
 	"rock": 10,
-	"flower_bed": 20,
 	"decoration": 20,
-	"rock_ground": 10,  # Painted Rocks terrain (no boulder) back to grass
-	"brush": 10,
+	"building": 20,  # Flat demolition fee, whatever the facility cost
+	"walking_path": 5,  # The Path improvement (thin walking trail)
 }
 
 func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.ZERO) -> void:
-	"""Handle bulldozer removal at a single tile. Supports both single-click and drag."""
+	"""Handle bulldozer removal at a single tile. Supports both single-click and drag.
+
+	The Bulldozer only demolishes Improvements and Buildings — decorations,
+	walking paths and facility buildings. Course Terrain tiles (every ground
+	paint, trees and boulders included) are untouched: replace one by painting
+	any other Course Terrain tile over it.
+	"""
 	var dragging = is_painting
 	# Check land ownership
 	if GameManager.land_manager and not GameManager.land_manager.is_tile_owned(grid_pos):
@@ -1987,68 +1971,7 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 			EventBus.notify("You don't own this land! Press L to buy parcels.", "error")
 		return
 
-	# Search clicked tile + neighbors for entities whose visual bounds contain the mouse.
-	# Entities visually extend beyond their grid tile, so exact-tile lookup misses clicks
-	# on the visible trunk/canopy that overflow into adjacent tiles.
-	var hit_tree_pos: Vector2i = Vector2i(-1, -1)
-	var hit_rock_pos: Vector2i = Vector2i(-1, -1)
-	for dx in range(-1, 2):
-		for dy in range(-1, 2):
-			var check_pos = grid_pos + Vector2i(dx, dy)
-			if not terrain_grid.is_valid_position(check_pos):
-				continue
-			if hit_tree_pos == Vector2i(-1, -1):
-				var t = entity_layer.get_tree_at(check_pos)
-				if t and _is_mouse_over_entity(mouse_world, t, t.tree_data):
-					hit_tree_pos = check_pos
-			if hit_rock_pos == Vector2i(-1, -1):
-				var r = entity_layer.get_rock_at(check_pos)
-				if r and _is_mouse_over_entity(mouse_world, r, r.rock_data):
-					hit_rock_pos = check_pos
-
-	# Remove hit tree (prefer tree over rock when overlapping)
-	if hit_tree_pos != Vector2i(-1, -1):
-		var cost = BULLDOZER_COSTS["tree"]
-		if not GameManager.can_afford(cost):
-			if not dragging:
-				if GameManager.is_bankrupt():
-					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
-				else:
-					EventBus.notify("Not enough money to remove tree ($%d)" % cost, "error")
-			return
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Remove tree", -cost)
-		_suppress_tile_undo = true
-		entity_layer.remove_tree(hit_tree_pos)
-		_suppress_tile_undo = false
-		_bulldoze_drag_count += 1
-		_bulldoze_drag_cost += cost
-		if not dragging:
-			EventBus.notify("Tree removed (-$%d)" % cost, "info")
-		return
-
-	# Remove hit rock
-	if hit_rock_pos != Vector2i(-1, -1):
-		var cost = BULLDOZER_COSTS["rock"]
-		if not GameManager.can_afford(cost):
-			if not dragging:
-				if GameManager.is_bankrupt():
-					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
-				else:
-					EventBus.notify("Not enough money to remove rock ($%d)" % cost, "error")
-			return
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Remove rock", -cost)
-		_suppress_tile_undo = true
-		entity_layer.remove_rock(hit_rock_pos)
-		_suppress_tile_undo = false
-		_bulldoze_drag_count += 1
-		_bulldoze_drag_cost += cost
-		if not dragging:
-			EventBus.notify("Rock removed (-$%d)" % cost, "info")
-		return
-
-	# Remove decoration at this tile
+	# Remove decoration at this tile (Improvements tab)
 	var hit_decoration = entity_layer.get_decoration_at(grid_pos)
 	if hit_decoration:
 		var cost = BULLDOZER_COSTS.get("decoration", 20)
@@ -2068,50 +1991,55 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 			EventBus.notify("Decoration removed (-$%d)" % cost, "info")
 		return
 
-	# Check for flower bed terrain (exact tile only — flower beds fill their tile)
-	var tile_type = terrain_grid.get_tile(grid_pos)
-	if tile_type == TerrainTypes.Type.FLOWER_BED:
-		var cost = BULLDOZER_COSTS["flower_bed"]
+	# Demolish the building covering this tile (Buildings tab). Buildings may
+	# span several tiles — clicking any footprint tile demolishes the whole
+	# facility for a flat fee.
+	var hit_building = entity_layer.get_building_containing(grid_pos)
+	if hit_building:
+		var cost = BULLDOZER_COSTS["building"]
 		if not GameManager.can_afford(cost):
 			if not dragging:
 				if GameManager.is_bankrupt():
 					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
 				else:
-					EventBus.notify("Not enough money to remove flower bed ($%d)" % cost, "error")
+					EventBus.notify("Not enough money to demolish the building ($%d)" % cost, "error")
 			return
+		var building_name: String = str(hit_building.building_data.get("name", "")) \
+				if not hit_building.building_data.is_empty() else ""
+		if building_name.is_empty():
+			building_name = hit_building.building_type.replace("_", " ").capitalize()
 		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Remove flower bed", -cost)
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
+		EventBus.log_transaction("Demolish %s" % building_name, -cost)
+		entity_layer.remove_building(hit_building.grid_position)
 		_bulldoze_drag_count += 1
 		_bulldoze_drag_cost += cost
 		if not dragging:
-			EventBus.notify("Flower bed removed (-$%d)" % cost, "info")
+			EventBus.notify("%s demolished (-$%d)" % [building_name, cost], "info")
 		return
 
-	# Painted rocky ground and brush clear back to natural grass (a boulder's
-	# own spot was handled above with the boulder).
-	if (tile_type == TerrainTypes.Type.ROCKS and entity_layer.get_rock_at(grid_pos) == null) \
-			or tile_type == TerrainTypes.Type.BRUSH:
-		var is_rock_ground: bool = tile_type == TerrainTypes.Type.ROCKS
-		var cost = BULLDOZER_COSTS["rock_ground" if is_rock_ground else "brush"]
-		var what := "rocky ground" if is_rock_ground else "brush"
+	# The Path improvement: a thin walking trail laid over the ground.
+	# (Course terrain paints replace the ground itself; a trail on plain
+	# hostable ground needs its own pass.)
+	if terrain_grid.has_walking_path(grid_pos):
+		var cost = BULLDOZER_COSTS["walking_path"]
 		if not GameManager.can_afford(cost):
 			if not dragging:
 				if GameManager.is_bankrupt():
 					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
 				else:
-					EventBus.notify("Not enough money to clear %s ($%d)" % [what, cost], "error")
+					EventBus.notify("Not enough money to remove walking path ($%d)" % cost, "error")
 			return
 		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Clear %s" % what, -cost)
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
+		EventBus.log_transaction("Remove walking path", -cost)
+		terrain_grid.set_walking_path(grid_pos, false)
+		undo_manager.record_walking_path(grid_pos, false)
 		_bulldoze_drag_count += 1
 		_bulldoze_drag_cost += cost
 		if not dragging:
-			EventBus.notify("Cleared %s (-$%d)" % [what, cost], "info")
+			EventBus.notify("Walking path removed (-$%d)" % cost, "info")
 		return
 
-	# Nothing to remove at this position
+	# Nothing to remove at this position — course terrain is never bulldozed.
 	if not dragging:
 		EventBus.notify("Nothing to bulldoze here", "info")
 
@@ -2338,6 +2266,7 @@ func _open_hole_context_menu(hole_data: GameManager.HoleData) -> void:
 	_hole_context_menu.toggle_hole_requested.connect(_on_context_toggle_hole)
 	_hole_context_menu.view_stats_requested.connect(_on_context_view_stats)
 	_hole_context_menu.par_override_requested.connect(_on_context_par_override)
+	_hole_context_menu.delete_hole_requested.connect(_on_context_delete_hole)
 	_hole_context_menu.menu_closed.connect(_on_context_menu_closed)
 
 	# Highlight the hole
@@ -2402,6 +2331,25 @@ func _on_context_par_override(hole_number: int, new_par: int) -> void:
 
 func _on_context_view_stats(hole_number: int) -> void:
 	_show_hole_stats(hole_number)
+
+## Deleting a hole renumbers every hole after it, so it asks first. The hole's
+## tee box and green stay painted on the course: repaint them, or paint a green
+## to cut a cup for the tee box the deleted hole leaves waiting.
+func _on_context_delete_hole(hole_number: int) -> void:
+	if not _find_hole_data(hole_number):
+		return
+	var dialog := ConfirmDialog.new(
+			"Hole %d will be removed and the holes after it renumbered.\nIts tee box and green stay on the course." % hole_number,
+			"Delete Hole", "Cancel")
+	dialog.name = "DeleteHoleConfirmDialog"
+	dialog.confirmed.connect(_on_delete_hole_confirmed.bind(hole_number))
+	$UI/HUD.add_child(dialog)
+
+func _on_delete_hole_confirmed(hole_number: int) -> void:
+	if not hole_tool.delete_hole(hole_number):
+		EventBus.notify("Hole %d is not on the course." % hole_number, "error")
+		return
+	EventBus.notify("Hole %d deleted — the holes after it renumbered" % hole_number, "info")
 
 func _find_hole_data(hole_number: int) -> GameManager.HoleData:
 	if not GameManager.current_course:
@@ -2665,6 +2613,15 @@ func _execute_middle_tee_move(new_pos: Vector2i) -> void:
 var _is_undoing: bool = false  # Prevent re-recording changes triggered by undo/redo
 var _suppress_tile_undo: bool = false  # Suppress tile change recording during entity placement/removal
 
+func _restore_removed_course_entity(removed: Dictionary) -> void:
+	if entity_layer == null or removed.is_empty():
+		return
+	entity_layer.restore_course_terrain_entity(
+		removed.get("position", Vector2i.ZERO),
+		str(removed.get("type", "")),
+		str(removed.get("subtype", "")),
+		int(removed.get("original_terrain", -1)))
+
 func _on_terrain_tile_changed_for_undo(tile_pos: Vector2i, old_type: int, new_type: int) -> void:
 	if _is_undoing or _suppress_tile_undo:
 		# Still keep tee UI in sync even while undoing or suppressing undo recording.
@@ -2727,11 +2684,18 @@ func _execute_undo_action(action: Dictionary) -> void:
 					else: terrain_grid.remove_cup_tile(change.position)
 				refund += TerrainTypes.get_placement_cost(change["new_type"])
 			for removed in action.get("removed_entities", []):
-				if removed.type == "tree": entity_layer.place_tree(removed.position, removed.subtype)
-				else: entity_layer.place_rock(removed.position, removed.subtype)
+				_restore_removed_course_entity(removed)
+			# Revert walking-path (Path improvement) changes made in the same stroke.
+			for wp in action.get("walking_paths", []):
+				terrain_grid.set_walking_path(wp["position"], not wp["added"])
 			refund = action.get("paid_cost", refund)
 			if refund > 0:
 				GameManager.modify_money(refund)
+		"walking_paths":
+			# Standalone Path improvement change (e.g. a bulldozer removal).
+			var changes = action.get("changes", [])
+			for i in range(changes.size() - 1, -1, -1):
+				terrain_grid.set_walking_path(changes[i]["position"], not changes[i]["added"])
 		"elevation":
 			# Revert vertex height changes in reverse order
 			var changes = action.get("changes", [])
@@ -2739,10 +2703,12 @@ func _execute_undo_action(action: Dictionary) -> void:
 				var change = changes[i]
 				terrain_grid.set_vertex_elevation(change["position"], change["old_elevation"])
 		"entity_place":
-			# Remove the entity and refund cost
+			# Remove the entity and refund cost. If it replaced another Course
+			# Terrain tile, put that tile back.
 			var grid_pos = action.get("grid_pos", Vector2i.ZERO)
 			var entity_type = action.get("entity_type", "")
 			var cost = action.get("cost", 0)
+			var replaced: Dictionary = action.get("replaced", {})
 			match entity_type:
 				"tree":
 					entity_layer.remove_tree(grid_pos)
@@ -2752,6 +2718,8 @@ func _execute_undo_action(action: Dictionary) -> void:
 					entity_layer.remove_rock(grid_pos)
 				"decoration":
 					entity_layer.remove_decoration(grid_pos)
+			if not replaced.is_empty():
+				_restore_removed_course_entity(replaced)
 			if cost > 0:
 				GameManager.modify_money(cost)
 		"pin_move":
@@ -2805,9 +2773,12 @@ func _execute_redo_action(action: Dictionary) -> void:
 			# Re-apply all tile changes in order
 			var changes = action.get("changes", [])
 			var cost = 0
+			# Lift replaced trees and boulders without restoring their stamp;
+			# the tile changes below are the ground that should remain. A
+			# removal-only stroke (Rocks painted over a boulder) leaves Rocks.
 			for removed in action.get("removed_entities", []):
-				if removed.type == "tree": entity_layer.remove_tree(removed.position)
-				else: entity_layer.remove_rock(removed.position)
+				if entity_layer:
+					entity_layer.take_course_terrain_entity(removed.position)
 			for change in changes:
 				terrain_grid.set_tile(change["position"], change["new_type"])
 				if change.has("new_depth"): terrain_grid.set_bunker_depth(change.position, change.new_depth)
@@ -2815,20 +2786,35 @@ func _execute_redo_action(action: Dictionary) -> void:
 					if change.new_cup: terrain_grid.add_cup_tile(change.position)
 					else: terrain_grid.remove_cup_tile(change.position)
 				cost += TerrainTypes.get_placement_cost(change["new_type"])
+			# Re-apply walking-path (Path improvement) changes from the same stroke.
+			for wp in action.get("walking_paths", []):
+				terrain_grid.set_walking_path(wp["position"], wp["added"])
 			cost = action.get("paid_cost", cost)
 			if cost > 0:
 				GameManager.modify_money(-cost)
+		"walking_paths":
+			# Standalone Path improvement change (e.g. a bulldozer removal).
+			var changes = action.get("changes", [])
+			for change in changes:
+				terrain_grid.set_walking_path(change["position"], change["added"])
 		"elevation":
 			# Re-apply vertex height changes in order
 			var changes = action.get("changes", [])
 			for change in changes:
 				terrain_grid.set_vertex_elevation(change["position"], change["new_elevation"])
 		"entity_place":
-			# Re-place the entity and deduct cost
+			# Re-place the entity and deduct cost. Undo put back whatever this
+			# placement replaced; lift that again so the redo matches the click.
 			var grid_pos = action.get("grid_pos", Vector2i.ZERO)
 			var entity_type = action.get("entity_type", "")
 			var subtype = action.get("subtype", "")
 			var cost = action.get("cost", 0)
+			var replaced: Dictionary = action.get("replaced", {})
+			if not replaced.is_empty() and entity_layer:
+				entity_layer.take_course_terrain_entity(grid_pos)
+				var ground := int(replaced.get("original_terrain", -1))
+				if ground >= 0:
+					entity_layer.remember_original_terrain(grid_pos, ground)
 			match entity_type:
 				"tree":
 					entity_layer.place_tree(grid_pos, subtype)
@@ -3698,6 +3684,8 @@ func _exit_tree() -> void:
 		EventBus.hole_deleted.disconnect(_on_hole_deleted)
 	if EventBus.hole_toggled.is_connected(_on_hole_toggled):
 		EventBus.hole_toggled.disconnect(_on_hole_toggled)
+	if EventBus.hole_updated.is_connected(_refresh_hole_button):
+		EventBus.hole_updated.disconnect(_refresh_hole_button)
 	if EventBus.end_of_day.is_connected(_on_end_of_day):
 		EventBus.end_of_day.disconnect(_on_end_of_day)
 	if EventBus.load_completed.is_connected(_on_load_completed):

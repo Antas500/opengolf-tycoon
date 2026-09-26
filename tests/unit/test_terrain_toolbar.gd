@@ -24,17 +24,22 @@ func test_course_tiles_share_one_group_in_top_and_bottom_rows() -> void:
 	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
 	assert_eq(grid.columns, TOP_ROW.size() + ceili(float(landscape_count) / 2.0))
-	assert_eq(grid.get_child_count(), TOP_ROW.size() + BOTTOM_ROW.size() + landscape_count,
+	assert_eq(grid.flow_children().size(),
+		TOP_ROW.size() + BOTTOM_ROW.size() + landscape_count,
 		"All course and landscape tiles share exactly two rows")
 	for tool_type in TOP_ROW + BOTTOM_ROW:
 		assert_eq(toolbar._tool_buttons[tool_type].get_parent(), grid,
 			"Course tiles should live in the same group")
 
+	# Reading order: the tiles take slots in the order they are children. The
+	# nestled Open Hole button is not a tile, so it holds no slot (see
+	# test_open_hole_nests_into_the_notch_between_the_tee_and_green_tiles).
+	var tiles: Array[Control] = grid.flow_children()
 	for slot in TOP_ROW.size():
-		assert_eq(toolbar._tool_buttons[TOP_ROW[slot]].get_index(), slot,
+		assert_eq(tiles.find(toolbar._tool_buttons[TOP_ROW[slot]]), slot,
 			"%s is tile %d of the top row" % [TerrainTypes.get_type_name(TOP_ROW[slot]), slot])
 	for slot in BOTTOM_ROW.size():
-		assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot,
+		assert_eq(tiles.find(toolbar._tool_buttons[BOTTOM_ROW[slot]]), grid.columns + slot,
 			"%s is tile %d of the bottom row" % [TerrainTypes.get_type_name(BOTTOM_ROW[slot]), slot])
 
 	# The rows are drawn staggered: the bottom row sits half a tile below the top.
@@ -52,18 +57,19 @@ func test_bottom_row_is_shifted_right_into_the_notches_of_the_top_row() -> void:
 	await _settle_layout()
 	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
 	var pitch := grid.tile_size.x + grid.h_separation
-	var bottom_count := grid.get_child_count() - grid.columns
+	var tiles: Array[Control] = grid.flow_children()
+	var bottom_count := tiles.size() - grid.columns
 
 	for i in bottom_count:
-		var below: Control = grid.get_child(grid.columns + i)
-		var above_left: Control = grid.get_child(i)
+		var below: Control = tiles[grid.columns + i]
+		var above_left: Control = tiles[i]
 
 		# Half a tile to the right of the tile above: the row is staggered.
 		assert_almost_eq(below.position.x - above_left.position.x, pitch * 0.5, 0.01,
 			"Bottom row tile %d should be shifted half a tile to the right" % i)
 		if i + 1 < grid.columns:
 			# Centred on the gap between the two tiles above it.
-			var above_right: Control = grid.get_child(i + 1)
+			var above_right: Control = tiles[i + 1]
 			assert_almost_eq(below.position.x,
 				(above_left.position.x + above_right.position.x) * 0.5, 0.01,
 				"Bottom row tile %d should sit in the notch between two top row tiles" % i)
@@ -83,10 +89,11 @@ func test_interlocking_rows_never_overlap_each_others_diamonds() -> void:
 
 	# A bottom row tile's top vertex must stay outside every diamond above it,
 	# including the last tile, which overhangs the end of the top row.
-	for i in grid.get_child_count() - grid.columns:
-		var below: Control = grid.get_child(grid.columns + i)
+	var tiles: Array[Control] = grid.flow_children()
+	for i in tiles.size() - grid.columns:
+		var below: Control = tiles[grid.columns + i]
 		var vertex := below.position + Vector2(tile.x * 0.5, 0.0)
-		for above in grid.get_children().slice(0, grid.columns):
+		for above in tiles.slice(0, grid.columns):
 			assert_false(TerrainTileButton.point_on_tile(vertex - above.position),
 				"Bottom row tile %d should not cover the diamond of top row tile %d"
 					% [i, above.get_index()])
@@ -173,6 +180,25 @@ func test_tile_rows_keep_space_above_below_and_between_them() -> void:
 func _settle_layout() -> void:
 	await wait_frames(2)
 
+## The diamond's four vertices plus the midpoints of its edges: enough points to
+## show a nestled button is clear of the tiles either side of it.
+func _diamond_samples(box: Vector2) -> Array[Vector2]:
+	var points: Array[Vector2] = []
+	for corner in OpenHoleNotchButton.diamond_corners(box):
+		points.append(corner)
+	points.append(box * Vector2(0.25, 0.25))
+	points.append(box * Vector2(0.75, 0.25))
+	points.append(box * Vector2(0.75, 0.75))
+	points.append(box * Vector2(0.25, 0.75))
+	return points
+
+## The improvement shelf's decoration tiles, in shelf order: the leading path
+## tile is a painting tool rather than a catalogue entry, so catalogue
+## assertions skip it.
+func _catalogue_tiles() -> Array:
+	return toolbar._decoration_shelf.get_children().filter(
+		func(tile): return tile != toolbar._path_tile)
+
 func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.tab_count, 9, "Toolbar should have 9 tabs")
 	assert_eq(toolbar._pages.size(), 9, "Toolbar should have 9 pages")
@@ -186,16 +212,18 @@ func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.CLUB), "Club")
 	assert_eq(toolbar._tab_bar.get_tab_title(TerrainToolbar.Tab.STAFF), "Staff")
 
-func test_all_pages_are_horizontal_scroll_containers() -> void:
+func test_all_pages_scroll_horizontally_behind_fixed_chrome() -> void:
 	for i in toolbar._pages.size():
 		var page = toolbar._pages[i]
 		assert_not_null(page, "Page %d should not be null" % i)
-		assert_eq(page.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO,
+		var scroll: ScrollContainer = toolbar.page_scroll(i)
+		assert_not_null(scroll, "Page %d should hold a scroll container" % i)
+		assert_eq(scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO,
 			"Page %d should have horizontal scroll mode AUTO" % i)
-		assert_eq(page.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED,
+		assert_eq(scroll.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED,
 			"Page %d should have vertical scroll mode DISABLED" % i)
-		assert_gt(page.get_child_count(), 0, "Page %d should have content child" % i)
-		var content = page.get_child(0)
+		assert_gt(scroll.get_child_count(), 0, "Page %d should have content child" % i)
+		var content = scroll.get_child(0)
 		assert_true(content is HBoxContainer, "Page %d content container should be HBoxContainer" % i)
 
 func test_tab_selection_toggles_visibility() -> void:
@@ -210,6 +238,59 @@ func test_tab_selection_toggles_visibility() -> void:
 	toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
 	assert_false(toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS].visible)
 	assert_true(toolbar._pages[TerrainToolbar.Tab.BUILDINGS].visible)
+
+func test_bulldozer_pins_to_the_removal_tabs_bottom_left_corners() -> void:
+	assert_eq(toolbar._bulldozer_buttons.size(), 2,
+		"One pinned Bulldozer per tab whose tiles it can remove")
+	for tab in [TerrainToolbar.Tab.IMPROVEMENTS, TerrainToolbar.Tab.BUILDINGS]:
+		var page: Control = toolbar._pages[tab]
+		var found := page.find_children("*", "BulldozerButton", false, false)
+		assert_eq(found.size(), 1, "%s page pins exactly one Bulldozer" % toolbar._tab_bar.get_tab_title(tab))
+		var btn: BulldozerButton = found[0]
+		# Anchored to the page's bottom-left corner, clear of the page edges.
+		assert_almost_eq(btn.anchor_left, 0.0, 0.001, "Anchored to the left edge")
+		assert_almost_eq(btn.anchor_top, 1.0, 0.001, "Anchored to the bottom edge")
+		assert_almost_eq(btn.anchor_right, 0.0, 0.001, "Anchored to the left edge")
+		assert_almost_eq(btn.anchor_bottom, 1.0, 0.001, "Anchored to the bottom edge")
+		assert_almost_eq(btn.offset_left, BulldozerButton.CORNER_MARGIN, 0.01)
+		assert_almost_eq(btn.offset_bottom, -BulldozerButton.CORNER_MARGIN, 0.01)
+		# A round button: square bounds of the fixed diameter, circular hit face.
+		assert_eq(btn.custom_minimum_size,
+			Vector2(BulldozerButton.BUTTON_DIAMETER, BulldozerButton.BUTTON_DIAMETER))
+		assert_true(btn._has_point(btn.size * 0.5), "The circle face is clickable")
+		assert_false(btn._has_point(Vector2(1, 1)),
+			"The bounding box corners fall through to the tiles underneath")
+		assert_string_contains(btn.accessibility_description, "Course Terrain tiles are not affected",
+			"The tooltip explains the Bulldozer's scope")
+	# The Course Terrain page pins nothing: ground tiles are never bulldozed.
+	assert_eq(toolbar._pages[TerrainToolbar.Tab.TERRAIN].find_children(
+		"*", "BulldozerButton", true, false).size(), 0,
+		"Course Terrain has no Bulldozer button")
+
+func test_bulldozer_buttons_trigger_and_share_the_mode_state() -> void:
+	watch_signals(toolbar)
+	var buttons: Array = toolbar._bulldozer_buttons
+
+	# Pressing a pinned button stays on its own tab and starts bulldozer mode.
+	toolbar.select_tab(TerrainToolbar.Tab.IMPROVEMENTS)
+	buttons[0].pressed.emit()
+	assert_signal_emitted(toolbar, "bulldozer_pressed")
+	assert_true(toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS].visible,
+		"Pressing the pinned Bulldozer keeps its tab open")
+
+	toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
+	buttons[1].pressed.emit()
+	assert_signal_emitted(toolbar, "bulldozer_pressed")
+	assert_true(toolbar._pages[TerrainToolbar.Tab.BUILDINGS].visible,
+		"Pressing the pinned Bulldozer keeps its tab open")
+
+	# Both circles report the mode: gold ring while it runs, quiet when it ends.
+	toolbar.set_bulldozer_active(true)
+	for btn in buttons:
+		assert_true(btn.is_active(), "The pinned Bulldozer shows the mode is on")
+	toolbar.set_bulldozer_active(false)
+	for btn in buttons:
+		assert_false(btn.is_active(), "The pinned Bulldozer shows the mode is off")
 
 func test_tool_selection_and_signals() -> void:
 	watch_signals(toolbar)
@@ -228,9 +309,11 @@ func test_tool_selection_and_signals() -> void:
 	assert_false(toolbar.has_selection())
 
 func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
+	# The walking path paints the course as much as any of these, so it is drawn
+	# as a tile too — it just lives in the Improvements honeycomb.
 	var paint_tools := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
 		TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.BUNKER,
-		TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS]
+		TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS, TerrainTypes.Type.PATH]
 	for tool_type in paint_tools:
 		var button: ToolButton = toolbar._tool_buttons[tool_type]
 		assert_true(button is TerrainTileButton, "%s should be a tile button" % button.tool_name)
@@ -250,9 +333,10 @@ func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 			"The shortcut still reaches assistive tech")
 		assert_eq(button.cost, TerrainTypes.get_placement_cost(tool_type))
 
-	# Other pages and non-painting actions retain their familiar ToolButtons.
-	assert_false(toolbar._tool_buttons[TerrainTypes.Type.PATH] is TerrainTileButton)
-	assert_false(toolbar._tool_buttons["bulldozer"] is TerrainTileButton)
+	# Non-painting actions retain their familiar ToolButtons. The Bulldozer is
+	# no longer a Course Terrain tool at all — it is pinned to the Improvements
+	# and Buildings tabs, whose tiles it can remove.
+	assert_false(toolbar._tool_buttons.has("bulldozer"), "The Bulldozer is not a Course Terrain tool")
 	assert_false(toolbar._open_hole_buttons[0] is TerrainTileButton)
 
 func test_building_choices_use_the_course_tile_design() -> void:
@@ -263,7 +347,7 @@ func test_building_choices_use_the_course_tile_design() -> void:
 	toolbar.set_building_registry(registry)
 
 	assert_true(toolbar._building_shelf is TileHoneycomb)
-	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.building_tile_columns(registry.size()))
+	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.tile_columns(registry.size()))
 	assert_eq(toolbar._building_shelf.get_child_count(), registry.size())
 	for button in toolbar._building_shelf.get_children():
 		assert_true(button is BuildingTileButton, "Building choices should use isometric tile buttons")
@@ -284,7 +368,7 @@ func test_building_choices_use_the_course_tile_design() -> void:
 	assert_signal_emitted_with_parameters(toolbar, "building_selected", ["bench"])
 
 func test_buildings_tab_has_no_heading_or_info_section() -> void:
-	var page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.BUILDINGS]
+	var page: Control = toolbar._pages[TerrainToolbar.Tab.BUILDINGS]
 	var texts: Array[String] = []
 	for label in page.find_children("*", "Label", true, false):
 		if label.get_parent() is TerrainTileButton:
@@ -385,27 +469,372 @@ func test_green_tile_flag_tracks_the_next_green_type() -> void:
 	assert_string_contains(button.tool_description, "Green Without Hole")
 	assert_string_contains(button.accessibility_description, "selected brush")
 
+func test_every_course_terrain_tile_says_it_replaces_the_others() -> void:
+	var sentence := TerrainTypes.REPLACES_ANY_COURSE_TILE
+	for tool_type in TOP_ROW + BOTTOM_ROW + [TerrainTypes.Type.FLOWER_BED]:
+		var button: TerrainTileButton = toolbar._tool_buttons[tool_type]
+		assert_string_contains(button.tool_description, sentence,
+			"%s tells the player it replaces any other Course Terrain tile" % button.tool_name)
+	for key in ["boulder_small", "rock", "boulder_large"]:
+		assert_string_contains(toolbar._tool_buttons[key].tool_description, sentence,
+			"Boulder tiles replace any other Course Terrain tile")
+	for tree_type in CourseTheme.get_tree_types(GameManager.current_theme):
+		assert_string_contains(toolbar._tool_buttons["tree_" + str(tree_type)].tool_description, sentence,
+			"Tree tiles replace any other Course Terrain tile")
+	# The Path tool is an improvement laid over ground, not a Course Terrain tile.
+	assert_false(toolbar._tool_buttons[TerrainTypes.Type.PATH].tool_description.contains(sentence),
+		"The walking path does not replace course terrain")
+	toolbar.set_green_placement_state(false)
+	assert_string_contains(toolbar._tool_buttons[TerrainTypes.Type.GREEN].tool_description, sentence,
+		"Switching the green between with-hole and without keeps the replacement note")
+
 func test_course_terrain_tab_has_no_green_size_presets() -> void:
-	var terrain_content: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0)
-	assert_eq(terrain_content.get_child_count(), 3,
-		"The terrain tab contains the tools, separator, unified tile grid, with no extra separator or preset group")
+	var terrain_content: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.TERRAIN)
+	assert_eq(terrain_content.get_child_count(), 1,
+		"The scrolling terrain tab is just the unified tile grid — the brush is pinned to the page, and there is no extra separator or preset group")
 
-func test_holes_tab_has_hbox_hole_list() -> void:
-	assert_not_null(toolbar.hole_list, "hole_list should exist")
-	assert_true(toolbar.hole_list is HBoxContainer, "hole_list should be an HBoxContainer")
+## Open Hole pairs the tee box and the green, so the Course Terrain tab nestles
+## the action into the notch between those two tiles instead of leaving it in the
+## tools column at the far edge of the tab.
+func test_open_hole_nests_into_the_notch_between_the_tee_and_green_tiles() -> void:
+	await _settle_layout()
+	var grid: TileHoneycomb = toolbar._course_tiles
+	var tee: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]
+	var green: Control = toolbar._tool_buttons[TerrainTypes.Type.GREEN]
+	var open_hole: OpenHoleNotchButton = toolbar._open_hole_buttons[0]
 
-	# Add a sample hole row and verify containment
-	var row = HBoxContainer.new()
-	row.name = "HoleRow1"
-	toolbar.hole_list.add_child(row)
-	assert_true(toolbar.hole_list.has_node("HoleRow1"))
-	row.queue_free()
+	assert_true(open_hole is OpenHoleNotchButton, "Open Hole is drawn as a notch cell, not a wide button")
+	assert_eq(open_hole.get_parent(), grid, "Open Hole lives on the Course Terrain honeycomb")
+	assert_true(grid.is_notch_child(open_hole), "The action fills a notch instead of a tile slot")
+	assert_false(grid.flow_children().has(open_hole),
+		"A nestled child takes no slot, so the tiles keep their rows")
+	assert_eq(open_hole.tool_name, "Open Hole")
+	assert_eq(open_hole.hotkey, "H")
+	assert_eq(open_hole.caption(), "[H]",
+		"A notch cell is too small for the name: it carries the hotkey chip")
+	assert_string_contains(open_hole.tool_description, "tee box",
+		"The hover tooltip still explains what the action does")
 
-func test_golfers_tab_lists_are_horizontal_and_populate() -> void:
+	# Tucked between the two tiles' facing edges, its bottom point on the point
+	# where those edges meet and its top point level with the top of the row.
+	var tee_centre := tee.position + tee.size * 0.5
+	var green_centre := green.position + green.size * 0.5
+	var centre := open_hole.position + open_hole.size * 0.5
+	# Where the two tiles meet: the tee box's right vertex and the green's left
+	# vertex face each other across the honeycomb's gap.
+	var meet := (tee.position + Vector2(tee.size.x, tee.size.y * 0.5)
+		+ green.position + Vector2(0.0, green.size.y * 0.5)) * 0.5
+	assert_almost_eq(centre.x, (tee_centre.x + green_centre.x) * 0.5, 0.01,
+		"The diamond is centred between the tee box and the green")
+	assert_almost_eq(centre.x, meet.x, 0.01, "Centred on the point where the two tiles meet")
+	assert_almost_eq(centre.y + open_hole.size.y * 0.5, meet.y, 0.01,
+		"Its bottom point sits on the point where the tee box and the green meet")
+	assert_almost_eq(centre.y - open_hole.size.y * 0.5, tee.position.y, 0.01,
+		"Its top point is level with the top of the tiles' row")
+	# Half a course cell: an isometric diamond narrower than the notch cell, so
+	# it keeps daylight from the tiles, and exactly as tall, so its points line
+	# up with the grid it drops into.
+	assert_almost_eq(open_hole.size.x, open_hole.size.y * 2.0, 0.01,
+		"The notch cell is an isometric diamond, like the tiles")
+	var notch := grid.notch_cell_size()
+	assert_lt(open_hole.size.x, notch.x, "Narrower than the notch, so it clears the tiles")
+	assert_almost_eq(open_hole.size.y, notch.y, 0.01, "As tall as the notch: its points meet the grid")
+	assert_almost_eq((grid.notch_centre(0) - centre).length(), 0.0, 0.01,
+		"The honeycomb centres the action in the tee/green notch")
+	for tile in [tee, green]:
+		for point in _diamond_samples(open_hole.size):
+			assert_false(TerrainTileButton.point_on_tile(open_hole.position + point - tile.position),
+				"The Open Hole diamond stays clear of the %s tile" % tile.tool_name)
+
+	# Only the diamond answers to the mouse.
+	assert_true(open_hole._has_point(open_hole.size * 0.5), "The middle of the diamond is clickable")
+	assert_false(open_hole._has_point(Vector2(1, 1)),
+		"The empty corner of its bounding box falls through to the tiles underneath")
+
+	# Pressing it still opens the hole.
+	watch_signals(toolbar)
+	open_hole.pressed.emit()
+	assert_signal_emitted(toolbar, "open_hole_pressed")
+
+func test_open_hole_notch_does_not_shift_the_course_tiles() -> void:
+	await _settle_layout()
+	var tiles: Array[Control] = toolbar._course_tiles.flow_children()
+	assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]), 0,
+		"The tee box still opens the top row")
+	assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.GREEN]), 1,
+		"The green still follows it, with nothing wedged between them")
+	assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.BUNKER]), 2,
+		"The rest of the top row is untouched")
+	for slot in BOTTOM_ROW.size():
+		assert_eq(tiles.find(toolbar._tool_buttons[BOTTOM_ROW[slot]]),
+			toolbar._course_tiles.columns + slot,
+			"%s keeps its bottom row slot" % TerrainTypes.get_type_name(BOTTOM_ROW[slot]))
+
+## The nestled diamond reports the action's availability in its own ring: gold
+## while a tee box and a cup are waiting to be paired, grey while they are not.
+func test_open_hole_notch_ring_tracks_whether_a_hole_can_be_opened() -> void:
+	var open_hole: OpenHoleNotchButton = toolbar._open_hole_buttons[0]
+
+	toolbar.set_open_hole_state(false, "Paint a tee box to go with the waiting green.")
+	assert_true(open_hole.disabled)
+	assert_eq(open_hole._ring_color(), OpenHoleNotchButton.COLOR_RING_DISABLED,
+		"The ring is grey while no hole can be opened")
+	assert_string_contains(open_hole.tool_description, "Paint a tee box")
+
+	toolbar.set_open_hole_state(true, "")
+	assert_false(open_hole.disabled)
+	assert_eq(open_hole._ring_color(), UIConstants.COLOR_GOLD,
+		"The ring turns gold the moment the pair is ready")
+	assert_string_contains(open_hole.tool_description, "waiting tee box")
+
+## Switching themes rebuilds the landscape catalogue around the nestled action:
+## the tile flow is reshuffled, and the Open Hole button must not be moved into
+## a row with it.
+func test_theme_changes_keep_the_open_hole_between_the_tee_and_green() -> void:
+	var original_theme: int = GameManager.current_theme
+	var open_hole: OpenHoleNotchButton = toolbar._open_hole_buttons[0]
+	for theme in [CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND,
+			CourseTheme.Type.DESERT, CourseTheme.Type.PARKLAND]:
+		GameManager.current_theme = theme
+		EventBus.theme_changed.emit(theme)
+		await _settle_layout()
+
+		var grid: TileHoneycomb = toolbar._course_tiles
+		assert_true(grid.is_notch_child(open_hole), "The action stays nestled, never a tile")
+		assert_almost_eq(
+			(open_hole.position + open_hole.size * 0.5).distance_to(grid.notch_centre(0)), 0.0, 0.01,
+			"A rebuilt catalogue leaves the action in the tee/green notch")
+		var tiles: Array[Control] = grid.flow_children()
+		assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]), 0)
+		assert_eq(tiles.find(toolbar._tool_buttons[TerrainTypes.Type.GREEN]), 1)
+		assert_false(tiles.has(open_hole), "The catalogue rebuild never turns it into a tile")
+	GameManager.current_theme = original_theme
+	EventBus.theme_changed.emit(original_theme)
+
+## The Course Terrain brush controls no longer lead the scrolling shelf: they
+## are pinned to the page's bottom-left corner so they stay above the tiles.
+func test_brush_controls_pin_to_the_terrain_tabs_bottom_left_corner() -> void:
+	var page: Control = toolbar._pages[TerrainToolbar.Tab.TERRAIN]
+	var dock: PanelContainer = toolbar._brush_dock
+	assert_not_null(dock, "The Course Terrain tab pins a brush dock")
+	assert_eq(dock.name, "BrushDock")
+	assert_eq(dock.get_parent(), page, "Pinned to the page, not to the scrolling shelf")
+	assert_false(toolbar.page_scroll(TerrainToolbar.Tab.TERRAIN).is_ancestor_of(dock),
+		"The brush stays fixed while the tiles scroll beneath it")
+	assert_eq(page.find_children("*", "TerrainToolsColumn", true, false).size(), 0,
+		"The old tools column is gone")
+
+	# Anchored to the page's bottom-left corner, clear of the page edges.
+	assert_almost_eq(dock.anchor_left, 0.0, 0.001, "Anchored to the left edge")
+	assert_almost_eq(dock.anchor_top, 1.0, 0.001, "Anchored to the bottom edge")
+	assert_almost_eq(dock.anchor_right, 0.0, 0.001, "Anchored to the left edge")
+	assert_almost_eq(dock.anchor_bottom, 1.0, 0.001, "Anchored to the bottom edge")
+	assert_almost_eq(dock.offset_left, TerrainToolbar.BRUSH_DOCK_MARGIN, 0.01)
+	assert_almost_eq(dock.offset_bottom, -TerrainToolbar.BRUSH_DOCK_MARGIN, 0.01)
+
+	await _settle_layout()
+	var side := TerrainToolbar.brush_dock_side()
+	assert_eq(dock.size, Vector2(side, side), "A square plate of four cells")
+	assert_eq(dock.position, Vector2(TerrainToolbar.BRUSH_DOCK_MARGIN,
+		page.size.y - TerrainToolbar.BRUSH_DOCK_MARGIN - side),
+		"Held in the bottom-left corner of the tab")
+	assert_true(Rect2(Vector2.ZERO, page.size).encloses(Rect2(dock.position, dock.size)),
+		"The plate stays inside the tab")
+
+## "Fixed" means fixed: scrolling the catalogue moves the tiles, and the brush
+## stays where it was pinned.
+func test_pinned_brush_stays_put_while_the_tiles_scroll() -> void:
+	var scroll: ScrollContainer = toolbar.page_scroll(TerrainToolbar.Tab.TERRAIN)
+	var dock: PanelContainer = toolbar._brush_dock
+	await _settle_layout()
+	var dock_before: Vector2 = dock.get_global_transform_with_canvas().origin
+	var tee: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX]
+	var tee_before: Vector2 = tee.get_global_transform_with_canvas().origin
+
+	scroll.scroll_horizontal = 200
+	await _settle_layout()
+	assert_gt(scroll.scroll_horizontal, 0, "The shelf scrolled")
+	assert_eq(dock.get_global_transform_with_canvas().origin, dock_before,
+		"The brush stays fixed in the corner of the tab")
+	assert_ne(tee.get_global_transform_with_canvas().origin, tee_before,
+		"The tiles scroll beneath it")
+
+	scroll.scroll_horizontal = 0
+	await _settle_layout()
+	assert_eq(dock.get_global_transform_with_canvas().origin, dock_before)
+
+## The pinned plate carries the whole brush — shape, the size it paints with,
+## and the two steps — and drives exactly the brush it used to.
+func test_pinned_brush_dock_carries_the_whole_brush() -> void:
+	var dock: PanelContainer = toolbar._brush_dock
+	var cell := Vector2(TerrainToolbar.BRUSH_DOCK_CELL, TerrainToolbar.BRUSH_DOCK_CELL)
+
+	var shapes: Array = dock.find_children("*", "Button", true, false).filter(
+		func(button): return button in toolbar._brush_shape_buttons)
+	assert_eq(shapes.size(), 1, "One round/square picker")
+	var shape: Button = shapes[0]
+	assert_true(shape.toggle_mode)
+	assert_eq(shape.custom_minimum_size, cell)
+
+	var chips := dock.find_children("BrushSizeChip", "Label", true, false)
+	assert_eq(chips.size(), 1, "One size readout")
+	var chip: Label = chips[0]
+	assert_has(toolbar._brush_labels, chip, "The toolbar writes the size into the chip")
+	assert_eq(chip.custom_minimum_size, cell)
+
+	var steps: Array = dock.find_children("*", "Button", true, false).filter(
+		func(button): return button in toolbar._brush_buttons)
+	assert_eq(steps.size(), 2, "Smaller and bigger")
+	for step in steps:
+		assert_eq(step.custom_minimum_size, cell)
+
+	# The dock is the terrain tab's brush: stepping it changes the real brush,
+	# and the chip reads back the size the selected tool paints with.
+	watch_signals(toolbar)
+	toolbar.set_brush_size(5)
+	assert_eq(chip.text, "5x5")
+	for step in steps:
+		if step.text == "+":
+			step.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [7])
+	assert_eq(toolbar.get_brush_size(), 7)
+	assert_eq(chip.text, "7x7")
+
+	# A tool capped at a single tile locks the dock, like every other brush UI.
+	toolbar.set_brush_limit(1)
+	assert_eq(chip.text, "1x1", "The chip shows the capped size")
+	assert_true(shape.disabled, "The shape picker is locked")
+	for step in steps:
+		assert_true(step.disabled, "The stepper is locked")
+	toolbar.set_brush_limit(HoleLayout.UNLIMITED_BRUSH)
+	assert_false(shape.disabled)
+	toolbar.set_brush_size(1)
+
+## The plate floats above the shelf in the corner the staggered rows leave
+## empty, so no tile loses a pixel of its clickable diamond to it.
+func test_pinned_brush_dock_leaves_every_tile_diamond_clear() -> void:
+	await _settle_layout()
+	var dock: PanelContainer = toolbar._brush_dock
+	var dock_origin: Vector2 = dock.get_global_transform_with_canvas().origin
+	var dock_rect := Rect2(dock_origin, dock.size)
+	assert_gt(dock_rect.size.x, 0.0, "The dock is laid out")
+
+	var checked := 0
+	for tile in toolbar._course_tiles.flow_children() + [toolbar._open_hole_buttons[0]]:
+		var covered := false
+		for offset_y in range(0, int(dock_rect.size.y) + 1, 2):
+			for offset_x in range(0, int(dock_rect.size.x) + 1, 2):
+				var local: Vector2 = dock_rect.position + Vector2(offset_x, offset_y) \
+						- tile.get_global_transform_with_canvas().origin
+				if TerrainTileButton.point_on_tile(local):
+					covered = true
+		assert_false(covered,
+			"%s keeps its diamond clear of the pinned brush" % (tile as ToolButton).tool_name)
+		checked += 1
+	assert_eq(checked, toolbar._course_tiles.flow_children().size() + 1,
+		"Every tile on the tab, plus the nestled Open Hole action, was checked")
+
+func test_holes_tab_has_hole_grid_without_duplicate_action_or_heading() -> void:
+	assert_not_null(toolbar.hole_grid, "hole_grid should exist")
+	assert_true(toolbar.hole_grid is GridContainer, "hole_grid should be a GridContainer")
+
+	var page_content := toolbar.page_content(TerrainToolbar.Tab.HOLES)
+	assert_eq(page_content.get_child_count(), 1,
+		"The Holes tab contains only the hole grid")
+	assert_same(page_content.get_child(0), toolbar.hole_grid,
+		"The hole grid is the tab's direct content")
+	var page: Control = toolbar._pages[TerrainToolbar.Tab.HOLES]
+	assert_eq(page.find_children("*", "ToolButton", true, false).size(), 0,
+		"The Open Hole action is not duplicated on the Holes tab")
+	assert_false(page.find_children("*", "Label", true, false)
+		.any(func(label): return label.text == "COURSE HOLES"),
+		"The redundant COURSE HOLES heading is removed")
+
+	# Add a sample hole button and verify containment: the button is the whole
+	# of a hole's per-hole UI, with no toggle or delete button beside it.
+	_add_hole_button(1)
+	assert_true(toolbar.hole_grid.has_node("HoleBtn1"))
+	assert_eq(toolbar.hole_grid.get_child_count(), 1, "One hole is one button")
+	assert_eq(toolbar.hole_grid.columns, 1, "One hole fills one column")
+
+## A hole button the way main.gd makes it: named for its hole and carrying its
+## number as metadata, which is what the column layout sorts on.
+func _add_hole_button(hole_number: int) -> Button:
+	var hole_btn := Button.new()
+	hole_btn.name = "HoleBtn%d" % hole_number
+	hole_btn.set_meta("hole_number", hole_number)
+	toolbar.hole_grid.add_child(hole_btn)
+	toolbar.layout_hole_buttons()
+	return hole_btn
+
+## Holes stack three deep and the columns run off to the right, so a course
+## grows along the axis the page already scrolls on.
+func test_hole_buttons_stack_three_to_a_column() -> void:
+	for hole_number in 8:
+		_add_hole_button(hole_number + 1)
+
+	var grid := toolbar.hole_grid
+	assert_eq(grid.columns, 3, "Eight holes fill two columns of three and start a third")
+
+	# The grid fills row-major, so reading down the first column gives holes
+	# 1-3, down the second 4-6, and down the third 7-8.
+	var reading_order := [1, 4, 7, 2, 5, 8, 3, 6]
+	for slot in reading_order.size():
+		assert_eq(int(grid.get_child(slot).get_meta("hole_number")), reading_order[slot],
+			"Slot %d reads down the columns in hole order" % slot)
+
+	toolbar.select_tab(TerrainToolbar.Tab.HOLES)
+	await _settle_layout()
+	var rows: Array[float] = []
+	for child in grid.get_children():
+		if not rows.has(child.position.y):
+			rows.append(child.position.y)
+	assert_eq(rows.size(), TerrainToolbar.HOLE_COLUMN_HEIGHT,
+		"Holes sit in exactly three rows")
+
+func test_a_full_course_of_holes_stays_inside_the_bottom_bar() -> void:
+	for hole_number in 18:
+		_add_hole_button(hole_number + 1)
+	var grid := toolbar.hole_grid
+	assert_eq(grid.columns, 6, "Eighteen holes fill six columns of three")
+
+	toolbar.select_tab(TerrainToolbar.Tab.HOLES)
+	await _settle_layout()
+	assert_gt(grid.get_combined_minimum_size().y, 0.0, "The hole buttons are measured")
+	var available := float(UIConstants.BOTTOM_BAR_HEIGHT) \
+			- toolbar._tab_bar.get_combined_minimum_size().y
+	assert_lte(grid.get_combined_minimum_size().y, available,
+		"Three rows of hole buttons fit under the tab bar")
+
+## A hole that goes takes its button with it and the rest re-seat, which is the
+## rebuild main.gd runs whenever the holes are renumbered.
+func test_hole_buttons_reseat_when_a_hole_goes() -> void:
+	for hole_number in 6:
+		_add_hole_button(hole_number + 1)
+	var gone: Button = toolbar.hole_grid.get_node("HoleBtn4")
+	toolbar.hole_grid.remove_child(gone)
+	gone.queue_free()
+	toolbar.layout_hole_buttons()
+
+	var grid := toolbar.hole_grid
+	assert_eq(grid.get_child_count(), 5, "The hole that went took its button with it")
+	assert_eq(grid.columns, 2, "Five holes fill one column of three and one of two")
+	# Reading down the columns: 1,2,3 then 5,6.
+	var reading_order := [1, 5, 2, 6, 3]
+	for slot in reading_order.size():
+		assert_eq(int(grid.get_child(slot).get_meta("hole_number")), reading_order[slot],
+			"Slot %d reads down the columns after hole 4 went" % slot)
+
+## Both Golfers tab lists are shelves of columns: the golfers on the course
+## stack four deep, the recent rounds six deep, and the columns run off to the
+## right where the page already scrolls — the same rhythm the Holes tab keeps.
+func test_golfers_tab_lists_are_shelves_of_columns_and_populate() -> void:
 	assert_not_null(toolbar._active_golfers_box, "_active_golfers_box should exist")
-	assert_true(toolbar._active_golfers_box is HBoxContainer, "_active_golfers_box should be HBoxContainer")
+	assert_true(toolbar._active_golfers_box is HBoxContainer,
+		"_active_golfers_box should be HBoxContainer")
 	assert_not_null(toolbar._recent_rounds_box, "_recent_rounds_box should exist")
-	assert_true(toolbar._recent_rounds_box is HBoxContainer, "_recent_rounds_box should be HBoxContainer")
+	assert_true(toolbar._recent_rounds_box is HBoxContainer,
+		"_recent_rounds_box should be HBoxContainer")
 
 	# Test data provider
 	toolbar.golfer_data_provider = func() -> Array:
@@ -419,8 +848,182 @@ func test_golfers_tab_lists_are_horizontal_and_populate() -> void:
 	})
 
 	toolbar._refresh_golfer_lists()
-	assert_eq(toolbar._active_golfers_box.get_child_count(), 2, "Should have 2 active golfer rows")
-	assert_eq(toolbar._recent_rounds_box.get_child_count(), 1, "Should have 1 recent round row")
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 1,
+		"Two golfers need one column")
+	assert_eq(toolbar._active_golfers_box.get_child(0).get_child_count(), 2,
+		"That column holds both golfer rows")
+	assert_true(toolbar._active_golfers_box.get_child(0) is VBoxContainer,
+		"A column stacks its rows vertically")
+	assert_eq(toolbar._recent_rounds_box.get_child_count(), 1,
+		"One round needs one column")
+	assert_eq(toolbar._recent_rounds_box.get_child(0).get_child_count(), 1,
+		"That column holds the round")
+
+## Golfers on the course named Golfer1, Golfer2 ... so the column layout can be
+## read back off the buttons the tab builds.
+func _provide_golfers(count: int) -> void:
+	toolbar.golfer_data_provider = func() -> Array:
+		var rows: Array = []
+		for number in count:
+			rows.append({"id": number + 1, "name": "Golfer%d" % (number + 1), "tier": 1,
+				"hole": number + 1, "strokes": number, "mood": 0.5})
+		return rows
+
+## The golfers in one column, top to bottom, named by their button text.
+func _golfers_in_column(column: Control) -> Array[String]:
+	var names: Array[String] = []
+	for row in column.get_children():
+		for child in row.get_children():
+			if child is Button:
+				names.append((child as Button).text.get_slice(" ", 0))
+	return names
+
+## The rounds in one column, top to bottom, named by their label text.
+func _rounds_in_column(column: Control) -> Array[String]:
+	var names: Array[String] = []
+	for label in column.get_children():
+		names.append((label as Label).text.get_slice(":", 0))
+	return names
+
+func _assert_column_holds(column: Control, expected: Array[String], what: String) -> void:
+	var found := _golfers_in_column(column) if what == "golfer" else _rounds_in_column(column)
+	assert_eq(found.size(), expected.size(),
+		"The column holds %d %ss" % [expected.size(), what])
+	for slot in expected.size():
+		assert_eq(found[slot], expected[slot],
+			"%s %d of the column reads %s" % [what.capitalize(), slot + 1, expected[slot]])
+
+## Golfers on the course stack four deep and the columns run off to the right,
+## so a busy course grows along the axis the page already scrolls on.
+func test_golfers_on_the_course_stack_four_to_a_column() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(6)
+	toolbar._refresh_golfer_lists()
+
+	var shelf := toolbar._active_golfers_box
+	assert_eq(shelf.get_child_count(), 2,
+		"Six golfers fill one column of four and spill into a second")
+	_assert_column_holds(shelf.get_child(0),
+		["Golfer1", "Golfer2", "Golfer3", "Golfer4"], "golfer")
+	_assert_column_holds(shelf.get_child(1), ["Golfer5", "Golfer6"], "golfer")
+
+	await _settle_layout()
+	var first: Control = shelf.get_child(0)
+	var second: Control = shelf.get_child(1)
+	var rows: Array[float] = []
+	for row in first.get_children():
+		if not rows.has(row.position.y):
+			rows.append(row.position.y)
+	assert_eq(rows.size(), TerrainToolbar.GOLFER_COLUMN_HEIGHT,
+		"The first column runs exactly four deep")
+	assert_gt(second.position.x, first.position.x,
+		"The second column sits to the right of the first, not under it")
+	assert_almost_eq(second.get_child(0).global_position.y,
+		first.get_child(0).global_position.y, 0.01,
+		"The short second column starts level with the top of the first")
+
+## A course at full tilt keeps stacking four to a column for as long as golfers
+## keep arriving: the columns run off to the right, where the page scrolls.
+func test_a_busy_course_fills_one_column_of_four_after_another() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(9)
+	toolbar._refresh_golfer_lists()
+
+	var shelf := toolbar._active_golfers_box
+	assert_eq(shelf.get_child_count(), 3, "Nine golfers fill two columns and start a third")
+	_assert_column_holds(shelf.get_child(0),
+		["Golfer1", "Golfer2", "Golfer3", "Golfer4"], "golfer")
+	_assert_column_holds(shelf.get_child(1),
+		["Golfer5", "Golfer6", "Golfer7", "Golfer8"], "golfer")
+	_assert_column_holds(shelf.get_child(2), ["Golfer9"], "golfer")
+
+## Recent rounds stack six deep for the same reason: they are one-line labels,
+## so six of them still sit under the tab bar while the columns run sideways.
+func test_recent_rounds_stack_six_to_a_column() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	# Each round is pushed to the front of the history, so record the oldest
+	# first and the list reads R1 (newest) down to R7.
+	for round_number in 7:
+		toolbar.record_completed_round({
+			"name": "R%d" % (7 - round_number), "strokes": 70 + round_number,
+			"par": 72, "day": 1, "tier": 1, "owner": false,
+		})
+	toolbar._refresh_golfer_lists()
+
+	var shelf := toolbar._recent_rounds_box
+	assert_eq(shelf.get_child_count(), 2,
+		"Seven rounds fill one column of six and spill into a second")
+	_assert_column_holds(shelf.get_child(0),
+		["R1", "R2", "R3", "R4", "R5", "R6"], "round")
+	_assert_column_holds(shelf.get_child(1), ["R7"], "round")
+
+	await _settle_layout()
+	var first: Control = shelf.get_child(0)
+	var rows: Array[float] = []
+	for label in first.get_children():
+		if not rows.has(label.position.y):
+			rows.append(label.position.y)
+	assert_eq(rows.size(), TerrainToolbar.RECENT_ROUND_COLUMN_HEIGHT,
+		"The first column runs exactly six deep")
+	assert_gt(shelf.get_child(1).position.x, first.position.x,
+		"The seventh round starts a column beside the first, not a row below it")
+
+## The Golfers tab has no vertical scroll, so a full column of each list has to
+## fit under the tab bar inside the bottom bar's height.
+func test_golfer_and_round_columns_stay_inside_the_bottom_bar() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(8)
+	for round_number in 12:
+		toolbar.record_completed_round({
+			"name": "R%d" % (12 - round_number), "strokes": 70 + round_number,
+			"par": 72, "day": 1, "tier": 1, "owner": false,
+		})
+	toolbar._refresh_golfer_lists()
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 2,
+		"Eight golfers fill two columns of four")
+	assert_eq(toolbar._recent_rounds_box.get_child_count(), 2,
+		"Twelve rounds fill two columns of six")
+
+	await _settle_layout()
+	var available := float(UIConstants.BOTTOM_BAR_HEIGHT) \
+			- toolbar._tab_bar.get_combined_minimum_size().y
+	var content := toolbar.page_content(TerrainToolbar.Tab.GOLFERS)
+	assert_gt(content.get_combined_minimum_size().y, 0.0, "The Golfers tab is measured")
+	assert_lte(content.get_combined_minimum_size().y, available,
+		"Four golfers and six rounds deep fit under the tab bar")
+
+## A refresh replaces the columns it drew last time instead of stacking the
+## fresh ones beside them: the tab refreshes once a second while it is open, so
+## a stale column would crowd out the golfers actually on the course.
+func test_golfer_refresh_replaces_the_columns_it_drew_last_time() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	_provide_golfers(6)
+	toolbar._refresh_golfer_lists()
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 2, "Six golfers take two columns")
+
+	_provide_golfers(2)
+	toolbar._refresh_golfer_lists()
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 1,
+		"The column from the previous refresh is gone")
+	_assert_column_holds(toolbar._active_golfers_box.get_child(0),
+		["Golfer1", "Golfer2"], "golfer")
+
+## With nobody on the course and no rounds played, each list keeps its single
+## column and shows its empty message in it.
+func test_empty_golfer_lists_keep_one_column() -> void:
+	toolbar.select_tab(TerrainToolbar.Tab.GOLFERS)
+	toolbar.golfer_data_provider = func() -> Array:
+		return []
+	toolbar._refresh_golfer_lists()
+
+	assert_eq(toolbar._active_golfers_box.get_child_count(), 1,
+		"The empty message takes a single column")
+	assert_eq(toolbar._active_golfers_box.get_child(0).get_child_count(), 1,
+		"That column holds only the message")
+	assert_eq(toolbar._recent_rounds_box.get_child_count(), 1,
+		"The empty message takes a single column")
+	assert_eq(toolbar._recent_rounds_box.get_child(0).get_child_count(), 1,
+		"That column holds only the message")
 
 func test_feed_unread_badge() -> void:
 	toolbar.set_feed_unread(5)
@@ -517,7 +1120,7 @@ func test_staff_tab_embeds_staff_management() -> void:
 		"Staff tab should not keep a Staff Management launcher button")
 	assert_not_null(toolbar._staff_panel, "Staff tab should embed a StaffPanel")
 	assert_true(toolbar._staff_panel is StaffPanel)
-	assert_eq(toolbar._staff_panel.get_parent().get_parent(), toolbar._pages[TerrainToolbar.Tab.STAFF],
+	assert_eq(toolbar._staff_panel.get_parent().get_parent(), toolbar.page_scroll(TerrainToolbar.Tab.STAFF),
 		"StaffPanel should live on the Staff tab page")
 
 	var labels: Array[String] = []
@@ -535,7 +1138,7 @@ func test_staff_tab_embeds_staff_management() -> void:
 	assert_true(toolbar._staff_panel.visible)
 
 func test_mouse_wheel_horizontal_scroll_input() -> void:
-	var scroll: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.TERRAIN]
+	var scroll: ScrollContainer = toolbar.page_scroll(TerrainToolbar.Tab.TERRAIN)
 	scroll.scroll_horizontal = 100
 
 	# Mouse wheel down -> scroll right (increase horizontal offset)
@@ -587,7 +1190,7 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 	# The unified honeycomb itself sits inside Course Terrain page and has 2 interlocking rows
 	assert_not_null(toolbar._course_tiles)
 	assert_eq(toolbar._course_tiles.get_parent().get_parent(),
-		toolbar._pages[TerrainToolbar.Tab.TERRAIN].get_child(0),
+		toolbar.page_content(TerrainToolbar.Tab.TERRAIN),
 		"Unified honeycomb should live in Course Terrain tab")
 	var total_landscape_tiles: int = 1 + 3 + theme_trees.size()
 	assert_eq(toolbar._course_tiles.columns, TOP_ROW.size() + ceili(float(total_landscape_tiles) / 2.0),
@@ -597,9 +1200,12 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 	assert_eq(landscape_group, course_group,
 		"Nature & Landscaping should share the course tile group")
 
-func test_improvements_tab_only_contains_paths_and_decorations() -> void:
-	var imp_page: ScrollContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS]
-	var imp_hbox: HBoxContainer = imp_page.get_child(0)
+func test_improvements_tab_holds_paths_and_every_decoration_tile() -> void:
+	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/decorations.json"))["decorations"]
+	toolbar.set_decoration_registry(registry)
+
+	var imp_hbox: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.IMPROVEMENTS)
 
 	# Verify Trees, Boulders, Flower Bed are NOT in Improvements tab
 	var tool_names: Array[String] = []
@@ -610,7 +1216,226 @@ func test_improvements_tab_only_contains_paths_and_decorations() -> void:
 	assert_false(tool_names.has("Boulders"), "Improvements tab must not contain Boulders")
 	assert_false(tool_names.has("Flower Bed"), "Improvements tab must not contain Flower Bed")
 	assert_true(tool_names.has("Path"), "Improvements tab should contain Path")
-	assert_true(tool_names.has("Decorations"), "Improvements tab should contain Decorations")
+	assert_false(tool_names.has("Decorations"),
+		"The Garden Shed's Decorations button is replaced by the decoration tiles")
+
+	# The garden shed catalogue now lives in the tab as tiles, with the walking
+	# path sharing their honeycomb.
+	assert_eq(toolbar._decoration_shelf.get_child_count(),
+		registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES,
+		"Every decoration from the garden shed should be a tile")
+	for dec_type in registry:
+		var tile: DecorationTileButton = toolbar._decoration_tiles[dec_type]
+		assert_not_null(tile, "%s should have a tile" % dec_type)
+		assert_eq(tile.get_parent(), toolbar._decoration_shelf)
+		assert_eq(tile.decoration_type, dec_type)
+		assert_eq(tile.tool_name, registry[dec_type]["name"])
+		assert_eq(tile.get_parent().get_parent().get_parent(), imp_hbox,
+			"The decoration shelf should sit in the Improvements tab")
+
+func test_path_tile_leads_the_improvements_honeycomb() -> void:
+	# The path is no longer a lone button in a PATHS box: it sits in the tile
+	# honeycomb on the right of the tab, in slot 0 — the first tile of the top row.
+	var shelf: TileHoneycomb = toolbar._decoration_shelf
+	var path_tile: TerrainTileButton = toolbar._path_tile
+	assert_true(path_tile is TerrainTileButton, "The path is drawn as a course tile")
+	assert_eq(path_tile.get_parent(), shelf, "The path belongs to the improvements honeycomb")
+	assert_eq(path_tile.get_index(), 0, "The path is the honeycomb's first tile")
+	assert_same(toolbar._tool_buttons[TerrainTypes.Type.PATH], path_tile,
+		"The path tile is what the toolbar highlights when the tool is selected")
+
+	toolbar.set_decoration_registry({"bench": {"name": "Bench", "category": "furniture"},
+		"statue": {"name": "Statue", "category": "sculptures"},
+		"bed": {"name": "Bed", "category": "landscaping"},
+		"pool": {"name": "Pool", "category": "water"}})
+	assert_eq(shelf.get_child(0), path_tile,
+		"Rebuilding the catalogue puts the path back at the head of the top row")
+	await _settle_layout()
+	var top_row_y: float = path_tile.position.y
+	assert_almost_eq(shelf.get_child(1).position.y, top_row_y, 0.01,
+		"The first decoration follows the path along the top row")
+	assert_gt(shelf.get_child(3).position.y, top_row_y,
+		"The row below sits in the notches under the path's row")
+
+	var imp_hbox: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.IMPROVEMENTS)
+	assert_false(imp_hbox.find_children("*", "Label", true, false)
+		.any(func(label): return label.text == "PATHS"),
+		"The path has no box of its own now it shares the tile shelf")
+
+	# Picking the tile selects the tool and keeps the Improvements tab open.
+	toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
+	watch_signals(toolbar)
+	path_tile.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.PATH])
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.PATH)
+	assert_eq(toolbar._tab_bar.current_tab, TerrainToolbar.Tab.IMPROVEMENTS)
+
+func test_path_tile_previews_the_trail_over_the_ground_it_crosses() -> void:
+	# A path is a thin trail laid on top of the ground, so its tile shows turf
+	# with a ribbon across it instead of a full tile of paving.
+	var path_tile: TerrainTileButton = toolbar._path_tile
+	var image: Image = path_tile._surface_material.get_shader_parameter("terrain_data").get_image()
+	assert_eq(roundi(image.get_pixel(1, 1).r * 255.0), TerrainTypes.Type.ROUGH,
+		"The tile previews the rough a walking path is cut through, not cart-path paving")
+	assert_eq(roundi(image.get_pixel(0, 1).r * 255.0), TerrainTypes.Type.ROUGH,
+		"The turf runs to the edges of the tile: the path paints no patch of ground")
+	assert_eq(roundi(image.get_pixel(2, 2).r * 255.0), TerrainTypes.Type.ROUGH,
+		"The whole tile is ground the trail crosses")
+
+	var art: Node2D = path_tile.get_node("WalkingPathPreviewArt")
+	assert_eq(art.get_child_count(), 3, "A rim, the dirt, and a paler centre line")
+	var band: Polygon2D = art.get_child(1)
+	var center := TerrainTileButton.BUTTON_SIZE * 0.5
+	var along := Vector2(TerrainTileButton.TILE_SIZE.x * 0.5, TerrainTileButton.TILE_SIZE.y * 0.5)
+	# The ribbon's ends are the midpoints of the two tile edges it joins, so a
+	# lone tile reads as a piece of one continuous trail.
+	assert_eq((band.polygon[0] + band.polygon[3]) * 0.5, center - along * 0.5,
+		"The trail starts at the shared edge with the neighbour up-left")
+	assert_eq((band.polygon[1] + band.polygon[2]) * 0.5, center + along * 0.5,
+		"and ends at the shared edge with the neighbour down-right")
+	for corner in band.polygon:
+		assert_true(TerrainTileButton.point_on_tile(corner),
+			"The trail stays inside the diamond: %s" % corner)
+	assert_eq(band.color, WalkingPathOverlay.DIRT_COLOR,
+		"The preview uses the overlay's own dirt colours")
+
+func test_decoration_tiles_use_the_course_tile_design() -> void:
+	var registry := {
+		"rose_border": {"name": "Rose Border", "category": "landscaping", "cost": 120,
+			"daily_upkeep": 3, "description": "Roses for the walks."},
+		"fountain": {"name": "Fountain", "category": "water", "cost": 500,
+			"daily_upkeep": 15, "description": "A sparkling water feature.",
+			"unlock": {"type": "reputation", "value": 99}},
+	}
+	toolbar.set_decoration_registry(registry)
+
+	assert_true(toolbar._decoration_shelf is TileHoneycomb)
+	assert_eq(toolbar._decoration_shelf.columns, TerrainToolbar.tile_columns(
+		registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES),
+		"The shelf's rows count the leading path tile as well as the catalogue")
+	assert_eq(toolbar._decoration_shelf.get_child_count(),
+		registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES)
+	assert_eq(toolbar._decoration_shelf.v_padding, TerrainToolbar.TILE_V_PADDING,
+		"The decoration shelf keeps the same breathing room as the other tile tabs")
+
+	for button in _catalogue_tiles():
+		assert_true(button is DecorationTileButton, "Decorations should use isometric tile buttons")
+		assert_true(button is TerrainTileButton, "Decoration tiles share the Course Terrain button base")
+		assert_eq(button.custom_minimum_size, TerrainTileButton.BUTTON_SIZE)
+		assert_eq(button.text, "", "Decoration names should be drawn on the tile")
+		assert_eq(button._name_label.size, TerrainTileButton.BUTTON_SIZE)
+		assert_eq(button.tooltip_text, "", "Only the rich TooltipManager popup should appear")
+		assert_not_null(button._decoration_art, "Each tile previews the artwork used on the course")
+		assert_false(button.accessibility_description.is_empty())
+
+	var roses: DecorationTileButton = toolbar._decoration_tiles["rose_border"]
+	assert_eq(roses.cost, 120)
+	assert_eq(roses.maintenance, 3, "Daily upkeep reaches the tooltip footer")
+	assert_string_contains(roses.tool_description, "Landscaping")
+	assert_string_contains(roses.tool_description, "Roses for the walks.")
+
+	watch_signals(toolbar)
+	roses.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "decoration_selected", ["rose_border"])
+
+func test_decoration_shelf_keeps_the_garden_shed_category_order() -> void:
+	var registry := {
+		"statue": {"name": "Statue", "category": "sculptures"},
+		"bench": {"name": "Bench", "category": "furniture"},
+		"bed": {"name": "Bed", "category": "landscaping"},
+		"pool": {"name": "Pool", "category": "water"},
+		"unknown": {"name": "Oddity"},
+	}
+	toolbar.set_decoration_registry(registry)
+
+	var order: Array[String] = []
+	for child in _catalogue_tiles():
+		order.append(child.decoration_type)
+	assert_eq(order, ["bed", "pool", "bench", "statue", "unknown"],
+		"Decorations should be listed category by category, in shed order")
+	assert_eq(toolbar._decoration_shelf.get_child(0), toolbar._path_tile,
+		"The path still leads the row the catalogue is laid out in")
+
+func test_locked_decorations_stay_on_the_shelf_until_earned() -> void:
+	var registry := {
+		"topiary": {"name": "Topiary", "category": "landscaping", "cost": 200, "daily_upkeep": 8},
+		"statue": {"name": "Golfer Statue", "category": "sculptures", "cost": 1000,
+			"daily_upkeep": 10, "unlock": {"type": "star_rating", "value": 5}},
+	}
+	toolbar.set_decoration_registry(registry)
+
+	var open_tile: DecorationTileButton = toolbar._decoration_tiles["topiary"]
+	var locked_tile: DecorationTileButton = toolbar._decoration_tiles["statue"]
+	assert_false(open_tile.disabled, "Decorations without a requirement are selectable")
+	assert_true(locked_tile.disabled, "Locked decorations stay on the shelf, greyed out")
+	assert_true(locked_tile.locked, "The tile knows it is locked")
+	assert_almost_eq(locked_tile.modulate.a, 0.65, 0.001, "A locked tile is dimmed like a disabled tool")
+	assert_string_contains(locked_tile.tool_description, "Locked")
+	assert_string_contains(locked_tile.tool_description, "5★ rating")
+	assert_string_contains(locked_tile.tool_description, "Sculptures")
+
+	# Clicking a locked tile never starts a placement.
+	watch_signals(toolbar)
+	toolbar._on_decoration_card_pressed("statue")
+	assert_signal_not_emitted(toolbar, "decoration_selected")
+
+	# A course that earns the fifth star unlocks it on the next refresh.
+	var stars: int = GameManager.course_rating.get("stars", 0)
+	GameManager.course_rating["stars"] = 5
+	toolbar.refresh_decoration_unlocks()
+	assert_false(locked_tile.disabled, "Meeting the requirement unlocks the tile")
+	assert_false(locked_tile.tool_description.contains("Locked"))
+	GameManager.course_rating["stars"] = stars
+	toolbar.refresh_decoration_unlocks()
+	assert_true(locked_tile.disabled, "Losing the rating locks the tile again")
+
+func test_decoration_unlocks_follow_the_live_course_state() -> void:
+	var registry := {
+		"bench": {"name": "Bench", "category": "furniture", "unlock":
+			{"type": "holes_built", "value": 99}},
+	}
+	toolbar.set_decoration_registry(registry)
+	var tile: DecorationTileButton = toolbar._decoration_tiles["bench"]
+	assert_true(tile.disabled, "A course with fewer than 99 holes starts locked")
+	assert_string_contains(tile.tool_description, "99 holes")
+
+func test_improvements_decorations_fill_the_page_without_overflowing() -> void:
+	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/decorations.json"))["decorations"]
+	toolbar.set_decoration_registry(registry)
+	toolbar.select_tab(TerrainToolbar.Tab.IMPROVEMENTS)
+	await _settle_layout()
+
+	var tile := TerrainTileButton.BUTTON_SIZE
+	var two_rows := tile.y * 1.5 + TerrainToolbar.TILE_V_SEPARATION \
+			+ 2.0 * TerrainToolbar.TILE_V_PADDING
+	assert_almost_eq(toolbar._decoration_shelf.get_combined_minimum_size().y, two_rows, 0.01,
+		"28 decorations plus the path should fill exactly two interlocking rows")
+	assert_eq(toolbar._decoration_shelf.columns,
+		ceili(float(registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES) / 2.0))
+	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT),
+		"The Improvements tab must fit inside the bottom bar")
+
+func test_every_decoration_tile_shows_course_artwork() -> void:
+	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/decorations.json"))["decorations"]
+	for dec_type in registry:
+		assert_true(DecorationTileArt.has_art(dec_type),
+			"%s should have artwork for its tile" % dec_type)
+
+func test_decoration_shelf_rebuild_leaves_no_stale_tiles() -> void:
+	var first := {"a": {"name": "A", "category": "landscaping"}}
+	var second := {"b": {"name": "B", "category": "water"}, "c": {"name": "C", "category": "water"}}
+	toolbar.set_decoration_registry(first)
+	toolbar.set_decoration_registry(second)
+
+	assert_eq(toolbar._decoration_shelf.get_child_count(), 3,
+		"Replacing the catalogue should immediately drop the old tiles")
+	assert_false(toolbar._decoration_tiles.has("a"))
+	assert_eq(toolbar._decoration_shelf.columns, 2,
+		"Two decorations plus the leading path tile need two columns")
+	assert_eq(toolbar._decoration_shelf.get_child(0), toolbar._path_tile,
+		"The path survives the rebuild, at the head of the top row")
 
 func test_theme_change_updates_tree_tiles_in_course_terrain_tab() -> void:
 	# Switch theme to DESERT
@@ -656,16 +1481,17 @@ func test_theme_changes_keep_one_honeycomb_without_stale_tiles() -> void:
 		GameManager.current_theme = theme
 		EventBus.theme_changed.emit(theme)
 		var trees: Array = CourseTheme.get_tree_types(theme)
-		assert_eq(grid.get_child_count(), 18 + trees.size(),
+		assert_eq(grid.flow_children().size(), 18 + trees.size(),
 			"Theme refresh must immediately remove old tiles, even within one frame")
-		assert_eq(grid.columns, ceili(float(grid.get_child_count()) / 2.0))
+		assert_eq(grid.columns, ceili(float(grid.flow_children().size()) / 2.0))
 		assert_same(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX], tee,
 			"Theme changes must preserve course tile state")
 		for key in toolbar._tool_buttons:
 			if str(key).begins_with("tree_"):
 				assert_has(trees, str(key).trim_prefix("tree_"), "No stale tree tools")
+		var tiles: Array[Control] = grid.flow_children()
 		for slot in BOTTOM_ROW.size():
-			assert_eq(toolbar._tool_buttons[BOTTOM_ROW[slot]].get_index(), grid.columns + slot)
+			assert_eq(tiles.find(toolbar._tool_buttons[BOTTOM_ROW[slot]]), grid.columns + slot)
 		assert_eq(toolbar._pages[TerrainToolbar.Tab.TERRAIN].find_children(
 			"*", "TileHoneycomb", true, false).size(), 1)
 	GameManager.current_theme = original_theme

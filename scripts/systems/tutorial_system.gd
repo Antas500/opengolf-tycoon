@@ -28,14 +28,14 @@ const STEP_DATA = {
 	},
 	Step.PAINT_TERRAIN: {
 		"title": "Step 1: Paint Your Course",
-		"message": "Open the Terrain tab in the toolbar at the bottom right to paint fairways, greens, and hazards.\n\nClick on a terrain type, then click and drag on the map to paint.",
+		"message": "Open the Terrain tab in the toolbar at the bottom right to paint fairways, greens, and hazards.\n\nClick on a terrain type, then click and drag on the map to paint. Any Course Terrain tile replaces any other — including trees and boulders.",
 		"action": "Paint some terrain to continue",
 		"requires_action": true,
 		"signal": "terrain_tile_changed",
 	},
 	Step.CREATE_HOLE: {
 		"title": "Step 2: Create a Hole",
-		"message": "Paint the two ends of a hole, then open it.\n\n1. Tee Box tool (T) — one tile for the tee\n2. Green tool (3) — one tile becomes the green with a hole\n3. Press H or click 'Open Hole' to pair them",
+		"message": "Paint the two ends of a hole, then open it.\n\n1. Tee Box tool (T) — one tile for the tee\n2. Green tool (3) — one tile becomes the green with a hole\n3. Press H — or click the [H] diamond between the tee and the green — to pair them",
 		"action": "Open your first hole to continue",
 		"requires_action": true,
 		"signal": "hole_created",
