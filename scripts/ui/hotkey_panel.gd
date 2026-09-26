@@ -52,7 +52,7 @@ func _build_ui() -> void:
 		["5", "Bunker"],
 		["6", "Water"],
 		["7", "Out of Bounds"],
-		["8", "Path"],
+		["8", "Path (Improvements tab)"],
 		["9", "Firm Fairway"],
 		["0", "Waste Bunker"],
 		["Shift+2", "Deep Rough"],

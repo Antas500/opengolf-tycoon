@@ -387,7 +387,7 @@ func _make_terrain_tools_column() -> VBoxContainer:
 	_open_hole_buttons.append(open_hole_btn)
 	_make_column_button_compact(open_hole_btn, COLUMN_BUTTON_HEIGHT)
 
-	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, boulders, rocky ground, brush, flowers, decorations"})
+	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, boulders, rocky ground, brush, flowers, decorations, walking paths"})
 	_make_column_button_compact(bulldozer_btn, COLUMN_BUTTON_HEIGHT)
 
 	column.add_child(_make_small_group_label("BRUSH"))
@@ -422,7 +422,7 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	var path_box = HBoxContainer.new()
 	path_box.add_theme_constant_override("separation", 4)
 	path_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(path_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Walking path for golfers"})
+	_add_tool_button(path_box, {"type": TerrainTypes.Type.PATH, "name": "Path", "icon": "[.]", "hotkey": "8", "desc": "Thin dirt walking path laid over rough, deep rough, waste bunker, brush, rocks, streams, flower beds, boulders and trees. Each tile is a dot; edge-adjacent dots join into one trail, and a trail that reaches the clubhouse is paved."})
 	hbox.add_child(_make_tab_group("PATHS", path_box))
 
 	hbox.add_child(_make_separator())

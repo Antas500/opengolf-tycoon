@@ -30,6 +30,11 @@ var _object_footprints: Dictionary = {}
 ## waiting to be paired with a tee box. Once a hole is opened the marker is consumed and
 ## the cup lives on as the hole's `hole_position`, so every marker here is unused.
 var _cup_tiles: Dictionary = {}  # Vector2i -> true
+## Tiles carrying the Path improvement: a thin walking path laid ON TOP of
+## hostable ground (see TerrainTypes.WALKING_PATH_TERRAINS) without replacing
+## the terrain underneath. Repainting a tile to non-hostable ground removes
+## the path. See set_walking_path().
+var _walking_paths: Dictionary = {}  # Vector2i -> true
 ## Index of TEE_BOX tiles, kept in step with _grid so the tee placement rule
 ## ("no waiting tee box on the course") is a dictionary lookup, not a grid scan.
 var _tee_box_tiles: Dictionary = {}  # Vector2i -> true
@@ -46,6 +51,8 @@ signal vertex_elevation_changed(vertex: Vector2i, old_elevation: int, new_elevat
 signal view_rotated(orientation: int, isometric: bool)
 ## Emitted whenever a "Green With Hole" (cup) marker is added or removed.
 signal cup_tiles_changed
+## Emitted whenever the Path improvement (walking path) layer changes.
+signal walking_paths_changed
 
 ## Bumped on every terrain type, bunker depth or elevation write — including the
 ## quiet bulk paths (load, generation) that emit no per-tile signals — so caches of
@@ -67,6 +74,7 @@ var _tree_overlay: TreeOverlay = null
 var _rock_overlay: RockOverlay = null
 var _flower_overlay: FlowerOverlay = null
 var _path_overlay: PathOverlay = null
+var _walking_path_overlay: WalkingPathOverlay = null
 var _debug_overlay: TerrainDebugOverlay = null
 var _land_boundary_overlay: LandBoundaryOverlay = null
 var _wind_flag_overlay: WindFlagOverlay = null
@@ -102,6 +110,7 @@ func _ready() -> void:
 	# TreeOverlay and RockOverlay disabled — entities render their own sprites.
 	# TREES/ROCKS terrain tiles use grass color to blend invisibly.
 	_setup_flower_overlay()
+	_setup_walking_path_overlay()
 	_setup_elevation_overlay()
 	_setup_debug_overlay()
 	_setup_noise_overlay()
@@ -203,6 +212,8 @@ func _redraw_all_overlays() -> void:
 		_flower_overlay.queue_redraw()
 	if _path_overlay:
 		_path_overlay.queue_redraw()
+	if _walking_path_overlay:
+		_walking_path_overlay.queue_redraw()
 	if _shot_heatmap_overlay:
 		_shot_heatmap_overlay.queue_redraw()
 
@@ -258,6 +269,7 @@ func _initialize_grid() -> void:
 	_ensure_vertex_storage()
 	_tee_box_tiles.clear()
 	_object_footprints.clear()
+	_walking_paths.clear()
 	for x in range(grid_width):
 		for y in range(grid_height):
 			var pos = Vector2i(x, y)
@@ -466,6 +478,8 @@ func refresh_all_overlays() -> void:
 	if _path_overlay and _path_overlay.has_method("_scan_path_tiles"):
 		_path_overlay._scan_path_tiles()
 		_path_overlay.queue_redraw()
+	if _walking_path_overlay:
+		_walking_path_overlay.rebuild()
 	if _ob_markers_overlay and _ob_markers_overlay.has_method("_calculate_boundaries"):
 		_ob_markers_overlay._calculate_boundaries()
 	if _cup_overlay:
@@ -490,6 +504,11 @@ func set_tile(pos: Vector2i, terrain_type: int, player_placed: bool = true) -> v
 	terrain_revision += 1
 	# A new terrain type replaces whatever object footprint the tile carried.
 	_object_footprints.erase(pos)
+	# A walking path only survives on hostable ground (see TerrainTypes.
+	# WALKING_PATH_TERRAINS) — repainting the tile to anything else clears it.
+	if _walking_paths.has(pos) and not TerrainTypes.can_host_walking_path(terrain_type):
+		_walking_paths.erase(pos)
+		walking_paths_changed.emit()
 	# Painting over a "Green With Hole" tile with anything else removes its cup.
 	if terrain_type != TerrainTypes.Type.GREEN and _cup_tiles.has(pos):
 		remove_cup_tile(pos)
@@ -679,6 +698,75 @@ func deserialize_cup_tiles(data) -> void:
 				_cup_tiles[pos] = true
 	cup_tiles_changed.emit()
 
+# =============================================================================
+# Walking paths — the Path improvement laid over hostable ground
+# =============================================================================
+
+## Does this tile carry a walking path?
+func has_walking_path(pos: Vector2i) -> bool:
+	return _walking_paths.has(pos)
+
+## Can a walking path be laid on this tile (valid position, hostable ground)?
+func can_place_walking_path(pos: Vector2i) -> bool:
+	return is_valid_position(pos) and TerrainTypes.can_host_walking_path(get_tile(pos))
+
+## Player-facing reason a walking path cannot be laid here ("" when it can).
+func walking_path_placement_error(pos: Vector2i) -> String:
+	if not is_valid_position(pos):
+		return "Outside the course."
+	if not TerrainTypes.can_host_walking_path(get_tile(pos)):
+		return "Walking paths are laid on rough, deep rough, waste bunker, brush, rocks, streams, flower beds, boulders and trees."
+	return ""
+
+## Lay (or remove) the walking path on a tile. Returns true when the layer
+## actually changed. Placement refuses non-hostable ground.
+func set_walking_path(pos: Vector2i, enabled: bool) -> bool:
+	if not is_valid_position(pos):
+		return false
+	if enabled == _walking_paths.has(pos):
+		return false
+	if enabled and not TerrainTypes.can_host_walking_path(get_tile(pos)):
+		return false
+	if enabled:
+		_walking_paths[pos] = true
+	else:
+		_walking_paths.erase(pos)
+	walking_paths_changed.emit()
+	return true
+
+## Every tile carrying a walking path.
+func get_walking_paths() -> Array[Vector2i]:
+	var paths: Array[Vector2i] = []
+	for pos in _walking_paths:
+		paths.append(pos)
+	return paths
+
+func clear_walking_paths() -> void:
+	if _walking_paths.is_empty():
+		return
+	_walking_paths.clear()
+	walking_paths_changed.emit()
+
+func serialize_walking_paths() -> Array:
+	var data: Array = []
+	for pos in _walking_paths:
+		data.append("%d,%d" % [pos.x, pos.y])
+	return data
+
+func deserialize_walking_paths(data) -> void:
+	_walking_paths.clear()
+	if data == null:
+		return
+	for key in data:
+		var parts = str(key).split(",")
+		if parts.size() == 2:
+			var pos = Vector2i(int(parts[0]), int(parts[1]))
+			# Only keep paths whose ground still hosts them (a tree may have
+			# been cleared, a fairway painted over, ...).
+			if is_valid_position(pos) and TerrainTypes.can_host_walking_path(get_tile(pos)):
+				_walking_paths[pos] = true
+	walking_paths_changed.emit()
+
 ## Reset to bare land so a new course starts clean: every tile back to GRASS and
 ## all per-tile state cleared (player-placed marks, bunker depths, sculpted
 ## elevation, waiting cups). New Game paints natural terrain over the existing
@@ -690,6 +778,7 @@ func reset_for_new_course() -> void:
 	_bunker_depth_grid.clear()
 	terrain_revision += 1
 	clear_cup_tiles()
+	clear_walking_paths()
 	if _bunker_overlay:
 		_bunker_overlay.queue_redraw()
 
@@ -707,6 +796,7 @@ func create_analysis_copy() -> TerrainGrid:
 	copy._grid = _grid.duplicate()
 	copy._bunker_depth_grid = _bunker_depth_grid.duplicate()
 	copy._object_footprints = _object_footprints.duplicate()
+	copy._walking_paths = _walking_paths.duplicate()
 	_ensure_vertex_storage()
 	copy._vertex_elevation = _vertex_elevation.duplicate()
 	copy._vertex_stride = _vertex_stride
@@ -856,6 +946,12 @@ func _setup_path_overlay() -> void:
 	_path_overlay.name = "PathOverlay"
 	add_child(_path_overlay)
 	_path_overlay.initialize(self)
+
+func _setup_walking_path_overlay() -> void:
+	_walking_path_overlay = WalkingPathOverlay.new()
+	_walking_path_overlay.name = "WalkingPathOverlay"
+	add_child(_walking_path_overlay)
+	_walking_path_overlay.initialize(self)
 
 func _setup_elevation_overlay() -> void:
 	_elevation_overlay = ElevationOverlay.new()

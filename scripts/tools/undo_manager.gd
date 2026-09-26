@@ -13,6 +13,7 @@ var redo_stack: Array = []  # Array of UndoAction
 var _current_stroke: Array = []  # Collects tile changes during a paint stroke
 var _stroke_cost := 0
 var _stroke_removals: Array = []
+var _stroke_walking_paths: Array = []  # {position, added} changes during a paint stroke
 var _is_recording_stroke: bool = false
 
 signal undo_performed()
@@ -23,6 +24,7 @@ func begin_stroke() -> void:
 	_current_stroke = []
 	_stroke_cost = 0
 	_stroke_removals = []
+	_stroke_walking_paths = []
 	_is_recording_stroke = true
 
 ## Record a single tile change within the current stroke
@@ -39,10 +41,19 @@ func record_tile_change(position: Vector2i, old_type: int, new_type: int, metada
 		return
 	_current_stroke.append(change)
 
+## Record a walking-path (Path improvement) change. During a stroke it joins
+## the stroke's terrain action; outside a stroke it is its own undoable action.
+func record_walking_path(position: Vector2i, added: bool) -> void:
+	var change := {"position": position, "added": added}
+	if not _is_recording_stroke:
+		_push_action({"type": "walking_paths", "changes": [change]})
+		return
+	_stroke_walking_paths.append(change)
+
 ## End the current paint stroke and push it as a single undo action
 func end_stroke() -> void:
 	_is_recording_stroke = false
-	if _current_stroke.is_empty():
+	if _current_stroke.is_empty() and _stroke_walking_paths.is_empty():
 		return
 	var action = {
 		"type": "terrain",
@@ -50,8 +61,11 @@ func end_stroke() -> void:
 		"paid_cost": _stroke_cost,
 		"removed_entities": _stroke_removals.duplicate(true)
 	}
+	if not _stroke_walking_paths.is_empty():
+		action["walking_paths"] = _stroke_walking_paths.duplicate()
 	_push_action(action)
 	_current_stroke = []
+	_stroke_walking_paths = []
 
 ## Record an elevation paint stroke (array of changes from ElevationTool)
 func record_elevation_stroke(changes: Array) -> void:
@@ -115,6 +129,7 @@ func clear() -> void:
 	undo_stack.clear()
 	redo_stack.clear()
 	_current_stroke.clear()
+	_stroke_walking_paths.clear()
 	_is_recording_stroke = false
 
 func record_stroke_cost(cost: int) -> void:

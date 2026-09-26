@@ -38,6 +38,7 @@ var round_brush := true
 var brush_size: int = 1
 var is_painting: bool = false
 var _tee_block_notified: bool = false  # One "tee box is waiting" notice per stroke
+var _path_block_notified: bool = false  # One "no room for a walking path" notice per stroke
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
 var last_paint_vertex: Vector2i = Vector2i(-1, -1)
 
@@ -929,6 +930,7 @@ func _start_painting() -> void:
 
 	is_painting = true
 	_tee_block_notified = false
+	_path_block_notified = false
 	undo_manager.begin_stroke()
 	_paint_at_mouse()
 
@@ -938,6 +940,7 @@ func _stop_painting() -> void:
 		EventBus.notify("Cleared %d item%s (-$%d)" % [_bulldoze_drag_count, "s" if _bulldoze_drag_count != 1 else "", _bulldoze_drag_cost], "info")
 	is_painting = false
 	_tee_block_notified = false
+	_path_block_notified = false
 	last_paint_pos = Vector2i(-1, -1)
 	last_paint_vertex = Vector2i(-1, -1)
 	if not elevation_tool.is_active():
@@ -958,6 +961,12 @@ func _paint_at_mouse() -> void:
 	last_paint_pos = grid_pos
 
 func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
+	# The Path improvement is laid on top of the terrain instead of replacing
+	# it, so it has its own stamp.
+	if current_tool == TerrainTypes.Type.PATH:
+		_paint_walking_path_stamp(grid_pos)
+		return
+
 	var cost = TerrainTypes.get_placement_cost(current_tool)
 	if cost > 0 and not GameManager.can_afford(cost):
 		if GameManager.is_bankrupt():
@@ -1074,6 +1083,44 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	# Painting a tee box or a green changes what may be placed next, and whether a
 	# hole is ready to open.
 	_refresh_hole_layout_ui()
+
+## The Path improvement: lay a thin walking path ON TOP of the tile instead of
+## repainting its terrain. Hostable ground is TerrainTypes.WALKING_PATH_TERRAINS
+## (rough, deep rough, waste bunker, brush, rocks/boulders, stream, flower bed,
+## trees). One tile per stamp; the brush is capped at 1x1 by HoleLayout.
+func _paint_walking_path_stamp(grid_pos: Vector2i) -> void:
+	if not terrain_grid.is_valid_position(grid_pos):
+		return
+	# Land must be owned before anything is laid on it.
+	if GameManager.land_manager and not GameManager.land_manager.is_tile_owned(grid_pos):
+		if not _path_block_notified:
+			_path_block_notified = true
+			EventBus.notify("You don't own this land! Press L to buy parcels.", "error")
+		return
+	# Buildings and decorations occupy their tiles; a trail cannot run under them.
+	if entity_layer and (entity_layer.is_tile_occupied_by_building(grid_pos) \
+			or entity_layer.is_tile_occupied_by_decoration(grid_pos)):
+		return
+	if not terrain_grid.can_place_walking_path(grid_pos):
+		if not _path_block_notified:
+			_path_block_notified = true
+			EventBus.notify(terrain_grid.walking_path_placement_error(grid_pos), "error")
+		return
+	if terrain_grid.has_walking_path(grid_pos):
+		return  # Already has a trail — no double charge.
+	var cost := TerrainTypes.get_placement_cost(TerrainTypes.Type.PATH)
+	if cost > 0 and not GameManager.can_afford(cost):
+		if GameManager.is_bankrupt():
+			EventBus.notify("Spending blocked! Balance below -$1,000", "error")
+		else:
+			EventBus.notify("Not enough money!", "error")
+		return
+	if not terrain_grid.set_walking_path(grid_pos, true):
+		return
+	undo_manager.record_walking_path(grid_pos, true)
+	undo_manager.record_stroke_cost(cost)
+	GameManager.modify_money(-cost)
+	EventBus.log_transaction("Walking path", -cost)
 
 func _update_measure_overlay() -> void:
 	if _measure_overlay:
@@ -1863,6 +1910,7 @@ const BULLDOZER_COSTS = {
 	"decoration": 20,
 	"rock_ground": 10,  # Painted Rocks terrain (no boulder) back to grass
 	"brush": 10,
+	"walking_path": 5,  # The Path improvement (thin walking trail)
 }
 
 func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.ZERO) -> void:
@@ -1996,6 +2044,28 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 		_bulldoze_drag_cost += cost
 		if not dragging:
 			EventBus.notify("Cleared %s (-$%d)" % [what, cost], "info")
+		return
+
+	# The Path improvement: a thin walking trail laid over the ground.
+	# (Clearing the ground itself above would have removed it too, but a trail
+	# on plain hostable ground needs its own pass.)
+	if terrain_grid.has_walking_path(grid_pos):
+		var cost = BULLDOZER_COSTS["walking_path"]
+		if not GameManager.can_afford(cost):
+			if not dragging:
+				if GameManager.is_bankrupt():
+					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
+				else:
+					EventBus.notify("Not enough money to remove walking path ($%d)" % cost, "error")
+			return
+		GameManager.modify_money(-cost)
+		EventBus.log_transaction("Remove walking path", -cost)
+		terrain_grid.set_walking_path(grid_pos, false)
+		undo_manager.record_walking_path(grid_pos, false)
+		_bulldoze_drag_count += 1
+		_bulldoze_drag_cost += cost
+		if not dragging:
+			EventBus.notify("Walking path removed (-$%d)" % cost, "info")
 		return
 
 	# Nothing to remove at this position
@@ -2616,9 +2686,17 @@ func _execute_undo_action(action: Dictionary) -> void:
 			for removed in action.get("removed_entities", []):
 				if removed.type == "tree": entity_layer.place_tree(removed.position, removed.subtype)
 				else: entity_layer.place_rock(removed.position, removed.subtype)
+			# Revert walking-path (Path improvement) changes made in the same stroke.
+			for wp in action.get("walking_paths", []):
+				terrain_grid.set_walking_path(wp["position"], not wp["added"])
 			refund = action.get("paid_cost", refund)
 			if refund > 0:
 				GameManager.modify_money(refund)
+		"walking_paths":
+			# Standalone Path improvement change (e.g. a bulldozer removal).
+			var changes = action.get("changes", [])
+			for i in range(changes.size() - 1, -1, -1):
+				terrain_grid.set_walking_path(changes[i]["position"], not changes[i]["added"])
 		"elevation":
 			# Revert vertex height changes in reverse order
 			var changes = action.get("changes", [])
@@ -2702,9 +2780,17 @@ func _execute_redo_action(action: Dictionary) -> void:
 					if change.new_cup: terrain_grid.add_cup_tile(change.position)
 					else: terrain_grid.remove_cup_tile(change.position)
 				cost += TerrainTypes.get_placement_cost(change["new_type"])
+			# Re-apply walking-path (Path improvement) changes from the same stroke.
+			for wp in action.get("walking_paths", []):
+				terrain_grid.set_walking_path(wp["position"], wp["added"])
 			cost = action.get("paid_cost", cost)
 			if cost > 0:
 				GameManager.modify_money(-cost)
+		"walking_paths":
+			# Standalone Path improvement change (e.g. a bulldozer removal).
+			var changes = action.get("changes", [])
+			for change in changes:
+				terrain_grid.set_walking_path(change["position"], change["added"])
 		"elevation":
 			# Re-apply vertex height changes in order
 			var changes = action.get("changes", [])

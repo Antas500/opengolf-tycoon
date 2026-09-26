@@ -111,3 +111,16 @@ const COURSE_PAINT_TYPES: Array[int] = [
 	Type.FAIRWAY, Type.FIRM_FAIRWAY, Type.DEEP_ROUGH, Type.WASTE_BUNKER,
 	Type.BRUSH, Type.ROCKS, Type.OUT_OF_BOUNDS,
 ]
+
+## Ground the walking-path improvement can be laid over (the Path tool in the
+## Improvements tab): the rough and scrubby Course Terrain tiles, painted
+## Rocks and boulder ground (Rocks), streams and flower beds, plus tree tiles.
+## The path sits on top of these tiles without replacing the terrain.
+const WALKING_PATH_TERRAINS: Array[int] = [
+	Type.ROUGH, Type.DEEP_ROUGH, Type.WASTE_BUNKER, Type.BRUSH,
+	Type.ROCKS, Type.STREAM, Type.FLOWER_BED, Type.TREES,
+]
+
+## Can a walking path be laid on this terrain?
+static func can_host_walking_path(type: int) -> bool:
+	return type in WALKING_PATH_TERRAINS
