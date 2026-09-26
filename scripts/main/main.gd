@@ -8,7 +8,7 @@ extends Node2D
 @onready var golfer_manager: GolferManager = $GolferManager
 @onready var bottom_bar: HBoxContainer = $UI/HUD/BottomBar
 var terrain_toolbar: TerrainToolbar = null
-var hole_list: HBoxContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
+var hole_grid: GridContainer = null  # Lives in the toolbar's Holes tab (set up in _setup_terrain_toolbar)
 @onready var left_controls: VBoxContainer = $UI/HUD/BottomBar/LeftControls
 @onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
 @onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
@@ -21,6 +21,9 @@ var hole_list: HBoxContainer = null  # Lives in the toolbar's Holes tab (set up 
 var ultra_btn: Button = null
 @onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/SpeedControls
 const VIEW_ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
+## Every hole button opens that hole's context menu, so they all read at one
+## width instead of following each hole's par and yardage text.
+const HOLE_BUTTON_WIDTH := 132
 
 # New UI components
 var player_round: PlayerRoundManager
@@ -478,6 +481,8 @@ func _connect_signals() -> void:
 	EventBus.hole_created.connect(_on_hole_created)
 	EventBus.hole_deleted.connect(_on_hole_deleted)
 	EventBus.hole_toggled.connect(_on_hole_toggled)
+	# The hole menu can re-par a hole, so its button re-reads the hole.
+	EventBus.hole_updated.connect(_refresh_hole_button)
 	EventBus.end_of_day.connect(_on_end_of_day)
 	EventBus.load_completed.connect(_on_load_completed)
 	EventBus.new_game_started.connect(_on_new_game_started)
@@ -524,8 +529,8 @@ func _setup_terrain_toolbar() -> void:
 	# Keep the toolbar as the last child so it sits immediately after the separator
 	bottom_bar.move_child(terrain_toolbar, bottom_bar.get_child_count() - 1)
 
-	# The course holes list now lives in the toolbar's Holes tab
-	hole_list = terrain_toolbar.hole_list
+	# The course holes buttons now live in the toolbar's Holes tab
+	hole_grid = terrain_toolbar.hole_grid
 
 	# Build tool signals
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
@@ -1399,87 +1404,78 @@ func _on_day_changed(_new_day: int) -> void:
 
 func _on_hole_created(hole_number: int, par: int, distance_yards: int) -> void:
 	StrokeIndexCalculator.recalculate_for_course()
-	var row = HBoxContainer.new()
-	row.name = "HoleRow%d" % hole_number
-	row.add_theme_constant_override("separation", 3)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-
-	# Make hole label a clickable button
+	if not hole_grid:
+		return
 	var hole_btn = Button.new()
-	hole_btn.name = "HoleBtn"
+	hole_btn.name = "HoleBtn%d" % hole_number
 	hole_btn.text = "H%d: P%d (%d yds)" % [hole_number, par, distance_yards]
 	hole_btn.flat = false
 	hole_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hole_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	hole_btn.tooltip_text = "Hole %d (Par %d, %d yds) - Click to view statistics" % [hole_number, par, distance_yards]
 	hole_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	hole_btn.custom_minimum_size = Vector2(0, 26)
-	hole_btn.pressed.connect(_show_hole_stats.bind(hole_number))
-	row.add_child(hole_btn)
-
-	var toggle_btn = Button.new()
-	toggle_btn.name = "ToggleBtn"
-	toggle_btn.text = "Open"
-	toggle_btn.custom_minimum_size = Vector2(44, 26)
-	toggle_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	toggle_btn.pressed.connect(_on_hole_toggle_pressed.bind(hole_number))
-	row.add_child(toggle_btn)
-
-	var delete_btn = Button.new()
-	delete_btn.name = "DeleteBtn"
-	delete_btn.text = "X"
-	delete_btn.custom_minimum_size = Vector2(24, 26)
-	delete_btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	delete_btn.pressed.connect(_on_hole_delete_pressed.bind(hole_number))
-	row.add_child(delete_btn)
-
-	hole_list.add_child(row)
+	hole_btn.custom_minimum_size = Vector2(HOLE_BUTTON_WIDTH, 26)
+	hole_btn.set_meta("hole_number", hole_number)
+	# One button per hole. Everything else about that hole — its pin, tees and
+	# green, its par, whether it is open, its statistics — sits behind the same
+	# context menu as clicking the hole out on the course.
+	hole_btn.pressed.connect(_on_hole_button_pressed.bind(hole_number))
+	hole_grid.add_child(hole_btn)
+	# Three holes to a column, so the buttons are re-seated after every change.
+	terrain_toolbar.layout_hole_buttons()
+	# The signal payload seeds the label; the course data owns the open state.
+	_refresh_hole_button(hole_number)
 	_update_status_rating()
 
-func _on_hole_toggle_pressed(hole_number: int) -> void:
-	if not GameManager.current_course:
+## A hole button opens the hole's context menu — the same one the course's tee,
+## green and flag open — rather than the statistics screen.
+func _on_hole_button_pressed(hole_number: int) -> void:
+	var hole = _find_hole_data(hole_number)
+	if not hole:
 		return
-	var is_open = GameManager.current_course.toggle_hole_open(hole_number)
-	var status = "opened" if is_open else "closed"
-	EventBus.notify("Hole %d %s" % [hole_number, status], "info")
+	_open_hole_context_menu(hole)
 
-func _on_hole_delete_pressed(hole_number: int) -> void:
-	hole_tool.delete_hole(hole_number)
+## Re-read one hole button from the course data: its par, its yardage and
+## whether it is open. A closed hole plays nowhere, so its button dims the way
+## the row's Open/Closed toggle used to.
+func _refresh_hole_button(hole_number: int) -> void:
+	var hole_btn := _find_hole_button(hole_number)
+	if not hole_btn:
+		return
+	var hole := _find_hole_data(hole_number)
+	if not hole:
+		return
+	hole_btn.text = "H%d: P%d (%d yds)" % [hole_number, hole.par, hole.distance_yards]
+	hole_btn.tooltip_text = "Hole %d (Par %d, %d yds)%s - Click for the hole menu" % [
+			hole_number, hole.par, hole.distance_yards, "" if hole.is_open else " - Closed"]
+	hole_btn.modulate = Color(1, 1, 1) if hole.is_open else Color(0.5, 0.5, 0.5)
 
-func _on_hole_deleted(hole_number: int) -> void:
-	# Remove the hole row from the UI
-	var row_name = "HoleRow%d" % hole_number
-	if hole_list.has_node(row_name):
-		hole_list.get_node(row_name).queue_free()
-	# Rebuild the hole list to reflect renumbered holes
+func _find_hole_button(hole_number: int) -> Button:
+	if not hole_grid:
+		return null
+	return hole_grid.get_node_or_null("HoleBtn%d" % hole_number) as Button
+
+func _on_hole_deleted(_hole_number: int) -> void:
+	# Rebuild the buttons so they follow the renumbered holes
 	_rebuild_hole_list()
 	_update_status_rating()
 	StrokeIndexCalculator.recalculate_for_course()
 
-func _on_hole_toggled(hole_number: int, is_open: bool) -> void:
+func _on_hole_toggled(hole_number: int, _is_open: bool) -> void:
 	StrokeIndexCalculator.recalculate_for_course()
-	var row_name = "HoleRow%d" % hole_number
-	if hole_list.has_node(row_name):
-		var row = hole_list.get_node(row_name)
-		var toggle_btn = row.get_node("ToggleBtn") as Button
-		var hole_btn = row.get_node("HoleBtn") as Button
-		if toggle_btn:
-			toggle_btn.text = "Open" if is_open else "Closed"
-			toggle_btn.modulate = Color(1, 1, 1) if is_open else Color(0.6, 0.6, 0.6)
-		if hole_btn:
-			hole_btn.modulate = Color(1, 1, 1) if is_open else Color(0.5, 0.5, 0.5)
+	_refresh_hole_button(hole_number)
 
 func _rebuild_hole_list() -> void:
-	# Clear existing hole rows
-	for child in hole_list.get_children():
+	if not hole_grid:
+		return
+	# Drop the old buttons outright: leaving them queued for deletion would keep
+	# them counted in the column layout for the rest of this frame.
+	for child in hole_grid.get_children():
+		hole_grid.remove_child(child)
 		child.queue_free()
-	# Re-add from course data
+	# Re-add from course data, which also restores each hole's open state
 	if GameManager.current_course:
 		for hole in GameManager.current_course.holes:
 			_on_hole_created(hole.hole_number, hole.par, hole.distance_yards)
-			# Re-apply closed state
-			if not hole.is_open:
-				_on_hole_toggled(hole.hole_number, false)
 
 func _prepare_for_nature_placement() -> void:
 	"""Leave other placement modes before starting a tree or boulder placement."""
@@ -2270,6 +2266,7 @@ func _open_hole_context_menu(hole_data: GameManager.HoleData) -> void:
 	_hole_context_menu.toggle_hole_requested.connect(_on_context_toggle_hole)
 	_hole_context_menu.view_stats_requested.connect(_on_context_view_stats)
 	_hole_context_menu.par_override_requested.connect(_on_context_par_override)
+	_hole_context_menu.delete_hole_requested.connect(_on_context_delete_hole)
 	_hole_context_menu.menu_closed.connect(_on_context_menu_closed)
 
 	# Highlight the hole
@@ -2334,6 +2331,25 @@ func _on_context_par_override(hole_number: int, new_par: int) -> void:
 
 func _on_context_view_stats(hole_number: int) -> void:
 	_show_hole_stats(hole_number)
+
+## Deleting a hole renumbers every hole after it, so it asks first. The hole's
+## tee box and green stay painted on the course: repaint them, or paint a green
+## to cut a cup for the tee box the deleted hole leaves waiting.
+func _on_context_delete_hole(hole_number: int) -> void:
+	if not _find_hole_data(hole_number):
+		return
+	var dialog := ConfirmDialog.new(
+			"Hole %d will be removed and the holes after it renumbered.\nIts tee box and green stay on the course." % hole_number,
+			"Delete Hole", "Cancel")
+	dialog.name = "DeleteHoleConfirmDialog"
+	dialog.confirmed.connect(_on_delete_hole_confirmed.bind(hole_number))
+	$UI/HUD.add_child(dialog)
+
+func _on_delete_hole_confirmed(hole_number: int) -> void:
+	if not hole_tool.delete_hole(hole_number):
+		EventBus.notify("Hole %d is not on the course." % hole_number, "error")
+		return
+	EventBus.notify("Hole %d deleted — the holes after it renumbered" % hole_number, "info")
 
 func _find_hole_data(hole_number: int) -> GameManager.HoleData:
 	if not GameManager.current_course:
@@ -3668,6 +3684,8 @@ func _exit_tree() -> void:
 		EventBus.hole_deleted.disconnect(_on_hole_deleted)
 	if EventBus.hole_toggled.is_connected(_on_hole_toggled):
 		EventBus.hole_toggled.disconnect(_on_hole_toggled)
+	if EventBus.hole_updated.is_connected(_refresh_hole_button):
+		EventBus.hole_updated.disconnect(_refresh_hole_button)
 	if EventBus.end_of_day.is_connected(_on_end_of_day):
 		EventBus.end_of_day.disconnect(_on_end_of_day)
 	if EventBus.load_completed.is_connected(_on_load_completed):

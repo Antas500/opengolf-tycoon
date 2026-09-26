@@ -7,7 +7,7 @@ class_name TerrainToolbar
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      sculpting controls and brush size
-##  - Holes:          course holes list (rows are filled by main.gd)
+##  - Holes:          one button per course hole, three to a column, each opening that hole's context menu (the buttons are filled by main.gd)
 ##  - Golfers:        who is on the course and recent rounds
 ##  - Player:         play the course, tournaments, player skills
 ##  - Club:           land, marketing, milestones, feed, scorecard
@@ -147,13 +147,17 @@ const BRUSH_DOCK_PADDING := 1.0
 ## Same corner margin the pinned Bulldozer keeps on the other two tabs.
 const BRUSH_DOCK_MARGIN := BulldozerButton.CORNER_MARGIN
 const BRUSH_DOCK_TOOLTIP := "Paint brush: shape, size, smaller and bigger. Stays put while the tiles scroll."
+## Holes stack three deep per column and the columns run off to the right, so
+## the tab grows along the axis the page already scrolls on and never past the
+## bottom bar's height.
+const HOLE_COLUMN_HEIGHT := 3
 const OPEN_HOLE_TOOLTIP := "Pair the waiting tee box with the waiting green with a hole"
 const OPEN_HOLE_BLOCKED_TOOLTIP := "Needs exactly one unused tee box and one unused green with a hole"
 ## What the Bulldozer removes — improvements and buildings only. Course
 ## Terrain tiles are ground paint: repaint them with another tile instead.
 const BULLDOZER_TOOLTIP := "Demolish decorations, walking paths and buildings. Click or drag over them. Fees: $5 per path tile, $20 per decoration or building. Course Terrain tiles are not affected — any Course Terrain tile replaces any other, including trees and boulders."
 
-var hole_list: HBoxContainer = null  # Course holes rows (filled by main.gd)
+var hole_grid: GridContainer = null  # Course holes buttons, three to a column (filled by main.gd)
 var golfer_data_provider: Callable = Callable()  # -> Array of golfer row dicts
 
 var _current_tool: int = -1
@@ -797,15 +801,44 @@ func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_brush_group())
 
 func _build_holes_tab(hbox: HBoxContainer) -> void:
-	# The Course Terrain tab owns the Open Hole action. Keep this tab focused on
-	# the course's hole list without a duplicate action button or group heading.
-	hole_list = HBoxContainer.new()
-	hole_list.name = "HoleList"
-	hole_list.add_theme_constant_override("separation", 6)
-	hole_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hole_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hole_list.alignment = BoxContainer.ALIGNMENT_BEGIN
-	hbox.add_child(hole_list)
+	# The Course Terrain tab owns the Open Hole action, and each hole's context
+	# menu owns that hole's open/closed toggle and its statistics. Keep this tab
+	# to the holes themselves — one button each, three to a column, no per-hole
+	# toggle or delete buttons and no group heading.
+	hole_grid = GridContainer.new()
+	hole_grid.name = "HoleGrid"
+	hole_grid.columns = 1
+	hole_grid.add_theme_constant_override("h_separation", 6)
+	hole_grid.add_theme_constant_override("v_separation", 4)
+	hole_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hbox.add_child(hole_grid)
+
+## Re-seat the hole buttons so they read three deep down each column before the
+## next column starts. main.gd adds and removes one button per hole, but the
+## grid fills row-major, so the children are put back into column-major order
+## after every change and the grid is widened to exactly the columns they need.
+## Each button carries its hole number as metadata.
+func layout_hole_buttons() -> void:
+	if not hole_grid:
+		return
+	var buttons: Array[Control] = []
+	for child in hole_grid.get_children():
+		if child is Control and not child.is_queued_for_deletion():
+			buttons.append(child)
+	buttons.sort_custom(func(a: Control, b: Control) -> bool:
+		return int(a.get_meta("hole_number", 0)) < int(b.get_meta("hole_number", 0)))
+	if buttons.is_empty():
+		hole_grid.columns = 1
+		return
+	var column_count := int(ceil(float(buttons.size()) / float(HOLE_COLUMN_HEIGHT)))
+	hole_grid.columns = column_count
+	var slot := 0
+	for row in HOLE_COLUMN_HEIGHT:
+		for column in column_count:
+			var index := column * HOLE_COLUMN_HEIGHT + row
+			if index < buttons.size():
+				hole_grid.move_child(buttons[index], slot)
+				slot += 1
 
 func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	var on_course_group = VBoxContainer.new()

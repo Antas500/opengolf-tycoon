@@ -734,15 +734,15 @@ func test_pinned_brush_dock_leaves_every_tile_diamond_clear() -> void:
 	assert_eq(checked, toolbar._course_tiles.flow_children().size() + 1,
 		"Every tile on the tab, plus the nestled Open Hole action, was checked")
 
-func test_holes_tab_has_hole_list_without_duplicate_action_or_heading() -> void:
-	assert_not_null(toolbar.hole_list, "hole_list should exist")
-	assert_true(toolbar.hole_list is HBoxContainer, "hole_list should be an HBoxContainer")
+func test_holes_tab_has_hole_grid_without_duplicate_action_or_heading() -> void:
+	assert_not_null(toolbar.hole_grid, "hole_grid should exist")
+	assert_true(toolbar.hole_grid is GridContainer, "hole_grid should be a GridContainer")
 
 	var page_content := toolbar.page_content(TerrainToolbar.Tab.HOLES)
 	assert_eq(page_content.get_child_count(), 1,
-		"The Holes tab contains only the hole list")
-	assert_same(page_content.get_child(0), toolbar.hole_list,
-		"The hole list is the tab's direct content")
+		"The Holes tab contains only the hole grid")
+	assert_same(page_content.get_child(0), toolbar.hole_grid,
+		"The hole grid is the tab's direct content")
 	var page: Control = toolbar._pages[TerrainToolbar.Tab.HOLES]
 	assert_eq(page.find_children("*", "ToolButton", true, false).size(), 0,
 		"The Open Hole action is not duplicated on the Holes tab")
@@ -750,12 +750,80 @@ func test_holes_tab_has_hole_list_without_duplicate_action_or_heading() -> void:
 		.any(func(label): return label.text == "COURSE HOLES"),
 		"The redundant COURSE HOLES heading is removed")
 
-	# Add a sample hole row and verify containment
-	var row = HBoxContainer.new()
-	row.name = "HoleRow1"
-	toolbar.hole_list.add_child(row)
-	assert_true(toolbar.hole_list.has_node("HoleRow1"))
-	row.queue_free()
+	# Add a sample hole button and verify containment: the button is the whole
+	# of a hole's per-hole UI, with no toggle or delete button beside it.
+	_add_hole_button(1)
+	assert_true(toolbar.hole_grid.has_node("HoleBtn1"))
+	assert_eq(toolbar.hole_grid.get_child_count(), 1, "One hole is one button")
+	assert_eq(toolbar.hole_grid.columns, 1, "One hole fills one column")
+
+## A hole button the way main.gd makes it: named for its hole and carrying its
+## number as metadata, which is what the column layout sorts on.
+func _add_hole_button(hole_number: int) -> Button:
+	var hole_btn := Button.new()
+	hole_btn.name = "HoleBtn%d" % hole_number
+	hole_btn.set_meta("hole_number", hole_number)
+	toolbar.hole_grid.add_child(hole_btn)
+	toolbar.layout_hole_buttons()
+	return hole_btn
+
+## Holes stack three deep and the columns run off to the right, so a course
+## grows along the axis the page already scrolls on.
+func test_hole_buttons_stack_three_to_a_column() -> void:
+	for hole_number in 8:
+		_add_hole_button(hole_number + 1)
+
+	var grid := toolbar.hole_grid
+	assert_eq(grid.columns, 3, "Eight holes fill two columns of three and start a third")
+
+	# The grid fills row-major, so reading down the first column gives holes
+	# 1-3, down the second 4-6, and down the third 7-8.
+	var reading_order := [1, 4, 7, 2, 5, 8, 3, 6]
+	for slot in reading_order.size():
+		assert_eq(int(grid.get_child(slot).get_meta("hole_number")), reading_order[slot],
+			"Slot %d reads down the columns in hole order" % slot)
+
+	toolbar.select_tab(TerrainToolbar.Tab.HOLES)
+	await _settle_layout()
+	var rows: Array[float] = []
+	for child in grid.get_children():
+		if not rows.has(child.position.y):
+			rows.append(child.position.y)
+	assert_eq(rows.size(), TerrainToolbar.HOLE_COLUMN_HEIGHT,
+		"Holes sit in exactly three rows")
+
+func test_a_full_course_of_holes_stays_inside_the_bottom_bar() -> void:
+	for hole_number in 18:
+		_add_hole_button(hole_number + 1)
+	var grid := toolbar.hole_grid
+	assert_eq(grid.columns, 6, "Eighteen holes fill six columns of three")
+
+	toolbar.select_tab(TerrainToolbar.Tab.HOLES)
+	await _settle_layout()
+	assert_gt(grid.get_combined_minimum_size().y, 0.0, "The hole buttons are measured")
+	var available := float(UIConstants.BOTTOM_BAR_HEIGHT) \
+			- toolbar._tab_bar.get_combined_minimum_size().y
+	assert_lte(grid.get_combined_minimum_size().y, available,
+		"Three rows of hole buttons fit under the tab bar")
+
+## A hole that goes takes its button with it and the rest re-seat, which is the
+## rebuild main.gd runs whenever the holes are renumbered.
+func test_hole_buttons_reseat_when_a_hole_goes() -> void:
+	for hole_number in 6:
+		_add_hole_button(hole_number + 1)
+	var gone: Button = toolbar.hole_grid.get_node("HoleBtn4")
+	toolbar.hole_grid.remove_child(gone)
+	gone.queue_free()
+	toolbar.layout_hole_buttons()
+
+	var grid := toolbar.hole_grid
+	assert_eq(grid.get_child_count(), 5, "The hole that went took its button with it")
+	assert_eq(grid.columns, 2, "Five holes fill one column of three and one of two")
+	# Reading down the columns: 1,2,3 then 5,6.
+	var reading_order := [1, 5, 2, 6, 3]
+	for slot in reading_order.size():
+		assert_eq(int(grid.get_child(slot).get_meta("hole_number")), reading_order[slot],
+			"Slot %d reads down the columns after hole 4 went" % slot)
 
 func test_golfers_tab_lists_are_horizontal_and_populate() -> void:
 	assert_not_null(toolbar._active_golfers_box, "_active_golfers_box should exist")

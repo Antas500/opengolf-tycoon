@@ -15,6 +15,7 @@ signal move_green_requested(hole_number: int)
 signal toggle_hole_requested(hole_number: int)
 signal view_stats_requested(hole_number: int)
 signal par_override_requested(hole_number: int, new_par: int)
+signal delete_hole_requested(hole_number: int)
 signal menu_closed()
 
 func _init(p_hole_data: GameManager.HoleData, p_terrain_grid: TerrainGrid) -> void:
@@ -195,6 +196,19 @@ func _build_ui() -> void:
 	var stats_btn = _create_menu_button("View Statistics")
 	stats_btn.pressed.connect(func(): view_stats_requested.emit(hole_data.hole_number); _close())
 	vbox.add_child(stats_btn)
+
+	vbox.add_child(_create_separator())
+
+	# Delete Hole: the only destructive action here, so it sits apart at the
+	# bottom and stays red under the cursor. main.gd asks before it deletes —
+	# the holes after this one renumber.
+	var delete_btn = _create_menu_button("Delete Hole")
+	delete_btn.add_theme_color_override("font_color", UIConstants.COLOR_DANGER)
+	delete_btn.add_theme_color_override("font_hover_color", UIConstants.COLOR_DANGER_DIM)
+	delete_btn.tooltip_text = "Remove Hole %d and renumber the holes after it. Asks first." \
+			% hole_data.hole_number
+	delete_btn.pressed.connect(func(): delete_hole_requested.emit(hole_data.hole_number); _close())
+	vbox.add_child(delete_btn)
 
 func _cycle_par(current_par: int, auto_par: int) -> int:
 	var min_par = max(3, auto_par - 1)
