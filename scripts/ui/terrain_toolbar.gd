@@ -3,9 +3,9 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: tools column (open hole, bulldozer, brush) before one course, hazard & landscape tiles honeycomb
-##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue)
-##  - Buildings:      amenity buildings catalogue
+##  - Course Terrain: tools column (open hole and brush) before one course, hazard & landscape tiles honeycomb
+##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), plus the bulldozer
+##  - Buildings:      amenity buildings catalogue plus the bulldozer
 ##  - Elevation:      sculpting controls and brush size
 ##  - Holes:          course holes list (rows are filled by main.gd)
 ##  - Golfers:        who is on the course and recent rounds
@@ -82,7 +82,9 @@ const TOOL_TAB_MAP := {
 	TerrainTypes.Type.ROCKS: Tab.TERRAIN,
 	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
 	"open_hole": Tab.TERRAIN,
-	"bulldozer": Tab.TERRAIN,
+	# Bulldozing is an Improvements/Buildings action. The button is present in
+	# both tabs; Improvements is the keyboard/default destination.
+	"bulldozer": Tab.IMPROVEMENTS,
 	"tree": Tab.TERRAIN,
 	"rock": Tab.TERRAIN,
 	"boulder_small": Tab.TERRAIN,
@@ -166,6 +168,7 @@ var _decoration_registry: Dictionary = {}
 var _decoration_shelf: TileHoneycomb = null
 var _decoration_tiles: Dictionary = {}  # decoration type -> DecorationTileButton
 var _path_tile: TerrainTileButton = null  # Walking path tile leading the shelf
+var _bulldozer_buttons: Array[ToolButton] = []  # One action button in each removable-item tab
 var _course_tiles: TileHoneycomb = null
 var _landscape_buttons: Array[Node] = []
 var _selected_string_tool: String = ""
@@ -334,8 +337,8 @@ func _on_scroll_gui_input(event: InputEvent, scroll: ScrollContainer) -> void:
 # =============================================================================
 
 func _build_terrain_tab(hbox: HBoxContainer) -> void:
-	# The Open Hole action, the Bulldozer and the brush stack in one column
-	# before the tiles so the most-used course tools sit first in the tab.
+	# Open Hole and the brush stack before the terrain tiles. Terrain tiles are
+	# deliberately edited by painting a replacement tile, not by bulldozing.
 	hbox.add_child(_make_terrain_tools_column())
 
 	hbox.add_child(_make_separator())
@@ -376,8 +379,8 @@ func _build_terrain_tab(hbox: HBoxContainer) -> void:
 
 	_populate_landscape_tiles()
 
-## Open Hole, Bulldozer and the brush controls stacked vertically. This column
-## opens the Course Terrain tab so the tools sit before the tile honeycomb.
+## Open Hole and the brush controls stacked vertically. The Course Terrain tab
+## has no bulldozer: terrain is changed by painting another terrain tile over it.
 ## Buttons use a compact 26px height (matching the brush stepper) so the whole
 ## column still fits inside the 190px bottom bar. ToolButton._ready() resets
 ## custom_minimum_size, so the compact height is applied on ready instead.
@@ -391,9 +394,6 @@ func _make_terrain_tools_column() -> VBoxContainer:
 	var open_hole_btn := _add_tool_button(column, {"type": "open_hole", "name": "Open Hole", "icon": "[H]", "hotkey": "H", "desc": OPEN_HOLE_TOOLTIP})
 	_open_hole_buttons.append(open_hole_btn)
 	_make_column_button_compact(open_hole_btn, COLUMN_BUTTON_HEIGHT)
-
-	var bulldozer_btn := _add_tool_button(column, {"type": "bulldozer", "name": "Bulldozer", "icon": "[D]", "hotkey": "X", "desc": "Removes trees, boulders, rocky ground, brush, flowers, decorations, walking paths"})
-	_make_column_button_compact(bulldozer_btn, COLUMN_BUTTON_HEIGHT)
 
 	column.add_child(_make_small_group_label("BRUSH"))
 
@@ -423,6 +423,27 @@ func _make_column_button_compact(btn: ToolButton, height: int) -> void:
 			CONNECT_ONE_SHOT
 		)
 
+## Build the shared removal action used by the Improvements and Buildings tabs.
+## Terrain has no bulldozer: a course surface is removed by painting another
+## Course Terrain tile over it instead.
+func _make_bulldozer_group() -> VBoxContainer:
+	var group := VBoxContainer.new()
+	group.name = "BulldozerTools"
+	group.add_theme_constant_override("separation", 2)
+	group.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	group.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	group.add_child(_make_small_group_label("REMOVE"))
+	var button := _add_tool_button(group, {
+		"type": "bulldozer",
+		"name": "Bulldozer",
+		"icon": "[D]",
+		"hotkey": "X",
+		"desc": "Remove trees, boulders, walking paths, decorations and buildings. Course Terrain tiles are replaced by painting another terrain tile."
+	})
+	_make_column_button_compact(button, 26)
+	_bulldozer_buttons.append(button)
+	return group
+
 func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	# Every improvement — the walking path and each ornament in The Garden Shed —
 	# sits in one honeycomb of the same interlocking isometric tiles used by
@@ -444,8 +465,9 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(_make_tab_group("", _decoration_shelf, true))
 
 	hbox.add_child(_make_separator())
+	hbox.add_child(_make_bulldozer_group())
 
-	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play."))
+	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play. The bulldozer removes Improvements, Buildings and natural props."))
 
 ## The walking path drawn as a course tile and laid in the first slot of the
 ## Improvements honeycomb. It is a painting tool rather than a catalogue entry,
@@ -551,11 +573,11 @@ func _build_buildings_tab(hbox: HBoxContainer) -> void:
 	_building_shelf.v_padding = TILE_V_PADDING
 	_building_shelf.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_building_shelf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	# No group heading or INFO blurb: the tiles speak for themselves and the
-	# rich hover tooltip carries each facility's cost and upkeep.
-	# The shelf carries its own breathing room above and below the rows, so it
-	# keeps that spacing instead of stretching to fill the whole page height.
+	# The rich hover tooltip carries each facility's cost and upkeep. The shelf
+	# carries its own breathing room above and below the rows, so it keeps that
+	# spacing instead of stretching to fill the whole page height.
 	hbox.add_child(_make_tab_group("", _building_shelf, true))
+	hbox.add_child(_make_bulldozer_group())
 	_populate_building_shelf()
 
 func set_building_registry(registry: Dictionary) -> void:
@@ -909,7 +931,11 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 	if tool_type is String and tool_type == "feed":
 		_feed_button = btn
 	elif not (tool_type is String and _is_menu_action(tool_type)):
-		_tool_buttons[tool_type] = btn
+		# Bulldozer is intentionally instantiated once per removable-item tab.
+		# Keep the first instance in the legacy lookup while `_bulldozer_buttons`
+		# exposes both visible buttons to callers and tests.
+		if not (tool_type is String and tool_type == "bulldozer") or not _tool_buttons.has(tool_type):
+			_tool_buttons[tool_type] = btn
 		if tool_type is int:
 			if tool_type == TerrainTypes.Type.GREEN:
 				_green_tile_button = btn as TerrainTileButton
@@ -1220,7 +1246,14 @@ func _on_tool_button_pressed(tool_type) -> void:
 			clear_selection()
 		return
 
-	_reveal_tab_for_tool(tool_type)
+	# A bulldozer button is visible in both removable-item tabs. Do not jump
+	# away from Buildings when its local button is pressed; keyboard activation
+	# still defaults to Improvements when no bulldozer tab is open.
+	if tool_type is String and tool_type == "bulldozer":
+		if _tab_bar.current_tab != Tab.IMPROVEMENTS and _tab_bar.current_tab != Tab.BUILDINGS:
+			select_tab(Tab.IMPROVEMENTS)
+	else:
+		_reveal_tab_for_tool(tool_type)
 
 	if tool_type is int:
 		_current_tool = tool_type

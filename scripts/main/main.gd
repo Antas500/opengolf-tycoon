@@ -1000,8 +1000,9 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	var total_cost = 0
 	var obstacle_removal_cost = 0
 	var blocked_by_land = false
-	# Built course terrain auto-removes trees and rocks when placed; natural
-	# ground (rough, deep rough, brush, rocks) grows around them.
+	# Every Course Terrain tool replaces the existing terrain type at each
+	# paintable tile. Built surfaces also clear tree/boulder props they cover;
+	# natural ground may grow around those props, preserving the prop workflow.
 	var clears_obstacles = current_tool in [
 		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
 		TerrainTypes.Type.BUNKER, TerrainTypes.Type.POT_BUNKER, TerrainTypes.Type.WASTE_BUNKER,
@@ -1590,7 +1591,8 @@ func _on_lower_elevation_pressed() -> void:
 	print("Elevation mode: LOWERING")
 
 func _on_bulldozer_pressed() -> void:
-	"""Activate bulldozer mode to remove trees, rocks, and flower beds"""
+	"""Activate bulldozer mode for trees, boulders, Improvements and Buildings.
+	Course Terrain tiles are changed by painting a replacement tile."""
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
@@ -1904,12 +1906,12 @@ func _bulldoze_at_mouse() -> void:
 
 # Bulldozer removal costs
 const BULLDOZER_COSTS = {
+	# Props and removable catalogue items have a clearing fee. Course Terrain
+	# tiles are deliberately absent: paint a replacement terrain tile instead.
 	"tree": 15,
 	"rock": 10,
-	"flower_bed": 20,
 	"decoration": 20,
-	"rock_ground": 10,  # Painted Rocks terrain (no boulder) back to grass
-	"brush": 10,
+	"building": 20,
 	"walking_path": 5,  # The Path improvement (thin walking trail)
 }
 
@@ -2003,52 +2005,31 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 			EventBus.notify("Decoration removed (-$%d)" % cost, "info")
 		return
 
-	# Check for flower bed terrain (exact tile only — flower beds fill their tile)
-	var tile_type = terrain_grid.get_tile(grid_pos)
-	if tile_type == TerrainTypes.Type.FLOWER_BED:
-		var cost = BULLDOZER_COSTS["flower_bed"]
+	# Remove a building when any tile in its footprint is clicked. Buildings do
+	# not alter the underlying terrain, so removing one simply frees its tiles.
+	var hit_building = entity_layer.get_building_at(grid_pos)
+	if hit_building:
+		var cost = BULLDOZER_COSTS.get("building", 20)
 		if not GameManager.can_afford(cost):
 			if not dragging:
 				if GameManager.is_bankrupt():
 					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
 				else:
-					EventBus.notify("Not enough money to remove flower bed ($%d)" % cost, "error")
+					EventBus.notify("Not enough money to remove building ($%d)" % cost, "error")
 			return
 		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Remove flower bed", -cost)
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
+		EventBus.log_transaction("Remove building", -cost)
+		entity_layer.remove_building(hit_building.grid_position)
 		_bulldoze_drag_count += 1
 		_bulldoze_drag_cost += cost
 		if not dragging:
-			EventBus.notify("Flower bed removed (-$%d)" % cost, "info")
+			EventBus.notify("Building removed (-$%d)" % cost, "info")
 		return
 
-	# Painted rocky ground and brush clear back to natural grass (a boulder's
-	# own spot was handled above with the boulder).
-	if (tile_type == TerrainTypes.Type.ROCKS and entity_layer.get_rock_at(grid_pos) == null) \
-			or tile_type == TerrainTypes.Type.BRUSH:
-		var is_rock_ground: bool = tile_type == TerrainTypes.Type.ROCKS
-		var cost = BULLDOZER_COSTS["rock_ground" if is_rock_ground else "brush"]
-		var what := "rocky ground" if is_rock_ground else "brush"
-		if not GameManager.can_afford(cost):
-			if not dragging:
-				if GameManager.is_bankrupt():
-					EventBus.notify("Spending blocked! Balance below -$1,000", "error")
-				else:
-					EventBus.notify("Not enough money to clear %s ($%d)" % [what, cost], "error")
-			return
-		GameManager.modify_money(-cost)
-		EventBus.log_transaction("Clear %s" % what, -cost)
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.GRASS)
-		_bulldoze_drag_count += 1
-		_bulldoze_drag_cost += cost
-		if not dragging:
-			EventBus.notify("Cleared %s (-$%d)" % [what, cost], "info")
-		return
-
-	# The Path improvement: a thin walking trail laid over the ground.
-	# (Clearing the ground itself above would have removed it too, but a trail
-	# on plain hostable ground needs its own pass.)
+	# The Path improvement: a thin walking trail laid over the ground. Terrain
+	# tiles are intentionally not handled here; replace them by painting another
+	# Course Terrain tile instead. A trail on plain hostable ground needs its own
+	# pass.
 	if terrain_grid.has_walking_path(grid_pos):
 		var cost = BULLDOZER_COSTS["walking_path"]
 		if not GameManager.can_afford(cost):

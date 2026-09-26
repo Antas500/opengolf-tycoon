@@ -209,7 +209,15 @@ func place_rock(grid_pos: Vector2i, rock_size: String = "medium") -> Rock:
 	return rock
 
 func get_building_at(grid_pos: Vector2i) -> Building:
-	return buildings.get(grid_pos, null)
+	"""Return the building occupying a tile, including a multi-tile footprint."""
+	if buildings.has(grid_pos):
+		return buildings[grid_pos]
+	for building in buildings.values():
+		var origin: Vector2i = building.grid_position
+		if grid_pos.x >= origin.x and grid_pos.x < origin.x + building.width \
+				and grid_pos.y >= origin.y and grid_pos.y < origin.y + building.height:
+			return building
+	return null
 
 func get_tree_at(grid_pos: Vector2i) -> TreeEntity:
 	return trees.get(grid_pos, null)
@@ -250,6 +258,7 @@ func remove_building(grid_pos: Vector2i) -> void:
 		building.destroy()
 		buildings.erase(grid_pos)
 		building_removed.emit(grid_pos)
+		EventBus.building_removed.emit(grid_pos)
 
 func remove_tree(grid_pos: Vector2i) -> void:
 	var tree = trees.get(grid_pos, null)

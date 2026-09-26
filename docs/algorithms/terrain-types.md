@@ -20,12 +20,16 @@ the right end of each row:
 | Bottom | Fairway, Firm Fairway, Deep Rough, Waste Bunker, Brush, Rocks, Out of Bounds |
 
 The honeycomb width adapts to the theme's tree catalogue while staying two rows
-high. Open Hole, Bulldozer, and brush controls remain in a column before it.
-The Path improvement lives on the Improvements tab instead, drawn as a course
-tile in the same honeycomb as the decoration tiles and placed first in the top
-row, because it is the improvement players reach for most. Its tile previews
-the rough a trail is cut through with the dirt ribbon across it — a path lies on
-top of the ground rather than replacing it (see [garden catalog](garden-catalog.md)).
+high. Open Hole and brush controls remain in a column before it. Course Terrain
+is replacement-only: painting any Course Terrain tile over another Course Terrain
+tile changes that tile directly; the Bulldozer never clears terrain surfaces.
+The Bulldozer is available beside the Improvements and Buildings shelves, where
+it removes placed items from those tabs. The Path improvement lives on the
+Improvements tab, drawn as a course tile in the same honeycomb as the decoration
+tiles and placed first in the top row, because it is the improvement players
+reach for most. Its tile previews the rough a trail is cut through with the dirt
+ribbon across it — a path lies on top of the ground rather than replacing it
+(see [garden catalog](garden-catalog.md)).
 Grass, Heavy Rough, Trees and Empty are placed by generation or by entities
 (a tree stamps Trees, a boulder stamps Rocks).
 
@@ -49,11 +53,11 @@ Grass, Heavy Rough, Trees and Empty are placed by generation or by entities
   distance) and costs nothing to maintain.
 - **Rocks** — Stony ground: the worst lie on the course (0.25), wedge only. A
   boulder standing on other ground also plays as Rocks but keeps its grass look.
-  Painting Rocks around a boulder merges it into the rocky ground. The bulldozer
-  clears painted Rocks back to grass.
+  Painting Rocks around a boulder merges it into the rocky ground. Replace it by
+  painting another Course Terrain tile.
 - **Brush** — Dense scrub (gorse, heather, sagebrush): 0.3 lie, 50% distance,
-  wedge only, and it swallows rolling balls. Golfers wade through it slowly. The
-  bulldozer clears it back to grass.
+  wedge only, and it swallows rolling balls. Golfers wade through it slowly.
+  Replace it by painting another Course Terrain tile.
 
 ---
 
@@ -73,6 +77,8 @@ WASTE_BUNKER 18, BRUSH 19
 `CourseSurface.PALETTE_KEYS` holds one theme color key per id. The shader
 reads the palette width, so a new type needs a palette key and a color in every
 theme (`CourseTheme.get_terrain_colors()` and `TilesetGenerator.TERRAIN_COLORS`).
+Terrain replacement does not require a separate clearing action or Bulldozer
+charge; the normal placement cost of the newly painted tile still applies.
 
 ### 2. Families
 
@@ -136,15 +142,18 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 
 ### 5. Painting
 
-- Built surfaces (fairways, bunkers, water, stream, tee, green) clear trees and
-  boulders they're painted over; natural ground (rough, deep rough, brush, rocks)
-  grows around them.
+- Every Course Terrain tile replaces the existing terrain type at its painted
+  position. Built surfaces (fairways, bunkers, water, stream, tee, green) also
+  clear trees and boulders they're painted over; natural ground (rough, deep
+  rough, brush, rocks) grows around them.
 - Stream strokes are 4-connected (`TerrainBrush.centers_4_connected()`) so the
   channel never breaks at a diagonal step.
 - Boulders can stand on grass, fairways, roughs and unoccupied painted Rocks.
   Trees can stand on grass, fairways, roughs and path. Both keep off sand, brush
   and water, because their spot draws native grass.
-- The bulldozer removes painted Rocks and Brush for $10 a tile, leaving grass.
+- The Bulldozer does not alter Course Terrain. It removes walking paths,
+  decorations and buildings, plus the existing tree/boulder props, for their
+  respective clearing fees.
 
 ### 6. Rendering
 
