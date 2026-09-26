@@ -419,14 +419,18 @@ func has_building_of_type(building_type: String) -> bool:
 
 func is_tile_occupied_by_building(grid_pos: Vector2i) -> bool:
 	## Check if a tile is occupied by any building (including multi-tile buildings)
+	return get_building_containing(grid_pos) != null
+
+func get_building_containing(grid_pos: Vector2i) -> Building:
+	## Get the building whose footprint covers this tile (multi-tile aware).
+	## Buildings are keyed by their top-left placement tile, so demolition from
+	## any tile of the facility looks the footprint up like this.
 	for building in buildings.values():
 		var b_pos = building.grid_position
-		var b_width = building.width
-		var b_height = building.height
-		if grid_pos.x >= b_pos.x and grid_pos.x < b_pos.x + b_width and \
-		   grid_pos.y >= b_pos.y and grid_pos.y < b_pos.y + b_height:
-			return true
-	return false
+		if grid_pos.x >= b_pos.x and grid_pos.x < b_pos.x + building.width and \
+		   grid_pos.y >= b_pos.y and grid_pos.y < b_pos.y + building.height:
+			return building
+	return null
 
 func get_all_trees() -> Array:
 	return trees.values()
