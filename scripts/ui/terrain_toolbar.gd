@@ -543,10 +543,6 @@ func _build_improvements_tab(hbox: HBoxContainer) -> void:
 	_populate_decoration_shelf()
 	hbox.add_child(_make_tab_group("", _decoration_shelf, true))
 
-	hbox.add_child(_make_separator())
-
-	hbox.add_child(_make_tip_label("Decorations & walking paths raise course aesthetics and pace of play."))
-
 ## The walking path drawn as a course tile and laid in the first slot of the
 ## Improvements honeycomb. It is a painting tool rather than a catalogue entry,
 ## so `_populate_decoration_shelf()` preserves it while it rebuilds the shelf.

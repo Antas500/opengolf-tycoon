@@ -55,15 +55,7 @@ func _has_point(point: Vector2) -> bool:
 	return point.distance_to(size * 0.5) <= size.x * 0.5
 
 func _create_styles() -> void:
-	var radius := BUTTON_DIAMETER * 0.5
-	for state in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
-		var box := StyleBoxFlat.new()
-		box.corner_radius_top_left = radius
-		box.corner_radius_top_right = radius
-		box.corner_radius_bottom_right = radius
-		box.corner_radius_bottom_left = radius
-		add_theme_stylebox_override(state, box)
-	_apply_styles()
+	pass
 
 ## Circle face + ring. The ring turns gold while bulldozer mode is active so
 ## the pinned buttons report the mode the toolbar cannot otherwise show.
@@ -71,21 +63,7 @@ func _apply_styles() -> void:
 	pass
 
 func _style_for(state: String, face: Color, ring: Color, border: float) -> void:
-	var box: StyleBoxFlat = get_theme_stylebox(state)
-	if box == null or not box is StyleBoxFlat:
-		box = StyleBoxFlat.new()
-		add_theme_stylebox_override(state, box)
-	var radius := BUTTON_DIAMETER * 0.5
-	box.bg_color = face
-	box.corner_radius_top_left = radius
-	box.corner_radius_top_right = radius
-	box.corner_radius_bottom_right = radius
-	box.corner_radius_bottom_left = radius
-	box.border_width_left = border
-	box.border_width_top = border
-	box.border_width_right = border
-	box.border_width_bottom = border
-	box.border_color = ring
+	pass
 
 func set_active(active: bool) -> void:
 	if _is_active == active:
