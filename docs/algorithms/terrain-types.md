@@ -21,9 +21,13 @@ the right end of each row:
 
 The honeycomb width adapts to the theme's tree catalogue while staying two rows
 high. Open Hole, Bulldozer, and brush controls remain in a column before it.
-Path lives on the Improvements tab alongside the decoration tile shelf. Grass, Heavy Rough,
-Trees and Empty are placed by generation or by entities (a tree stamps Trees,
-a boulder stamps Rocks).
+The Path improvement lives on the Improvements tab instead, drawn as a course
+tile in the same honeycomb as the decoration tiles and placed first in the top
+row, because it is the improvement players reach for most. Its tile previews
+the rough a trail is cut through with the dirt ribbon across it — a path lies on
+top of the ground rather than replacing it (see [garden catalog](garden-catalog.md)).
+Grass, Heavy Rough, Trees and Empty are placed by generation or by entities
+(a tree stamps Trees, a boulder stamps Rocks).
 
 ### The seven newer tiles
 

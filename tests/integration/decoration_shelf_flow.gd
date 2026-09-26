@@ -43,11 +43,16 @@ func run() -> void:
 	for child in main.get_children():
 		check(not (child is Window), "Decorations no longer open a separate window")
 
-	# The shelf carries the whole catalogue, locked ornaments included.
-	check(toolbar._decoration_shelf.get_child_count() == registry.size(),
-		"Every decoration is a tile on the shelf")
-	check(toolbar._decoration_shelf.columns == ceili(float(registry.size()) / 2.0),
+	# The shelf carries the whole catalogue, locked ornaments included, with the
+	# walking path leading its top row.
+	check(toolbar._decoration_shelf.get_child_count() == registry.size() + 1,
+		"Every decoration is a tile on the shelf, plus the leading path tile")
+	check(toolbar._decoration_shelf.columns == ceili(float(registry.size() + 1) / 2.0),
 		"The shelf is laid out in two interlocking rows")
+	check(toolbar._decoration_shelf.get_child(0) == toolbar._path_tile,
+		"The path tile leads the improvements honeycomb")
+	check(toolbar._path_tile.text == "" and toolbar._path_tile.icon == null,
+		"The path is drawn as a course tile, not as a labelled button")
 
 	# A locked ornament cannot start a placement: drop the rating below the
 	# statue's 4-star requirement, then check the tile greys out and says what it

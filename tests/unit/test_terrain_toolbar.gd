@@ -173,6 +173,13 @@ func test_tile_rows_keep_space_above_below_and_between_them() -> void:
 func _settle_layout() -> void:
 	await wait_frames(2)
 
+## The improvement shelf's decoration tiles, in shelf order: the leading path
+## tile is a painting tool rather than a catalogue entry, so catalogue
+## assertions skip it.
+func _catalogue_tiles() -> Array:
+	return toolbar._decoration_shelf.get_children().filter(
+		func(tile): return tile != toolbar._path_tile)
+
 func test_toolbar_has_nine_tabs() -> void:
 	assert_eq(toolbar._tab_bar.tab_count, 9, "Toolbar should have 9 tabs")
 	assert_eq(toolbar._pages.size(), 9, "Toolbar should have 9 pages")
@@ -228,9 +235,11 @@ func test_tool_selection_and_signals() -> void:
 	assert_false(toolbar.has_selection())
 
 func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
+	# The walking path paints the course as much as any of these, so it is drawn
+	# as a tile too — it just lives in the Improvements honeycomb.
 	var paint_tools := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH,
 		TerrainTypes.Type.GREEN, TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.BUNKER,
-		TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS]
+		TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS, TerrainTypes.Type.PATH]
 	for tool_type in paint_tools:
 		var button: ToolButton = toolbar._tool_buttons[tool_type]
 		assert_true(button is TerrainTileButton, "%s should be a tile button" % button.tool_name)
@@ -250,8 +259,7 @@ func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 			"The shortcut still reaches assistive tech")
 		assert_eq(button.cost, TerrainTypes.get_placement_cost(tool_type))
 
-	# Other pages and non-painting actions retain their familiar ToolButtons.
-	assert_false(toolbar._tool_buttons[TerrainTypes.Type.PATH] is TerrainTileButton)
+	# Non-painting actions retain their familiar ToolButtons.
 	assert_false(toolbar._tool_buttons["bulldozer"] is TerrainTileButton)
 	assert_false(toolbar._open_hole_buttons[0] is TerrainTileButton)
 
@@ -617,8 +625,10 @@ func test_improvements_tab_holds_paths_and_every_decoration_tile() -> void:
 	assert_false(tool_names.has("Decorations"),
 		"The Garden Shed's Decorations button is replaced by the decoration tiles")
 
-	# The garden shed catalogue now lives in the tab as tiles.
-	assert_eq(toolbar._decoration_shelf.get_child_count(), registry.size(),
+	# The garden shed catalogue now lives in the tab as tiles, with the walking
+	# path sharing their honeycomb.
+	assert_eq(toolbar._decoration_shelf.get_child_count(),
+		registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES,
 		"Every decoration from the garden shed should be a tile")
 	for dec_type in registry:
 		var tile: DecorationTileButton = toolbar._decoration_tiles[dec_type]
@@ -628,6 +638,72 @@ func test_improvements_tab_holds_paths_and_every_decoration_tile() -> void:
 		assert_eq(tile.tool_name, registry[dec_type]["name"])
 		assert_eq(tile.get_parent().get_parent().get_parent(), imp_hbox,
 			"The decoration shelf should sit in the Improvements tab")
+
+func test_path_tile_leads_the_improvements_honeycomb() -> void:
+	# The path is no longer a lone button in a PATHS box: it sits in the tile
+	# honeycomb on the right of the tab, in slot 0 — the first tile of the top row.
+	var shelf: TileHoneycomb = toolbar._decoration_shelf
+	var path_tile: TerrainTileButton = toolbar._path_tile
+	assert_true(path_tile is TerrainTileButton, "The path is drawn as a course tile")
+	assert_eq(path_tile.get_parent(), shelf, "The path belongs to the improvements honeycomb")
+	assert_eq(path_tile.get_index(), 0, "The path is the honeycomb's first tile")
+	assert_same(toolbar._tool_buttons[TerrainTypes.Type.PATH], path_tile,
+		"The path tile is what the toolbar highlights when the tool is selected")
+
+	toolbar.set_decoration_registry({"bench": {"name": "Bench", "category": "furniture"},
+		"statue": {"name": "Statue", "category": "sculptures"},
+		"bed": {"name": "Bed", "category": "landscaping"},
+		"pool": {"name": "Pool", "category": "water"}})
+	assert_eq(shelf.get_child(0), path_tile,
+		"Rebuilding the catalogue puts the path back at the head of the top row")
+	await _settle_layout()
+	var top_row_y: float = path_tile.position.y
+	assert_almost_eq(shelf.get_child(1).position.y, top_row_y, 0.01,
+		"The first decoration follows the path along the top row")
+	assert_gt(shelf.get_child(3).position.y, top_row_y,
+		"The row below sits in the notches under the path's row")
+
+	var imp_hbox: HBoxContainer = toolbar._pages[TerrainToolbar.Tab.IMPROVEMENTS].get_child(0)
+	assert_false(imp_hbox.find_children("*", "Label", true, false)
+		.any(func(label): return label.text == "PATHS"),
+		"The path has no box of its own now it shares the tile shelf")
+
+	# Picking the tile selects the tool and keeps the Improvements tab open.
+	toolbar.select_tab(TerrainToolbar.Tab.BUILDINGS)
+	watch_signals(toolbar)
+	path_tile.pressed.emit()
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.PATH])
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.PATH)
+	assert_eq(toolbar._tab_bar.current_tab, TerrainToolbar.Tab.IMPROVEMENTS)
+
+func test_path_tile_previews_the_trail_over_the_ground_it_crosses() -> void:
+	# A path is a thin trail laid on top of the ground, so its tile shows turf
+	# with a ribbon across it instead of a full tile of paving.
+	var path_tile: TerrainTileButton = toolbar._path_tile
+	var image: Image = path_tile._surface_material.get_shader_parameter("terrain_data").get_image()
+	assert_eq(roundi(image.get_pixel(1, 1).r * 255.0), TerrainTypes.Type.ROUGH,
+		"The tile previews the rough a walking path is cut through, not cart-path paving")
+	assert_eq(roundi(image.get_pixel(0, 1).r * 255.0), TerrainTypes.Type.ROUGH,
+		"The turf runs to the edges of the tile: the path paints no patch of ground")
+	assert_eq(roundi(image.get_pixel(2, 2).r * 255.0), TerrainTypes.Type.ROUGH,
+		"The whole tile is ground the trail crosses")
+
+	var art: Node2D = path_tile.get_node("WalkingPathPreviewArt")
+	assert_eq(art.get_child_count(), 3, "A rim, the dirt, and a paler centre line")
+	var band: Polygon2D = art.get_child(1)
+	var center := TerrainTileButton.BUTTON_SIZE * 0.5
+	var along := Vector2(TerrainTileButton.TILE_SIZE.x * 0.5, TerrainTileButton.TILE_SIZE.y * 0.5)
+	# The ribbon's ends are the midpoints of the two tile edges it joins, so a
+	# lone tile reads as a piece of one continuous trail.
+	assert_eq((band.polygon[0] + band.polygon[3]) * 0.5, center - along * 0.5,
+		"The trail starts at the shared edge with the neighbour up-left")
+	assert_eq((band.polygon[1] + band.polygon[2]) * 0.5, center + along * 0.5,
+		"and ends at the shared edge with the neighbour down-right")
+	for corner in band.polygon:
+		assert_true(TerrainTileButton.point_on_tile(corner),
+			"The trail stays inside the diamond: %s" % corner)
+	assert_eq(band.color, WalkingPathOverlay.DIRT_COLOR,
+		"The preview uses the overlay's own dirt colours")
 
 func test_decoration_tiles_use_the_course_tile_design() -> void:
 	var registry := {
@@ -640,12 +716,15 @@ func test_decoration_tiles_use_the_course_tile_design() -> void:
 	toolbar.set_decoration_registry(registry)
 
 	assert_true(toolbar._decoration_shelf is TileHoneycomb)
-	assert_eq(toolbar._decoration_shelf.columns, TerrainToolbar.tile_columns(registry.size()))
-	assert_eq(toolbar._decoration_shelf.get_child_count(), registry.size())
+	assert_eq(toolbar._decoration_shelf.columns, TerrainToolbar.tile_columns(
+		registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES),
+		"The shelf's rows count the leading path tile as well as the catalogue")
+	assert_eq(toolbar._decoration_shelf.get_child_count(),
+		registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES)
 	assert_eq(toolbar._decoration_shelf.v_padding, TerrainToolbar.TILE_V_PADDING,
 		"The decoration shelf keeps the same breathing room as the other tile tabs")
 
-	for button in toolbar._decoration_shelf.get_children():
+	for button in _catalogue_tiles():
 		assert_true(button is DecorationTileButton, "Decorations should use isometric tile buttons")
 		assert_true(button is TerrainTileButton, "Decoration tiles share the Course Terrain button base")
 		assert_eq(button.custom_minimum_size, TerrainTileButton.BUTTON_SIZE)
@@ -676,10 +755,12 @@ func test_decoration_shelf_keeps_the_garden_shed_category_order() -> void:
 	toolbar.set_decoration_registry(registry)
 
 	var order: Array[String] = []
-	for child in toolbar._decoration_shelf.get_children():
+	for child in _catalogue_tiles():
 		order.append(child.decoration_type)
 	assert_eq(order, ["bed", "pool", "bench", "statue", "unknown"],
 		"Decorations should be listed category by category, in shed order")
+	assert_eq(toolbar._decoration_shelf.get_child(0), toolbar._path_tile,
+		"The path still leads the row the catalogue is laid out in")
 
 func test_locked_decorations_stay_on_the_shelf_until_earned() -> void:
 	var registry := {
@@ -735,8 +816,9 @@ func test_improvements_decorations_fill_the_page_without_overflowing() -> void:
 	var two_rows := tile.y * 1.5 + TerrainToolbar.TILE_V_SEPARATION \
 			+ 2.0 * TerrainToolbar.TILE_V_PADDING
 	assert_almost_eq(toolbar._decoration_shelf.get_combined_minimum_size().y, two_rows, 0.01,
-		"28 decorations should fill exactly two interlocking rows")
-	assert_eq(toolbar._decoration_shelf.columns, ceili(float(registry.size()) / 2.0))
+		"28 decorations plus the path should fill exactly two interlocking rows")
+	assert_eq(toolbar._decoration_shelf.columns,
+		ceili(float(registry.size() + TerrainToolbar.IMPROVEMENTS_LEAD_TILES) / 2.0))
 	assert_lte(toolbar.get_combined_minimum_size().y, float(UIConstants.BOTTOM_BAR_HEIGHT),
 		"The Improvements tab must fit inside the bottom bar")
 
@@ -753,10 +835,13 @@ func test_decoration_shelf_rebuild_leaves_no_stale_tiles() -> void:
 	toolbar.set_decoration_registry(first)
 	toolbar.set_decoration_registry(second)
 
-	assert_eq(toolbar._decoration_shelf.get_child_count(), 2,
+	assert_eq(toolbar._decoration_shelf.get_child_count(), 3,
 		"Replacing the catalogue should immediately drop the old tiles")
 	assert_false(toolbar._decoration_tiles.has("a"))
-	assert_eq(toolbar._decoration_shelf.columns, 1)
+	assert_eq(toolbar._decoration_shelf.columns, 2,
+		"Two decorations plus the leading path tile need two columns")
+	assert_eq(toolbar._decoration_shelf.get_child(0), toolbar._path_tile,
+		"The path survives the rebuild, at the head of the top row")
 
 func test_theme_change_updates_tree_tiles_in_course_terrain_tab() -> void:
 	# Switch theme to DESERT

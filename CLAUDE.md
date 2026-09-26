@@ -61,7 +61,7 @@ Main (Node2D) ← main.gd
 ├── Holes (Node2D)
 ├── IsometricCamera (Camera2D)
 └── UI (CanvasLayer)
-    └── HUD (Control) → HUDStatusColumn (top-right stats column), BottomBar (view/speed controls + tabbed TerrainToolbar: Terrain / Improve / Build / Elev / Holes / Golfers / Player / Club / Staff). The Staff tab embeds hire/fire, course condition, payroll, and effects (no separate Staff Management window). The Improvements tab holds the Path tool and the decoration catalogue as isometric tiles (no separate Garden Shed window): `scripts/ui/components/decoration_tile_button.gd` + `decoration_tile_art.gd`, filled from `data/decorations.json` by `TerrainToolbar.set_decoration_registry()`.
+    └── HUD (Control) → HUDStatusColumn (top-right stats column), BottomBar (view/speed controls + tabbed TerrainToolbar: Terrain / Improve / Build / Elev / Holes / Golfers / Player / Club / Staff). The Staff tab embeds hire/fire, course condition, payroll, and effects (no separate Staff Management window). The Improvements tab holds one honeycomb of isometric tiles — the Path tool leading the top row, then the decoration catalogue (no separate Garden Shed window): `scripts/ui/components/decoration_tile_button.gd` + `decoration_tile_art.gd`, filled from `data/decorations.json` by `TerrainToolbar.set_decoration_registry()`.
 ```
 
 ## Algorithm Documentation
