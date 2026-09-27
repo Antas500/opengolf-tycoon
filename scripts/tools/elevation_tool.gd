@@ -9,11 +9,11 @@ class_name ElevationTool
 ##
 ##  - **Vertex Selector**: raises or lowers a single vertex by one step.
 ##  - **Flat Square Selector**: raises or lowers the lowest/highest vertices
-##    inside the square area until they are all even, then raises or lowers
-##    all of the square's vertices by one step.
-##  - **Gradual Square Selector**: raises or lowers the middle vertex (odd
-##    sizes) or middle square of vertices (even sizes) inside the square
-##    area, and moves the nearby vertices inside the area whenever they
+##    of the brush's tiles until they are all even, then raises or lowers
+##    all of the brush's vertices by one step.
+##  - **Gradual Square Selector**: raises or lowers the middle vertex (even
+##    sizes) or the middle 2x2 square of vertices (odd sizes) inside the
+##    brush, and moves the nearby vertices inside the brush whenever they
 ##    would come to differ by more than one elevation per vertex of
 ##    distance from the changing vertex - the terrain stays gradual.
 ##
@@ -21,6 +21,20 @@ class_name ElevationTool
 ## Elevation Brush Shape (square or round), which are separate from the
 ## terrain paint brush controls. The toolbar owns those per-tool values and
 ## pushes them here through set_brush().
+##
+## Brush sizes are counted in **tiles**, not vertices: the brush reshapes the
+## tiles it covers by moving their corner vertices.
+##
+##  Square shape: 1x1 = 1 tile = 4 vertices, 2x2 = 4 tiles = 9 vertices,
+##                3x3 = 9 tiles = 16 vertices, 4x4 = 16 tiles = 25 vertices...
+##  Round shape:  1x1 = 1 tile = 4 vertices, 2x2 = 4 tiles = 9 vertices,
+##                3x3 = 5 tiles = 12 vertices, 4x4 = 12 tiles = 21 vertices,
+##                5x5 = 13 tiles = 24 vertices...
+##
+## The round shape drops the tiles whose centre falls outside a circle of
+## radius S/2 around the middle of the block, so the corners of the square are
+## clipped away. The vertices a brush moves are the corners of the tiles it
+## keeps, so the hover preview and the selection always agree.
 
 enum Tool { NONE, VERTEX, FLAT, GRADUAL }
 
@@ -30,7 +44,7 @@ const TOOL_VERTEX := "vertex"
 const TOOL_FLAT := "flat"
 const TOOL_GRADUAL := "gradual"
 
-## Elevation Brush Sizes per tool (S x S vertices).
+## Elevation Brush Sizes per tool, in tiles (S x S tiles = (S+1)^2 vertices).
 const FLAT_BRUSH_SIZES: Array[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 const GRADUAL_BRUSH_SIZES: Array[int] = [2, 3, 4, 5, 6, 7, 8, 9]
 
@@ -44,7 +58,7 @@ var tool: Tool = Tool.NONE
 var elevation_mode: ElevationMode = ElevationMode.NONE
 var is_painting: bool = false
 
-## Elevation brush of the active Square Selector tool (size in vertices,
+## Elevation brush of the active Square Selector tool (size in tiles,
 ## square vs round area). Set by the toolbar when a tool is selected or its
 ## brush controls change.
 var brush_size: int = 3
@@ -113,105 +127,170 @@ func set_brush_square(square: bool) -> void:
 	brush_square = square
 
 # =============================================================================
-# Square area geometry (testable without a scene tree)
+# Brush geometry (testable without a scene tree)
 # =============================================================================
 
-## Offsets of an S x S vertex square centred on the cursor vertex. Even sizes
-## centre on the middle 2x2 block of vertices, so the offsets run from
-## -(S/2 - 1) to S/2. With a round shape the corners are clipped by a circle.
-static func square_offsets(size: int, round_shape: bool) -> Array[Vector2i]:
+## The tile a tile-space point falls inside - the Square Selectors anchor
+## their brush on it, so the brush covers the tile under the cursor.
+static func anchor_tile(grid_point: Vector2) -> Vector2i:
+	return Vector2i(floori(grid_point.x), floori(grid_point.y))
+
+## Where a brush sits for a cursor point: the Vertex Selector edits the
+## nearest vertex, while the Square Selectors centre their tiles on the tile
+## the point falls in.
+static func anchor_for_tool(grid_point: Vector2, terrain_grid: TerrainGrid,
+		brush_tool: Tool) -> Vector2i:
+	if brush_tool == Tool.VERTEX:
+		return terrain_grid.nearest_vertex(grid_point)
+	return anchor_tile(grid_point)
+
+## Tile offsets of an S x S tile brush. Odd sizes centre on the anchor tile;
+## even sizes centre on the vertex at the anchor tile's near corner, so they
+## cover S tiles per side either way. The round shape keeps only the tiles
+## whose centre lies within a circle of radius S/2 around the middle of the
+## block, which clips the corners of the square away.
+static func tile_offsets(size: int, square_shape: bool) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var from: int = -int((size - 1) / 2)
+	var from: int = -(size / 2)
 	var to: int = size - 1 + from
-	var centre: float = 0.5 if size % 2 == 0 else 0.0
-	var limit: float = float(size - 1) / 2.0 + 0.5
+	# Middle of the block in tile-offset space: tile centres sit half a tile
+	# along from their offset, so the block's centre is (from + to + 1) / 2.
+	var middle: float = float(from + to + 1) * 0.5
+	var limit: float = float(size / 2)
 	for x in range(from, to + 1):
 		for y in range(from, to + 1):
-			if round_shape:
-				var dx: float = float(x) - centre
-				var dy: float = float(y) - centre
+			if not square_shape:
+				var dx: float = float(x) + 0.5 - middle
+				var dy: float = float(y) + 0.5 - middle
 				if dx * dx + dy * dy > limit * limit:
 					continue
 			result.append(Vector2i(x, y))
 	return result
 
-## The S x S square area (or round clip of it) as absolute vertices, clamped
-## to the grid.
-static func square_vertices(terrain_grid: TerrainGrid, center: Vector2i, size: int,
-		round_shape: bool) -> Array[Vector2i]:
+## The vertices a brush moves: the corners of the tiles it covers. An S x S
+## tile brush therefore holds (S+1) x (S+1) vertices - 1x1 = 4, 2x2 = 9,
+## 3x3 = 16, 4x4 = 25 - and a round brush only the corners of the tiles it
+## keeps.
+static func vertex_offsets(size: int, square_shape: bool) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	for offset in square_offsets(size, round_shape):
-		var vertex: Vector2i = center + offset
-		if terrain_grid.is_valid_vertex(vertex):
-			result.append(vertex)
+	var seen := {}
+	for tile in tile_offsets(size, square_shape):
+		for corner in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+			var offset: Vector2i = tile + corner
+			if seen.has(offset):
+				continue
+			seen[offset] = true
+			result.append(offset)
 	return result
 
-## The middle vertex (odd size) or middle 2x2 square of vertices (even size)
-## of the S x S area centred on `center` - what the Gradual tool moves first.
-static func middle_vertices(size: int, center: Vector2i) -> Array[Vector2i]:
-	if size % 2 == 1:
-		return [center]
+## The S x S block of tiles (or its round clipping) anchored on `anchor`,
+## clipped to the grid. This is what the hover preview tints.
+static func brush_tiles(terrain_grid: TerrainGrid, anchor: Vector2i, size: int,
+		square_shape: bool) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if terrain_grid == null:
+		return result
+	for offset in tile_offsets(size, square_shape):
+		var tile: Vector2i = anchor + offset
+		if terrain_grid.is_valid_position(tile):
+			result.append(tile)
+	return result
+
+## The vertices the brush moves: every corner of its tiles, deduplicated and
+## clipped to the grid.
+static func brush_vertices(terrain_grid: TerrainGrid, anchor: Vector2i, size: int,
+		square_shape: bool) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if terrain_grid == null:
+		return result
+	var seen := {}
+	for tile in brush_tiles(terrain_grid, anchor, size, square_shape):
+		for vertex in terrain_grid.vertices_of_tile(tile):
+			if terrain_grid.is_valid_vertex(vertex) and not seen.has(vertex):
+				seen[vertex] = true
+				result.append(vertex)
+	return result
+
+## The middle vertex (even sizes) or the middle 2x2 square of vertices (odd
+## sizes) of the brush anchored on `anchor` - what the Gradual tool moves
+## first. Even sizes centre the brush on a vertex; odd sizes centre it on the
+## anchor tile, whose four corners are the middle block.
+static func middle_vertices(size: int, anchor: Vector2i) -> Array[Vector2i]:
+	if size % 2 == 0:
+		return [anchor]
 	var middle: Array[Vector2i] = []
 	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1)]:
-		middle.append(center + offset)
+		middle.append(anchor + offset)
 	return middle
 
-## Chebyshev distance from `vertex` to the middle vertex or middle 2x2 square
-## of the S x S area centred on `center`. One per vertex of travel, so a
-## gradual surface may differ from the middle by at most `d` elevations.
-static func distance_to_middle(vertex: Vector2i, size: int, center: Vector2i) -> int:
-	if size % 2 == 1:
-		return maxi(absi(vertex.x - center.x), absi(vertex.y - center.y))
+## Chebyshev distance from `vertex` to the middle vertex (even sizes) or the
+## middle 2x2 square of vertices (odd sizes) of the brush anchored on
+## `anchor`. One per vertex of travel, so a gradual surface may differ from
+## the middle by at most `d` elevations.
+static func distance_to_middle(vertex: Vector2i, size: int, anchor: Vector2i) -> int:
+	if size % 2 == 0:
+		return maxi(absi(vertex.x - anchor.x), absi(vertex.y - anchor.y))
 	var dx: int = 0
-	if vertex.x < center.x:
-		dx = center.x - vertex.x
-	elif vertex.x > center.x + 1:
-		dx = vertex.x - center.x - 1
+	if vertex.x < anchor.x:
+		dx = anchor.x - vertex.x
+	elif vertex.x > anchor.x + 1:
+		dx = vertex.x - anchor.x - 1
 	var dy: int = 0
-	if vertex.y < center.y:
-		dy = center.y - vertex.y
-	elif vertex.y > center.y + 1:
-		dy = vertex.y - center.y - 1
+	if vertex.y < anchor.y:
+		dy = anchor.y - vertex.y
+	elif vertex.y > anchor.y + 1:
+		dy = vertex.y - anchor.y - 1
 	return maxi(dx, dy)
 
 # =============================================================================
 # Painting
 # =============================================================================
 
-## Paint at a tile-space point (integers are vertices, `+0.5` are tile centres).
+## Paint at a tile-space point (integers are vertices, `+0.5` are tile
+## centres). The Vertex Selector snaps to the nearest vertex; the Square
+## Selectors anchor their tiles on the tile the point falls in.
 func paint_at_point(grid_point: Vector2, terrain_grid: TerrainGrid,
 		entity_layer: EntityLayer = null) -> Array:
 	if not _can_paint(terrain_grid):
 		return []
-	return paint_vertices(terrain_grid.nearest_vertex(grid_point), terrain_grid, entity_layer)
+	var anchor: Vector2i = anchor_for_tool(grid_point, terrain_grid, tool)
+	if tool == Tool.VERTEX:
+		return paint_at_vertex(anchor, terrain_grid, entity_layer)
+	return paint_at_tile(anchor, terrain_grid, entity_layer)
 
-## Paint centred on a tile: snaps to the tile's near vertex like a click at
-## the tile centre.
+## Paint centred on a tile: the Square Selectors' brush is anchored on it.
 func paint_elevation(grid_pos: Vector2i, terrain_grid: TerrainGrid,
 		entity_layer: EntityLayer = null) -> Array:
-	if not _can_paint(terrain_grid):
-		return []
-	if not terrain_grid.is_valid_position(grid_pos):
-		return []
-	return paint_at_point(Vector2(grid_pos) + Vector2(0.5, 0.5), terrain_grid, entity_layer)
+	if tool == Tool.VERTEX:
+		return paint_at_vertex(grid_pos, terrain_grid, entity_layer)
+	return paint_at_tile(grid_pos, terrain_grid, entity_layer)
 
-## Paint the selected tool around an explicit vertex. Right click raises,
+## Paint with the brush anchored on the tile `anchor`. Right click raises,
 ## left click lowers; vertices outside the selection are never touched.
-func paint_vertices(center: Vector2i, terrain_grid: TerrainGrid,
+func paint_at_tile(anchor: Vector2i, terrain_grid: TerrainGrid,
 		entity_layer: EntityLayer = null) -> Array:
 	if not _can_paint(terrain_grid):
 		return []
-	if not terrain_grid.is_valid_vertex(center):
+	if not terrain_grid.is_valid_position(anchor):
 		return []
 	var raising: bool = is_raising()
 	match tool:
 		Tool.VERTEX:
-			return _paint_vertex(center, terrain_grid, raising, entity_layer)
+			return _paint_vertex(anchor, terrain_grid, raising, entity_layer)
 		Tool.FLAT:
-			return _paint_flat(center, terrain_grid, raising, entity_layer)
+			return _paint_flat(anchor, terrain_grid, raising, entity_layer)
 		Tool.GRADUAL:
-			return _paint_gradual(center, terrain_grid, raising, entity_layer)
+			return _paint_gradual(anchor, terrain_grid, raising, entity_layer)
 	return []
+
+## Paint the Vertex Selector, whose whole selection is one vertex.
+func paint_at_vertex(vertex: Vector2i, terrain_grid: TerrainGrid,
+		entity_layer: EntityLayer = null) -> Array:
+	if not _can_paint(terrain_grid):
+		return []
+	if not terrain_grid.is_valid_vertex(vertex):
+		return []
+	return _paint_vertex(vertex, terrain_grid, is_raising(), entity_layer)
 
 func _can_paint(terrain_grid: TerrainGrid) -> bool:
 	return tool != Tool.NONE and elevation_mode != ElevationMode.NONE and terrain_grid != null
@@ -244,18 +323,18 @@ func _paint_vertex(center: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 	_change_vertex(center, terrain_grid.get_vertex_elevation(center) + delta, terrain_grid, changes)
 	return changes
 
-## Flat Square Selector: even the square first (the lowest vertices are raised
-## up to the highest, or the highest are lowered down to the lowest), then
-## shift every vertex of the square one step. The whole area ends one step
+## Flat Square Selector: even the brush's tiles first (the lowest vertices are
+## raised up to the highest, or the highest are lowered down to the lowest),
+## then shift every vertex of the brush one step. The whole area ends one step
 ## above its previous highest (raising) or one step below its previous
 ## lowest (lowering).
-func _paint_flat(center: Vector2i, terrain_grid: TerrainGrid, raising: bool,
+func _paint_flat(anchor: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 		entity_layer: EntityLayer) -> Array:
 	var changes: Array = []
 	var area: Array[Vector2i] = []
 	var lowest: int = terrain_grid.MAX_ELEVATION
 	var highest: int = terrain_grid.MIN_ELEVATION
-	for vertex in square_vertices(terrain_grid, center, brush_size, brush_square):
+	for vertex in brush_vertices(terrain_grid, anchor, brush_size, brush_square):
 		if not _is_vertex_selected(vertex, terrain_grid, entity_layer):
 			continue
 		area.append(vertex)
@@ -272,15 +351,15 @@ func _paint_flat(center: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 	return changes
 
 ## Gradual Square Selector: move the middle vertex or middle 2x2 square one
-## step, then clamp every other vertex of the area so it cannot differ from
+## step, then clamp every other vertex of the brush so it cannot differ from
 ## the new middle height by more than one elevation per vertex of distance.
 ## Nearby vertices are only moved while that gradient constraint would be
-## broken; the rest of the square keeps its shape.
-func _paint_gradual(center: Vector2i, terrain_grid: TerrainGrid, raising: bool,
+## broken; the rest of the brush keeps its shape.
+func _paint_gradual(anchor: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 		entity_layer: EntityLayer) -> Array:
 	var changes: Array = []
 	var area: Array[Vector2i] = []
-	for vertex in square_vertices(terrain_grid, center, brush_size, brush_square):
+	for vertex in brush_vertices(terrain_grid, anchor, brush_size, brush_square):
 		if _is_vertex_selected(vertex, terrain_grid, entity_layer):
 			area.append(vertex)
 	if area.is_empty():
@@ -288,7 +367,7 @@ func _paint_gradual(center: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 
 	var shift: int = 1 if raising else -1
 	var middle: Array[Vector2i] = []
-	for vertex in middle_vertices(brush_size, center):
+	for vertex in middle_vertices(brush_size, anchor):
 		if area.has(vertex):
 			middle.append(vertex)
 	if middle.is_empty():
@@ -315,7 +394,7 @@ func _paint_gradual(center: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 	for vertex in area:
 		if middle.has(vertex):
 			continue
-		var distance: int = distance_to_middle(vertex, brush_size, center)
+		var distance: int = distance_to_middle(vertex, brush_size, anchor)
 		var old_height: int = terrain_grid.get_vertex_elevation(vertex)
 		var target: int = clampi(old_height,
 				middle_target - distance, middle_target + distance)

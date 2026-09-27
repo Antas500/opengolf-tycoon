@@ -1311,7 +1311,7 @@ func _update_elevation_brush_label() -> void:
 	for label in _elevation_brush_labels:
 		if is_instance_valid(label):
 			label.text = text
-			label.tooltip_text = "Elevation brush size %s" % text
+			label.tooltip_text = "Elevation brush size %s tiles" % text
 
 func _update_elevation_brush_shape_button(btn: Button) -> void:
 	if _elevation_brush_square():

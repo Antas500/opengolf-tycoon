@@ -4,6 +4,9 @@ extends Node
 ## selects the tool, right click raises, left click lowers, right click never
 ## cancels the tool, and Esc still does.
 ##
+## The Square Selectors' brush is measured in tiles: it reshapes the tiles it
+## covers, so a 3x3 brush holds 16 vertices (4 per side).
+##
 ## Run:  godot --headless --path . res://tests/harness/elevation_tools_harness.tscn
 
 var main: Node2D
@@ -32,17 +35,31 @@ func _mouse_button(pressed: bool, button_index: int) -> InputEventMouseButton:
 	event.pressed = pressed
 	return event
 
-## An owned, unoccupied vertex in the middle of the quick-start course.
-func _pick_vertex() -> Vector2i:
+## An owned, unoccupied tile in the middle of the quick-start course: every
+## corner of it (and of the brushes centred on it) can be reshaped.
+func _pick_tile() -> Vector2i:
 	for radius in range(0, 20):
 		for dy in range(-radius, radius + 1):
 			for dx in range(-radius, radius + 1):
 				if maxi(absi(dx), absi(dy)) != radius:
 					continue
-				var vertex := Vector2i(64, 64) + Vector2i(dx, dy)
-				if grid.is_vertex_editable(vertex, main.entity_layer, false):
-					return vertex
+				var tile := Vector2i(64, 64) + Vector2i(dx, dy)
+				if not grid.is_valid_position(tile):
+					continue
+				if _tile_is_editable(tile):
+					return tile
 	return Vector2i(64, 64)
+
+func _tile_is_editable(tile: Vector2i) -> bool:
+	for vertex in grid.vertices_of_tile(tile):
+		if not grid.is_vertex_editable(vertex, main.entity_layer, false):
+			return false
+	return true
+
+## Flatten every vertex of the brush centred on `anchor` so assertions are exact.
+func _flatten(anchor: Vector2i, size: int) -> void:
+	for vertex in ElevationTool.brush_vertices(grid, anchor, size, true):
+		grid.set_vertex_elevation(vertex, 0)
 
 func _run() -> void:
 	await _frames(10)
@@ -52,14 +69,10 @@ func _run() -> void:
 	grid = main.terrain_grid
 	await _frames(5)
 
-	var vertex := _pick_vertex()
-	_check(grid.is_vertex_editable(vertex, main.entity_layer, false),
-			"test vertex %s is editable owned land" % vertex)
-	# Flatten the 9x9 area around the test vertex so assertions are exact.
-	for offset in ElevationTool.square_offsets(9, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			grid.set_vertex_elevation(candidate, 0)
+	var anchor := _pick_tile()
+	_check(_tile_is_editable(anchor), "test tile %s is editable owned land" % anchor)
+	# Flatten the brushes used below so assertions are exact.
+	_flatten(anchor, 9)
 
 	# ------------------------------------------------------------------
 	# 1. Toolbar selects the Flat Square tool; the tool arms for painting.
@@ -75,7 +88,7 @@ func _run() -> void:
 	# ------------------------------------------------------------------
 	# 2. Right click raises and never cancels; left click lowers.
 	#    (Headless, the pointer sits at the course corner, so the terrain
-	#    effect of the stroke is verified in section 3 on a chosen vertex;
+	#    effect of the stroke is verified in section 3 on a chosen tile;
 	#    here we verify the input wiring and mode state.)
 	# ------------------------------------------------------------------
 	main._unhandled_input(_mouse_button(true, MOUSE_BUTTON_RIGHT))
@@ -95,49 +108,41 @@ func _run() -> void:
 	_check(main.elevation_tool.is_active(), "left click release did not cancel the tool")
 
 	# ------------------------------------------------------------------
-	# 3. Flat Square: right click evens the square up, then raises it;
-	#    left click evens it down, then lowers it.
+	# 3. Flat Square: right click evens the brush up, then raises it;
+	#    left click evens it down, then lowers it. A 3x3 brush is nine
+	#    tiles holding sixteen vertices.
 	# ------------------------------------------------------------------
 	main._start_elevation_painting(true)
-	for offset in ElevationTool.square_offsets(3, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			grid.set_vertex_elevation(candidate, (offset.x + 2) % 3)  # 0,1,2 rings
-	var flat_changes: Array = main.elevation_tool.paint_vertices(vertex, grid, main.entity_layer)
+	var flat_area := ElevationTool.brush_vertices(grid, anchor, 3, true)
+	_check(flat_area.size() == 16, "3x3 Flat brush selects 16 vertices (%d)" % flat_area.size())
+	for i in flat_area.size():
+		grid.set_vertex_elevation(flat_area[i], i % 3)  # 0,1,2 mixture
+	var flat_changes: Array = main.elevation_tool.paint_at_tile(anchor, grid, main.entity_layer)
 	main.undo_manager.record_elevation_stroke(flat_changes)
 	main._stop_elevation_painting()
 	await _frames(2)
-	for offset in ElevationTool.square_offsets(3, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			_check(grid.get_vertex_elevation(candidate) == 3,
-					"flat raise: vertex %s levelled to 2 then raised to 3" % candidate)
-	_check(grid.get_vertex_elevation(vertex + Vector2i(3, 0)) == 0,
-			"flat raise: outside the square is untouched")
+	for vertex in flat_area:
+		_check(grid.get_vertex_elevation(vertex) == 3,
+				"flat raise: vertex %s levelled to 2 then raised to 3" % vertex)
+	_check(grid.get_vertex_elevation(anchor + Vector2i(-2, 0)) == 0,
+			"flat raise: outside the brush is untouched")
 
 	main._start_elevation_painting(false)
-	for offset in ElevationTool.square_offsets(3, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			grid.set_vertex_elevation(candidate, 3)
-	var flat_lower: Array = main.elevation_tool.paint_vertices(vertex, grid, main.entity_layer)
+	for vertex in flat_area:
+		grid.set_vertex_elevation(vertex, 3)
+	var flat_lower: Array = main.elevation_tool.paint_at_tile(anchor, grid, main.entity_layer)
 	main.undo_manager.record_elevation_stroke(flat_lower)
 	main._stop_elevation_painting()
 	await _frames(2)
-	for offset in ElevationTool.square_offsets(3, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			_check(grid.get_vertex_elevation(candidate) == 2,
-					"flat lower: vertex %s stays even and steps down to 2" % candidate)
+	for vertex in flat_area:
+		_check(grid.get_vertex_elevation(vertex) == 2,
+				"flat lower: vertex %s stays even and steps down to 2" % vertex)
 
 	# ------------------------------------------------------------------
 	# 4. Gradual Square: right click lifts the middle; repeated clicks build
 	#    a one-step pyramid.
 	# ------------------------------------------------------------------
-	for offset in ElevationTool.square_offsets(9, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			grid.set_vertex_elevation(candidate, 0)
+	_flatten(anchor, 9)
 	main._on_elevation_tool_pressed(ElevationTool.TOOL_GRADUAL)
 	await _frames(2)
 	_check(main.elevation_tool.tool == ElevationTool.Tool.GRADUAL, "Gradual Square tool selected")
@@ -148,18 +153,18 @@ func _run() -> void:
 	_check(main.elevation_tool.brush_size == 7, "elevation brush widened to 7x7")
 	main._start_elevation_painting(true)
 	for i in range(3):
-		var gradual_changes: Array = main.elevation_tool.paint_vertices(vertex, grid, main.entity_layer)
+		var gradual_changes: Array = main.elevation_tool.paint_at_tile(anchor, grid, main.entity_layer)
 		main.undo_manager.record_elevation_stroke(gradual_changes)
 		main._stop_elevation_painting()
 		main._start_elevation_painting(true)
 	await _frames(2)
-	_check(grid.get_vertex_elevation(vertex) == 3, "gradual raise: middle lifted to 3")
-	for offset in ElevationTool.square_offsets(7, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			var expected: int = 3 - ElevationTool.distance_to_middle(candidate, 7, vertex)
-			_check(grid.get_vertex_elevation(candidate) == expected,
-					"gradual raise: vertex %s holds the one-step pyramid (%d)" % [candidate, expected])
+	var middle := ElevationTool.middle_vertices(7, anchor)
+	_check(grid.get_vertex_elevation(anchor) == 3, "gradual raise: middle lifted to 3")
+	for vertex in ElevationTool.brush_vertices(grid, anchor, 7, true):
+		var expected: int = 3 - ElevationTool.distance_to_middle(vertex, 7, anchor)
+		_check(grid.get_vertex_elevation(vertex) == expected,
+				"gradual raise: vertex %s holds the one-step pyramid (%d)" % [vertex, expected])
+	_check(middle.size() == 4, "7x7 gradual brush lifts the anchor tile's four corners")
 
 	# ------------------------------------------------------------------
 	# 5. Vertex tool: one vertex moves, nothing else does.
@@ -167,22 +172,17 @@ func _run() -> void:
 	main._on_elevation_tool_pressed(ElevationTool.TOOL_VERTEX)
 	await _frames(2)
 	_check(main.elevation_tool.tool == ElevationTool.Tool.VERTEX, "Vertex tool selected")
-	for offset in ElevationTool.square_offsets(5, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate):
-			grid.set_vertex_elevation(candidate, 0)
+	_flatten(anchor, 5)
 	main._start_elevation_painting(true)
-	var vertex_changes: Array = main.elevation_tool.paint_vertices(vertex, grid, main.entity_layer)
+	var vertex_changes: Array = main.elevation_tool.paint_at_vertex(anchor, grid, main.entity_layer)
 	main.undo_manager.record_elevation_stroke(vertex_changes)
 	main._stop_elevation_painting()
 	await _frames(2)
-	_check(grid.get_vertex_elevation(vertex) == 1, "vertex raise: the single vertex lifted to 1")
+	_check(grid.get_vertex_elevation(anchor) == 1, "vertex raise: the single vertex lifted to 1")
 	var neighbours_moved := 0
-	for offset in ElevationTool.square_offsets(5, false):
-		var candidate: Vector2i = vertex + offset
-		if grid.is_valid_vertex(candidate) and candidate != vertex:
-			if grid.get_vertex_elevation(candidate) != 0:
-				neighbours_moved += 1
+	for vertex in ElevationTool.brush_vertices(grid, anchor, 5, true):
+		if vertex != anchor and grid.get_vertex_elevation(vertex) != 0:
+			neighbours_moved += 1
 	_check(neighbours_moved == 0, "vertex raise: no other vertex moved")
 
 	# ------------------------------------------------------------------
@@ -190,7 +190,7 @@ func _run() -> void:
 	# ------------------------------------------------------------------
 	main._perform_undo()
 	await _frames(2)
-	_check(grid.get_vertex_elevation(vertex) == 0, "undo restored the vertex tool stroke")
+	_check(grid.get_vertex_elevation(anchor) == 0, "undo restored the vertex tool stroke")
 
 	# ------------------------------------------------------------------
 	# 7. Esc cancels the tool.
