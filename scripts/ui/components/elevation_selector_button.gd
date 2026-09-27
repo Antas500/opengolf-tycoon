@@ -1,12 +1,14 @@
 extends TerrainTileButton
 class_name ElevationSelectorButton
 ## An Elevation tab selector drawn as a small diamond of terrain tiles that
-## demonstrates what the selector does to the ground:
+## demonstrates what the selector does to the ground. Every demo is a 5x5 tile
+## grid with the central 3x3 tiles selected — the Square Selectors' default
+## Elevation Brush — outlined in gold:
 ##  - **vertex**: one grid vertex lifted a single step, its four tiles tilting
 ##    up to meet it.
-##  - **flat**: a square of tiles raised together into a level plateau.
-##  - **gradual**: the middle of the square raised into a smooth hill, every
-##    neighbouring vertex keeping at most one step of slope.
+##  - **flat**: the selected 3x3 tiles raised together into a level plateau.
+##  - **gradual**: the selected 3x3 tiles raised into a smooth hill, every
+##    vertex keeping at most one step of slope.
 ##
 ## The button keeps TerrainTileButton's diamond hit area, outline and
 ## selection treatment; only the artwork inside the diamond differs.
@@ -16,8 +18,11 @@ class_name ElevationSelectorButton
 const SELECTOR_SCALE := 2.0
 const SELECTOR_TILE_SIZE := TILE_SIZE * SELECTOR_SCALE
 
-## Tiles along each side of the preview diamond.
-const GRID_TILES := 4
+## Tiles along each side of the preview grid.
+const GRID_TILES := 5
+## Tiles along each side of the selected block the demos highlight: the
+## Square Selectors' default 3x3 Elevation Brush, outlined in gold.
+const SELECTED_TILES := 3
 ## Screen height of one elevation step in the preview.
 const STEP_PX := 6.0 * SELECTOR_SCALE
 ## The preview diamond is inset a little so raised ground stays inside the
@@ -44,6 +49,7 @@ static func example_heights(kind: String) -> Array:
 	var n := GRID_TILES + 1
 	var heights: Array = []
 	var mid := GRID_TILES / 2
+	var sel := _selected_vertex_range()
 	for y in n:
 		var row: Array = []
 		for x in n:
@@ -52,15 +58,32 @@ static func example_heights(kind: String) -> Array:
 				"vertex":
 					h = 1 if x == mid and y == mid else 0
 				"flat":
-					h = 1 if abs(x - mid) <= 1 and abs(y - mid) <= 1 else 0
+					h = 1 if x >= sel.x and x <= sel.y and y >= sel.x and y <= sel.y else 0
 				"gradual":
-					h = maxi(0, 2 - maxi(abs(x - mid), abs(y - mid)))
+					h = maxi(0, (GRID_TILES - _centre_distance_doubled(x, y)) / 2)
 			row.append(h)
 		heights.append(row)
 	return heights
 
+
+## First and last vertex (per axis) of the selected tile block: the selected
+## 3x3 tiles span a 4x4 block of corner vertices.
+static func _selected_vertex_range() -> Vector2i:
+	var first := (GRID_TILES - SELECTED_TILES) / 2
+	return Vector2i(first, first + SELECTED_TILES)
+
+
+## Doubled Chebyshev distance from vertex (x, y) to the centre of the preview
+## grid. The centre of a 5x5 tile grid falls between vertices, so doubling
+## keeps every distance a whole number: 1 = the centre vertices, 3 = the
+## selection's rim, 5 = the grid's rim.
+static func _centre_distance_doubled(x: int, y: int) -> int:
+	return maxi(abs(x * 2 - GRID_TILES), abs(y * 2 - GRID_TILES))
+
 ## Screen position (local to the button) of grid vertex (x, y) at height h.
-static func vertex_point(x: int, y: int, h: float) -> Vector2:
+## x and y are floats so spots between vertices (the middle of a tile) can be
+## addressed too.
+static func vertex_point(x: float, y: float, h: float) -> Vector2:
 	var tile := SELECTOR_TILE_SIZE * PREVIEW_SCALE / float(GRID_TILES)
 	var top := Vector2(SELECTOR_TILE_SIZE.x * 0.5,
 		(SELECTOR_TILE_SIZE.y - SELECTOR_TILE_SIZE.y * PREVIEW_SCALE) * 0.5 + PREVIEW_DROP)
@@ -116,24 +139,32 @@ func _add_tile(x: int, y: int, heights: Array) -> void:
 	edge.antialiased = true
 	_art.add_child(edge)
 
-## Mark the vertices each selector actually moves.
+## Mark what each selector reshapes: both Square Selectors get a gold outline
+## around their selected 3x3 tiles, and the Gradual Selector adds a dot on the
+## middle it moves.
 func _add_markers(heights: Array) -> void:
 	var mid := GRID_TILES / 2
 	match tool_type:
 		"vertex":
 			_add_dot(vertex_point(mid, mid, heights[mid][mid]))
-		"flat":
+		"flat", "gradual":
+			var sel := _selected_vertex_range()
 			var outline := Line2D.new()
 			outline.points = PackedVector2Array([
-				vertex_point(mid - 1, mid - 1, 1), vertex_point(mid + 1, mid - 1, 1),
-				vertex_point(mid + 1, mid + 1, 1), vertex_point(mid - 1, mid + 1, 1),
-				vertex_point(mid - 1, mid - 1, 1)])
+				vertex_point(sel.x, sel.x, heights[sel.x][sel.x]),
+				vertex_point(sel.y, sel.x, heights[sel.x][sel.y]),
+				vertex_point(sel.y, sel.y, heights[sel.y][sel.y]),
+				vertex_point(sel.x, sel.y, heights[sel.y][sel.x]),
+				vertex_point(sel.x, sel.x, heights[sel.x][sel.x])])
 			outline.width = 2.5
 			outline.default_color = HIGHLIGHT_COLOR
 			outline.antialiased = true
 			_art.add_child(outline)
-		"gradual":
-			_add_dot(vertex_point(mid, mid, heights[mid][mid]))
+			if tool_type == "gradual":
+				# The dot sits on the hilltop, over the middle of the
+				# selection — the vertex pair a click raises or lowers.
+				_add_dot(vertex_point(GRID_TILES * 0.5, GRID_TILES * 0.5,
+						heights[mid][mid]))
 
 func _add_dot(center: Vector2) -> void:
 	var dot := Polygon2D.new()

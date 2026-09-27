@@ -1520,6 +1520,45 @@ func test_elevation_selectors_are_terrain_tile_previews() -> void:
 	var gradual: Array = ElevationSelectorButton.example_heights("gradual")
 	assert_gt(gradual[mid][mid], gradual[mid - 1][mid - 1], "gradual example peaks in the middle")
 
+func test_square_selector_examples_are_5x5_grids_with_3x3_selected() -> void:
+	assert_eq(ElevationSelectorButton.GRID_TILES, 5, "the examples draw 5x5 tile grids")
+	assert_eq(ElevationSelectorButton.SELECTED_TILES, 3, "the examples select 3x3 tiles")
+	var n: int = ElevationSelectorButton.GRID_TILES + 1
+	var lo: int = (ElevationSelectorButton.GRID_TILES - ElevationSelectorButton.SELECTED_TILES) / 2
+	var hi: int = lo + ElevationSelectorButton.SELECTED_TILES
+
+	# Flat: exactly the selected block's corner vertices lift, so the central
+	# 3x3 tiles rise together into one level slab and nothing else moves.
+	var flat: Array = ElevationSelectorButton.example_heights("flat")
+	assert_eq(flat.size(), n, "the flat example spans the whole 5x5 grid")
+	for y in n:
+		assert_eq(flat[y].size(), n, "each row of the flat example spans the whole 5x5 grid")
+		for x in n:
+			var on_slab: bool = x >= lo and x <= hi and y >= lo and y <= hi
+			assert_eq(flat[y][x], 1 if on_slab else 0,
+					"flat example lifts exactly the selected tiles' corners")
+	for y in ElevationSelectorButton.GRID_TILES:
+		for x in ElevationSelectorButton.GRID_TILES:
+			var slab: bool = flat[y][x] > 0 and flat[y][x + 1] > 0 and flat[y + 1][x] > 0 and flat[y + 1][x + 1] > 0
+			assert_eq(slab, x >= lo and x < hi and y >= lo and y < hi,
+					"flat example selects exactly the central 3x3 tiles")
+
+	# Gradual: the same central 3x3 tiles rise as a smooth hill — one step up
+	# at the selection's rim, two over the middle, never more than one step of
+	# slope between neighbouring vertices.
+	var gradual: Array = ElevationSelectorButton.example_heights("gradual")
+	assert_eq(gradual.size(), n, "the gradual example spans the whole 5x5 grid")
+	assert_eq(gradual[lo][lo], 1, "the hill's rim on the selection edge is one step up")
+	assert_eq(gradual[lo + 1][lo + 1], 2, "the hill peaks over the middle of the selection")
+	for y in n:
+		for x in n:
+			for step in [Vector2i(1, 0), Vector2i(0, 1)]:
+				var nx: int = x + step.x
+				var ny: int = y + step.y
+				if nx < n and ny < n:
+					assert_lte(absi(gradual[ny][nx] - gradual[y][x]), 1,
+							"gradual example keeps at most one step of slope")
+
 func test_elevation_selectors_are_twice_the_catalogue_tile_size() -> void:
 	var doubled := TerrainTileButton.BUTTON_SIZE * 2.0
 	for tool_name in ["vertex", "flat", "gradual"]:
