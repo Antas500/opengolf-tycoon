@@ -57,9 +57,10 @@ more vertex than tile per side.
 The hover preview tints exactly those tiles and marks exactly those vertices,
 so what the player sees under the cursor is what a click reshapes.
 
-Elevation levels are integers from `MIN_ELEVATION` (-5) to `MAX_ELEVATION`
-(+5) on the `(grid_width + 1) × (grid_height + 1)` vertex field owned by
-`TerrainGrid`.
+Elevation levels are integers from `MIN_ELEVATION` (0) to `MAX_ELEVATION`
+(10) on the `(grid_width + 1) × (grid_height + 1)` vertex field owned by
+`TerrainGrid`. Flat, untouched ground sits mid-range at `BASE_ELEVATION` (5),
+so every course can still be raised five levels or dug down five levels.
 
 ## Algorithm
 
@@ -125,8 +126,8 @@ Every other vertex of `A` keeps its height. Raising the `{0, 0, 2, 2}` brush
 sends the two 0s to 1 (`{1, 1, 2, 2}`); lowering it sends the two 2s down to
 1 (`{0, 0, 1, 1}`). Repeated strokes level the brush, and because every
 vertex of an even brush is both the lowest and the highest, an already-even
-brush simply steps up or down as one flat slab. When the extreme sits at +5
-(raising) or -5 (lowering) the clamped target equals the current height and
+brush simply steps up or down as one flat slab. When the extreme sits at 10
+(raising) or 0 (lowering) the clamped target equals the current height and
 nothing changes.
 
 ### Gradual Square Selector
@@ -171,7 +172,7 @@ through `TerrainGrid.set_vertex_elevation()`.
 
 | Setting | Location | Value | Effect |
 | --- | --- | --- | --- |
-| Elevation range | `TerrainGrid.MIN_ELEVATION / MAX_ELEVATION` | -5 / +5 | Height limits every tool clamps to |
+| Elevation range | `TerrainGrid.MIN_ELEVATION / MAX_ELEVATION` | 0 / 10 | Height limits every tool clamps to |
 | Brush sizes | `ElevationTool.BRUSH_SIZES` | 1..9 | S×S tile brushes Flat and Gradual share |
 | Step size | both `paint_*` paths | 1 | Elevation change per moved vertex |
 | Round-clip radius | `tile_offsets` | `S/2` tiles | How much the round shape keeps of the square's corners |

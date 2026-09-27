@@ -59,7 +59,7 @@ func _tile_is_editable(tile: Vector2i) -> bool:
 ## Flatten every vertex of the brush centred on `anchor` so assertions are exact.
 func _flatten(anchor: Vector2i, size: int) -> void:
 	for vertex in ElevationTool.brush_vertices(grid, anchor, size, true):
-		grid.set_vertex_elevation(vertex, 0)
+		grid.set_vertex_elevation(vertex, grid.BASE_ELEVATION)
 
 func _run() -> void:
 	await _frames(10)
@@ -116,30 +116,30 @@ func _run() -> void:
 	var flat_area := ElevationTool.brush_vertices(grid, anchor, 3, true)
 	_check(flat_area.size() == 16, "3x3 Flat brush selects 16 vertices (%d)" % flat_area.size())
 	for i in flat_area.size():
-		grid.set_vertex_elevation(flat_area[i], i % 3)  # 0,1,2 mixture
+		grid.set_vertex_elevation(flat_area[i], grid.BASE_ELEVATION + i % 3)  # +0/+1/+2 mixture
 	var flat_changes: Array = main.elevation_tool.paint_at_tile(anchor, grid, main.entity_layer)
 	main.undo_manager.record_elevation_stroke(flat_changes)
 	main._stop_elevation_painting()
 	await _frames(2)
 	for i in flat_area.size():
 		var vertex: Vector2i = flat_area[i]
-		var expected: int = 1 if i % 3 == 0 else i % 3
+		var expected: int = grid.BASE_ELEVATION + 1 if i % 3 == 0 else grid.BASE_ELEVATION + i % 3
 		_check(grid.get_vertex_elevation(vertex) == expected,
 				"flat raise: vertex %s %s" % [vertex,
 				"is at the lowest level: raised one level" if i % 3 == 0 else "is higher: stays put"])
-	_check(grid.get_vertex_elevation(anchor + Vector2i(-2, 0)) == 0,
+	_check(grid.get_vertex_elevation(anchor + Vector2i(-2, 0)) == grid.BASE_ELEVATION,
 			"flat raise: outside the brush is untouched")
 
 	main._start_elevation_painting(false)
 	for vertex in flat_area:
-		grid.set_vertex_elevation(vertex, 3)
+		grid.set_vertex_elevation(vertex, grid.BASE_ELEVATION + 3)
 	var flat_lower: Array = main.elevation_tool.paint_at_tile(anchor, grid, main.entity_layer)
 	main.undo_manager.record_elevation_stroke(flat_lower)
 	main._stop_elevation_painting()
 	await _frames(2)
 	for vertex in flat_area:
-		_check(grid.get_vertex_elevation(vertex) == 2,
-				"flat lower: vertex %s stays even and steps down to 2" % vertex)
+		_check(grid.get_vertex_elevation(vertex) == grid.BASE_ELEVATION + 2,
+				"flat lower: vertex %s stays even and steps down one level" % vertex)
 
 	# ------------------------------------------------------------------
 	# 4. Gradual Square: right click lifts the middle; repeated clicks build
@@ -162,9 +162,10 @@ func _run() -> void:
 		main._start_elevation_painting(true)
 	await _frames(2)
 	var middle := ElevationTool.middle_vertices(7, anchor)
-	_check(grid.get_vertex_elevation(anchor) == 3, "gradual raise: middle lifted to 3")
+	_check(grid.get_vertex_elevation(anchor) == grid.BASE_ELEVATION + 3,
+			"gradual raise: middle lifted three levels")
 	for vertex in ElevationTool.brush_vertices(grid, anchor, 7, true):
-		var expected: int = 3 - ElevationTool.distance_to_middle(vertex, 7, anchor)
+		var expected: int = grid.BASE_ELEVATION + 3 - ElevationTool.distance_to_middle(vertex, 7, anchor)
 		_check(grid.get_vertex_elevation(vertex) == expected,
 				"gradual raise: vertex %s holds the one-step pyramid (%d)" % [vertex, expected])
 	_check(middle.size() == 4, "7x7 gradual brush lifts the anchor tile's four corners")
@@ -181,10 +182,11 @@ func _run() -> void:
 	main.undo_manager.record_elevation_stroke(vertex_changes)
 	main._stop_elevation_painting()
 	await _frames(2)
-	_check(grid.get_vertex_elevation(anchor) == 1, "vertex raise: the single vertex lifted to 1")
+	_check(grid.get_vertex_elevation(anchor) == grid.BASE_ELEVATION + 1,
+			"vertex raise: the single vertex lifted one level")
 	var neighbours_moved := 0
 	for vertex in ElevationTool.brush_vertices(grid, anchor, 5, true):
-		if vertex != anchor and grid.get_vertex_elevation(vertex) != 0:
+		if vertex != anchor and grid.get_vertex_elevation(vertex) != grid.BASE_ELEVATION:
 			neighbours_moved += 1
 	_check(neighbours_moved == 0, "vertex raise: no other vertex moved")
 
@@ -193,7 +195,8 @@ func _run() -> void:
 	# ------------------------------------------------------------------
 	main._perform_undo()
 	await _frames(2)
-	_check(grid.get_vertex_elevation(anchor) == 0, "undo restored the vertex tool stroke")
+	_check(grid.get_vertex_elevation(anchor) == grid.BASE_ELEVATION,
+			"undo restored the vertex tool stroke")
 
 	# ------------------------------------------------------------------
 	# 7. Esc cancels the tool.

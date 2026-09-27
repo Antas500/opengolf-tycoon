@@ -37,12 +37,13 @@ poses accompany the existing score thoughts and walking/swing sprites.
 
 For a stamp of radius `r`, compute normalized distance `d = distance / r` and
 an elevation increment `round(amount * max(0, 1 - d²)²)`. Clamp resulting levels
-to -5..5. Collect each changed tile's old and new elevation for the existing undo
+to 0..10 (flat ground sits mid-range at the base level 5). Collect each changed
+tile's old and new elevation for the existing undo
 manager. The player's square selectors no longer use this falloff — they move
 whole squares and single vertices (see elevation-tools.md). Quick Start uses
 +3 tee stamps, +2 green crowns, and a -1 hollow for the valley.
 
-The surface texture's blue channel stores `(base elevation + 5) / 10`. A second,
+The surface texture's blue channel stores `(elevation - MIN_ELEVATION) / (MAX_ELEVATION - MIN_ELEVATION)`. A second,
 linearly filtered sampler reads that same texture at ±1.5 tiles to estimate a
 broad normal. Sun direction drives restrained material shading (0.75–1.12), with
 flat ground remaining neutral. Existing detailed elevation shading/contours are

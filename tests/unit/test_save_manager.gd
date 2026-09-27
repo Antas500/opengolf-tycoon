@@ -135,6 +135,65 @@ func test_records_json_roundtrip() -> void:
 	assert_eq(restored.best_per_hole[3].golfer_name, "Phil")
 
 
+# --- Elevation save migration (v3 signed -5..+5 -> v4 levels 0..10) ---
+
+func test_pre_v4_elevation_heights_shift_into_the_new_range() -> void:
+	# Pre-v4 saves stored signed heights with flat ground at 0. Shifting by
+	# BASE_ELEVATION maps the old bottom (-5) to 0, flat (0) to 5, top (+5) to 10.
+	var legacy := {"3,3": -5, "4,4": -3, "5,5": 0, "6,6": 2, "7,7": 5}
+	var shifted: Dictionary = SaveManager._shift_elevation_dict(legacy, TerrainGrid.BASE_ELEVATION)
+	assert_eq(int(shifted["3,3"]), TerrainGrid.MIN_ELEVATION)
+	assert_eq(int(shifted["4,4"]), TerrainGrid.BASE_ELEVATION - 3)
+	assert_eq(int(shifted["5,5"]), TerrainGrid.BASE_ELEVATION, "old flat ground becomes the base level")
+	assert_eq(int(shifted["6,6"]), TerrainGrid.BASE_ELEVATION + 2)
+	assert_eq(int(shifted["7,7"]), TerrainGrid.MAX_ELEVATION)
+
+func test_shift_elevation_dict_is_a_no_op_for_current_saves() -> void:
+	var current := {"3,3": 0, "4,4": 7}
+	assert_eq(SaveManager._shift_elevation_dict(current, 0), current)
+
+func test_elevation_roundtrip_keeps_base_level_sparse() -> void:
+	var grid := TerrainGrid.new()
+	grid.grid_width = 8
+	grid.grid_height = 8
+	add_child_autofree(grid)
+	grid.set_vertex_elevation(Vector2i(3, 3), grid.BASE_ELEVATION + 2)
+	grid.set_vertex_elevation(Vector2i(4, 4), grid.MIN_ELEVATION)
+
+	var serialized := grid.serialize_elevation()
+	assert_eq(serialized.size(), 2, "only vertices off the base level are stored")
+	assert_true(serialized.has("3,3"))
+	assert_eq(int(serialized["4,4"]), 0, "level 0 is a stored height, not a missing entry")
+
+	grid.set_vertex_elevation(Vector2i(3, 3), grid.MIN_ELEVATION)
+	grid.deserialize_elevation(serialized)
+	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), grid.BASE_ELEVATION + 2)
+	assert_eq(grid.get_vertex_elevation(Vector2i(4, 4)), grid.MIN_ELEVATION)
+	assert_eq(grid.get_vertex_elevation(Vector2i(5, 5)), grid.BASE_ELEVATION,
+			"missing entries read back as the flat base level")
+
+func test_legacy_tile_elevation_migrates_around_the_base_level() -> void:
+	# The pre-v3 save format stored one signed height per tile; shifted by
+	# BASE_ELEVATION on load, tiles above the old flat 0 land above the base
+	# level. The migration averages tiles onto shared corners, so a lone +2
+	# tile becomes a gentle +1 bump — the same smoothing legacy saves always
+	# got — and untouched ground keeps the base level exactly.
+	var grid := TerrainGrid.new()
+	grid.grid_width = 8
+	grid.grid_height = 8
+	add_child_autofree(grid)
+	var legacy_tiles := {"4,4": 2}
+	grid.migrate_tile_elevation(
+			SaveManager._shift_elevation_dict(legacy_tiles, TerrainGrid.BASE_ELEVATION))
+	assert_eq(grid.get_elevation(Vector2i(4, 4)), TerrainGrid.BASE_ELEVATION + 1,
+			"a +2 legacy tile averages to one level above the base")
+	assert_eq(grid.get_elevation(Vector2i(0, 0)), TerrainGrid.BASE_ELEVATION)
+	for x in range(9):
+		for y in range(9):
+			var h: int = grid.get_vertex_elevation(Vector2i(x, y))
+			assert_between(h, TerrainGrid.MIN_ELEVATION, TerrainGrid.MAX_ELEVATION)
+
+
 # --- Helper functions (mirror SaveManager's serialization logic) ---
 
 func _serialize_holes(holes: Array) -> Array:

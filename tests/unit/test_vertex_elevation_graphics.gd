@@ -1,6 +1,10 @@
 extends GutTest
 ## Tests for vertex-based terrain graphics displacement and slope visualization.
 
+## Flat ground sits at BASE_ELEVATION (mid-range of 0..10); screen displacement
+## is measured from it.
+const BASE := TerrainGrid.BASE_ELEVATION
+
 var grid: TerrainGrid
 
 func before_each() -> void:
@@ -15,43 +19,43 @@ func test_vertex_elevation_displacement_in_isometric_view() -> void:
 	assert_gt(grid.ELEVATION_STEP_Y, 0.0)
 
 	var v_flat := Vector2i(5, 5)
-	grid.set_vertex_elevation(v_flat, 0)
+	grid.set_vertex_elevation(v_flat, BASE)
 	var disp_flat := grid.get_vertex_elevation_displacement(v_flat)
 	assert_eq(disp_flat, Vector2.ZERO)
 
 	var v_high := Vector2i(6, 6)
-	grid.set_vertex_elevation(v_high, 3)
+	grid.set_vertex_elevation(v_high, BASE + 3)
 	var disp_high := grid.get_vertex_elevation_displacement(v_high)
 	assert_eq(disp_high.x, 0.0)
 	assert_eq(disp_high.y, -3.0 * grid.ELEVATION_STEP_Y)
 
 	var v_low := Vector2i(7, 7)
-	grid.set_vertex_elevation(v_low, -2)
+	grid.set_vertex_elevation(v_low, BASE - 2)
 	var disp_low := grid.get_vertex_elevation_displacement(v_low)
 	assert_eq(disp_low.x, 0.0)
 	assert_eq(disp_low.y, 2.0 * grid.ELEVATION_STEP_Y)
 
 func test_grid_point_to_screen_moves_with_elevation() -> void:
 	var v := Vector2i(4, 4)
-	grid.set_vertex_elevation(v, 0)
+	grid.set_vertex_elevation(v, BASE)
 	var flat_screen: Vector2 = grid.grid_point_to_screen(Vector2(v))
 
-	grid.set_vertex_elevation(v, 2)
+	grid.set_vertex_elevation(v, BASE + 2)
 	var raised_screen: Vector2 = grid.grid_point_to_screen(Vector2(v))
 	assert_eq(raised_screen.x, flat_screen.x)
 	assert_almost_eq(raised_screen.y, flat_screen.y - 2.0 * grid.ELEVATION_STEP_Y, 0.01)
 
-	grid.set_vertex_elevation(v, -3)
+	grid.set_vertex_elevation(v, BASE - 3)
 	var lowered_screen: Vector2 = grid.grid_point_to_screen(Vector2(v))
 	assert_eq(lowered_screen.x, flat_screen.x)
 	assert_almost_eq(lowered_screen.y, flat_screen.y + 3.0 * grid.ELEVATION_STEP_Y, 0.01)
 
 func test_tile_polygon_corners_reflect_varying_vertex_heights() -> void:
 	# Tile at (3, 3) has corners at (3,3), (4,3), (4,4), (3,4)
-	grid.set_vertex_elevation(Vector2i(3, 3), 0)
-	grid.set_vertex_elevation(Vector2i(4, 3), 2)
-	grid.set_vertex_elevation(Vector2i(4, 4), 4)
-	grid.set_vertex_elevation(Vector2i(3, 4), 1)
+	grid.set_vertex_elevation(Vector2i(3, 3), BASE)
+	grid.set_vertex_elevation(Vector2i(4, 3), BASE + 2)
+	grid.set_vertex_elevation(Vector2i(4, 4), BASE + 4)
+	grid.set_vertex_elevation(Vector2i(3, 4), BASE + 1)
 
 	var poly := grid.tile_polygon(Vector2i(3, 3))
 	assert_eq(poly.size(), 4)
@@ -72,7 +76,7 @@ func test_tile_polygon_corners_reflect_varying_vertex_heights() -> void:
 func test_screen_to_grid_point_inverts_elevation_displacement() -> void:
 	# For an elevated point on a slope, screen_to_grid_point should retrieve the grid coordinate
 	var target_grid := Vector2(5.0, 5.0)
-	grid.set_vertex_elevation(Vector2i(5, 5), 3)
+	grid.set_vertex_elevation(Vector2i(5, 5), BASE + 3)
 
 	var screen_pos := grid.grid_point_to_screen(target_grid)
 	var unprojected := grid.screen_to_grid_point(screen_pos)
@@ -85,7 +89,7 @@ func test_top_down_view_has_no_elevation_displacement() -> void:
 	assert_false(grid.view_isometric)
 
 	var v := Vector2i(4, 4)
-	grid.set_vertex_elevation(v, 4)
+	grid.set_vertex_elevation(v, BASE + 4)
 	var disp := grid.get_vertex_elevation_displacement(v)
 	assert_eq(disp, Vector2.ZERO)
 

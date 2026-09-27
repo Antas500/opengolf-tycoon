@@ -1123,11 +1123,12 @@ func test_staff_tab_embeds_staff_management() -> void:
 	var labels: Array[String] = []
 	for label in toolbar._staff_panel.find_children("*", "Label", true, false):
 		labels.append(label.text)
-	assert_true(labels.has("CONDITION"), "Staff tab should show course condition")
 	assert_true(labels.has("HIRE STAFF"), "Staff tab should show hire buttons")
 	assert_true(labels.has("CURRENT STAFF"), "Staff tab should show the roster")
-	assert_true(labels.has("EFFECTS"), "Staff tab should show staff effects")
-	assert_eq(toolbar._staff_panel._hire_buttons.size(), 4, "Four staff types can be hired")
+	assert_false(labels.has("CONDITION"), "Staff tab keeps only the two required sections")
+	assert_false(labels.has("EFFECTS"), "Staff tab keeps only the two required sections")
+	assert_eq(toolbar._staff_panel._hire_buttons.size(), 8,
+		"Every job type offers a standard and a premium hire")
 
 	# Selecting the Staff tab refreshes the embedded panel rather than emitting a popup signal.
 	toolbar.select_tab(TerrainToolbar.Tab.STAFF)

@@ -1,9 +1,12 @@
 extends ColorRect
 class_name CourseSurface
 ## Continuous, world-anchored terrain. Two textures feed the surface shader:
-##   R = terrain ID / 255, G = bunker depth, B = (tile elevation + 5) / 10,
+##   R = terrain ID / 255, G = bunker depth,
+##   B = (tile elevation - MIN_ELEVATION) / (MAX_ELEVATION - MIN_ELEVATION),
 ##   A = 0 on an object footprint (a boulder standing on other ground, which
 ##       keeps the native turf look), otherwise 1.
+## The vertex_elevation image packs levels the same way, so the shader's
+## (tex - 0.5) * 10 decode turns BASE_ELEVATION (flat) back into 0.
 
 ## Palette color key for each terrain ID, indexed by TerrainTypes.Type. The
 ## shader reads the palette width, so appending a type only needs a key here.
@@ -100,7 +103,8 @@ func update_vertex(vertex: Vector2i) -> void:
 func _write_vertex(vertex: Vector2i) -> void:
 	if _elevation_image == null or not _grid.is_valid_vertex(vertex):
 		return
-	var gray: float = clampf((float(_grid.get_vertex_elevation(vertex)) + 5.0) / 10.0, 0.0, 1.0)
+	var gray: float = clampf(float(_grid.get_vertex_elevation(vertex) - _grid.MIN_ELEVATION)
+			/ float(_grid.MAX_ELEVATION - _grid.MIN_ELEVATION), 0.0, 1.0)
 	_elevation_image.set_pixel(vertex.x, vertex.y, Color(gray, 0.0, 0.0))
 	_elevation_dirty = true
 
@@ -111,7 +115,9 @@ func flush_elevation() -> void:
 
 func _write_tile(pos: Vector2i) -> void:
 	_data.set_pixel(pos.x, pos.y, Color(float(_grid.get_tile(pos)) / 255.0,
-		float(_grid.get_bunker_depth(pos)), float(_grid.get_elevation(pos) + 5) / 10.0,
+		float(_grid.get_bunker_depth(pos)),
+		float(_grid.get_elevation(pos) - _grid.MIN_ELEVATION)
+				/ float(_grid.MAX_ELEVATION - _grid.MIN_ELEVATION),
 		0.0 if _grid.is_object_footprint(pos) else 1.0))
 
 func _on_tile_changed(pos: Vector2i, _old: int, _new: int) -> void:

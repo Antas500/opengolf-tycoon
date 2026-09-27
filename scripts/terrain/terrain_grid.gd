@@ -12,8 +12,14 @@ class_name TerrainGrid
 ## Grid <-> world projection shared by every renderer and the input handlers.
 var projection: GridProjection = GridProjection.new()
 
-const MIN_ELEVATION: int = -5
-const MAX_ELEVATION: int = 5
+## Elevation levels run 0..10: 0 is the deepest a vertex can be dug down and
+## 10 the highest it can be raised. Flat, untouched ground sits mid-range at
+## BASE_ELEVATION so the terrain can still move five levels in each direction.
+const MIN_ELEVATION: int = 0
+const MAX_ELEVATION: int = 10
+## Level of flat ground ("sea level"): what a fresh course lies at, and the
+## middle of the MIN..MAX range. Screen displacement is measured from here.
+const BASE_ELEVATION: int = 5
 const SLOPE_SAMPLE_STEP: float = 0.5
 const ELEVATION_STEP_Y: float = 10.0
 
@@ -285,12 +291,12 @@ func _init_projection() -> void:
 func get_elevation_displacement(grid_pos: Vector2) -> Vector2:
 	if not view_isometric or ELEVATION_STEP_Y == 0.0:
 		return Vector2.ZERO
-	return Vector2(0.0, -get_elevation_at(grid_pos) * ELEVATION_STEP_Y)
+	return Vector2(0.0, -(get_elevation_at(grid_pos) - BASE_ELEVATION) * ELEVATION_STEP_Y)
 
 func get_vertex_elevation_displacement(vertex: Vector2i) -> Vector2:
 	if not view_isometric or ELEVATION_STEP_Y == 0.0:
 		return Vector2.ZERO
-	return Vector2(0.0, -float(get_vertex_elevation(vertex)) * ELEVATION_STEP_Y)
+	return Vector2(0.0, -float(get_vertex_elevation(vertex) - BASE_ELEVATION) * ELEVATION_STEP_Y)
 
 func screen_to_grid(screen_pos: Vector2) -> Vector2i:
 	var g := screen_to_grid_point(screen_pos)
@@ -307,19 +313,19 @@ func screen_to_grid_point(screen_pos: Vector2) -> Vector2:
 	var best_g := projection.unproject(screen_pos)
 	var best_diff: float = 999999.0
 	var step_size: float = ELEVATION_STEP_Y * 0.5
-	var t: float = float(MAX_ELEVATION) * ELEVATION_STEP_Y
-	var min_t: float = float(MIN_ELEVATION) * ELEVATION_STEP_Y
+	var t: float = float(MAX_ELEVATION - BASE_ELEVATION) * ELEVATION_STEP_Y
+	var min_t: float = float(MIN_ELEVATION - BASE_ELEVATION) * ELEVATION_STEP_Y
 
 	while t >= min_t - 0.1:
 		var g := projection.unproject(screen_pos + Vector2(0.0, t))
-		var h_px: float = get_elevation_at(g) * ELEVATION_STEP_Y
+		var h_px: float = (get_elevation_at(g) - BASE_ELEVATION) * ELEVATION_STEP_Y
 		var diff: float = absf(t - h_px)
 		if diff < best_diff:
 			best_diff = diff
 			best_g = g
 		if t <= h_px:
 			# Surface crossed: refine with exact height at this point
-			var h_final: float = get_elevation_at(g) * ELEVATION_STEP_Y
+			var h_final: float = (get_elevation_at(g) - BASE_ELEVATION) * ELEVATION_STEP_Y
 			best_g = projection.unproject(screen_pos + Vector2(0.0, h_final))
 			return best_g
 		t -= step_size
@@ -1097,7 +1103,7 @@ func _ensure_vertex_storage() -> void:
 	var previous_stride: int = _vertex_stride
 	_vertex_elevation = PackedInt32Array()
 	_vertex_elevation.resize(needed)
-	_vertex_elevation.fill(0)
+	_vertex_elevation.fill(BASE_ELEVATION)
 	_vertex_stride = stride
 	if previous.size() == 0 or previous_stride <= 0:
 		return
@@ -1111,9 +1117,10 @@ func _vertex_index(vertex: Vector2i) -> int:
 	return vertex.y * (grid_width + 1) + vertex.x
 
 ## Height stored at a grid vertex (clamped to MIN_ELEVATION..MAX_ELEVATION).
+## Off-grid vertices report BASE_ELEVATION so slopes at the rim stay level.
 func get_vertex_elevation(vertex: Vector2i) -> int:
 	if not is_valid_vertex(vertex):
-		return 0
+		return BASE_ELEVATION
 	_ensure_vertex_storage()
 	return _vertex_elevation[_vertex_index(vertex)]
 
@@ -1200,7 +1207,7 @@ func get_elevation_at_precise(precise_pos: Vector2) -> float:
 
 func get_tile_height(pos: Vector2i) -> float:
 	if not is_valid_position(pos):
-		return 0.0
+		return float(BASE_ELEVATION)
 	return get_elevation_at(Vector2(pos) + Vector2(0.5, 0.5))
 
 func get_elevation(pos: Vector2i) -> int:
@@ -1265,13 +1272,14 @@ func set_enclosed_elevation(bounds: Rect2i, terrain_type: int, height: int,
 				target = int(height_fn.call(vertex))
 			set_vertex_elevation(vertex, target)
 
-func get_nonzero_vertices() -> Array[Vector2i]:
+func get_non_base_vertices() -> Array[Vector2i]:
+	## Vertices whose height differs from BASE_ELEVATION (flat ground).
 	_ensure_vertex_storage()
 	var result: Array[Vector2i] = []
 	var stride: int = grid_width + 1
 	for y in range(grid_height + 1):
 		for x in range(stride):
-			if _vertex_elevation[y * stride + x] != 0:
+			if _vertex_elevation[y * stride + x] != BASE_ELEVATION:
 				result.append(Vector2i(x, y))
 	return result
 
@@ -1393,13 +1401,15 @@ func serialize_player_placed() -> Array:
 	return data
 
 func serialize_elevation() -> Dictionary:
+	## Sparse map: only vertices off BASE_ELEVATION are stored; a missing entry
+	## reads as BASE_ELEVATION on load (see deserialize_elevation).
 	_ensure_vertex_storage()
 	var data: Dictionary = {}
 	var stride: int = grid_width + 1
 	for y in range(grid_height + 1):
 		for x in range(stride):
 			var height: int = _vertex_elevation[y * stride + x]
-			if height != 0:
+			if height != BASE_ELEVATION:
 				data["%d,%d" % [x, y]] = height
 	return data
 
@@ -1441,7 +1451,7 @@ func deserialize_player_placed(data: Array) -> void:
 
 func deserialize_elevation(data: Dictionary) -> void:
 	_ensure_vertex_storage()
-	_vertex_elevation.fill(0)
+	_vertex_elevation.fill(BASE_ELEVATION)
 	for key in data:
 		var parts = str(key).split(",")
 		if parts.size() == 2:
@@ -1460,15 +1470,15 @@ func migrate_tile_elevation(data: Dictionary) -> void:
 			if is_valid_position(pos):
 				tiles[pos] = clampi(int(data[key]), MIN_ELEVATION, MAX_ELEVATION)
 	_ensure_vertex_storage()
-	_vertex_elevation.fill(0)
+	_vertex_elevation.fill(BASE_ELEVATION)
 	for y in range(grid_height + 1):
 		for x in range(grid_width + 1):
 			var vertex := Vector2i(x, y)
 			var total: int = 0
 			var count: int = 0
-			# Missing tiles are sea level — the legacy map only stored non-zero ones.
+			# Missing tiles are flat — the legacy map only stored non-flat ones.
 			for tile in tiles_around_vertex(vertex):
-				total += int(tiles.get(tile, 0))
+				total += int(tiles.get(tile, BASE_ELEVATION))
 				count += 1
 			if count > 0:
 				_vertex_elevation[_vertex_index(vertex)] = roundi(float(total) / float(count))

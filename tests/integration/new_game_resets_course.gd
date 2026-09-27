@@ -60,8 +60,9 @@ func run() -> void:
 	main.entity_layer.place_rock(Vector2i(58, 58), "medium")
 	check(main.entity_layer.rocks.has(Vector2i(58, 58)), "First course has a placed rock")
 	var sculpted := Vector2i(61, 61)
-	grid.set_vertex_elevation(sculpted, 5)
-	check(grid.get_vertex_elevation(sculpted) == 5, "First course has sculpted elevation")
+	grid.set_vertex_elevation(sculpted, grid.MAX_ELEVATION)
+	check(grid.get_vertex_elevation(sculpted) == grid.MAX_ELEVATION,
+			"First course has sculpted elevation")
 	check(main.undo_manager.can_undo(), "First course has undo history")
 	check(main.hole_manager.get_all_hole_visualizers().size() == 1, "First course has a hole flag")
 	main.golfer_manager.spawn_initial_group()
@@ -96,9 +97,11 @@ func run() -> void:
 	check(not main.undo_manager.can_undo(), "Undo history does not cross into the second course")
 	check(main.golfer_manager.get_active_golfers().is_empty(), "No golfer survives into the second course")
 	check(layout.can_place_tee_box(grid, gm.current_course), "The player can paint a first tee box")
-	# Natural generation clamps vertices to the theme's elevation range (max 3), so
-	# the +5 the player sculpted can only come back if the vertex was never reset.
-	check(grid.get_vertex_elevation(sculpted) != 5, "Sculpted elevation is regenerated, not inherited")
+	# Natural generation stays within the theme's elevation range of the flat base
+	# level (BASE_ELEVATION + 3 at most), so the maximum the player sculpted can
+	# only come back if the vertex was never reset.
+	check(grid.get_vertex_elevation(sculpted) != grid.MAX_ELEVATION,
+			"Sculpted elevation is regenerated, not inherited")
 
 	# The second course must still be playable: a tee and a green open a hole.
 	main._on_tool_selected(TerrainTypes.Type.TEE_BOX)

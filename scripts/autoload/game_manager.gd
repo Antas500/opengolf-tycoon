@@ -118,6 +118,9 @@ var shot_heatmap_tracker: ShotHeatmapTracker = null
 # Economy system references (set by main scene)
 var land_manager: LandManager = null
 var staff_manager: StaffManager = null
+var weed_manager: WeedManager = null
+## The live golfer spawner, used by on-course staff to find customers.
+var golfer_manager: GolferManager = null
 var marketing_manager: MarketingManager = null
 
 # Daily statistics tracking
@@ -416,13 +419,9 @@ func clamp_green_fee_to_max() -> void:
 
 func process_green_fee_payment(golfer_id: int, golfer_name: String) -> bool:
 	"""Process a golfer's green fee payment and return success.
-	Revenue = per-hole fee x number of open holes + pro shop bonus."""
+	Revenue = per-hole fee x number of open holes."""
 	var holes = get_open_hole_count()
 	var total = green_fee * max(holes, 1)
-
-	# Pro shop staff add bonus revenue per golfer
-	if staff_manager:
-		total += int(staff_manager.get_pro_shop_revenue_bonus())
 
 	if current_course:
 		for hole in current_course.get_open_holes():

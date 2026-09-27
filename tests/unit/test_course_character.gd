@@ -1,4 +1,8 @@
 extends GutTest
+
+## Elevation levels run 0..10 with flat ground mid-range at BASE_ELEVATION.
+const BASE := TerrainGrid.BASE_ELEVATION
+
 var grid: TerrainGrid
 var previous_land
 var previous_pause: bool
@@ -33,29 +37,29 @@ func test_sculpted_brush_tapers_preserves_surfaces_and_can_be_undone() -> void:
 	# only used by course generation).
 	var center := grid.nearest_vertex(Vector2(8, 8) + Vector2(0.5, 0.5))
 	var changes := SculptedTerrain.stamp(grid, center, SculptedTerrain.sculpt_radius(9), 3, null)
-	assert_eq(grid.get_vertex_elevation(Vector2i(9, 9)), 3)
-	assert_eq(grid.get_vertex_elevation(Vector2i(12, 9)), 1)
-	assert_eq(grid.get_vertex_elevation(Vector2i(13, 9)), 0)
-	assert_eq(grid.get_elevation(Vector2i(9, 9)), 3)
-	assert_eq(grid.get_elevation(Vector2i(11, 9)), 1)
-	assert_eq(grid.get_elevation(Vector2i(12, 9)), 0)
-	assert_eq(grid.get_elevation(Vector2i(8, 8)), 1)
-	assert_eq(grid.get_elevation(Vector2i(8, 7)), 0)
-	assert_eq(grid.get_elevation(Vector2i(7, 8)), 0)
-	assert_eq(grid.get_vertex_elevation(Vector2i(9, 8)), 0)
+	assert_eq(grid.get_vertex_elevation(Vector2i(9, 9)), BASE + 3)
+	assert_eq(grid.get_vertex_elevation(Vector2i(12, 9)), BASE + 1)
+	assert_eq(grid.get_vertex_elevation(Vector2i(13, 9)), BASE)
+	assert_eq(grid.get_elevation(Vector2i(9, 9)), BASE + 3)
+	assert_eq(grid.get_elevation(Vector2i(11, 9)), BASE + 1)
+	assert_eq(grid.get_elevation(Vector2i(12, 9)), BASE)
+	assert_eq(grid.get_elevation(Vector2i(8, 8)), BASE + 1)
+	assert_eq(grid.get_elevation(Vector2i(8, 7)), BASE)
+	assert_eq(grid.get_elevation(Vector2i(7, 8)), BASE)
+	assert_eq(grid.get_vertex_elevation(Vector2i(9, 8)), BASE)
 	assert_eq(grid.serialize(), saved)
-	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0 - 5.0), 3)
+	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0), BASE + 3)
 	var heights := grid.serialize_elevation()
 	grid.deserialize_elevation(heights)
-	assert_eq(grid.get_elevation(Vector2i(9, 9)), 3)
-	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0 - 5.0), 3)
+	assert_eq(grid.get_elevation(Vector2i(9, 9)), BASE + 3)
+	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0), BASE + 3)
 	for i in range(changes.size() - 1, -1, -1):
 		var change = changes[i]
 		grid.set_vertex_elevation(change.position, change.old_elevation)
-	assert_eq(grid.get_elevation(Vector2i(9, 9)), 0)
-	assert_eq(grid.get_elevation(Vector2i(8, 8)), 0)
+	assert_eq(grid.get_elevation(Vector2i(9, 9)), BASE)
+	assert_eq(grid.get_elevation(Vector2i(8, 8)), BASE)
 	grid.deserialize_elevation({})
-	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0 - 5.0), 0)
+	assert_eq(roundi(grid._course_surface._data.get_pixel(9, 9).b * 10.0), BASE)
 
 func test_sculpting_respects_buildings_and_height_limits() -> void:
 	var entities := EntityLayer.new()
@@ -65,18 +69,18 @@ func test_sculpting_respects_buildings_and_height_limits() -> void:
 	var registry: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))["buildings"]
 	entities.place_building("clubhouse", Vector2i(6, 6), registry)
 	SculptedTerrain.stamp(grid, Vector2i(8, 8), 5, 3, entities)
-	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), 0)
-	assert_eq(grid.get_elevation(Vector2i(8, 8)), 0)
+	assert_eq(grid.get_vertex_elevation(Vector2i(8, 8)), BASE)
+	assert_eq(grid.get_elevation(Vector2i(8, 8)), BASE)
 	# Just outside the footprint the same stamp still lifts the ground.
-	assert_eq(grid.get_vertex_elevation(Vector2i(5, 8)), 1)
-	grid.set_elevation(Vector2i(3, 3), 4)
-	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), 4)
+	assert_eq(grid.get_vertex_elevation(Vector2i(5, 8)), BASE + 1)
+	grid.set_elevation(Vector2i(3, 3), BASE + 4)
+	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), BASE + 4)
 	SculptedTerrain.stamp(grid, Vector2i(3, 3), 3, 3)
-	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), 5)
-	assert_eq(grid.get_elevation(Vector2i(3, 3)), 5)
+	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), grid.MAX_ELEVATION)
+	assert_eq(grid.get_elevation(Vector2i(3, 3)), grid.MAX_ELEVATION)
 	SculptedTerrain.stamp(grid, Vector2i(3, 3), 3, -20)
-	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), -5)
-	assert_eq(grid.get_elevation(Vector2i(3, 3)), -5)
+	assert_eq(grid.get_vertex_elevation(Vector2i(3, 3)), grid.MIN_ELEVATION)
+	assert_eq(grid.get_elevation(Vector2i(3, 3)), grid.MIN_ELEVATION)
 
 func test_clubhouse_upgrades_grow_without_changing_footprint_or_duplicate_clicks() -> void:
 	var building := Building.new()

@@ -78,7 +78,7 @@ func test_reset_for_new_course_clears_every_per_tile_state() -> void:
 	grid.add_cup_tile(Vector2i(3, 3))
 	grid.set_tile(Vector2i(4, 4), TerrainTypes.Type.BUNKER)
 	grid.set_bunker_depth(Vector2i(4, 4), 1)
-	grid.set_vertex_elevation(Vector2i(5, 5), 4)
+	grid.set_vertex_elevation(Vector2i(5, 5), grid.BASE_ELEVATION + 4)
 
 	grid.reset_for_new_course()
 
@@ -86,6 +86,7 @@ func test_reset_for_new_course_clears_every_per_tile_state() -> void:
 	assert_eq(grid.get_cup_tiles(), [], "Waiting cups must not survive")
 	assert_eq(grid.serialize_player_placed(), [], "Player-placed marks must not survive")
 	assert_eq(grid.serialize_bunker_depth(), {}, "Bunker depths must not survive")
-	assert_eq(grid.get_vertex_elevation(Vector2i(5, 5)), 0, "Sculpted elevation must not survive")
+	assert_eq(grid.get_vertex_elevation(Vector2i(5, 5)), grid.BASE_ELEVATION,
+			"Sculpted elevation must not survive")
 	assert_eq(grid.get_tile(Vector2i(2, 2)), TerrainTypes.Type.GRASS)
 	assert_eq(grid.get_tile(Vector2i(3, 3)), TerrainTypes.Type.GRASS)

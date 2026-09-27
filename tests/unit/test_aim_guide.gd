@@ -89,7 +89,7 @@ func test_backspin_and_punch_scale_the_arc() -> void:
 func test_ground_track_follows_elevation() -> void:
 	var flat := AimGuide.build_geometry(grid, _preview())
 	for x in range(6, 11):
-		grid.set_elevation(Vector2i(x, 14), 3)
+		grid.set_elevation(Vector2i(x, 14), grid.BASE_ELEVATION + 3)
 	var hilly := AimGuide.build_geometry(grid, _preview())
 	var index: int = hilly.ground_track.size() / 2
 	assert_lt(hilly.ground_track[index].y, flat.ground_track[index].y,

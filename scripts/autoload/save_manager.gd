@@ -19,7 +19,9 @@ extends Node
 
 const SAVE_DIR: String = "user://saves/"
 const SETTINGS_PATH: String = "user://settings.cfg"
-const SAVE_VERSION: int = 3
+## v4 moved terrain elevation levels from -5..+5 to 0..10 (flat ground moved
+## from level 0 to BASE_ELEVATION = 5); older saves are shifted up on load.
+const SAVE_VERSION: int = 4
 
 ## Scene-tree references (set by Main in _ready())
 var terrain_grid: TerrainGrid = null
@@ -216,6 +218,8 @@ func _build_save_data() -> Dictionary:
 		data["land"] = GameManager.land_manager.serialize()
 	if GameManager.staff_manager:
 		data["staff"] = GameManager.staff_manager.serialize()
+	if GameManager.weed_manager:
+		data["weeds"] = GameManager.weed_manager.serialize()
 	if GameManager.marketing_manager:
 		data["marketing"] = GameManager.marketing_manager.serialize()
 
@@ -266,6 +270,17 @@ func _serialize_pin_positions(pin_positions: Array) -> Array:
 	for pos in pin_positions:
 		result.append({"x": pos.x, "y": pos.y})
 	return result
+
+## Offset every height in a serialized elevation map ("x,y" -> int) by `shift`
+## levels, clamped to the legal range. Used to migrate pre-v4 signed heights.
+static func _shift_elevation_dict(data: Dictionary, shift: int) -> Dictionary:
+	if shift == 0:
+		return data
+	var shifted: Dictionary = {}
+	for key in data:
+		shifted[key] = clampi(int(data[key]) + shift,
+				TerrainGrid.MIN_ELEVATION, TerrainGrid.MAX_ELEVATION)
+	return shifted
 
 ## Apply loaded save data
 func _apply_save_data(data: Dictionary) -> void:
@@ -323,12 +338,18 @@ func _apply_save_data(data: Dictionary) -> void:
 	# Terrain
 	if terrain_grid and data.has("terrain"):
 		terrain_grid.deserialize(data["terrain"])
+	# Pre-v4 saves stored signed heights (-5..+5 with flat = 0); the levels now
+	# run 0..10 with flat = BASE_ELEVATION, so legacy heights shift up by 5.
+	var save_version: int = int(data.get("version", 1))
+	var legacy_elevation_shift: int = TerrainGrid.BASE_ELEVATION if save_version < 4 else 0
 	if terrain_grid and data.has("vertex_elevation"):
-		terrain_grid.deserialize_elevation(data["vertex_elevation"])
+		terrain_grid.deserialize_elevation(
+				_shift_elevation_dict(data["vertex_elevation"], legacy_elevation_shift))
 	elif terrain_grid and data.has("elevation"):
 		# Pre-v3 saves stored one height per tile: average them onto the shared
 		# corners so older courses keep their shape and gain smooth slopes.
-		terrain_grid.migrate_tile_elevation(data["elevation"])
+		terrain_grid.migrate_tile_elevation(
+				_shift_elevation_dict(data["elevation"], legacy_elevation_shift))
 	if terrain_grid and data.has("player_placed"):
 		terrain_grid.deserialize_player_placed(data["player_placed"])
 	if terrain_grid:
@@ -380,6 +401,8 @@ func _apply_save_data(data: Dictionary) -> void:
 		GameManager.land_manager.deserialize(data["land"])
 	if GameManager.staff_manager and data.has("staff"):
 		GameManager.staff_manager.deserialize(data["staff"])
+	if GameManager.weed_manager and data.has("weeds"):
+		GameManager.weed_manager.deserialize(data["weeds"])
 	if GameManager.marketing_manager and data.has("marketing"):
 		GameManager.marketing_manager.deserialize(data["marketing"])
 

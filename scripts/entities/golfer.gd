@@ -106,6 +106,10 @@ var guest_key := ""
 var is_returning_guest := false
 var paid_round_fee := 0
 var activity_text := "Playing golf"
+## Seconds before on-course staff may serve this golfer again. Prevents a single
+## greeter/vendor/marshal from parking next to one golfer and spamming effects.
+var staff_help_cooldown := 0.0
+const STAFF_HELP_COOLDOWN_SECONDS: float = 20.0
 var _amenity_phase := 0
 var _amenity_destination := Vector2.ZERO
 var _amenity_origin := Vector2.ZERO
@@ -723,6 +727,8 @@ func _apply_tier_name_color() -> void:
 
 func _process(delta: float) -> void:
 	if GameManager.is_paused or GameManager.current_speed == GameManager.GameSpeed.PAUSED: return
+	if staff_help_cooldown > 0.0:
+		staff_help_cooldown = maxf(0.0, staff_help_cooldown - delta)
 	if _amenity_phase > 0:
 		_process_amenity_visit(delta)
 		return
@@ -2624,6 +2630,40 @@ func _check_need_triggers() -> void:
 	var triggers = needs.check_need_triggers()
 	for trigger in triggers:
 		show_thought(trigger)
+
+# =============================================================================
+# On-course staff service (greeters, marshals, drinks vendors)
+# =============================================================================
+
+## Whether this golfer can be served by on-course staff right now.
+func is_staff_service_available() -> bool:
+	return staff_help_cooldown <= 0.0 and current_state != State.FINISHED
+
+## A greeter chatted with this golfer — cheers them up.
+func receive_greeting(amount: float) -> void:
+	if not is_staff_service_available():
+		return
+	staff_help_cooldown = STAFF_HELP_COOLDOWN_SECONDS
+	_adjust_mood(amount)
+	show_thought(FeedbackTriggers.TriggerType.CHEERED_UP)
+
+## A marshal talked this group back to a sensible pace.
+func receive_pace_help(amount: float) -> void:
+	if not is_staff_service_available():
+		return
+	staff_help_cooldown = STAFF_HELP_COOLDOWN_SECONDS
+	var boost := needs.restore_pace(amount)
+	_adjust_mood(0.02 + boost)
+	show_thought(FeedbackTriggers.TriggerType.PACED_UP)
+
+## A drinks vendor handed this golfer something cold.
+func receive_drink(amount: float) -> void:
+	if not is_staff_service_available():
+		return
+	staff_help_cooldown = STAFF_HELP_COOLDOWN_SECONDS
+	var boost := needs.restore_thirst(amount)
+	_adjust_mood(0.02 + boost)
+	show_thought(FeedbackTriggers.TriggerType.REFRESHED)
 
 ## Create highlight ring node for active golfer indication
 func _create_highlight_ring() -> void:

@@ -12,6 +12,8 @@ var _saved_multi_tee: bool
 
 const TEE := Vector2i(6, 20)
 const CUP := Vector2i(30, 20)
+## Flat ground level: elevations are set as offsets from it (range 0..10).
+const BASE := TerrainGrid.BASE_ELEVATION
 
 func before_each() -> void:
 	_saved_course = GameManager.current_course
@@ -196,9 +198,9 @@ func test_the_marker_fits_a_tee_tile_on_sculpted_ground() -> void:
 	# Corner elevations move the edges of the grass the tile paints, so the fit
 	# has to follow the ground rather than the flat diamond.
 	_paint_waiting_pair()
-	grid.set_vertex_elevation(TEE, 4)
-	grid.set_vertex_elevation(TEE + Vector2i(1, 0), -3)
-	grid.set_vertex_elevation(TEE + Vector2i(0, 1), 2)
+	grid.set_vertex_elevation(TEE, BASE + 4)
+	grid.set_vertex_elevation(TEE + Vector2i(1, 0), BASE - 3)
+	grid.set_vertex_elevation(TEE + Vector2i(0, 1), BASE + 2)
 	overlay.rebuild()
 	_assert_marker_inside_tile(TEE, "sculpted")
 
@@ -206,10 +208,10 @@ func test_a_tee_tile_folded_by_elevation_shrinks_its_marker() -> void:
 	# A cliff edge across one tile folds its projected grass into a sliver, so the
 	# marker has less to fit into than the flat diamond suggests.
 	_paint_waiting_pair()
-	grid.set_vertex_elevation(TEE, 5)
-	grid.set_vertex_elevation(TEE + Vector2i(1, 0), -5)
-	grid.set_vertex_elevation(TEE + Vector2i(1, 1), 5)
-	grid.set_vertex_elevation(TEE + Vector2i(0, 1), -5)
+	grid.set_vertex_elevation(TEE, grid.MAX_ELEVATION)
+	grid.set_vertex_elevation(TEE + Vector2i(1, 0), grid.MIN_ELEVATION)
+	grid.set_vertex_elevation(TEE + Vector2i(1, 1), grid.MAX_ELEVATION)
+	grid.set_vertex_elevation(TEE + Vector2i(0, 1), grid.MIN_ELEVATION)
 	overlay.rebuild()
 	var layout := overlay.marker_layout(TEE)
 	assert_false(layout.is_empty(), "The folded tile still gets a marker")

@@ -17,7 +17,7 @@ OpenGolf Tycoon has **strong simulation bones** — the golf engine (shot physic
 These systems meet or exceed genre standards:
 
 ### Course Design Tools (A)
-- 14 terrain types, elevation (-5 to +5), 6 course themes with gameplay modifiers
+- 14 terrain types, elevation (levels 0 to 10), 6 course themes with gameplay modifiers
 - Hole creation wizard (tee → green → flag), auto-par from yardage
 - Undo stack (50 actions), terrain brush, elevation tool
 - This is the SimGolf DNA and it works. The procedural tileset per theme is a nice touch.

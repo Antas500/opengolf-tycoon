@@ -38,7 +38,7 @@ Once a player accumulates significant capital ($200K+), there is nothing aspirat
 ### Existing Terrain Tools
 - `TerrainGrid` supports batch painting (14 terrain types)
 - `TilesetGenerator` handles procedural tileset with theme colors
-- Elevation grid (-5 to +5) allows pre-sculpted terrain
+- Elevation grid (levels 0 to 10) allows pre-sculpted terrain
 - Trees and rocks can be pre-placed as entities
 
 ### QuickStartCourse Pattern
