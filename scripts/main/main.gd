@@ -649,7 +649,7 @@ func _on_toolbar_golfer_clicked(golfer_id: int) -> void:
 		_on_golfer_clicked(golfer)
 
 func _on_play_course_pressed() -> void:
-	terrain_toolbar.select_player_section(3)
+	terrain_toolbar.select_player_section(PlayerTab.PAGE_PLAY)
 
 func _initialize_game() -> void:
 	# Show main menu instead of auto-starting
@@ -3197,7 +3197,7 @@ func _setup_tournament_panel() -> void:
 	tournament_panel.embedded = true
 	tournament_panel.name = "TournamentPanel"
 	tournament_panel.close_requested.connect(_on_tournament_panel_closed)
-	terrain_toolbar.player_tab.pages[5].add_child(tournament_panel)
+	terrain_toolbar.player_tab.add_persistent(tournament_panel)
 	tournament_panel.setup(tournament_manager)
 
 func _on_tournament_panel_closed() -> void:
@@ -3208,7 +3208,7 @@ func _on_tournament_panel_closed() -> void:
 
 func _toggle_tournament_panel() -> void:
 	"""Toggle the tournament panel visibility."""
-	terrain_toolbar.select_player_section(5)
+	terrain_toolbar.select_player_section(PlayerTab.PAGE_PLAY)
 	tournament_panel._refresh_display()
 
 func _on_tournament_completed(_tier: int, results: Dictionary) -> void:
