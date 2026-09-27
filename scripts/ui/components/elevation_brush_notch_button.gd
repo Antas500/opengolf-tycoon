@@ -75,9 +75,9 @@ func set_caption(value: String) -> void:
 	caption = value
 	queue_redraw()
 
-## Switch the control on or off with the tool it belongs to and repaint it: the
-## Vertex selector paints a single vertex and has no brush at all, so both of
-## the brush's notch cells grey out while it is selected.
+## Switch the control on or off and repaint it. The toolbar keeps the Elevation
+## Brush enabled even when neither Square tool is selected, so the player can
+## set the shape before picking Flat or Gradual.
 func set_brush_enabled(enabled: bool) -> void:
 	disabled = not enabled
 	_update_visual_state()

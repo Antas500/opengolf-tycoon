@@ -6,7 +6,7 @@ class_name TerrainToolbar
 ##  - Course Terrain: one course, hazard & landscape tiles honeycomb, with the brush controls pinned to the page's bottom-left corner so they ride above the tiles instead of scrolling with them; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
-##  - Elevation:      the Vertex, Flat Square and Gradual Square selector tools in one honeycomb, with the Elevation Brush (size and shape) that belongs to the two Square tools alone nestled into the notch between them — the size stepper in the V above the point where those tiles meet, the shape toggle in the V below it — while the terrain brush stays the Course Terrain tab's own
+##  - Elevation:      the Vertex, Flat Square and Gradual Square selector tools in one honeycomb, with the Elevation Brush (size and shape) the two Square tools share nestled into the notch between them — the size stepper in the V above the point where those tiles meet, the shape toggle in the V below it — while the terrain brush stays the Course Terrain tab's own
 ##  - Holes:          one button per course hole, three to a column, each opening that hole's context menu (the buttons are filled by main.gd)
 ##  - Golfers:        who is on the course, four golfers to a column, beside the recent rounds, six rounds to a column
 ##  - Player:         play the course, tournaments, player skills
@@ -192,16 +192,15 @@ var _brush_limit: int = HoleLayout.UNLIMITED_BRUSH  # 1 = current tool paints a 
 var _brush_labels: Array[Label] = []
 var _brush_buttons: Array[Button] = []
 var _brush_shape_buttons: Array[Button] = []
-# Elevation brush: the Square Selector tools carry their own size and shape,
-# separate from the terrain paint brush above. Values are kept per tool so
-# switching between Flat and Gradual restores each one's own settings. The two
-# controls themselves are notch cells between the Square selectors, not a group
-# of their own beside the row (see _add_elevation_brush_notches).
+# Elevation brush: the Square Selector tools share one size and shape,
+# separate from the terrain paint brush above. Switching between Flat and
+# Gradual keeps the same settings, and the controls stay usable even when
+# neither Square tool is selected. The two controls themselves are notch cells
+# between the Square selectors, not a group of their own beside the row
+# (see _add_elevation_brush_notches).
 var _elevation_tool: String = ""  # "vertex" | "flat" | "gradual" | "" (none)
-var _flat_brush_size: int = 3
-var _flat_brush_square := true
-var _gradual_brush_size: int = 3
-var _gradual_brush_square := true
+var _elevation_size: int = 3
+var _elevation_square := true
 var _elevation_brush_size_notches: Array[ElevationBrushSizeNotch] = []
 var _elevation_brush_labels: Array[Label] = []
 var _elevation_brush_buttons: Array[Button] = []
@@ -851,7 +850,7 @@ func _build_elevation_tab(hbox: HBoxContainer) -> void:
 func _add_elevation_brush_notches(selectors: TileHoneycomb) -> void:
 	selectors.set_notch_child(_make_elevation_brush_size_notch(), ELEVATION_BRUSH_NOTCH_SLOT, true)
 	selectors.set_notch_child(_make_elevation_brush_shape_notch(), ELEVATION_BRUSH_NOTCH_SLOT, false)
-	# No elevation tool is selected yet, so the brush starts switched off.
+	# Size and shape stay usable whether or not a Square tool is selected.
 	_update_elevation_brush_group()
 
 ## The Elevation Brush size stepper — smaller, the size it paints with, bigger —
@@ -1286,63 +1285,54 @@ func _make_brush_group() -> VBoxContainer:
 	_apply_brush_limit()
 	return group
 
-## The sizes the Elevation Brush offers for the selected Square Selector tool.
+## The sizes the Elevation Brush offers. Flat Square and Gradual Square share
+## the same 1x1 through 9x9 list, and the stepper keeps that range even when
+## neither Square tool is selected.
 func _elevation_brush_sizes() -> Array:
-	match _elevation_tool:
-		"flat":
-			return ElevationTool.FLAT_BRUSH_SIZES
-		"gradual":
-			return ElevationTool.GRADUAL_BRUSH_SIZES
-		_:
-			return []
+	return ElevationTool.BRUSH_SIZES
 
 func _elevation_brush_size() -> int:
-	return _flat_brush_size if _elevation_tool == "flat" else _gradual_brush_size
+	return _elevation_size
 
 func _elevation_brush_square() -> bool:
-	return _flat_brush_square if _elevation_tool == "flat" else _gradual_brush_square
+	return _elevation_square
 
 ## Set the selected elevation selector tool and sync the brush controls: the
-## notch cells mirror that tool's own size and shape (the Vertex tool disables
-## them both).
+## notch cells keep the shared size and shape, and stay enabled whether or not
+## a Square tool is selected.
 func set_elevation_tool(tool_name: String) -> void:
 	_elevation_tool = tool_name
 	_update_elevation_brush_group()
 
-## Read back the active tool's Elevation Brush settings.
+## Read back the shared Elevation Brush settings.
 func get_elevation_brush_size() -> int:
 	return _elevation_brush_size()
 
 func get_elevation_brush_square() -> bool:
 	return _elevation_brush_square()
 
-## Mirror the selected Square tool's own brush settings in the two notch cells.
-## The Vertex tool paints a single vertex and has no brush at all, so both cells
-## grey out while it is selected.
+## Mirror the shared brush settings in the two notch cells. Size and shape stay
+## enabled even when the Vertex tool is selected or no Square tool is selected,
+## so the player can set the brush before (or after) picking Flat or Gradual.
 func _update_elevation_brush_group() -> void:
-	var enabled: bool = _elevation_tool == "flat" or _elevation_tool == "gradual"
 	for button in _elevation_brush_buttons:
 		if is_instance_valid(button):
-			button.disabled = not enabled
+			button.disabled = false
 	for shape in _elevation_brush_shape_buttons:
 		if is_instance_valid(shape):
-			shape.set_brush_enabled(enabled)
+			shape.set_brush_enabled(true)
 			_update_elevation_brush_shape_button(shape)
 	for notch in _elevation_brush_size_notches:
 		if is_instance_valid(notch):
-			notch.set_brush_enabled(enabled)
+			notch.set_brush_enabled(true)
 	_update_elevation_brush_label()
 
 func _update_elevation_brush_label() -> void:
 	var sizes: Array = _elevation_brush_sizes()
 	var size: int = _elevation_brush_size()
-	# Keep the displayed size inside the tool's range (Gradual starts at 2x2).
 	if not sizes.is_empty() and not (size in sizes):
 		size = sizes.min() if size < sizes.min() else sizes.max()
-		if _elevation_tool == "flat":
-			_flat_brush_size = size
-		elif _elevation_tool == "gradual":
-			_gradual_brush_size = size
+		_elevation_size = size
 	var text := "%dx%d" % [size, size]
 	for label in _elevation_brush_labels:
 		if is_instance_valid(label):
@@ -1373,18 +1363,12 @@ func _on_elevation_brush_increase() -> void:
 		_set_elevation_brush_size(sizes[idx + 1])
 
 func _set_elevation_brush_size(value: int) -> void:
-	if _elevation_tool == "flat":
-		_flat_brush_size = value
-	elif _elevation_tool == "gradual":
-		_gradual_brush_size = value
+	_elevation_size = value
 	_update_elevation_brush_label()
 	elevation_brush_size_changed.emit(value)
 
 func _on_elevation_brush_shape_toggled() -> void:
-	if _elevation_tool == "flat":
-		_flat_brush_square = not _flat_brush_square
-	elif _elevation_tool == "gradual":
-		_gradual_brush_square = not _gradual_brush_square
+	_elevation_square = not _elevation_square
 	for shape in _elevation_brush_shape_buttons:
 		if is_instance_valid(shape):
 			_update_elevation_brush_shape_button(shape)

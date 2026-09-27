@@ -24,11 +24,11 @@ and releasing the button ends the stroke. No vertex outside the selection is
 ever touched, and vertices under buildings or on unowned land are skipped.
 Esc still cancels the tool (right click no longer does).
 
-The two Square Selector tools carry their own **Elevation Brush Size** and
-**Elevation Brush Shape** (square or round) controls, kept separate from the
-Terrain Brush controls on the Course Terrain tab. Flat offers 1×1 through 9×9;
-Gradual offers 2×2 through 9×9 (a one-tile brush has no room to be gradual).
-Each tool remembers its own size and shape.
+The two Square Selector tools share one **Elevation Brush Size** and
+**Elevation Brush Shape** (square or round) control pair, kept separate from the
+Terrain Brush controls on the Course Terrain tab. Both Flat and Gradual offer
+1×1 through 9×9, and switching between them keeps the same size and shape. The
+controls stay usable even when neither Square tool is selected.
 
 Both controls ride in the notch between the two Square tiles on the Elevation
 tab rather than in a group of their own beside the row: the size stepper
@@ -166,8 +166,7 @@ through `TerrainGrid.set_vertex_elevation()`.
 | Setting | Location | Value | Effect |
 | --- | --- | --- | --- |
 | Elevation range | `TerrainGrid.MIN_ELEVATION / MAX_ELEVATION` | -5 / +5 | Height limits every tool clamps to |
-| Flat sizes | `ElevationTool.FLAT_BRUSH_SIZES` | 1..9 | S×S tile brushes the Flat tool offers |
-| Gradual sizes | `ElevationTool.GRADUAL_BRUSH_SIZES` | 2..9 | S×S tile brushes the Gradual tool offers |
+| Brush sizes | `ElevationTool.BRUSH_SIZES` | 1..9 | S×S tile brushes Flat and Gradual share |
 | Step size | both `paint_*` paths | 1 | Elevation change per click |
 | Round-clip radius | `tile_offsets` | `S/2` tiles | How much the round shape keeps of the square's corners |
 | Gradient slope | Gradual cone clamp | 1 per vertex | Max elevation difference per vertex away from the middle |

@@ -17,9 +17,9 @@ class_name ElevationTool
 ##    would come to differ by more than one elevation per vertex of
 ##    distance from the changing vertex - the terrain stays gradual.
 ##
-## The two Square Selector tools carry their own Elevation Brush Size and
+## The two Square Selector tools share one Elevation Brush Size and
 ## Elevation Brush Shape (square or round), which are separate from the
-## terrain paint brush controls. The toolbar owns those per-tool values and
+## terrain paint brush controls. The toolbar owns those shared values and
 ## pushes them here through set_brush().
 ##
 ## Brush sizes are counted in **tiles**, not vertices: the brush reshapes the
@@ -44,9 +44,9 @@ const TOOL_VERTEX := "vertex"
 const TOOL_FLAT := "flat"
 const TOOL_GRADUAL := "gradual"
 
-## Elevation Brush Sizes per tool, in tiles (S x S tiles = (S+1)^2 vertices).
-const FLAT_BRUSH_SIZES: Array[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-const GRADUAL_BRUSH_SIZES: Array[int] = [2, 3, 4, 5, 6, 7, 8, 9]
+## Elevation Brush Sizes shared by the Square Selector tools, in tiles
+## (S x S tiles = (S+1)^2 vertices). Flat and Gradual both offer 1x1 through 9x9.
+const BRUSH_SIZES: Array[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 signal tool_changed(tool: Tool)
 signal elevation_mode_changed(mode: ElevationMode)
@@ -109,10 +109,8 @@ func is_lowering() -> bool:
 
 func brush_sizes() -> Array[int]:
 	match tool:
-		Tool.FLAT:
-			return FLAT_BRUSH_SIZES
-		Tool.GRADUAL:
-			return GRADUAL_BRUSH_SIZES
+		Tool.FLAT, Tool.GRADUAL:
+			return BRUSH_SIZES
 	return []
 
 func set_brush(size: int, square: bool) -> void:
@@ -120,7 +118,7 @@ func set_brush(size: int, square: bool) -> void:
 	brush_square = square
 
 func set_brush_size(value: int) -> void:
-	if value in brush_sizes():
+	if value in BRUSH_SIZES:
 		brush_size = value
 
 func set_brush_square(square: bool) -> void:
