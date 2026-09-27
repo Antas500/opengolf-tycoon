@@ -1520,6 +1520,16 @@ func test_elevation_selectors_are_terrain_tile_previews() -> void:
 	var gradual: Array = ElevationSelectorButton.example_heights("gradual")
 	assert_gt(gradual[mid][mid], gradual[mid - 1][mid - 1], "gradual example peaks in the middle")
 
+func test_elevation_selectors_are_twice_the_catalogue_tile_size() -> void:
+	var doubled := TerrainTileButton.BUTTON_SIZE * 2.0
+	for tool_name in ["vertex", "flat", "gradual"]:
+		var btn = toolbar._tool_buttons[tool_name]
+		assert_eq(btn.button_size(), doubled, "%s selector is double size" % tool_name)
+		assert_eq(btn.custom_minimum_size, doubled, "%s selector lays out at double size" % tool_name)
+		assert_true(btn._has_point(doubled * 0.5), "the centre of the big diamond is clickable")
+		assert_true(btn._has_point(Vector2(doubled.x * 0.9, doubled.y * 0.5)),
+				"the whole doubled diamond answers to the mouse")
+
 func test_elevation_brush_sizes_depend_on_the_selected_tool() -> void:
 	toolbar.set_elevation_tool("flat")
 	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],

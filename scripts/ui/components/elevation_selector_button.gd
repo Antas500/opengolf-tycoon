@@ -11,19 +11,27 @@ class_name ElevationSelectorButton
 ## The button keeps TerrainTileButton's diamond hit area, outline and
 ## selection treatment; only the artwork inside the diamond differs.
 
+## The selectors are drawn at twice the catalogue tile size so their relief
+## demos read clearly and they make large, easy click targets.
+const SELECTOR_SCALE := 2.0
+const SELECTOR_TILE_SIZE := TILE_SIZE * SELECTOR_SCALE
+
 ## Tiles along each side of the preview diamond.
 const GRID_TILES := 4
 ## Screen height of one elevation step in the preview.
-const STEP_PX := 6.0
+const STEP_PX := 6.0 * SELECTOR_SCALE
 ## The preview diamond is inset a little so raised ground stays inside the
 ## button, and dropped slightly so peaks have headroom.
 const PREVIEW_SCALE := 0.86
-const PREVIEW_DROP := 4.0
+const PREVIEW_DROP := 4.0 * SELECTOR_SCALE
 
 const GRASS_COLOR := Color("5f9e45")
 const HIGHLIGHT_COLOR := Color(1.0, 0.85, 0.35)
 
 var _art: Node2D
+
+func button_size() -> Vector2:
+	return SELECTOR_TILE_SIZE
 
 func _ready() -> void:
 	super._ready()
@@ -53,9 +61,9 @@ static func example_heights(kind: String) -> Array:
 
 ## Screen position (local to the button) of grid vertex (x, y) at height h.
 static func vertex_point(x: int, y: int, h: float) -> Vector2:
-	var tile := TILE_SIZE * PREVIEW_SCALE / float(GRID_TILES)
-	var top := Vector2(BUTTON_SIZE.x * 0.5,
-		(BUTTON_SIZE.y - TILE_SIZE.y * PREVIEW_SCALE) * 0.5 + PREVIEW_DROP)
+	var tile := SELECTOR_TILE_SIZE * PREVIEW_SCALE / float(GRID_TILES)
+	var top := Vector2(SELECTOR_TILE_SIZE.x * 0.5,
+		(SELECTOR_TILE_SIZE.y - SELECTOR_TILE_SIZE.y * PREVIEW_SCALE) * 0.5 + PREVIEW_DROP)
 	return top + Vector2((x - y) * tile.x * 0.5, (x + y) * tile.y * 0.5 - h * STEP_PX)
 
 func _build_elevation_art() -> void:
@@ -78,7 +86,7 @@ func _build_elevation_art() -> void:
 	# Push the caption below the demo so the relief stays visible.
 	if _name_label:
 		_name_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-		_name_label.position.y = 4
+		_name_label.position.y = 4 * SELECTOR_SCALE
 
 func _add_tile(x: int, y: int, heights: Array) -> void:
 	var hn: float = heights[y][x]
@@ -103,7 +111,7 @@ func _add_tile(x: int, y: int, heights: Array) -> void:
 	_art.add_child(poly)
 	var edge := Line2D.new()
 	edge.points = PackedVector2Array([corners[0], corners[1], corners[2], corners[3], corners[0]])
-	edge.width = 1.0
+	edge.width = 1.5
 	edge.default_color = Color(0.1, 0.2, 0.08, 0.45)
 	edge.antialiased = true
 	_art.add_child(edge)
@@ -120,7 +128,7 @@ func _add_markers(heights: Array) -> void:
 				vertex_point(mid - 1, mid - 1, 1), vertex_point(mid + 1, mid - 1, 1),
 				vertex_point(mid + 1, mid + 1, 1), vertex_point(mid - 1, mid + 1, 1),
 				vertex_point(mid - 1, mid - 1, 1)])
-			outline.width = 1.5
+			outline.width = 2.5
 			outline.default_color = HIGHLIGHT_COLOR
 			outline.antialiased = true
 			_art.add_child(outline)
@@ -132,7 +140,7 @@ func _add_dot(center: Vector2) -> void:
 	var pts := PackedVector2Array()
 	for i in 10:
 		var a := i * TAU / 10.0
-		pts.append(center + Vector2(cos(a) * 3.0, sin(a) * 2.0))
+		pts.append(center + Vector2(cos(a) * 3.0 * SELECTOR_SCALE, sin(a) * 2.0 * SELECTOR_SCALE))
 	dot.polygon = pts
 	dot.color = HIGHLIGHT_COLOR
 	dot.antialiased = true

@@ -22,14 +22,20 @@ static var _white_texture: ImageTexture
 ## Scattered terrain previewed as part of a patch rather than a lone tile.
 const FIELD_PREVIEWS: Array[int] = [TerrainTypes.Type.ROCKS, TerrainTypes.Type.BRUSH]
 
-static func tile_corners() -> PackedVector2Array:
-	var center := BUTTON_SIZE * 0.5
+static func tile_corners(tile_size: Vector2 = TILE_SIZE) -> PackedVector2Array:
+	var center := tile_size * 0.5
 	return PackedVector2Array([
-		Vector2(center.x, center.y - TILE_SIZE.y * 0.5),
-		Vector2(center.x + TILE_SIZE.x * 0.5, center.y),
-		Vector2(center.x, center.y + TILE_SIZE.y * 0.5),
-		Vector2(center.x - TILE_SIZE.x * 0.5, center.y),
+		Vector2(center.x, center.y - tile_size.y * 0.5),
+		Vector2(center.x + tile_size.x * 0.5, center.y),
+		Vector2(center.x, center.y + tile_size.y * 0.5),
+		Vector2(center.x - tile_size.x * 0.5, center.y),
 	])
+
+## Size of this button's diamond. Subclasses may draw a larger tile (the
+## Elevation selectors are twice the catalogue size); the button is always
+## exactly its diamond.
+func button_size() -> Vector2:
+	return BUTTON_SIZE
 
 var _surface_material: ShaderMaterial
 var _outline: Line2D
@@ -53,7 +59,7 @@ func _update_button() -> void:
 	# The tile and its caption replace ToolButton's flat sprite and button text.
 	text = ""
 	icon = null
-	custom_minimum_size = BUTTON_SIZE
+	custom_minimum_size = button_size()
 	size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -75,18 +81,18 @@ func _apply_styles() -> void:
 
 ## True when `point` (local to the button) falls on the diamond rather than in
 ## the empty corners of its bounding box.
-static func point_on_tile(point: Vector2) -> bool:
-	var offset := (point - TILE_SIZE * 0.5).abs()
-	return offset.x / (TILE_SIZE.x * 0.5) + offset.y / (TILE_SIZE.y * 0.5) <= 1.0
+static func point_on_tile(point: Vector2, tile_size: Vector2 = TILE_SIZE) -> bool:
+	var offset := (point - tile_size * 0.5).abs()
+	return offset.x / (tile_size.x * 0.5) + offset.y / (tile_size.y * 0.5) <= 1.0
 
 ## Only the diamond is clickable. Rows of the honeycomb overlap as rectangles,
 ## so a rectangular hit area would let a lower tile steal clicks from the tile
 ## whose notch it sits in.
 func _has_point(point: Vector2) -> bool:
-	return TerrainTileButton.point_on_tile(point)
+	return TerrainTileButton.point_on_tile(point, button_size())
 
 func _build_tile() -> void:
-	var corners := tile_corners()
+	var corners := tile_corners(button_size())
 	var shadow := Polygon2D.new()
 	shadow.polygon = corners
 	shadow.position = Vector2(0, 2)
@@ -128,8 +134,8 @@ func _build_tile() -> void:
 	_fit_name_label()  # Font size first: it drives the label's minimum size.
 	# Covering the whole tile keeps the text centred on the diamond whatever
 	# the name's width, and stops the caption from being clipped to its text.
-	_name_label.custom_minimum_size = BUTTON_SIZE
-	_name_label.size = BUTTON_SIZE
+	_name_label.custom_minimum_size = button_size()
+	_name_label.size = button_size()
 
 	# The Green tile button previews the next kind of green the tool will paint.
 	# A flag is shown only when that next tile will carry a cup.
@@ -230,7 +236,7 @@ func _fit_name_label() -> void:
 	var font_size := NAME_FONT_SIZE
 	while font_size > NAME_FONT_SIZE_MIN and \
 			font.get_string_size(tool_name, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size).x \
-			> BUTTON_SIZE.x * 0.7:
+			> button_size().x * 0.7:
 		font_size -= 1
 	_name_label.add_theme_font_size_override("font_size", font_size)
 

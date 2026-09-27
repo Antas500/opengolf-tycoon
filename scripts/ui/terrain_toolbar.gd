@@ -1035,7 +1035,7 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 	parent.add_child(btn)
 
 	if btn is TerrainTileButton:
-		btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
+		btn.custom_minimum_size = (btn as TerrainTileButton).button_size()
 		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	else:
 		btn.custom_minimum_size = Vector2(0, TOOL_ROW_HEIGHT)
