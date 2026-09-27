@@ -808,7 +808,7 @@ func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	_add_tool_button(selector_box, {"type": "vertex", "name": "Vertex", "icon": "◆", "hotkey": "V", "desc": "Right click raises, left click lowers, a single grid vertex by one step"})
 	_add_tool_button(selector_box, {"type": "flat", "name": "Flat Square", "icon": "■", "hotkey": "+", "desc": "Right click: even the square up, then raise it. Left click: even it down, then lower it. Whole square moves together"})
 	_add_tool_button(selector_box, {"type": "gradual", "name": "Gradual Square", "icon": "▲", "hotkey": "-", "desc": "Right click raises, left click lowers, the middle of the square; nearby vertices keep at most one step of slope"})
-	hbox.add_child(_make_tab_group("SELECTOR", selector_box))
+	hbox.add_child(_make_tab_group("", selector_box))
 
 	hbox.add_child(_make_separator())
 
@@ -1211,8 +1211,6 @@ func _make_elevation_brush_group() -> VBoxContainer:
 	group.name = "ElevationBrushGroup"
 	group.add_theme_constant_override("separation", 2)
 	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	group.add_child(_make_small_group_label("ELEVATION BRUSH"))
 
 	var shape := Button.new()
 	shape.focus_mode = Control.FOCUS_NONE
