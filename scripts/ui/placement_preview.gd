@@ -302,56 +302,60 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 		return
 
 	var mouse_world: Vector2 = camera.get_mouse_world_position()
-	var center: Vector2i = terrain_grid.nearest_vertex(terrain_grid.screen_to_grid_point(mouse_world))
-	if not terrain_grid.is_valid_vertex(center):
+	# The Vertex Selector snaps to the nearest vertex; the Square Selectors
+	# anchor their tile block on the tile under the cursor, so the preview
+	# always sits on what the click will reshape.
+	var grid_point: Vector2 = terrain_grid.screen_to_grid_point(mouse_world)
+	var anchor: Vector2i = ElevationTool.anchor_for_tool(grid_point, terrain_grid,
+			elevation_tool_type)
+	if not terrain_grid.is_valid_vertex(anchor):
 		return
 
 	var label: String
+	var label_point: Vector2
 	match elevation_tool_type:
 		ElevationTool.Tool.VERTEX:
 			# A vertex is the entire selection: never tint its neighbouring tiles.
-			_draw_vertex_marker(center, Color(1, 1, 1, 0.95 * alpha_mod), 0.18)
-			label = "%d" % terrain_grid.get_vertex_elevation(center)
+			_draw_vertex_marker(anchor, Color(1, 1, 1, 0.95 * alpha_mod), 0.18)
+			label = "%d" % terrain_grid.get_vertex_elevation(anchor)
+			label_point = to_local(terrain_grid.grid_point_to_screen(Vector2(anchor)))
 		ElevationTool.Tool.FLAT, ElevationTool.Tool.GRADUAL:
-			var selected_vertices := _elevation_preview_vertices(center)
-			var selected_lookup := {}
-			for vertex in selected_vertices:
-				selected_lookup[vertex] = true
-
-			var selected_tiles := _elevation_preview_tiles(selected_vertices)
+			# The brush is measured in tiles: it tints the tiles it covers and
+			# marks the corner vertices it will move.
+			var selected_tiles := _elevation_preview_tiles(anchor)
+			var selected_vertices := _elevation_preview_vertices(anchor)
+			if selected_vertices.is_empty():
+				return  # The brush is off the grid: nothing to preview.
 			for tile in selected_tiles:
-				_draw_isometric_tile(tile, true, alpha_mod, true, true)
+				_draw_isometric_tile(tile, true, alpha_mod, tile == anchor, true)
 
-			var middle: Array[Vector2i] = [center]
+			var middle: Array[Vector2i] = [anchor]
 			if elevation_tool_type == ElevationTool.Tool.GRADUAL:
-				middle = ElevationTool.middle_vertices(elevation_brush_size, center)
-			var connected_vertices := _elevation_preview_connected_vertices(selected_tiles)
-			for vertex in connected_vertices:
-				if selected_lookup.has(vertex):
-					var is_middle: bool = middle.has(vertex)
-					var marker_color := Color(1, 1, 1, 0.95 * alpha_mod) if is_middle \
+				middle = ElevationTool.middle_vertices(elevation_brush_size, anchor)
+			for vertex in selected_vertices:
+				var is_middle: bool = middle.has(vertex)
+				var marker_color := Color(1, 1, 1, 0.95 * alpha_mod) if is_middle \
 							else Color(0.55, 0.78, 1.0, 0.85 * alpha_mod)
-					_draw_vertex_marker(vertex, marker_color, 0.16 if is_middle else 0.10)
-				else:
-					# These are tile corners connected to the selected area, but not
-					# vertices the brush itself will edit.
-					_draw_vertex_marker(vertex, Color(0.55, 0.78, 1.0, 0.45 * alpha_mod), 0.08)
+				_draw_vertex_marker(vertex, marker_color, 0.16 if is_middle else 0.10)
 
 			var lowest: int = terrain_grid.MAX_ELEVATION
 			var highest: int = terrain_grid.MIN_ELEVATION
-			for vertex in selected_vertices:
+			# The Gradual tool only lifts its middle, so that is the height the
+			# label follows; the Flat tool levels the whole brush.
+			var reported: Array[Vector2i] = middle if elevation_tool_type == ElevationTool.Tool.GRADUAL \
+					else selected_vertices
+			for vertex in reported:
 				var height: int = terrain_grid.get_vertex_elevation(vertex)
 				lowest = mini(lowest, height)
 				highest = maxi(highest, height)
-			label = "%d" % terrain_grid.get_vertex_elevation(center) \
-					if elevation_tool_type == ElevationTool.Tool.GRADUAL \
-					else "%d..%d" % [lowest, highest]
+			label = "%d" % lowest if lowest == highest else "%d..%d" % [lowest, highest]
+			label_point = to_local(terrain_grid.grid_to_screen_center(anchor))
 		_:
 			return
 
 	draw_string(
 		ThemeDB.fallback_font,
-		to_local(terrain_grid.grid_point_to_screen(Vector2(center))) + Vector2(10, -8),
+		label_point + Vector2(10, -8),
 		label,
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
@@ -359,43 +363,26 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 		Color(1, 1, 1, 0.9 * alpha_mod)
 	)
 
-## Vertices selected by a square elevation tool; Vertex Selector intentionally
-## uses its own one-point drawing path instead.
-func _elevation_preview_vertices(center: Vector2i) -> Array[Vector2i]:
-	if not terrain_grid or elevation_tool_type == ElevationTool.Tool.VERTEX:
+## The tiles a square elevation tool reshapes - an S x S block of tiles (or its
+## round clipping) anchored on the hovered tile. The Vertex Selector
+## intentionally uses its own one-point drawing path instead.
+func _elevation_preview_tiles(anchor: Vector2i) -> Array[Vector2i]:
+	if not terrain_grid or not _is_square_elevation_tool():
 		return []
-	if elevation_tool_type != ElevationTool.Tool.FLAT \
-			and elevation_tool_type != ElevationTool.Tool.GRADUAL:
-		return []
-	return ElevationTool.square_vertices(terrain_grid, center, elevation_brush_size,
+	return ElevationTool.brush_tiles(terrain_grid, anchor, elevation_brush_size,
 			elevation_brush_square)
 
-## Each selected vertex affects the terrain surface of its surrounding tiles.
-## Deduplicate overlaps so a square selection is shaded cleanly.
-func _elevation_preview_tiles(vertices: Array[Vector2i]) -> Array[Vector2i]:
-	var tiles: Array[Vector2i] = []
-	var seen := {}
-	if not terrain_grid:
-		return tiles
-	for vertex in vertices:
-		for tile in terrain_grid.tiles_around_vertex(vertex):
-			if not seen.has(tile):
-				seen[tile] = true
-				tiles.append(tile)
-	return tiles
+## The vertices that same brush moves: the corners of its tiles. A 1x1 brush
+## moves 4 vertices, a 2x2 brush 9, a 3x3 brush 16, and so on.
+func _elevation_preview_vertices(anchor: Vector2i) -> Array[Vector2i]:
+	if not terrain_grid or not _is_square_elevation_tool():
+		return []
+	return ElevationTool.brush_vertices(terrain_grid, anchor, elevation_brush_size,
+			elevation_brush_square)
 
-## All corner vertices of the selected tiles, including selected brush vertices.
-func _elevation_preview_connected_vertices(tiles: Array[Vector2i]) -> Array[Vector2i]:
-	var vertices: Array[Vector2i] = []
-	var seen := {}
-	if not terrain_grid:
-		return vertices
-	for tile in tiles:
-		for vertex in terrain_grid.vertices_of_tile(tile):
-			if not seen.has(vertex):
-				seen[vertex] = true
-				vertices.append(vertex)
-	return vertices
+func _is_square_elevation_tool() -> bool:
+	return elevation_tool_type == ElevationTool.Tool.FLAT \
+			or elevation_tool_type == ElevationTool.Tool.GRADUAL
 
 func _draw_vertex_marker(vertex: Vector2i, color: Color, marker_scale: float) -> void:
 	var axis_x: Vector2 = terrain_grid.projection.axis_x() * marker_scale

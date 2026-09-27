@@ -43,7 +43,7 @@ var is_painting: bool = false
 var _tee_block_notified: bool = false  # One "tee box is waiting" notice per stroke
 var _path_block_notified: bool = false  # One "no room for a walking path" notice per stroke
 var last_paint_pos: Vector2i = Vector2i(-1, -1)
-var last_paint_vertex: Vector2i = Vector2i(-1, -1)
+var last_paint_anchor: Vector2i = Vector2i(-1, -1)
 
 # Measurement tool (Ctrl+click drag)
 var _measuring: bool = false
@@ -968,7 +968,7 @@ func _stop_painting() -> void:
 	_tee_block_notified = false
 	_path_block_notified = false
 	last_paint_pos = Vector2i(-1, -1)
-	last_paint_vertex = Vector2i(-1, -1)
+	last_paint_anchor = Vector2i(-1, -1)
 	if not elevation_tool.is_active():
 		undo_manager.end_stroke()
 
@@ -1792,7 +1792,7 @@ func _stop_elevation_painting() -> void:
 	if not is_painting:
 		return
 	is_painting = false
-	last_paint_vertex = Vector2i(-1, -1)
+	last_paint_anchor = Vector2i(-1, -1)
 	if elevation_tool.is_active():
 		elevation_tool.stop_stroke()
 
@@ -1800,12 +1800,14 @@ func _paint_elevation_at_mouse() -> void:
 	if not elevation_tool.is_raising() and not elevation_tool.is_lowering():
 		return
 	var mouse_world = camera.get_mouse_world_position()
-	# Tile-space point: integers are grid vertices, so the brush snaps to corners.
+	# Tile-space point: integers are grid vertices, `+0.5` are tile centres.
 	var grid_point = terrain_grid.screen_to_grid_point(mouse_world)
-	var vertex = terrain_grid.nearest_vertex(grid_point)
-	if vertex == last_paint_vertex:
+	# The Square Selectors anchor their tile block on the tile under the
+	# cursor; the Vertex Selector snaps to the nearest vertex.
+	var anchor = ElevationTool.anchor_for_tool(grid_point, terrain_grid, elevation_tool.tool)
+	if anchor == last_paint_anchor:
 		return
-	last_paint_vertex = vertex
+	last_paint_anchor = anchor
 
 	var changes = elevation_tool.paint_at_point(grid_point, terrain_grid, entity_layer)
 	if not changes.is_empty():
