@@ -175,6 +175,13 @@ func _update_preview(delta: float) -> void:
 				current_preview_positions = [grid_pos]
 		# Check overall validity for entity placement
 		current_preview_valid = placement_manager.can_place_at(grid_pos, terrain_grid)
+	elif elevation_mode_active:
+		# Elevation selectors draw their own vertex/tile footprint below. Do not
+		# leave the generic terrain hover tile under the cursor as a second,
+		# misleading highlight (especially for the single-vertex selector).
+		current_preview_positions = []
+		current_preview_valid = terrain_grid.is_valid_position(grid_pos)
+		_clear_potential_hole()
 	else:
 		# Terrain painting mode - show the area the tool will actually paint
 		var course: GameManager.CourseData = GameManager.current_course
@@ -194,7 +201,7 @@ func _update_preview(delta: float) -> void:
 			# WALKING_PATH_TERRAINS), so validity is per ground type.
 			current_preview_valid = terrain_grid.can_place_walking_path(grid_pos)
 
-	_update_potential_hole(grid_pos)
+		_update_potential_hole(grid_pos)
 	queue_redraw()
 
 ## Refresh the potential hole for the hovered tile: shown only while terrain
@@ -261,18 +268,21 @@ func _draw() -> void:
 	# shows per-tile validity colors plus a ghost dot instead of a paint fill.
 	var path_tool := is_terrain_mode and current_terrain_tool == TerrainTypes.Type.PATH
 
-	# Draw footprint tiles
-	for i in range(current_preview_positions.size()):
-		var grid_pos = current_preview_positions[i]
-		if terrain_grid.is_valid_position(grid_pos):
-			var tile_valid: bool
-			if is_entity_mode:
-				tile_valid = _is_tile_valid_for_placement(grid_pos)
-			elif path_tool:
-				tile_valid = terrain_grid.can_place_walking_path(grid_pos)
-			else:
-				tile_valid = true  # Terrain/elevation/bulldozer painting is always valid on valid tiles
-			_draw_isometric_tile(grid_pos, tile_valid, alpha_mod, i == 0, is_special_mode and not path_tool)
+	# Draw generic entity/terrain footprint tiles. Elevation selectors render
+	# their own footprint: Vertex is vertex-only, while the square tools draw
+	# tiles touched by the selected vertices and those tiles' corner vertices.
+	if not elevation_mode_active:
+		for i in range(current_preview_positions.size()):
+			var grid_pos = current_preview_positions[i]
+			if terrain_grid.is_valid_position(grid_pos):
+				var tile_valid: bool
+				if is_entity_mode:
+					tile_valid = _is_tile_valid_for_placement(grid_pos)
+				elif path_tool:
+					tile_valid = terrain_grid.can_place_walking_path(grid_pos)
+				else:
+					tile_valid = true  # Terrain/bulldozer painting is always valid on valid tiles
+				_draw_isometric_tile(grid_pos, tile_valid, alpha_mod, i == 0, is_special_mode and not path_tool)
 
 	if path_tool:
 		_draw_path_ghost(alpha_mod)
@@ -296,31 +306,43 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 	if not terrain_grid.is_valid_vertex(center):
 		return
 
-	var area_color: Color = Color(0.55, 0.78, 1.0, 0.85 * alpha_mod)
 	var label: String
-
 	match elevation_tool_type:
 		ElevationTool.Tool.VERTEX:
+			# A vertex is the entire selection: never tint its neighbouring tiles.
 			_draw_vertex_marker(center, Color(1, 1, 1, 0.95 * alpha_mod), 0.18)
 			label = "%d" % terrain_grid.get_vertex_elevation(center)
 		ElevationTool.Tool.FLAT, ElevationTool.Tool.GRADUAL:
-			var size: int = elevation_brush_size
-			var middle: Array[Vector2i] = []
+			var selected_vertices := _elevation_preview_vertices(center)
+			var selected_lookup := {}
+			for vertex in selected_vertices:
+				selected_lookup[vertex] = true
+
+			var selected_tiles := _elevation_preview_tiles(selected_vertices)
+			for tile in selected_tiles:
+				_draw_isometric_tile(tile, true, alpha_mod, true, true)
+
+			var middle: Array[Vector2i] = [center]
 			if elevation_tool_type == ElevationTool.Tool.GRADUAL:
-				middle = ElevationTool.middle_vertices(size, center)
-			else:
-				middle = [center]
+				middle = ElevationTool.middle_vertices(elevation_brush_size, center)
+			var connected_vertices := _elevation_preview_connected_vertices(selected_tiles)
+			for vertex in connected_vertices:
+				if selected_lookup.has(vertex):
+					var is_middle: bool = middle.has(vertex)
+					var marker_color := Color(1, 1, 1, 0.95 * alpha_mod) if is_middle \
+							else Color(0.55, 0.78, 1.0, 0.85 * alpha_mod)
+					_draw_vertex_marker(vertex, marker_color, 0.16 if is_middle else 0.10)
+				else:
+					# These are tile corners connected to the selected area, but not
+					# vertices the brush itself will edit.
+					_draw_vertex_marker(vertex, Color(0.55, 0.78, 1.0, 0.45 * alpha_mod), 0.08)
+
 			var lowest: int = terrain_grid.MAX_ELEVATION
 			var highest: int = terrain_grid.MIN_ELEVATION
-			for vertex in ElevationTool.square_vertices(terrain_grid, center, size,
-					elevation_brush_square):
+			for vertex in selected_vertices:
 				var height: int = terrain_grid.get_vertex_elevation(vertex)
 				lowest = mini(lowest, height)
 				highest = maxi(highest, height)
-				if middle.has(vertex):
-					_draw_vertex_marker(vertex, Color(1, 1, 1, 0.95 * alpha_mod), 0.16)
-				else:
-					_draw_vertex_marker(vertex, area_color, 0.10)
 			label = "%d" % terrain_grid.get_vertex_elevation(center) \
 					if elevation_tool_type == ElevationTool.Tool.GRADUAL \
 					else "%d..%d" % [lowest, highest]
@@ -336,6 +358,44 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 		12,
 		Color(1, 1, 1, 0.9 * alpha_mod)
 	)
+
+## Vertices selected by a square elevation tool; Vertex Selector intentionally
+## uses its own one-point drawing path instead.
+func _elevation_preview_vertices(center: Vector2i) -> Array[Vector2i]:
+	if not terrain_grid or elevation_tool_type == ElevationTool.Tool.VERTEX:
+		return []
+	if elevation_tool_type != ElevationTool.Tool.FLAT \
+			and elevation_tool_type != ElevationTool.Tool.GRADUAL:
+		return []
+	return ElevationTool.square_vertices(terrain_grid, center, elevation_brush_size,
+			elevation_brush_square)
+
+## Each selected vertex affects the terrain surface of its surrounding tiles.
+## Deduplicate overlaps so a square selection is shaded cleanly.
+func _elevation_preview_tiles(vertices: Array[Vector2i]) -> Array[Vector2i]:
+	var tiles: Array[Vector2i] = []
+	var seen := {}
+	if not terrain_grid:
+		return tiles
+	for vertex in vertices:
+		for tile in terrain_grid.tiles_around_vertex(vertex):
+			if not seen.has(tile):
+				seen[tile] = true
+				tiles.append(tile)
+	return tiles
+
+## All corner vertices of the selected tiles, including selected brush vertices.
+func _elevation_preview_connected_vertices(tiles: Array[Vector2i]) -> Array[Vector2i]:
+	var vertices: Array[Vector2i] = []
+	var seen := {}
+	if not terrain_grid:
+		return vertices
+	for tile in tiles:
+		for vertex in terrain_grid.vertices_of_tile(tile):
+			if not seen.has(vertex):
+				seen[vertex] = true
+				vertices.append(vertex)
+	return vertices
 
 func _draw_vertex_marker(vertex: Vector2i, color: Color, marker_scale: float) -> void:
 	var axis_x: Vector2 = terrain_grid.projection.axis_x() * marker_scale
