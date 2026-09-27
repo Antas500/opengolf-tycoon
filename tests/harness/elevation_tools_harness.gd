@@ -108,9 +108,9 @@ func _run() -> void:
 	_check(main.elevation_tool.is_active(), "left click release did not cancel the tool")
 
 	# ------------------------------------------------------------------
-	# 3. Flat Square: right click evens the brush up, then raises it;
-	#    left click evens it down, then lowers it. A 3x3 brush is nine
-	#    tiles holding sixteen vertices.
+	# 3. Flat Square: right click raises only the lowest vertices one
+	#    level; left click lowers only the highest ones. Even ground
+	#    steps as one slab. A 3x3 brush is nine tiles / sixteen vertices.
 	# ------------------------------------------------------------------
 	main._start_elevation_painting(true)
 	var flat_area := ElevationTool.brush_vertices(grid, anchor, 3, true)
@@ -121,9 +121,12 @@ func _run() -> void:
 	main.undo_manager.record_elevation_stroke(flat_changes)
 	main._stop_elevation_painting()
 	await _frames(2)
-	for vertex in flat_area:
-		_check(grid.get_vertex_elevation(vertex) == 3,
-				"flat raise: vertex %s levelled to 2 then raised to 3" % vertex)
+	for i in flat_area.size():
+		var vertex: Vector2i = flat_area[i]
+		var expected: int = 1 if i % 3 == 0 else i % 3
+		_check(grid.get_vertex_elevation(vertex) == expected,
+				"flat raise: vertex %s %s" % [vertex,
+				"is at the lowest level: raised one level" if i % 3 == 0 else "is higher: stays put"])
 	_check(grid.get_vertex_elevation(anchor + Vector2i(-2, 0)) == 0,
 			"flat raise: outside the brush is untouched")
 

@@ -831,7 +831,7 @@ func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	selectors.v_padding = ELEVATION_V_PADDING
 	selectors.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_add_tool_button(selectors, {"type": "vertex", "elevation_preview": true, "name": "Vertex", "icon": "◆", "hotkey": "V", "desc": "Right click raises, left click lowers, a single grid vertex by one step"})
-	_add_tool_button(selectors, {"type": "flat", "elevation_preview": true, "name": "Flat Square", "icon": "■", "hotkey": "+", "desc": "Right click: even the square up, then raise it. Left click: even it down, then lower it. Whole square moves together"})
+	_add_tool_button(selectors, {"type": "flat", "elevation_preview": true, "name": "Flat Square", "icon": "■", "hotkey": "+", "desc": "Right click: raise the square's lowest vertices one level. Left click: lower its highest ones one level. Even ground moves as one slab"})
 	_add_tool_button(selectors, {"type": "gradual", "elevation_preview": true, "name": "Gradual Square", "icon": "▲", "hotkey": "-", "desc": "Right click raises, left click lowers, the middle of the square; nearby vertices keep at most one step of slope"})
 	# The grid carries its own breathing room above and below the row, so it keeps
 	# that spacing instead of stretching to fill the whole page height.

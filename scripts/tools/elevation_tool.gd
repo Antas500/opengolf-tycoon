@@ -8,9 +8,11 @@ class_name ElevationTool
 ## reshaped.
 ##
 ##  - **Vertex Selector**: raises or lowers a single vertex by one step.
-##  - **Flat Square Selector**: raises or lowers the lowest/highest vertices
-##    of the brush's tiles until they are all even, then raises or lowers
-##    all of the brush's vertices by one step.
+##  - **Flat Square Selector**: raises only the brush's lowest vertices or
+##    lowers only its highest ones - the vertices sitting at the extreme of
+##    the selection - and each by one elevation level. The rest stay put, so
+##    uneven ground levels itself one stroke at a time; on even ground every
+##    vertex is at that extreme, so the whole slab steps together.
 ##  - **Gradual Square Selector**: raises or lowers the middle vertex (even
 ##    sizes) or the middle 2x2 square of vertices (odd sizes) inside the
 ##    brush, and moves the nearby vertices inside the brush whenever they
@@ -321,11 +323,12 @@ func _paint_vertex(center: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 	_change_vertex(center, terrain_grid.get_vertex_elevation(center) + delta, terrain_grid, changes)
 	return changes
 
-## Flat Square Selector: even the brush's tiles first (the lowest vertices are
-## raised up to the highest, or the highest are lowered down to the lowest),
-## then shift every vertex of the brush one step. The whole area ends one step
-## above its previous highest (raising) or one step below its previous
-## lowest (lowering).
+## Flat Square Selector: one stroke nudges only the vertices at the extreme of
+## the selection, and each by a single level - raising lifts just the brush's
+## lowest vertices, lowering trims just its highest ones. Every other vertex
+## keeps its height, so uneven ground levels itself one stroke at a time. On
+## even ground every vertex is both lowest and highest, so the whole brush
+## steps up or down together as one flat slab.
 func _paint_flat(anchor: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 		entity_layer: EntityLayer) -> Array:
 	var changes: Array = []
@@ -341,11 +344,13 @@ func _paint_flat(anchor: Vector2i, terrain_grid: TerrainGrid, raising: bool,
 		highest = maxi(highest, height)
 	if area.is_empty():
 		return changes
-	var shift: int = 1 if raising else -1
-	var target: int = clampi((highest if raising else lowest) + shift,
-			terrain_grid.MIN_ELEVATION, terrain_grid.MAX_ELEVATION)
+	# Only the vertices on the relevant edge of the selection move, one level
+	# per stroke: the lowest ones when raising, the highest ones when lowering.
+	var edge: int = lowest if raising else highest
 	for vertex in area:
-		_change_vertex(vertex, target, terrain_grid, changes)
+		if terrain_grid.get_vertex_elevation(vertex) != edge:
+			continue
+		_change_vertex(vertex, edge + (1 if raising else -1), terrain_grid, changes)
 	return changes
 
 ## Gradual Square Selector: move the middle vertex or middle 2x2 square one

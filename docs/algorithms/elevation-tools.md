@@ -7,10 +7,13 @@ which replace the old Rolling Hill, Hollow, Raise and Lower tools:
 
 - **Vertex Selector** (`V`) — raises or lowers a single grid vertex by one
   step.
-- **Flat Square Selector** (`+`) — takes the brush's vertices, evens them (the
-  lowest are raised up to the highest, or the highest are lowered down to the
-  lowest), then raises or lowers the whole brush one step. The brush moves as
-  one flat slab.
+- **Flat Square Selector** (`+`) — takes the brush's vertices and nudges only
+  the ones sitting at the extreme of the selection, one elevation level at a
+  time: right click raises every vertex at the brush's lowest level, left
+  click lowers every vertex at its highest level, and vertices at any other
+  height stay put. Uneven ground therefore levels itself one stroke at a
+  time; once the brush is even every vertex qualifies, so the whole square
+  steps up or down together as one flat slab.
 - **Gradual Square Selector** (`-`) — raises or lowers the middle vertex (even
   sizes) or the four corners of the middle tile (odd sizes), then moves the
   nearby vertices inside the brush whenever they would end up more than one
@@ -110,18 +113,21 @@ new_elevation = clamp(old + (1 if raising else -1), MIN, MAX)
 ### Flat Square Selector
 
 Let the selected (editable, on-grid) vertices of the brush be `A`, with
-`lowest = min A`, `highest = max A`. Every vertex in `A` is set to one
-target — "even the brush, then shift it" in a single step:
+`lowest = min A`, `highest = max A`. A stroke moves only the vertices that
+sit on the relevant extreme of `A`, and each by a single elevation level:
 
 ```
-target = clamp(highest + 1, MIN, MAX)   # raising  (right click)
-target = clamp(lowest  - 1, MIN, MAX)   # lowering (left click)
+vertex -> clamp(vertex + 1, MIN, MAX)   # raising  (right click), vertex == lowest
+vertex -> clamp(vertex - 1, MIN, MAX)   # lowering (left click), vertex == highest
 ```
 
-Raising the `{0, 0, 2, 2}` brush sends every vertex to 3; lowering it sends
-every vertex to -1. An already-even brush simply steps up or down. When the
-brush sits at +5 (raising) or -5 (lowering) the target equals the current
-heights and nothing changes.
+Every other vertex of `A` keeps its height. Raising the `{0, 0, 2, 2}` brush
+sends the two 0s to 1 (`{1, 1, 2, 2}`); lowering it sends the two 2s down to
+1 (`{0, 0, 1, 1}`). Repeated strokes level the brush, and because every
+vertex of an even brush is both the lowest and the highest, an already-even
+brush simply steps up or down as one flat slab. When the extreme sits at +5
+(raising) or -5 (lowering) the clamped target equals the current height and
+nothing changes.
 
 ### Gradual Square Selector
 
@@ -167,7 +173,7 @@ through `TerrainGrid.set_vertex_elevation()`.
 | --- | --- | --- | --- |
 | Elevation range | `TerrainGrid.MIN_ELEVATION / MAX_ELEVATION` | -5 / +5 | Height limits every tool clamps to |
 | Brush sizes | `ElevationTool.BRUSH_SIZES` | 1..9 | S×S tile brushes Flat and Gradual share |
-| Step size | both `paint_*` paths | 1 | Elevation change per click |
+| Step size | both `paint_*` paths | 1 | Elevation change per moved vertex |
 | Round-clip radius | `tile_offsets` | `S/2` tiles | How much the round shape keeps of the square's corners |
 | Gradient slope | Gradual cone clamp | 1 per vertex | Max elevation difference per vertex away from the middle |
 | Hotkeys | `TerrainToolbar._input` | V / + / - | Vertex / Flat Square / Gradual Square |

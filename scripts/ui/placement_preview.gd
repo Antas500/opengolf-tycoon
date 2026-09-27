@@ -341,7 +341,7 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 			var lowest: int = terrain_grid.MAX_ELEVATION
 			var highest: int = terrain_grid.MIN_ELEVATION
 			# The Gradual tool only lifts its middle, so that is the height the
-			# label follows; the Flat tool levels the whole brush.
+			# label follows; the Flat label reports the whole brush's range.
 			var reported: Array[Vector2i] = middle if elevation_tool_type == ElevationTool.Tool.GRADUAL \
 					else selected_vertices
 			for vertex in reported:

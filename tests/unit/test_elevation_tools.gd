@@ -45,6 +45,13 @@ func _set_elevations(values: Dictionary) -> void:
 func _brush_vertices(anchor: Vector2i, size: int, square: bool = true) -> Array[Vector2i]:
 	return ElevationTool.brush_vertices(grid, anchor, size, square)
 
+## The current elevation of each vertex, in order - for asserting strokes.
+func _elevations(vertices: Array) -> Array:
+	var result: Array = []
+	for vertex in vertices:
+		result.append(grid.get_vertex_elevation(vertex))
+	return result
+
 # =============================================================================
 # Tool selection state
 # =============================================================================
@@ -235,7 +242,7 @@ func test_vertex_selector_only_touches_the_one_vertex() -> void:
 # Flat Square Selector
 # =============================================================================
 
-func test_flat_raising_levels_the_low_vertices_up_then_shifts_the_brush() -> void:
+func test_flat_raising_lifts_only_the_lowest_vertices_one_level() -> void:
 	# 3x3 tile brush on (8,8): 16 corner vertices, stepped 0..3 by column.
 	for x in range(7, 11):
 		for y in range(7, 11):
@@ -244,27 +251,57 @@ func test_flat_raising_levels_the_low_vertices_up_then_shifts_the_brush() -> voi
 	tool.set_brush(3, true)
 	tool.set_mode(true)  # Right click
 	var changes := tool.paint_at_tile(Vector2i(8, 8), grid, null)
-	assert_eq(changes.size(), 16)
+	assert_eq(changes.size(), 4, "only the vertices at the lowest level move")
 	for y in range(7, 11):
 		for x in range(7, 11):
-			assert_eq(grid.get_vertex_elevation(Vector2i(x, y)), 4,
-					"vertex (%d,%d) should be levelled to 3 then raised to 4" % [x, y])
+			var expected: int = 1 if x == 7 else x - 7
+			assert_eq(grid.get_vertex_elevation(Vector2i(x, y)), expected,
+					"vertex (%d,%d): the lowest rise one level, the rest stay put" % [x, y])
 	# The brush's rim is untouched.
 	assert_eq(grid.get_vertex_elevation(Vector2i(6, 8)), 0)
 	assert_eq(grid.get_vertex_elevation(Vector2i(11, 8)), 0)
 
-func test_flat_lowering_levels_the_high_vertices_down_then_shifts_the_brush() -> void:
+func test_flat_lowering_trims_only_the_highest_vertices_one_level() -> void:
 	for x in range(7, 11):
 		for y in range(7, 11):
 			grid.set_vertex_elevation(Vector2i(x, y), x - 7)
 	tool.select_tool(ElevationTool.Tool.FLAT)
 	tool.set_brush(3, true)
 	tool.set_mode(false)  # Left click
-	tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	var changes := tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(changes.size(), 4, "only the vertices at the highest level move")
 	for y in range(7, 11):
 		for x in range(7, 11):
-			assert_eq(grid.get_vertex_elevation(Vector2i(x, y)), -1,
-					"vertex (%d,%d) should be levelled to 0 then lowered to -1" % [x, y])
+			var expected: int = 2 if x == 10 else x - 7
+			assert_eq(grid.get_vertex_elevation(Vector2i(x, y)), expected,
+					"vertex (%d,%d): the highest drop one level, the rest stay put" % [x, y])
+
+func test_flat_repeated_strokes_level_the_brush_then_move_it_as_one_slab() -> void:
+	var corners := [Vector2i(8, 8), Vector2i(9, 8), Vector2i(8, 9), Vector2i(9, 9)]
+	tool.select_tool(ElevationTool.Tool.FLAT)
+	tool.set_brush(1, true)
+	# Raising only lifts the selection's lowest vertices, one level per
+	# stroke, until the brush is even and steps up as one slab.
+	_set_elevations({Vector2i(8, 8): 0, Vector2i(9, 8): 0,
+			Vector2i(8, 9): 2, Vector2i(9, 9): 2})
+	tool.set_mode(true)  # Right click
+	tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(_elevations(corners), [1, 1, 2, 2], "raising lifts only the two lowest")
+	tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(_elevations(corners), [2, 2, 2, 2], "the second stroke levels the brush")
+	tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(_elevations(corners), [3, 3, 3, 3], "an even brush steps up as one slab")
+	# Lowering only trims the selection's highest vertices the same way.
+	tool.stop_stroke()
+	_set_elevations({Vector2i(8, 8): 3, Vector2i(9, 8): 3,
+			Vector2i(8, 9): 1, Vector2i(9, 9): 1})
+	tool.set_mode(false)  # Left click
+	tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(_elevations(corners), [2, 2, 1, 1], "lowering trims only the two highest")
+	tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(_elevations(corners), [1, 1, 1, 1], "the second stroke levels the brush")
+	tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(_elevations(corners), [0, 0, 0, 0], "an even brush steps down as one slab")
 
 func test_flat_on_flat_ground_is_a_plain_step() -> void:
 	tool.select_tool(ElevationTool.Tool.FLAT)
@@ -336,8 +373,8 @@ func test_flat_round_shape_skips_clipped_corners() -> void:
 			assert_eq(grid.get_vertex_elevation(vertex), 0, "clipped corner %s must not move" % vertex)
 
 func test_flat_ignores_unselected_and_uneditable_vertices() -> void:
-	# A ring of 3s around a 0 centre: raising must level to 3 then shift to 4,
-	# and nothing outside the brush may move.
+	# A ring of 3s around a 0 centre: raising moves only the centre (the
+	# selection's lowest vertex) one level, and nothing outside the brush.
 	for x in range(7, 11):
 		for y in range(7, 11):
 			grid.set_vertex_elevation(Vector2i(x, y), 0 if x == 9 and y == 9 else 3)
@@ -345,9 +382,17 @@ func test_flat_ignores_unselected_and_uneditable_vertices() -> void:
 	tool.set_brush(3, true)
 	tool.set_mode(true)
 	var changes := tool.paint_at_tile(Vector2i(8, 8), grid, null)
-	for change in changes:
-		assert_eq(change.new_elevation, 4)
-		assert_eq(grid.get_vertex_elevation(change.position), 4)
+	assert_eq(changes.size(), 1, "only the lowest vertex of the selection moves")
+	assert_eq(changes[0].position, Vector2i(9, 9))
+	assert_eq(changes[0].old_elevation, 0)
+	assert_eq(changes[0].new_elevation, 1)
+	assert_eq(grid.get_vertex_elevation(Vector2i(9, 9)), 1)
+	for x in range(7, 11):
+		for y in range(7, 11):
+			if x == 9 and y == 9:
+				continue
+			assert_eq(grid.get_vertex_elevation(Vector2i(x, y)), 3,
+					"vertex (%d,%d) is not at the lowest level: it must not move" % [x, y])
 	assert_eq(grid.get_vertex_elevation(Vector2i(6, 6)), 0)
 	assert_eq(grid.get_vertex_elevation(Vector2i(12, 12)), 0)
 
