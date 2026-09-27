@@ -67,8 +67,10 @@ func _on_load_completed(_success: bool) -> void:
 
 func _make_panel(full_screen: bool) -> void:
 	if is_instance_valid(player_tab):
-		content = player_tab.clear_page(0)
-		player_tab.select(0)
+		# The Play Course tab swaps its setup sections for the aiming HUD.
+		content = player_tab.clear_aim_page()
+		player_tab.set_playing(true)
+		player_tab.select(PlayerTab.PAGE_PLAY)
 		return
 	if is_instance_valid(overlay):
 		overlay.queue_free()
@@ -109,7 +111,8 @@ func attach_player_tab(tab: PlayerTab) -> void:
 func open_setup() -> void:
 	if is_instance_valid(player_tab):
 		if busy:
-			player_tab.select(0)
+			# Mid-round: jump to the Play Course tab showing the aiming HUD.
+			player_tab.select(PlayerTab.PAGE_PLAY)
 			return
 		_build_setup()
 		return
@@ -131,11 +134,13 @@ func open_setup() -> void:
 func _build_setup() -> void:
 	draft = PlayerGolferProfile.from_data(GameManager.player_profile.serialize())
 	if is_instance_valid(player_tab):
-		for index in [1, 2, 3, 4]:
+		player_tab.set_playing(false)
+		for index in [PlayerTab.PAGE_EDIT, PlayerTab.PAGE_SKILLS]:
 			player_tab.clear_page(index)
-		content = player_tab.clear_page(0)
-		_label("Start a Practice Round, Play vs Pro, or Tournament to aim your shots.")
-		content = player_tab.pages[1]
+		player_tab.clear_aim_page()
+		# The management tournament panel survives on the Play Course page.
+		player_tab.clear_play_page()
+		content = player_tab.pages[PlayerTab.PAGE_EDIT]
 	else:
 		_make_panel(true)
 	_label("PLAY YOUR COURSE")
@@ -159,23 +164,36 @@ func _build_setup() -> void:
 		row.add_child(color)
 	if is_instance_valid(player_tab):
 		_button("Save player", _save_player)
-		content = player_tab.pages[3]
-	_label("Round format")
-	mode_picker = OptionButton.new()
-	for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
-		mode_picker.add_item(title)
-	content.add_child(mode_picker)
-	pro_picker = OptionButton.new()
-	for pro in PROS:
-		pro_picker.add_item(pro)
-	content.add_child(pro_picker)
-	pro_picker.disabled = true
-	mode_picker.item_selected.connect(func(index: int): pro_picker.disabled = index != 1)
-	if is_instance_valid(player_tab):
-		mode_picker.hide()
-		pro_picker.reparent(player_tab.pages[4])
-		pro_picker.disabled = false
-		content = player_tab.pages[2]
+		# Play Course: the practice, vs pro and tournament sections combined.
+		content = player_tab.pages[PlayerTab.PAGE_PLAY]
+		_label("Practice Round")
+		mode_picker = OptionButton.new()
+		for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
+			mode_picker.add_item(title)
+		mode_picker.hide()  # Each section starts its own format below.
+		content.add_child(mode_picker)
+		var practice_button := _button("Start practice round", _start_embedded.bind(0))
+		practice_button.set_meta("owner_round_start", true)
+		_label("Play vs Pro")
+		pro_picker = OptionButton.new()
+		for pro in PROS:
+			pro_picker.add_item(pro)
+		content.add_child(pro_picker)
+		var pro_button := _button("Play selected pro", _start_embedded.bind(1))
+		pro_button.set_meta("owner_round_start", true)
+		content = player_tab.pages[PlayerTab.PAGE_SKILLS]
+	else:
+		_label("Round format")
+		mode_picker = OptionButton.new()
+		for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
+			mode_picker.add_item(title)
+		content.add_child(mode_picker)
+		pro_picker = OptionButton.new()
+		for pro in PROS:
+			pro_picker.add_item(pro)
+		pro_picker.disabled = true
+		content.add_child(pro_picker)
+		mode_picker.item_selected.connect(func(index: int): pro_picker.disabled = index != 1)
 	points_label = _label("")
 	_label("Each point adds 10% bonus. Maximum per skill: 990%.")
 	skill_labels.clear()
@@ -196,16 +214,11 @@ func _build_setup() -> void:
 			row.add_child(button)
 	if is_instance_valid(player_tab):
 		_button("Save skills", _save_player)
-		for index in [3, 4, 5]:
-			content = player_tab.pages[index]
-			# The tournament page also contains the management tournament panel.
-			if index == 5:
-				for child in content.get_children():
-					if child.has_meta("owner_round_start"):
-						content.remove_child(child)
-						child.queue_free()
-			var button := _button(["Start practice round", "Play selected pro", "Play tournament (4 golfers)"][index - 3], _start_embedded.bind(index - 3))
-			button.set_meta("owner_round_start", true)
+		# Tournament section: management panel above its start button.
+		content = player_tab.pages[PlayerTab.PAGE_PLAY]
+		player_tab.restage_persistent()
+		var tournament_button := _button("Play tournament (4 golfers)", _start_embedded.bind(2))
+		tournament_button.set_meta("owner_round_start", true)
 		start_button = null
 	else:
 		start_button = _button("Tee off", start_round)
@@ -239,7 +252,7 @@ func _start_embedded(kind: int) -> void:
 		return
 	if not draft.initialized and draft.remaining() != 0:
 		EventBus.notify("Allocate all 10 points in Player Skills first.", "info")
-		player_tab.select(2)
+		player_tab.select(PlayerTab.PAGE_SKILLS)
 		return
 	busy = true
 	previous_mode = GameManager.current_mode
@@ -263,7 +276,8 @@ func start_round() -> void:
 	var opponent := pro_picker.selected
 	active = true
 	if is_instance_valid(player_tab):
-		for index in [1, 2]:
+		# Lock the Edit Player and Player Skills pages while the round runs.
+		for index in [PlayerTab.PAGE_EDIT, PlayerTab.PAGE_SKILLS]:
 			for control in player_tab.pages[index].find_children("*", "Control", true, false):
 				if control is BaseButton:
 					control.disabled = true

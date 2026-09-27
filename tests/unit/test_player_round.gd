@@ -325,18 +325,24 @@ func test_embedded_player_navigation_and_setup() -> void:
 	var tab := PlayerTab.new()
 	fixture.add_child(tab)
 	rounds.attach_player_tab(tab)
-	assert_eq(tab.buttons.size(), 6)
-	assert_eq(tab.buttons[0].text, "Aiming Shot")
-	assert_eq(tab.buttons[5].text, "Tournament")
+	assert_eq(tab.buttons.size(), 3)
+	assert_eq(tab.buttons[PlayerTab.PAGE_PLAY].text, "Play Course")
+	assert_eq(tab.buttons[PlayerTab.PAGE_SKILLS].text, "Player Skills")
 	assert_false(rounds.busy, "Editing a player does not reserve a round")
 	assert_null(rounds.overlay, "Embedded setup creates no floating overlay")
-	assert_eq(rounds.name_edit.get_parent(), tab.pages[1])
-	assert_eq(rounds.points_label.get_parent(), tab.pages[2])
-	assert_eq(rounds.pro_picker.get_parent(), tab.pages[4])
-	for index in 6:
+	assert_eq(rounds.name_edit.get_parent(), tab.pages[PlayerTab.PAGE_EDIT])
+	assert_eq(rounds.points_label.get_parent(), tab.pages[PlayerTab.PAGE_SKILLS])
+	assert_eq(rounds.pro_picker.get_parent(), tab.pages[PlayerTab.PAGE_PLAY])
+	var starters := 0
+	for child in tab.pages[PlayerTab.PAGE_PLAY].get_children():
+		if child.has_meta("owner_round_start"):
+			starters += 1
+	assert_eq(starters, 3, "Play Course combines the practice, vs pro and tournament starters")
+	for index in 3:
 		tab.buttons[index].pressed.emit()
-		for page in 6:
+		for page in 3:
 			assert_eq(tab.pages[page].get_parent().visible, page == index)
+		assert_false(tab.aim_scroll.visible, "The aiming view stays hidden outside a round")
 
 func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	var tab := PlayerTab.new()
@@ -347,14 +353,22 @@ func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	rounds._start_embedded(1)
 	assert_true(rounds.active)
 	assert_eq(rounds.participants.size(), 2)
-	assert_eq(tab.selected, 0)
-	assert_eq(rounds.status.get_parent(), tab.pages[0])
+	assert_eq(tab.selected, PlayerTab.PAGE_PLAY)
+	assert_eq(rounds.status.get_parent(), tab.aim_page)
+	assert_true(tab.aim_scroll.visible, "Play Course swaps to the aiming view while playing")
+	assert_false(tab.pages[PlayerTab.PAGE_PLAY].visible, "Setup content hides during the round")
 	assert_null(rounds.overlay)
 	assert_false(rounds.name_edit.editable, "Appearance stays locked during the round")
 	rounds.leave_round()
 	assert_false(rounds.busy)
 	assert_true(rounds.name_edit.editable)
-	assert_eq(tab.pages[5].get_child_count(), 1, "Rebuilding does not duplicate tournament launch buttons")
+	assert_false(tab.aim_scroll.visible, "Play Course returns to setup after the round")
+	assert_true(tab.pages[PlayerTab.PAGE_PLAY].visible)
+	var starters := 0
+	for child in tab.pages[PlayerTab.PAGE_PLAY].get_children():
+		if child.has_meta("owner_round_start"):
+			starters += 1
+	assert_eq(starters, 3, "Rebuilding does not duplicate round-start buttons")
 
 func test_embedded_round_requires_skill_allocation() -> void:
 	var tab := PlayerTab.new()
@@ -362,4 +376,4 @@ func test_embedded_round_requires_skill_allocation() -> void:
 	rounds.attach_player_tab(tab)
 	rounds._start_embedded(0)
 	assert_false(rounds.busy)
-	assert_eq(tab.selected, 2)
+	assert_eq(tab.selected, PlayerTab.PAGE_SKILLS)
