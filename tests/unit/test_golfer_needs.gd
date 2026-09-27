@@ -514,3 +514,69 @@ func test_building_no_mood_boost_when_already_full() -> void:
 	var n = _make_needs()  # All at 1.0
 	var boost = n.apply_building_effect("bench")
 	assert_eq(boost, 0.0, "No mood boost when energy already at max")
+
+
+# --- Section 13: Thirst (drinks vendors) ---
+
+func test_thirst_starts_full_and_resets() -> void:
+	var n = _make_needs()
+	assert_eq(n.thirst, 1.0, "Thirst should start quenched")
+	n.thirst = 0.2
+	n.setup(1, 0.5)
+	assert_eq(n.thirst, 1.0, "Setup should re-quench thirst")
+
+func test_holes_decay_thirst() -> void:
+	var n = _make_needs({"tier": 1})
+	n.on_hole_completed()
+	assert_almost_eq(n.thirst, 1.0 - GolferNeeds.THIRST_DECAY_PER_HOLE, 0.001,
+		"A hole should make the golfer thirstier")
+
+func test_restore_thirst_quenches_and_returns_boost() -> void:
+	var n = _make_needs()
+	n.thirst = 0.3
+	var boost = n.restore_thirst(0.4)
+	assert_almost_eq(n.thirst, 0.7, 0.001)
+	assert_gt(boost, 0.0, "Drink should lift mood")
+	# Already full means no boost
+	n.restore_thirst(1.0)
+	assert_eq(n.thirst, 1.0)
+	assert_eq(n.restore_thirst(0.4), 0.0)
+
+func test_restore_thirst_clamped_at_one() -> void:
+	var n = _make_needs()
+	n.thirst = 0.9
+	n.restore_thirst(1.0)
+	assert_eq(n.thirst, 1.0)
+
+func test_restore_pace_get_groups_moving_again() -> void:
+	var n = _make_needs()
+	n.pace = 0.1
+	var boost = n.restore_pace(0.3)
+	assert_almost_eq(n.pace, 0.4, 0.001)
+	assert_gt(boost, 0.0)
+
+func test_thirsty_trigger_fires_once() -> void:
+	var n = _make_needs()
+	n.thirst = 0.2
+	var triggers = n.check_need_triggers()
+	assert_true(triggers.has(FeedbackTriggers.TriggerType.THIRSTY))
+	assert_eq(n.check_need_triggers().size(), 0, "Trigger should not repeat")
+
+func test_critical_thirst_applies_penalty() -> void:
+	var n = _make_needs()
+	n.thirst = 0.1
+	assert_almost_eq(n.get_mood_penalty(), -0.04, 0.001)
+
+func test_thirst_drags_overall_satisfaction() -> void:
+	var full = _make_needs()
+	assert_eq(full.get_overall_satisfaction(), 1.0,
+		"A quenched golfer scores exactly as before")
+	var parched = _make_needs()
+	parched.thirst = 0.0
+	assert_lt(parched.get_overall_satisfaction(), 1.0,
+		"Bone-dry golfers should be less satisfied")
+	assert_almost_eq(parched.get_overall_satisfaction(), GolferNeeds.THIRST_SATISFACTION_FLOOR, 0.001)
+
+func test_to_dict_includes_thirst() -> void:
+	var n = _make_needs()
+	assert_true(n.to_dict().has("thirst"))

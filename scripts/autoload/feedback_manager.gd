@@ -19,6 +19,7 @@ var needs_complaints: Dictionary = {
 	"hungry": 0,
 	"restroom": 0,
 	"slow_pace": 0,
+	"thirsty": 0,
 }
 
 func _ready() -> void:
@@ -46,6 +47,8 @@ func _on_golfer_thought(_golfer_id: int, trigger_type: int, sentiment: String) -
 			needs_complaints["restroom"] += 1
 		FeedbackTriggers.TriggerType.SLOW_PACE:
 			needs_complaints["slow_pace"] += 1
+		FeedbackTriggers.TriggerType.THIRSTY:
+			needs_complaints["thirsty"] += 1
 
 func _on_day_changed(_new_day: int) -> void:
 	reset_daily_stats()
@@ -68,6 +71,7 @@ func reset_daily_stats() -> void:
 		"hungry": 0,
 		"restroom": 0,
 		"slow_pace": 0,
+		"thirsty": 0,
 	}
 
 ## Get overall satisfaction rating (0.0 to 1.0)
@@ -175,6 +179,7 @@ func incident_title(trigger: int) -> String:
 		FeedbackTriggers.TriggerType.TIRED: return "Needs a rest"
 		FeedbackTriggers.TriggerType.HUNGRY: return "Needs food"
 		FeedbackTriggers.TriggerType.NEEDS_RESTROOM: return "Needs a restroom"
+		FeedbackTriggers.TriggerType.THIRSTY: return "Needs a drink"
 		FeedbackTriggers.TriggerType.OVERPRICED: return "Poor value"
 		FeedbackTriggers.TriggerType.HAZARD_WATER: return "Lost a ball in water"
 		FeedbackTriggers.TriggerType.SHANK: return "Mishit"
@@ -187,6 +192,7 @@ func incident_guidance(trigger: int) -> String:
 		FeedbackTriggers.TriggerType.TIRED: return "Add reachable seating beside the route. Rest restores energy and helps golfers keep walking comfortably."
 		FeedbackTriggers.TriggerType.HUNGRY: return "Add a snack bar or coffee house beside the route. Food restores hunger and earns service income."
 		FeedbackTriggers.TriggerType.NEEDS_RESTROOM: return "Add a restroom beside the route to restore comfort."
+		FeedbackTriggers.TriggerType.THIRSTY: return "Hire a drinks vendor (Soda Vendor or Cart Refresher) and set their area over this stretch so thirsty golfers get served on the course."
 		FeedbackTriggers.TriggerType.OVERPRICED: return "The fee exceeded this course's fair-price reference. Poor value reduces return intent."
 	return "Inspect this hole's scores and hazards. An occasional bad shot does not by itself mean the design needs changing."
 
@@ -200,7 +206,7 @@ func get_hotspots() -> Array:
 		groups[key].count += 1
 	var result: Array = groups.values()
 	result.sort_custom(func(a,b):
-		var actionable := [FeedbackTriggers.TriggerType.SLOW_PACE,FeedbackTriggers.TriggerType.TIRED,FeedbackTriggers.TriggerType.HUNGRY,FeedbackTriggers.TriggerType.NEEDS_RESTROOM,FeedbackTriggers.TriggerType.OVERPRICED]
+		var actionable := [FeedbackTriggers.TriggerType.SLOW_PACE,FeedbackTriggers.TriggerType.TIRED,FeedbackTriggers.TriggerType.HUNGRY,FeedbackTriggers.TriggerType.NEEDS_RESTROOM,FeedbackTriggers.TriggerType.THIRSTY,FeedbackTriggers.TriggerType.OVERPRICED]
 		var a_priority: int = 1000 if int(a.trigger) in actionable else 0
 		var b_priority: int = 1000 if int(b.trigger) in actionable else 0
 		return a_priority + int(a.count) > b_priority + int(b.count)

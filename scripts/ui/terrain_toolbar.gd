@@ -44,6 +44,9 @@ signal milestones_pressed
 signal feed_pressed
 signal scorecard_pressed
 signal golfer_row_clicked(golfer_id: int)
+## Ask main.gd to start (index >= 0) or cancel (index < 0) repositioning a staff
+## member's designated area.
+signal staff_area_move_requested(staff_index: int)
 
 enum Tab { TERRAIN, IMPROVEMENTS, BUILDINGS, ELEVATION, HOLES, GOLFERS, PLAYER, CLUB, STAFF }
 
@@ -1029,7 +1032,14 @@ func _build_staff_tab(hbox: HBoxContainer) -> void:
 	_staff_panel.name = "StaffPanel"
 	_staff_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_staff_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_staff_panel.area_move_requested.connect(func(index: int):
+		staff_area_move_requested.emit(index))
 	hbox.add_child(_staff_panel)
+
+## Reflect the active area-repositioning mode back into the roster buttons.
+func set_staff_area_mode_index(index: int) -> void:
+	if _staff_panel:
+		_staff_panel.set_area_mode_index(index)
 
 # =============================================================================
 # Helper Widgets

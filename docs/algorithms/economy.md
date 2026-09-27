@@ -10,11 +10,9 @@ The economy system governs how money flows in and out of the golf course busines
 
 1. **Green fees** — The primary income. Each golfer pays a per-hole fee multiplied by the number of open holes. The fee is player-configurable ($1–$200), but the maximum allowed fee scales with hole count ($10 per hole cap) to prevent small courses from charging excessive fees.
 
-2. **Pro shop bonus** — If a pro shop staff member is hired, each golfer generates $5 bonus on top of their green fee.
+2. **Building revenue** — Amenity buildings (restaurants, pro shops, snack bars) generate revenue per golfer within their effect radius. Revenue depends on golfer proximity and interaction chance (need-based probability).
 
-3. **Building revenue** — Amenity buildings (restaurants, pro shops, snack bars) generate revenue per golfer within their effect radius. Revenue depends on golfer proximity and interaction chance (need-based probability).
-
-4. **Tournament revenue** — Hosting tournaments generates spectator gate revenue and sponsorship deals (see [tournament-system.md](tournament-system.md)). Tournaments are primarily reputation machines, not profit generators — most tiers break even or lose money.
+3. **Tournament revenue** — Hosting tournaments generates spectator gate revenue and sponsorship deals (see [tournament-system.md](tournament-system.md)). Tournaments are primarily reputation machines, not profit generators — most tiers break even or lose money.
 
 ### Expenses
 
@@ -22,7 +20,7 @@ The economy system governs how money flows in and out of the golf course busines
 
 2. **Base operating cost** — A fixed daily cost: $100 + $50 per hole.
 
-3. **Staff salaries** — Individual staff members have fixed daily salaries: Groundskeeper $80, Pro Shop $60, Marshal $50, Cart Operator $40.
+3. **Staff salaries** — Individual staff members have fixed daily salaries. Each of the four jobs has a standard and a premium hire: Groundskeeper $80 / Technician $155, Club Pro $60 / Celebrity $130, Ranger $50 / Marshall $110, Soda Vendor $40 / Cart Refresher $95. See [staff-and-weeds.md](staff-and-weeds.md).
 
 4. **Building upkeep** — Each building has a daily operating cost (Clubhouse $100, Restaurant $60, Pro Shop $40, Snack Bar $15, Cart Shed $25, Driving Range $30, Restroom $10, Bench $0).
 
@@ -87,10 +85,10 @@ base_operating_cost = 100 + (hole_count * 50)
 
 # Staff salaries (individual per staff member)
 staff_salaries = sum of daily salary for each hired staff member
-    Groundskeeper: $80/day
-    Pro Shop:      $60/day
-    Marshal:       $50/day
-    Cart Operator: $40/day
+    Groundskeepers: Groundskeeper $80/day, Technician $155/day
+    Greeters:       Club Pro $60/day,    Celebrity $130/day
+    Marshals:       Ranger $50/day,      Marshall $110/day
+    Drinks Vendors: Soda Vendor $40/day, Cart Refresher $95/day
 
 # Building upkeep
 building_operating_costs = sum of all building daily costs
@@ -142,16 +140,18 @@ Two separate staff systems exist:
 | Full-Time | $10 | 1.00 | 1.00 |
 | Premium | $20 | 1.15 | 1.10 |
 
-**StaffManager individual staff** (functional staff with specific roles):
+**StaffManager individual staff** (employees who walk the course inside a designated area):
 
-| Type | Salary/Day | Effect |
-| ---- | ---------- | ------ |
-| Groundskeeper | $80 | +0.08 condition/day (offsets 0.05 base degradation) |
-| Marshal | $50 | Pace modifier for course rating |
-| Cart Operator | $40 | Golfer walk speed satisfaction |
-| Pro Shop | $60 | +$5 revenue per golfer |
+| Job | Standard / Premium | Salary/Day | On-course effect |
+| --- | ------------------ | ---------- | ---------------- |
+| Groundskeepers | Groundskeeper / Technician | $80 / $155 | Pull weeds; weeds left overnight set the course condition |
+| Greeters | Club Pro / Celebrity | $60 / $130 | Chat with golfers to lift their mood |
+| Marshals | Ranger / Marshall | $50 / $110 | Restore pace satisfaction and raise the pace rating |
+| Drinks Vendors | Soda Vendor / Cart Refresher | $40 / $95 | Quench golfer thirst |
 
-**Course condition** degrades at 0.05/day without groundskeepers and restores at 0.08/day per groundskeeper (net +0.03/day with one). Condition ranges 0.0–1.0 and affects the Condition rating category (30% of overall star rating). Firing a groundskeeper incurs an immediate 0.10 condition penalty (maintenance disruption), preventing costless fire/rehire cycling.
+Premium hires cost more but cover a bigger area, move faster and work faster. Full detail: [staff-and-weeds.md](staff-and-weeds.md).
+
+**Course condition** is recomputed each day from the weeds left on the course, softened by groundskeeper coverage (a fully staffed course ignores 70% of weed pressure). Condition ranges 0.0–1.0 and affects the Condition rating category (30% of overall star rating).
 
 ### 7. Seasonal & Theme Modifiers
 
@@ -198,7 +198,7 @@ All potential exploits have been mathematically analyzed and tested:
 | 2 | Max loan → buildings → profit | **Not exploitable** | $50k loan at 5%/7days = ~$357/day interest. Buildings alone (no green fees) generate ~$200/day revenue vs $535/day operating costs = -$335/day loss. Loan makes it worse. Buildings are supplements, not replacements for green fees. |
 | 3 | $200 green fee on 1 hole | **Mitigated** | Fee cap ($10/hole) limits 1-hole course to $10 max. |
 | 4 | Spam marketing for infinite golfers | **Mitigated** | sqrt() diminishing returns on marketing campaigns. |
-| 5 | Fire all staff, rehire later | **Mitigated** | Firing groundskeeper now applies immediate 0.10 condition penalty. Condition degrades at 0.05/day without groundskeeper. Recovery takes ~3 days per groundskeeper. $240 savings over 3 days not worth the rating hit. |
+| 5 | Fire all staff, rehire later | **Self-limiting** | Weeds are pulled on the course, not automatically, so a course with no groundskeepers accumulates clumps (up to 80) and its daily condition collapses. Re-hiring takes days of weeding to recover the rating. |
 | 6 | Never buy land, 40×40 forever | **Self-limiting** | Starting 40×40 fits ~4-5 holes max. Stagnation penalty kicks in at 28 days (-0.3 rep/day, floor 40). Design rating capped at ~2.75 stars. Local tournaments only ($300 net). Strategy stagnates — revenue capped, rep decays to floor. |
 | 7 | Tournament spam every 8 days | **Already balanced** | 7-day cooldown. Net profit per tier: Local -$200, Regional $0, National $0, Championship -$10k. Tournaments lose regular green fee revenue on tournament days (~$1,000). Value is reputation (+15 to +300), not money. |
 | 8 | Bench spam ($0 upkeep) | **Self-limiting** | `_visited_buildings` prevents re-visits per round. Interaction chance only 20% when energy is high. Tiny mood boost (0.02 per bench). Only restores energy (not comfort/hunger/pace). A $1,500 restroom provides more value than 7 benches ($1,400). |
@@ -217,8 +217,9 @@ All potential exploits have been mathematically analyzed and tested:
 | Base operating cost | `game_manager.gd` | $100 + $50/hole | Higher = more expensive to run |
 | Max loan | `game_manager.gd` | $50,000 | Higher = more emergency funding |
 | Loan interest rate | `game_manager.gd` | 5% per 7 days | Higher = faster debt spiral |
-| Staff salaries | `staff_manager.gd` | $40–$80/day | Higher = more expensive staff |
-| Groundskeeper firing penalty | `staff_manager.gd` | 0.10 condition | Higher = more penalty for cycling |
+| Staff salaries | `staff_manager.gd:STAFF_DATA` | $40–$155/day | Higher = more expensive staff |
+| Groundskeeper coverage | `staff_manager.gd:process_daily_maintenance()` | 0.7 weed relief | Higher = groundskeepers keep condition up with fewer hires |
+| Weed pressure per hole | `weed_manager.gd` | 4.0 weeds | Lower = weeds drag condition sooner |
 | Green fee sensitivity | `difficulty_presets.gd` | 0.7/1.0/1.5 | Higher = overpricing penalized more |
 | Stagnation threshold | `game_manager.gd` | 28 days | Lower = faster penalty for not expanding |
 | Stagnation decay | `game_manager.gd` | -0.3 rep/day | Higher = more pressure to expand |

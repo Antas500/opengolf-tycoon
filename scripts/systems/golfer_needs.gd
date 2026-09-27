@@ -13,6 +13,7 @@ class_name GolferNeeds
 var energy: float = 1.0       # Decreases as golfer walks/plays, restored by benches
 var comfort: float = 1.0      # Decreases over time, restored by restrooms
 var hunger: float = 1.0       # Decreases over time, restored by snack bars/restaurants
+var thirst: float = 1.0       # Decreases as the round wears on, restored by drinks vendors
 var pace: float = 1.0         # Decreases when waiting, affected by patience trait
 
 ## Golfer traits that modify need decay rates
@@ -23,12 +24,14 @@ var golfer_tier: int = 1      # GolferTier.Tier value — higher tiers are more 
 var _triggered_low_energy: bool = false
 var _triggered_low_comfort: bool = false
 var _triggered_low_hunger: bool = false
+var _triggered_low_thirst: bool = false
 var _triggered_low_pace: bool = false
 
 ## Track which needs have already applied their critical mood penalty (prevent cumulative stacking)
 var _applied_critical_energy: bool = false
 var _applied_critical_comfort: bool = false
 var _applied_critical_hunger: bool = false
+var _applied_critical_thirst: bool = false
 var _applied_critical_pace: bool = false
 
 ## Thresholds for triggering feedback
@@ -39,6 +42,7 @@ const CRITICAL_NEED_THRESHOLD: float = 0.15 # Below this, mood penalty applied
 const ENERGY_DECAY_PER_HOLE: float = 0.08    # ~12 holes before energy is low
 const COMFORT_DECAY_PER_HOLE: float = 0.06   # ~16 holes before comfort is low
 const HUNGER_DECAY_PER_HOLE: float = 0.05    # ~20 holes before hunger is low
+const THIRST_DECAY_PER_HOLE: float = 0.07    # ~14 holes before thirst is low
 
 ## Decay rate for pace (per second of waiting)
 const PACE_DECAY_PER_WAIT_SECOND: float = 0.003
@@ -57,6 +61,14 @@ const SNACK_BAR_HUNGER_RESTORE: float = 0.30
 const RESTAURANT_HUNGER_RESTORE: float = 0.50
 const CLUBHOUSE_ALL_RESTORE: float = 0.15     # Small boost to all needs
 
+## Snack bars and restaurants also serve drinks, so they take the edge off thirst.
+const SNACK_BAR_THIRST_RESTORE: float = 0.20
+const RESTAURANT_THIRST_RESTORE: float = 0.25
+
+## Thirst's drag on overall satisfaction. Fully quenched (1.0) leaves the
+## weighted four-need score untouched; bone dry (0.0) scales it to 85%.
+const THIRST_SATISFACTION_FLOOR: float = 0.85
+
 ## Initialize needs for a golfer based on their tier and personality
 func setup(tier: int, patience_trait: float) -> void:
 	golfer_tier = tier
@@ -65,14 +77,17 @@ func setup(tier: int, patience_trait: float) -> void:
 	energy = 1.0
 	comfort = 1.0
 	hunger = 1.0
+	thirst = 1.0
 	pace = 1.0
 	_triggered_low_energy = false
 	_triggered_low_comfort = false
 	_triggered_low_hunger = false
+	_triggered_low_thirst = false
 	_triggered_low_pace = false
 	_applied_critical_energy = false
 	_applied_critical_comfort = false
 	_applied_critical_hunger = false
+	_applied_critical_thirst = false
 	_applied_critical_pace = false
 
 ## Called after each hole is completed — decay needs based on play
@@ -81,6 +96,7 @@ func on_hole_completed() -> void:
 	energy = maxf(energy - ENERGY_DECAY_PER_HOLE * tier_modifier, 0.0)
 	comfort = maxf(comfort - COMFORT_DECAY_PER_HOLE * tier_modifier, 0.0)
 	hunger = maxf(hunger - HUNGER_DECAY_PER_HOLE * tier_modifier, 0.0)
+	thirst = maxf(thirst - THIRST_DECAY_PER_HOLE * tier_modifier, 0.0)
 
 ## Called when golfer is waiting (not their turn) — decay pace satisfaction
 func on_waiting(wait_seconds: float) -> void:
@@ -142,32 +158,65 @@ func apply_building_effect(building_type: String) -> float:
 			if hunger > old_hunger:
 				mood_boost = 0.03
 			_reset_hunger_flags_if_recovered()
+			thirst = minf(thirst + SNACK_BAR_THIRST_RESTORE, 1.0)
+			_reset_thirst_flags_if_recovered()
 		"restaurant":
 			var old_hunger = hunger
 			hunger = minf(hunger + RESTAURANT_HUNGER_RESTORE, 1.0)
 			if hunger > old_hunger:
 				mood_boost = 0.05
 			_reset_hunger_flags_if_recovered()
+			thirst = minf(thirst + RESTAURANT_THIRST_RESTORE, 1.0)
+			_reset_thirst_flags_if_recovered()
 		"clubhouse":
 			energy = minf(energy + CLUBHOUSE_ALL_RESTORE, 1.0)
 			comfort = minf(comfort + CLUBHOUSE_ALL_RESTORE, 1.0)
 			hunger = minf(hunger + CLUBHOUSE_ALL_RESTORE, 1.0)
+			thirst = minf(thirst + CLUBHOUSE_ALL_RESTORE, 1.0)
 			mood_boost = 0.03
 			_reset_energy_flags_if_recovered()
 			_reset_comfort_flags_if_recovered()
 			_reset_hunger_flags_if_recovered()
+			_reset_thirst_flags_if_recovered()
 
 	return mood_boost
 
+## A drinks vendor served this golfer. Restores thirst and returns the mood
+## boost applied (0.0 when they were already fully quenched).
+func restore_thirst(amount: float) -> float:
+	var old_thirst = thirst
+	thirst = clampf(thirst + amount, 0.0, 1.0)
+	_reset_thirst_flags_if_recovered()
+	if thirst <= old_thirst:
+		return 0.0
+	return 0.04
+
+## A marshal got this group moving again. Restores pace and returns the mood
+## boost applied (0.0 when pace was already full).
+func restore_pace(amount: float) -> float:
+	var old_pace = pace
+	pace = clampf(pace + amount, 0.0, 1.0)
+	if pace >= LOW_NEED_THRESHOLD:
+		_triggered_low_pace = false
+	if pace >= CRITICAL_NEED_THRESHOLD:
+		_applied_critical_pace = false
+	if pace <= old_pace:
+		return 0.0
+	return 0.03
+
 ## Get the overall needs satisfaction (0.0 to 1.0)
-## Weighted average — pace and energy matter most
+## Weighted average — pace and energy matter most. Thirst scales the result
+## rather than taking a share, so a fully quenched golfer is scored exactly as
+## before while a parched one is dragged down.
 func get_overall_satisfaction() -> float:
-	return (
+	var base := (
 		energy * 0.30 +
 		comfort * 0.20 +
 		hunger * 0.20 +
 		pace * 0.30
 	)
+	var thirst_factor := THIRST_SATISFACTION_FLOOR + (1.0 - THIRST_SATISFACTION_FLOOR) * thirst
+	return clampf(base * thirst_factor, 0.0, 1.0)
 
 ## Get mood penalty from unmet needs (negative value to subtract from mood)
 ## Only fires once per critical transition — resets when need recovers above threshold
@@ -182,6 +231,9 @@ func get_mood_penalty() -> float:
 	if hunger < CRITICAL_NEED_THRESHOLD and not _applied_critical_hunger:
 		penalty -= 0.03
 		_applied_critical_hunger = true
+	if thirst < CRITICAL_NEED_THRESHOLD and not _applied_critical_thirst:
+		penalty -= 0.04
+		_applied_critical_thirst = true
 	if pace < CRITICAL_NEED_THRESHOLD and not _applied_critical_pace:
 		penalty -= 0.08  # Pace frustration is the strongest penalty
 		_applied_critical_pace = true
@@ -203,6 +255,10 @@ func check_need_triggers() -> Array:
 	if hunger < LOW_NEED_THRESHOLD and not _triggered_low_hunger:
 		triggers.append(FeedbackTriggers.TriggerType.HUNGRY)
 		_triggered_low_hunger = true
+
+	if thirst < LOW_NEED_THRESHOLD and not _triggered_low_thirst:
+		triggers.append(FeedbackTriggers.TriggerType.THIRSTY)
+		_triggered_low_thirst = true
 
 	if pace < LOW_NEED_THRESHOLD and not _triggered_low_pace:
 		triggers.append(FeedbackTriggers.TriggerType.SLOW_PACE)
@@ -245,12 +301,20 @@ func _reset_hunger_flags_if_recovered() -> void:
 	if hunger >= CRITICAL_NEED_THRESHOLD:
 		_applied_critical_hunger = false
 
+## Reset thirst flags when thirst recovers above thresholds
+func _reset_thirst_flags_if_recovered() -> void:
+	if thirst >= LOW_NEED_THRESHOLD:
+		_triggered_low_thirst = false
+	if thirst >= CRITICAL_NEED_THRESHOLD:
+		_applied_critical_thirst = false
+
 ## Serialize for debug/display
 func to_dict() -> Dictionary:
 	return {
 		"energy": snappedf(energy, 0.01),
 		"comfort": snappedf(comfort, 0.01),
 		"hunger": snappedf(hunger, 0.01),
+		"thirst": snappedf(thirst, 0.01),
 		"pace": snappedf(pace, 0.01),
 		"overall": snappedf(get_overall_satisfaction(), 0.01),
 	}

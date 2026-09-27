@@ -4,7 +4,7 @@
 
 ## Plain English
 
-The golfer needs system tracks four explicit needs for each golfer during their round: **energy**, **comfort**, **hunger**, and **pace satisfaction**. Each need starts at 1.0 (fully satisfied) and decays as the golfer plays holes and waits for their turn.
+The golfer needs system tracks five explicit needs for each golfer during their round: **energy**, **comfort**, **hunger**, **thirst**, and **pace satisfaction**. Each need starts at 1.0 (fully satisfied) and decays as the golfer plays holes and waits for their turn.
 
 ### How It Works
 
@@ -12,6 +12,7 @@ Needs decay naturally as golfers play:
 - **Energy** drops after each hole (walking the course is tiring)
 - **Comfort** drops after each hole (need for restroom facilities)
 - **Hunger** drops after each hole (the slowest decay)
+- **Thirst** drops after each hole; snack bars and restaurants take the edge off, but drinks vendors are the real answer
 - **Pace** drops when golfers are idle waiting for their turn, modified by their patience trait
 
 When a need drops below the **low threshold** (0.30), the golfer may show a thought bubble complaint (e.g., "Getting tired...", "Need a restroom!"). When a need drops below the **critical threshold** (0.15), the golfer takes a one-time mood penalty. Both feedback triggers and mood penalties reset when a building visit restores the need above the respective threshold, allowing them to fire again if the need drops again.
@@ -25,7 +26,7 @@ Buildings placed on the course restore specific needs when a golfer walks within
 - **Restaurant**: Restores hunger (+0.50)
 - **Clubhouse**: Small boost to all needs (+0.15 each) at end of round
 
-This creates a strategic incentive: players must place amenity buildings along the course to keep golfers happy during long rounds.
+This creates a strategic incentive: players must place amenity buildings along the course to keep golfers happy during long rounds. On-course staff do the rest: **greeters** lift mood, **marshals** restore pace, and **drinks vendors** quench thirst — see [staff-and-weeds.md](staff-and-weeds.md).
 
 ### Tier Differences
 
@@ -52,6 +53,7 @@ on_hole_completed():
     energy  -= 0.08 * tier_modifier    # Low after ~12 holes (beginner) or ~9 holes (pro)
     comfort -= 0.06 * tier_modifier    # Low after ~16 holes (beginner) or ~12 holes (pro)
     hunger  -= 0.05 * tier_modifier    # Low after ~20 holes (beginner) or ~15 holes (pro)
+    thirst  -= 0.07 * tier_modifier    # Low after ~14 holes (beginner) or ~11 holes (pro)
 ```
 
 ### 2. Pace Decay (Waiting)
@@ -146,6 +148,9 @@ overall = energy * 0.30 + comfort * 0.20 + hunger * 0.20 + pace * 0.30
 | ENERGY_DECAY_PER_HOLE | `golfer_needs.gd:34` | 0.08 | Higher = golfers tire faster |
 | COMFORT_DECAY_PER_HOLE | `golfer_needs.gd:35` | 0.06 | Higher = more restroom demand |
 | HUNGER_DECAY_PER_HOLE | `golfer_needs.gd:36` | 0.05 | Higher = more food demand |
+| THIRST_DECAY_PER_HOLE | `golfer_needs.gd:37` | 0.07 | Higher = more drink demand |
+| THIRST_DECAY_PER_HOLE | `golfer_needs.gd:37` | 0.07 | Higher = more drink demand |
+| THIRST_SATISFACTION_FLOOR | `golfer_needs.gd` | 0.85 | Satisfaction multiplier when thirst is 0. Thirst scales the four-need score rather than taking a share, so a quenched golfer scores identically to before |
 | PACE_DECAY_PER_WAIT_SECOND | `golfer_needs.gd:44` | 0.003 | Higher = more pace complaints. At 0.003, patient golfers (0.9) survive 240s total wait without critical pace. |
 | LOW_NEED_THRESHOLD | `golfer_needs.gd:28` | 0.30 | Higher = complaints start sooner |
 | CRITICAL_NEED_THRESHOLD | `golfer_needs.gd:29` | 0.15 | Higher = mood penalties start sooner |

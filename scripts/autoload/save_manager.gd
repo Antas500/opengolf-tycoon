@@ -218,6 +218,8 @@ func _build_save_data() -> Dictionary:
 		data["land"] = GameManager.land_manager.serialize()
 	if GameManager.staff_manager:
 		data["staff"] = GameManager.staff_manager.serialize()
+	if GameManager.weed_manager:
+		data["weeds"] = GameManager.weed_manager.serialize()
 	if GameManager.marketing_manager:
 		data["marketing"] = GameManager.marketing_manager.serialize()
 
@@ -399,6 +401,8 @@ func _apply_save_data(data: Dictionary) -> void:
 		GameManager.land_manager.deserialize(data["land"])
 	if GameManager.staff_manager and data.has("staff"):
 		GameManager.staff_manager.deserialize(data["staff"])
+	if GameManager.weed_manager and data.has("weeds"):
+		GameManager.weed_manager.deserialize(data["weeds"])
 	if GameManager.marketing_manager and data.has("marketing"):
 		GameManager.marketing_manager.deserialize(data["marketing"])
 
