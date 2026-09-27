@@ -47,16 +47,17 @@ static func _generate_elevation(terrain_grid: TerrainGrid, rng: RandomNumberGene
 	var params = CourseTheme.get_generation_params(GameManager.current_theme)
 	var elev_range = params.get("elevation_range", 3)
 
-	# Apply noise-based elevation across the whole vertex field
+	# Apply noise-based elevation across the whole vertex field. The noise is a
+	# signed offset around the flat base level (0 keeps the land flat).
 	for x in range(width + 1):
 		for y in range(height + 1):
 			var vertex = Vector2i(x, y)
 			var noise_value = noise.get_noise_2d(float(x), float(y))
-			var elevation = roundi(noise_value * (elev_range + 0.5))
-			elevation = clampi(elevation, -elev_range, elev_range)
+			var offset = roundi(noise_value * (elev_range + 0.5))
+			offset = clampi(offset, -elev_range, elev_range)
 
-			if elevation != 0:
-				terrain_grid.set_vertex_elevation(vertex, elevation)
+			if offset != 0:
+				terrain_grid.set_vertex_elevation(vertex, terrain_grid.BASE_ELEVATION + offset)
 
 static func _generate_large_water_body(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate large water bodies - coastal ocean for Links, lagoon for Resort
@@ -105,9 +106,11 @@ static func _generate_coastal_water(terrain_grid: TerrainGrid, rng: RandomNumber
 	var bed_depth := func(vertex: Vector2i) -> int:
 		var dist := _coast_distance_from_edge(vertex.x, vertex.y, edge, width, height)
 		var depth := _coast_effective_depth(vertex.x, vertex.y, edge, base_depth, shore_noise, detail_noise)
-		return -2 if dist < depth * 0.5 else -1
+		# Water beds sit one or two levels below the flat base level.
+		return terrain_grid.BASE_ELEVATION - 2 if dist < depth * 0.5 else terrain_grid.BASE_ELEVATION - 1
 
-	terrain_grid.set_enclosed_elevation(Rect2i(0, 0, width, height), TerrainTypes.Type.WATER, -1, bed_depth)
+	terrain_grid.set_enclosed_elevation(Rect2i(0, 0, width, height), TerrainTypes.Type.WATER,
+			terrain_grid.BASE_ELEVATION - 1, bed_depth)
 
 
 static func _coast_distance_from_edge(x: int, y: int, edge: int, width: int, height: int) -> float:
@@ -169,8 +172,10 @@ static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerat
 	var lagoon_depth := func(vertex: Vector2i) -> int:
 		var dx: float = float(vertex.x - center_x) / base_radius_x
 		var dy: float = float(vertex.y - center_y) / base_radius_y
-		return -2 if sqrt(dx * dx + dy * dy) < 0.5 else -1
-	terrain_grid.set_enclosed_elevation(lagoon_bounds, TerrainTypes.Type.WATER, -1, lagoon_depth)
+		return terrain_grid.BASE_ELEVATION - 2 if sqrt(dx * dx + dy * dy) < 0.5 \
+				else terrain_grid.BASE_ELEVATION - 1
+	terrain_grid.set_enclosed_elevation(lagoon_bounds, TerrainTypes.Type.WATER,
+			terrain_grid.BASE_ELEVATION - 1, lagoon_depth)
 
 	# Add a secondary smaller pond connected or nearby for more natural look
 	var offset_angle = rng.randf() * TAU
@@ -195,7 +200,7 @@ static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerat
 	terrain_grid.set_enclosed_elevation(
 			Rect2i(pond2_x - int(pond2_radius) - 3, pond2_y - int(pond2_radius) - 3,
 					(int(pond2_radius) + 3) * 2, (int(pond2_radius) + 3) * 2),
-			TerrainTypes.Type.WATER, -1)
+			TerrainTypes.Type.WATER, terrain_grid.BASE_ELEVATION - 1)
 
 static func _generate_water(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate natural water features (ponds)
@@ -242,7 +247,7 @@ static func _generate_water(terrain_grid: TerrainGrid, rng: RandomNumberGenerato
 		terrain_grid.set_enclosed_elevation(
 				Rect2i(center_x - int(base_radius) - 3, center_y - int(base_radius) - 3,
 						(int(base_radius) + 3) * 2, (int(base_radius) + 3) * 2),
-				TerrainTypes.Type.WATER, -1)
+				TerrainTypes.Type.WATER, terrain_grid.BASE_ELEVATION - 1)
 
 static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate patches of rough and heavy rough to simulate overgrown undeveloped land
@@ -465,12 +470,12 @@ static func _generate_rocks(terrain_grid: TerrainGrid, entity_layer: EntityLayer
 		if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
 			continue
 
-		# Higher chance of rocks near elevation changes
-		var elevation = terrain_grid.get_elevation(pos)
+		# Higher chance of rocks the further the ground sits from the flat base level
+		var relief: int = absi(terrain_grid.get_elevation(pos) - terrain_grid.BASE_ELEVATION)
 		var base_chance = 0.3
-		if abs(elevation) >= 2:
+		if relief >= 2:
 			base_chance = 0.7
-		elif abs(elevation) >= 1:
+		elif relief >= 1:
 			base_chance = 0.5
 
 		if rng.randf() > base_chance:

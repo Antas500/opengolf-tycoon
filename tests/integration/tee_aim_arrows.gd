@@ -62,8 +62,8 @@ func run() -> void:
 
 	# The same tile with its corner raised: the marker has to follow the ground.
 	var test_tee: Vector2i = tees[0]
-	grid.set_vertex_elevation(Vector2i(test_tee), 4)
-	grid.set_vertex_elevation(Vector2i(test_tee.x + 1, test_tee.y), -3)
+	grid.set_vertex_elevation(Vector2i(test_tee), grid.BASE_ELEVATION + 4)
+	grid.set_vertex_elevation(Vector2i(test_tee.x + 1, test_tee.y), grid.BASE_ELEVATION - 3)
 	overlay.rebuild()
 	_assert_marker_inside_tile(test_tee)
 

@@ -110,7 +110,8 @@ static func _generate_scoped_pond(
 			var noise_offset := sin(angle * 3) * 1.5 + cos(angle * 5) * 1.0
 			if dist <= base_radius + noise_offset:
 				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
-	terrain_grid.set_enclosed_elevation(bounds, TerrainTypes.Type.WATER, -1)
+	terrain_grid.set_enclosed_elevation(bounds, TerrainTypes.Type.WATER,
+			terrain_grid.BASE_ELEVATION - 1)
 
 
 ## Generate a cluster of theme-appropriate trees within the parcel bounds.

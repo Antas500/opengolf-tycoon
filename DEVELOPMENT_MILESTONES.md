@@ -242,7 +242,7 @@ The game currently supports:
 
 ### [X] Terrain Elevation System
 **STATUS: COMPLETE** - Per-tile elevation with tools, visuals, and gameplay effects:
-- ✅ Per-tile integer elevation (-5 to +5, each unit ~10 feet)
+- ✅ Per-vertex integer elevation (levels 0 to 10 with flat ground at 5, each unit ~10 feet)
 - ✅ Raise/Lower terrain tools with brush painting (integrates with existing brush system)
 - ✅ Visual elevation shading overlay (lighter = higher, darker = lower)
 - ✅ Elevation numbers displayed when elevation tool is active

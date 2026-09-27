@@ -23,7 +23,7 @@ These systems are complete, stable, and represent genuine competitive advantages
 
 ### Core Simulation (Ship-Ready)
 - **Golfer AI** — Arguably the strongest system. Angular dispersion shot model with Gaussian miss distribution, persistent slice/hook tendencies per golfer, rare shank mechanics, 5-club bag with terrain/wind modifiers. This produces believable, varied golf that rewards good course design.
-- **Course Designer** — 11 terrain types, per-tile elevation (-5 to +5), 3-step hole creation, 4 tree types, 3 rock sizes, undo/redo (50 actions). The tools are intuitive and responsive.
+- **Course Designer** — 11 terrain types, elevation levels (0 to 10), 3-step hole creation, 4 tree types, 3 rock sizes, undo/redo (50 actions). The tools are intuitive and responsive.
 - **Weather & Wind** — 6 weather states affecting spawn rates and accuracy. Per-day wind with hourly drift and club-specific sensitivity. Creates real strategic variety day-to-day.
 - **Economy** — Green fees, building revenue (proximity-based), staff tiers, marketing channels, land acquisition, maintenance costs. The economic simulation has enough levers for meaningful management decisions.
 - **Tournaments** — 4 tiers (Local through Championship) with escalating requirements. Gives players intermediate goals.

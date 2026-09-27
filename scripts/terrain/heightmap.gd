@@ -3,11 +3,11 @@ extends RefCounted
 ## Heightmap - Course-wide R8 grayscale texture encoding sub-tile elevation
 ##
 ## Resolution: 512x512 (4 pixels per tile on a 128x128 grid)
-## Value encoding: 0 = lowest (-5), 128 = sea level (0), 255 = highest (+5)
-## Updated on elevation/tile changes, not every frame.
+## Value encoding: 0 = lowest (level 0), 128 = flat ground (BASE_ELEVATION = 5),
+## 255 = highest (level 10). Updated on elevation/tile changes, not every frame.
 
 const PIXELS_PER_TILE: int = 4
-const SEA_LEVEL: int = 128  # Grayscale value for elevation 0
+const SEA_LEVEL: int = 128  # Grayscale value for BASE_ELEVATION (flat ground)
 const ELEVATION_SCALE: float = 25.6  # Grayscale units per integer elevation level
 
 # 5-tap separable Gaussian kernel (sigma ~1.0, pre-normalized)
@@ -87,13 +87,14 @@ func get_texture() -> ImageTexture:
 func get_noise_seed() -> int:
 	return _noise_seed
 
-## Convert integer elevation (-5..+5) to grayscale byte (0..255)
+## Convert an integer elevation level (MIN_ELEVATION..MAX_ELEVATION) to a
+## grayscale byte (0..255), with BASE_ELEVATION landing on SEA_LEVEL.
 static func elevation_to_grayscale(elevation: int) -> int:
-	return clampi(SEA_LEVEL + roundi(elevation * ELEVATION_SCALE), 0, 255)
+	return clampi(SEA_LEVEL + roundi((elevation - TerrainGrid.BASE_ELEVATION) * ELEVATION_SCALE), 0, 255)
 
-## Convert grayscale byte back to float elevation
+## Convert grayscale byte back to an elevation level
 static func grayscale_to_elevation(gray: int) -> float:
-	return (float(gray) - SEA_LEVEL) / ELEVATION_SCALE
+	return TerrainGrid.BASE_ELEVATION + (float(gray) - SEA_LEVEL) / ELEVATION_SCALE
 
 ## Sample dual-frequency noise for a pixel, scaled by terrain type amplitude
 func _get_noise_offset(px: int, py: int, terrain_type: int) -> int:
@@ -130,7 +131,9 @@ func _write_tile(pos: Vector2i) -> void:
 		var right: float = lerpf(corners.y, corners.w, fy)
 		for lx in PIXELS_PER_TILE:
 			var fx: float = (float(lx) + 0.5) / float(PIXELS_PER_TILE)
-			var base_gray: int = roundi(lerpf(left, right, fx) * ELEVATION_SCALE)
+			# Vertex heights are absolute levels: measure them from BASE_ELEVATION
+			# so flat ground lands on SEA_LEVEL gray.
+			var base_gray: int = roundi((lerpf(left, right, fx) - TerrainGrid.BASE_ELEVATION) * ELEVATION_SCALE)
 			var offset_gray: int = roundi(profile[ly][lx] * ELEVATION_SCALE)
 			var noise_offset: int = _get_noise_offset(px + lx, py + ly, terrain_type)
 			_set_pixel_safe(px + lx, py + ly,

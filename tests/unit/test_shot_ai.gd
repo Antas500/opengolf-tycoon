@@ -314,11 +314,11 @@ func test_putt_on_sloped_green_compensates() -> void:
 	# Create slope: higher elevation to the north (y decreasing)
 	# Slope vector points south (positive y), so ball breaks south
 	for x in range(18, 25):
-		_set_elevation(Vector2i(x, 18), 3)
-		_set_elevation(Vector2i(x, 19), 2)
-		_set_elevation(Vector2i(x, 20), 1)
-		_set_elevation(Vector2i(x, 21), 0)
-		_set_elevation(Vector2i(x, 22), 0)
+		_set_elevation(Vector2i(x, 18), _terrain_grid.BASE_ELEVATION + 3)
+		_set_elevation(Vector2i(x, 19), _terrain_grid.BASE_ELEVATION + 2)
+		_set_elevation(Vector2i(x, 20), _terrain_grid.BASE_ELEVATION + 1)
+		_set_elevation(Vector2i(x, 21), _terrain_grid.BASE_ELEVATION)
+		_set_elevation(Vector2i(x, 22), _terrain_grid.BASE_ELEVATION)
 
 	var gd = _make_golfer({"ball_position": ball, "putting_skill": 0.9})
 	gd.ball_position_precise = Vector2(ball)
@@ -869,11 +869,11 @@ func test_tier_putting_skill_affects_read() -> void:
 
 	# Create slope: higher to the north
 	for x in range(16, 25):
-		_set_elevation(Vector2i(x, 18), 3)
-		_set_elevation(Vector2i(x, 19), 2)
-		_set_elevation(Vector2i(x, 20), 1)
-		_set_elevation(Vector2i(x, 21), 0)
-		_set_elevation(Vector2i(x, 22), 0)
+		_set_elevation(Vector2i(x, 18), _terrain_grid.BASE_ELEVATION + 3)
+		_set_elevation(Vector2i(x, 19), _terrain_grid.BASE_ELEVATION + 2)
+		_set_elevation(Vector2i(x, 20), _terrain_grid.BASE_ELEVATION + 1)
+		_set_elevation(Vector2i(x, 21), _terrain_grid.BASE_ELEVATION)
+		_set_elevation(Vector2i(x, 22), _terrain_grid.BASE_ELEVATION)
 
 	var beginner = _make_beginner({"ball_position": ball})
 	beginner.ball_position_precise = Vector2(ball)

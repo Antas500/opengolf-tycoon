@@ -9,7 +9,7 @@
 
 Replace the current per-tile rectangle-overlay elevation shading (`ElevationOverlay` + `ElevationShadingOverlay`) with a unified **shader-driven heightmap system** that renders per-pixel lighting, contour lines, and terrain-type-aware elevation profiles. This gives the course rolling, sculpted depth while keeping the cartoon/tycoon cel-shaded aesthetic.
 
-**Current state:** Elevation is an integer grid (`_elevation_grid`, -5 to +5). Visual feedback is two CPU-side `_draw()` overlays painting tinted rects and contour lines. There is no sub-tile height variation — a tile at elevation +2 is uniformly bright.
+**Current state:** Elevation is an integer vertex grid (`_vertex_elevation`, levels 0 to 10). Visual feedback is two CPU-side `_draw()` overlays painting tinted rects and contour lines. There is no sub-tile height variation — a tile two levels above the base is uniformly bright.
 
 **Target state:** A single heightmap texture encodes sub-tile elevation as grayscale. A fragment shader reads this texture, computes pseudo-normals, applies directional cel-shading, and draws contour lines — all GPU-side.
 
@@ -24,7 +24,7 @@ Use a **single course-wide heightmap** stored as an `ImageTexture` (R8 format, s
 | Property | Value | Rationale |
 |----------|-------|-----------|
 | Resolution | 512×512 px (4 px per tile on a 128×128 grid) | Good sub-tile detail; 256 KB uncompressed R8. Small enough for web VRAM. |
-| Value encoding | `0` = lowest (-5), `128` = sea level (0), `255` = highest (+5) | 8-bit gives 256 discrete levels. Each integer elevation step = ~25.6 grayscale units. |
+| Value encoding | `0` = lowest (level 0), `128` = flat base level (5), `255` = highest (level 10) | 8-bit gives 256 discrete levels. Each integer elevation step = ~25.6 grayscale units. |
 | Coordinate mapping | Pixel `(tx * 4 + lx, ty * 4 + ly)` maps to tile `(tx, ty)`, local offset `(lx, ly)` ∈ [0,3] | Direct index arithmetic; no UV math needed on CPU side. |
 | Update frequency | On elevation change (not every frame) | Heightmap is static between edits. |
 
@@ -34,7 +34,7 @@ class_name Heightmap
 extends RefCounted
 
 const PIXELS_PER_TILE: int = 4
-const SEA_LEVEL: int = 128  # Grayscale value for elevation 0
+const SEA_LEVEL: int = 128  # Grayscale value for the flat base level (5)
 const ELEVATION_SCALE: float = 25.6  # Grayscale units per integer elevation level
 
 var _image: Image
@@ -54,13 +54,14 @@ func _init(grid_width: int = 128, grid_height: int = 128) -> void:
 func get_texture() -> ImageTexture:
 	return _texture
 
-## Convert integer elevation (-5..+5) to grayscale byte (0..255)
+## Convert an elevation level (0..10) to a grayscale byte (0..255), with the
+## flat base level (5) landing on SEA_LEVEL gray (128)
 static func elevation_to_grayscale(elevation: int) -> int:
-	return clampi(SEA_LEVEL + roundi(elevation * ELEVATION_SCALE), 0, 255)
+	return clampi(SEA_LEVEL + roundi((elevation - TerrainGrid.BASE_ELEVATION) * ELEVATION_SCALE), 0, 255)
 
-## Convert grayscale byte back to float elevation
+## Convert grayscale byte back to an elevation level
 static func grayscale_to_elevation(gray: int) -> float:
-	return (float(gray) - SEA_LEVEL) / ELEVATION_SCALE
+	return TerrainGrid.BASE_ELEVATION + (float(gray) - SEA_LEVEL) / ELEVATION_SCALE
 ```
 
 ### 1.2 Writing Elevation Data
@@ -593,7 +594,7 @@ static func get_profile(terrain_type: int) -> Array:
 
 Players modify elevation with the existing `ElevationTool` (raise/lower by ±1). The heightmap integrates:
 
-1. **Base elevation** from `_elevation_grid` (player-controlled, -5 to +5)
+1. **Base elevation** from `_vertex_elevation` (player-controlled, levels 0 to 10)
 2. **Profile offset** from `ElevationProfiles` (terrain-type-dependent sub-tile shape)
 3. **Result**: `final_height = base + profile_offset`
 

@@ -103,19 +103,20 @@ func _draw_3d_lattice(tile_range: Array[Vector2i], visible_rect: Rect2) -> void:
 					_draw_lattice_line(p0, p2, h0, h2)
 
 func _draw_lattice_line(p0: Vector2, p1: Vector2, h0: int, h1: int) -> void:
+	var base: int = TerrainGrid.BASE_ELEVATION
 	var has_slope: bool = h0 != h1
-	var has_elev: bool = h0 != 0 or h1 != 0
+	var has_elev: bool = h0 != base or h1 != base
 
 	var color: Color
 	var width: float
 	if has_slope:
-		if h0 > 0 or h1 > 0:
+		if h0 > base or h1 > base:
 			color = Color(1.0, 0.82, 0.4, 0.5)
 		else:
 			color = Color(0.45, 0.75, 1.0, 0.5)
 		width = 1.6
 	elif has_elev:
-		color = Color(1.0, 0.85, 0.5, 0.25) if h0 > 0 else Color(0.5, 0.75, 1.0, 0.25)
+		color = Color(1.0, 0.85, 0.5, 0.25) if h0 > base else Color(0.5, 0.75, 1.0, 0.25)
 		width = 1.1
 	else:
 		color = Color(1.0, 1.0, 1.0, 0.10)
@@ -167,24 +168,23 @@ func _draw_vertex_markers(visible_rect: Rect2, _zoom: float, show_labels: bool,
 	var vertices: Array[Vector2i] = _visible_vertices(visible_rect)
 	for vertex in vertices:
 		var height: int = terrain_grid.get_vertex_elevation(vertex)
-		if height == 0:
+		if height == TerrainGrid.BASE_ELEVATION:
 			if show_lattice:
 				_draw_vertex_marker(vertex, Color(1, 1, 1, LATTICE_ALPHA), MARKER_SCALE * 0.7)
 			continue
 
 		var color: Color
-		if height > 0:
+		if height > TerrainGrid.BASE_ELEVATION:
 			color = Color(1.0, 0.85, 0.55, VERTEX_ALPHA)  # Warm = raised
 		else:
 			color = Color(0.55, 0.78, 1.0, VERTEX_ALPHA)  # Cool = depressed
 		var center: Vector2 = _draw_vertex_marker(vertex, color, MARKER_SCALE)
 
 		if show_labels:
-			var sign_str: String = "+" if height > 0 else ""
 			draw_string(
 				ThemeDB.fallback_font,
 				center + Vector2(4, -4),
-				"%s%d" % [sign_str, height],
+				"%d" % height,
 				HORIZONTAL_ALIGNMENT_LEFT,
 				-1,
 				9,
@@ -197,7 +197,8 @@ func _draw_contours(visible_rect: Rect2) -> void:
 	for x in range(tile_range[0].x, tile_range[1].x + 1):
 		for y in range(tile_range[0].y, tile_range[1].y + 1):
 			var pos := Vector2i(x, y)
-			if terrain_grid.get_elevation(pos) == 0 and not _has_elevated_neighbor(pos):
+			if terrain_grid.get_elevation(pos) == TerrainGrid.BASE_ELEVATION \
+					and not _has_elevated_neighbor(pos):
 				continue
 			if not visible_rect.has_point(terrain_grid.grid_to_screen_center(pos)):
 				continue
@@ -226,11 +227,12 @@ func _draw_vertex_marker(vertex: Vector2i, color: Color, marker_scale: float) ->
 	]), color)
 	return center
 
-## Check if any of the 4 neighbors has non-zero elevation
+## Check if any of the 4 neighbors sits off the flat base level
 func _has_elevated_neighbor(pos: Vector2i) -> bool:
 	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var neighbor: Vector2i = pos + offset
-		if terrain_grid.is_valid_position(neighbor) and terrain_grid.get_elevation(neighbor) != 0:
+		if terrain_grid.is_valid_position(neighbor) \
+				and terrain_grid.get_elevation(neighbor) != TerrainGrid.BASE_ELEVATION:
 			return true
 	return false
 
@@ -251,16 +253,18 @@ func _draw_contour_lines(pos: Vector2i) -> void:
 		if n_elev == elevation:
 			continue
 
-		# Determine line weight: thick for major intervals (crossing even levels)
+		# Determine line weight: thick for major intervals (crossing even levels
+		# or the flat base level)
 		var elev_diff: int = abs(elevation - n_elev)
-		var is_major: bool = elev_diff >= 2 or (elevation % 2 == 0 and n_elev % 2 != 0) or (elevation != 0 and n_elev == 0)
+		var is_major: bool = elev_diff >= 2 or (elevation % 2 == 0 and n_elev % 2 != 0) \
+				or (elevation != TerrainGrid.BASE_ELEVATION and n_elev == TerrainGrid.BASE_ELEVATION)
 		var line_width: float = 2.0 if is_major else 1.0
 		var alpha: float = CONTOUR_ALPHA_MAJOR if is_major else CONTOUR_ALPHA_MINOR
 
-		# Color: brown for boundaries, darker for deeper
+		# Color: brown above the base level, blue-gray below it
 		var avg_elev: float = (elevation + n_elev) / 2.0
 		var contour_color: Color
-		if avg_elev >= 0:
+		if avg_elev >= TerrainGrid.BASE_ELEVATION:
 			contour_color = Color(0.55, 0.4, 0.25, alpha)  # Warm brown
 		else:
 			contour_color = Color(0.2, 0.25, 0.4, alpha)    # Cool blue-gray
