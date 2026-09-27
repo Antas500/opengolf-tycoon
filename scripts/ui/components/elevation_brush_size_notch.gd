@@ -39,8 +39,8 @@ var size_label: Label
 var increase_button: Button
 
 ## A Control has no `disabled` of its own (that is BaseButton's), so the notch
-## carries one to grey itself out while the Vertex tool — which paints a single
-## vertex and has no brush at all — is selected.
+## carries one in case the toolbar greys it out. Size and shape stay enabled
+## even when neither Square tool is selected.
 var disabled := false
 
 func _init() -> void:
@@ -133,10 +133,9 @@ func _place(cell: Control, rect: Rect2) -> void:
 	cell.position = rect.position
 	cell.size = rect.size
 
-## Switch the stepper on or off with the tool it belongs to and repaint the
-## diamond around it: the Vertex selector paints a single vertex and has no
-## brush at all, so the whole notch greys out with its cells while it is
-## selected.
+## Switch the stepper on or off and repaint the diamond around it. The toolbar
+## keeps the Elevation Brush enabled even when neither Square tool is selected,
+## so the player can set the size before picking Flat or Gradual.
 func set_brush_enabled(enabled: bool) -> void:
 	disabled = not enabled
 	queue_redraw()

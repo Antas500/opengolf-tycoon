@@ -20,7 +20,7 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 
 ### Course Design
 - [Builder and Course Review](builder-and-review.md) — Continuous brushes, stroke undo, actionable feedback and starter club
-- [Elevation Selector Tools](elevation-tools.md) — Vertex, Flat Square and Gradual Square: right click raises, left click lowers, separate Elevation Brush per tool
+- [Elevation Selector Tools](elevation-tools.md) — Vertex, Flat Square and Gradual Square: right click raises, left click lowers, shared Elevation Brush size and shape
 - [Hole Creation](hole-creation.md) — 1x1 tee boxes, Green With Hole vs Green Without Hole, the potential hole path preview, and opening a hole from the waiting pair
 - [Tee Aim Arrow](tee-aim-arrow.md) — The painted aiming arrow in the grass of every tee tile: red ball either side, straight at the cup or curved round a dogleg's corner
 - [Landforms and Clubhouse Life](course-character.md) — Sculpted hills, coherent building architecture, and golfer reactions
