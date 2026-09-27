@@ -137,7 +137,7 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 - **CourseScorecardPanel**: Full course scorecard (hotkey `K`) showing all holes with par, yardage, stroke index, average scores, and course records. Adaptive layout for ≤9 vs 10+ holes.
 
 ### Tools
-- **ElevationTool**: Raise/lower tiles (-5 to +5). Affects shot distance and ball roll.
+- **ElevationTool**: Three selector tools replace the old Rolling Hill / Hollow / Raise / Lower buttons — **Vertex** (one vertex ±1), **Flat Square** (even the S×S square, then shift it one step) and **Gradual Square** (move the middle vertex / middle 2×2, clamp nearby vertices to a 1-per-vertex slope). Right click raises, left click lowers. Each Square tool has its own Elevation Brush Size/Shape, separate from the terrain brush. See [elevation-tools docs](docs/algorithms/elevation-tools.md).
 - **UndoManager**: 50-action stack with cost refunds.
 - **IsometricCamera**: WASD pan, mouse wheel zoom. View rotation lives on TerrainGrid, not the camera: **Q** / **Shift+Q** rotate the course counter-clockwise / clockwise, **I** toggles isometric ↔ top-down. Rotating re-projects terrain, overlays, entities and picking together, and preserves the grid point under the camera.
 

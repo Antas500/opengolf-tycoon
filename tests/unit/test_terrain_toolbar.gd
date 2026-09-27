@@ -1051,17 +1051,14 @@ func test_action_signals() -> void:
 	toolbar._on_tool_button_pressed("decoration")
 	assert_signal_emitted(toolbar, "decoration_placement_pressed")
 
-	toolbar._on_tool_button_pressed("raise")
-	assert_signal_emitted(toolbar, "raise_elevation_pressed")
+	toolbar._on_tool_button_pressed("vertex")
+	assert_signal_emitted_with_parameters(toolbar, "elevation_tool_pressed", ["vertex"])
 
-	toolbar._on_tool_button_pressed("lower")
-	assert_signal_emitted(toolbar, "lower_elevation_pressed")
+	toolbar._on_tool_button_pressed("flat")
+	assert_signal_emitted_with_parameters(toolbar, "elevation_tool_pressed", ["flat"])
 
-	toolbar._on_tool_button_pressed("mound")
-	assert_signal_emitted_with_parameters(toolbar, "sculpt_terrain_pressed", [true])
-
-	toolbar._on_tool_button_pressed("hollow")
-	assert_signal_emitted_with_parameters(toolbar, "sculpt_terrain_pressed", [false])
+	toolbar._on_tool_button_pressed("gradual")
+	assert_signal_emitted_with_parameters(toolbar, "elevation_tool_pressed", ["gradual"])
 
 	toolbar._on_tool_button_pressed("bulldozer")
 	assert_signal_emitted(toolbar, "bulldozer_pressed")
@@ -1496,3 +1493,72 @@ func test_theme_changes_keep_one_honeycomb_without_stale_tiles() -> void:
 			"*", "TileHoneycomb", true, false).size(), 1)
 	GameManager.current_theme = original_theme
 	EventBus.theme_changed.emit(original_theme)
+
+# =============================================================================
+# Elevation tab: selector tools + the separate Elevation Brush
+# =============================================================================
+
+func test_elevation_tab_has_the_three_selector_tools() -> void:
+	for tool_name in ["vertex", "flat", "gradual"]:
+		assert_true(tool_name in toolbar._tool_buttons, "%s selector button exists" % tool_name)
+		assert_eq(toolbar.TOOL_TAB_MAP[tool_name], TerrainToolbar.Tab.ELEVATION,
+				"%s lives on the Elevation tab" % tool_name)
+	for old_tool in ["mound", "hollow", "raise", "lower"]:
+		assert_false(old_tool in toolbar._tool_buttons, "old tool %s is gone" % old_tool)
+
+func test_elevation_brush_sizes_depend_on_the_selected_tool() -> void:
+	toolbar.set_elevation_tool("flat")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"Flat offers 1x1 through 9x9")
+	toolbar.set_elevation_tool("gradual")
+	assert_eq(toolbar._elevation_brush_sizes(), [2, 3, 4, 5, 6, 7, 8, 9],
+			"Gradual offers 2x2 through 9x9")
+	toolbar.set_elevation_tool("vertex")
+	assert_eq(toolbar._elevation_brush_sizes(), [], "Vertex has no brush sizes")
+
+func test_elevation_brush_controls_are_disabled_for_the_vertex_tool() -> void:
+	toolbar.set_elevation_tool("flat")
+	for button in toolbar._elevation_brush_buttons:
+		assert_false(button.disabled, "flat: size buttons enabled")
+	assert_false(toolbar._elevation_brush_shape_buttons[0].disabled, "flat: shape enabled")
+	toolbar.set_elevation_tool("vertex")
+	for button in toolbar._elevation_brush_buttons:
+		assert_true(button.disabled, "vertex: size buttons disabled")
+	assert_true(toolbar._elevation_brush_shape_buttons[0].disabled, "vertex: shape disabled")
+
+func test_elevation_brush_keeps_separate_settings_per_tool() -> void:
+	toolbar.set_elevation_tool("flat")
+	toolbar._set_elevation_brush_size(7)
+	toolbar._on_elevation_brush_shape_toggled()  # flat -> round
+	assert_eq(toolbar.get_elevation_brush_size(), 7)
+	assert_false(toolbar.get_elevation_brush_square())
+
+	toolbar.set_elevation_tool("gradual")
+	# Gradual restores its own (default) settings, not flat's.
+	assert_eq(toolbar.get_elevation_brush_size(), 3)
+	assert_true(toolbar.get_elevation_brush_square())
+
+	toolbar.set_elevation_tool("flat")
+	assert_eq(toolbar.get_elevation_brush_size(), 7, "flat settings were kept")
+	assert_false(toolbar.get_elevation_brush_square(), "flat shape was kept")
+
+func test_elevation_brush_size_stays_inside_the_tools_range() -> void:
+	toolbar.set_elevation_tool("flat")
+	toolbar._set_elevation_brush_size(1)  # 1x1 is a Flat-only size
+	toolbar.set_elevation_tool("gradual")
+	# Gradual shows its own stored size, which is always within 2x2..9x9.
+	assert_eq(toolbar.get_elevation_brush_size(), 3)
+	toolbar.set_elevation_tool("flat")
+	assert_eq(toolbar.get_elevation_brush_size(), 1, "flat kept its 1x1 size")
+	# The stepper only ever offers the tool's own sizes.
+	var flat_sizes: Array = toolbar._elevation_brush_sizes()
+	for size in flat_sizes:
+		assert_true(size in ElevationTool.FLAT_BRUSH_SIZES)
+
+func test_elevation_brush_signals_report_the_new_settings() -> void:
+	watch_signals(toolbar)
+	toolbar.set_elevation_tool("flat")
+	toolbar._set_elevation_brush_size(5)
+	assert_signal_emitted_with_parameters(toolbar, "elevation_brush_size_changed", [5])
+	toolbar._on_elevation_brush_shape_toggled()
+	assert_signal_emitted_with_parameters(toolbar, "elevation_brush_shape_changed", [false])

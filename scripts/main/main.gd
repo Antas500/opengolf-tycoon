@@ -290,6 +290,10 @@ func _input(event: InputEvent) -> void:
 	# Finish strokes even when the mouse is released over a panel.
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed and is_painting:
 		_stop_painting()
+	# ...and a right-click raise stroke ends the same way.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and not event.pressed and is_painting:
+		if elevation_tool.is_active():
+			_stop_elevation_painting()
 	# Keyboard shortcuts - handled in _input so UI controls don't swallow them
 	if event is InputEventKey and event.pressed and not event.echo:
 		# Escape key: deselect active tool/panel first, then open pause menu
@@ -419,6 +423,19 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	# While an elevation selector is active, right click raises terrain
+	# instead of cancelling the tool (ESC still cancels).
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT \
+			and elevation_tool.is_active() \
+			and GameManager.current_mode != GameManager.GameMode.MAIN_MENU \
+			and not GameManager.is_paused:
+		if event.pressed:
+			_start_elevation_painting(true)
+		else:
+			_stop_elevation_painting()
+		get_viewport().set_input_as_handled()
+		return
+
 	# Cancel action (ESC/right-click) should always work to deselect tools
 	if event.is_action_pressed("cancel"):
 		_cancel_action()
@@ -454,11 +471,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event.is_action_pressed("select"):
-		var was_placing := placement_manager.placement_mode != PlacementManager.PlacementMode.NONE or bulldozer_mode
-		_start_painting()
-		# Consume the event when in placement/bulldozer mode to prevent propagation
-		if was_placing:
+		if elevation_tool.is_active():
+			# Left click lowers the selected terrain.
+			_start_elevation_painting(false)
 			get_viewport().set_input_as_handled()
+		else:
+			var was_placing := placement_manager.placement_mode != PlacementManager.PlacementMode.NONE or bulldozer_mode
+			_start_painting()
+			# Consume the event when in placement/bulldozer mode to prevent propagation
+			if was_placing:
+				get_viewport().set_input_as_handled()
 	elif event.is_action_released("select"):
 		_stop_painting()
 	if is_painting and event is InputEventMouseMotion:
@@ -543,9 +565,9 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.decoration_placement_pressed.connect(_on_decoration_placement_pressed)
 	terrain_toolbar.decoration_selected.connect(_on_decoration_type_selected_from_toolbar)
 	terrain_toolbar.set_decoration_registry(decoration_registry)
-	terrain_toolbar.sculpt_terrain_pressed.connect(_on_sculpt_terrain_pressed)
-	terrain_toolbar.raise_elevation_pressed.connect(_on_raise_elevation_pressed)
-	terrain_toolbar.lower_elevation_pressed.connect(_on_lower_elevation_pressed)
+	terrain_toolbar.elevation_tool_pressed.connect(_on_elevation_tool_pressed)
+	terrain_toolbar.elevation_brush_size_changed.connect(_on_elevation_brush_size_changed)
+	terrain_toolbar.elevation_brush_shape_changed.connect(_on_elevation_brush_shape_changed)
 	terrain_toolbar.bulldozer_pressed.connect(_on_bulldozer_pressed)
 	terrain_toolbar.course_review_pressed.connect(func(): _toggle_panel(course_rating_overlay))
 	terrain_toolbar.brush_size_changed.connect(_on_brush_size_changed)
@@ -669,6 +691,7 @@ func _on_main_menu_quick_start(course_name: String, theme_type: int) -> void:
 	current_tool = -1
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
+	_cancel_elevation_mode()
 	if placement_preview:
 		placement_preview.set_terrain_painting_enabled(false)
 
@@ -915,12 +938,6 @@ func _start_painting() -> void:
 		_handle_placement_click(grid_pos)
 		return
 
-	# Check if we're in elevation painting mode
-	if elevation_tool.is_active():
-		is_painting = true
-		_paint_elevation_at_mouse()
-		return
-
 	# Shift+click on bunker tile toggles depth (shallow/deep)
 	if Input.is_key_pressed(KEY_SHIFT):
 		var mouse_world = camera.get_mouse_world_position()
@@ -943,6 +960,10 @@ func _stop_painting() -> void:
 	# Show bulldozer drag summary if items were cleared
 	if bulldozer_mode and _bulldoze_drag_count > 0:
 		EventBus.notify("Cleared %d item%s (-$%d)" % [_bulldoze_drag_count, "s" if _bulldoze_drag_count != 1 else "", _bulldoze_drag_cost], "info")
+	# Elevation strokes (left lowers / right raises) end through their own path.
+	if elevation_tool.is_active() and elevation_tool.elevation_mode != ElevationTool.ElevationMode.NONE:
+		_stop_elevation_painting()
+		return
 	is_painting = false
 	_tee_block_notified = false
 	_path_block_notified = false
@@ -1219,9 +1240,8 @@ func _on_tool_selected(tool_type: int) -> void:
 	print("Tool selected: " + TerrainTypes.get_type_name(tool_type))
 
 func _on_brush_size_changed(new_size: int) -> void:
-	if elevation_tool.is_active() and elevation_tool.sculpted and new_size < 7:
-		terrain_toolbar.set_brush_size(7)
-		return
+	# The terrain brush: the Elevation tab's Square Selectors keep their own
+	# Elevation Brush, so their size is not part of this state.
 	brush_size = new_size
 	if placement_preview:
 		placement_preview.set_brush_size(new_size)
@@ -1544,21 +1564,19 @@ func _on_decoration_type_selected_from_toolbar(decoration_type: String) -> void:
 	placement_manager.start_decoration_placement(decoration_type, decoration_registry[decoration_type])
 	print("Decoration placement mode from toolbar: %s" % decoration_type)
 
-func _on_sculpt_terrain_pressed(raising: bool) -> void:
-	if raising:
-		_on_raise_elevation_pressed()
-	else:
-		_on_lower_elevation_pressed()
-	elevation_tool.sculpted = true
-	terrain_toolbar.set_brush_size(7)
-	brush_size = maxi(brush_size, 7)
-	if placement_preview:
-		# The sculpted brush moves vertices with a radial falloff — show that footprint.
-		placement_preview.set_elevation_mode(true, raising, true)
-		placement_preview.set_brush_size(brush_size)
-	EventBus.notify("Sculpt a rolling hill" if raising else "Sculpt a hollow", "info")
-
-func _on_raise_elevation_pressed() -> void:
+## Select one of the three elevation selector tools. While it is active,
+## right clicking raises the selected terrain and left clicking lowers it.
+func _on_elevation_tool_pressed(tool_name: String) -> void:
+	var new_tool: ElevationTool.Tool
+	match tool_name:
+		ElevationTool.TOOL_VERTEX:
+			new_tool = ElevationTool.Tool.VERTEX
+		ElevationTool.TOOL_FLAT:
+			new_tool = ElevationTool.Tool.FLAT
+		ElevationTool.TOOL_GRADUAL:
+			new_tool = ElevationTool.Tool.GRADUAL
+		_:
+			return
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
@@ -1567,28 +1585,37 @@ func _on_raise_elevation_pressed() -> void:
 	is_painting = false
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
-	elevation_tool.start_raising()
+	# The Square Selectors carry their own Elevation Brush, separate from the
+	# terrain brush: hand the tool the settings its own controls are showing.
+	terrain_toolbar.set_elevation_tool(tool_name)
+	elevation_tool.select_tool(new_tool)
+	elevation_tool.set_brush(terrain_toolbar.get_elevation_brush_size(),
+			terrain_toolbar.get_elevation_brush_square())
 	terrain_grid.set_elevation_overlay_active(true)
-	if placement_preview:
-		placement_preview.set_elevation_mode(true, true, false)
-		placement_preview.set_brush_size(brush_size)
-	print("Elevation mode: RAISING")
+	_sync_elevation_preview()
+	var display_names := {
+		ElevationTool.TOOL_VERTEX: "Vertex",
+		ElevationTool.TOOL_FLAT: "Flat Square",
+		ElevationTool.TOOL_GRADUAL: "Gradual Square",
+	}
+	EventBus.notify("%s selector - right click raises, left click lowers" % display_names[tool_name], "info")
+	print("Elevation tool selected: %s" % tool_name)
 
-func _on_lower_elevation_pressed() -> void:
-	_cancel_hole_move_mode()
-	_close_hole_context_menu()
-	placement_manager.cancel_placement()
-	_cancel_bulldozer_mode()
-	_disable_terrain_painting_preview()
-	is_painting = false
-	if terrain_toolbar:
-		terrain_toolbar.clear_selection()
-	elevation_tool.start_lowering()
-	terrain_grid.set_elevation_overlay_active(true)
+func _on_elevation_brush_size_changed(new_size: int) -> void:
+	elevation_tool.set_brush_size(new_size)
+	_sync_elevation_preview()
+
+func _on_elevation_brush_shape_changed(square_shape: bool) -> void:
+	elevation_tool.set_brush_square(square_shape)
+	_sync_elevation_preview()
+
+## Point the placement preview at the selected elevation tool and its brush.
+func _sync_elevation_preview() -> void:
 	if placement_preview:
-		placement_preview.set_elevation_mode(true, false, false)
-		placement_preview.set_brush_size(brush_size)
-	print("Elevation mode: LOWERING")
+		placement_preview.set_elevation_mode(true)
+		placement_preview.set_elevation_tool(elevation_tool.tool)
+		placement_preview.set_elevation_brush(elevation_tool.brush_size,
+				elevation_tool.brush_square)
 
 func _on_bulldozer_pressed() -> void:
 	"""Activate bulldozer mode to demolish improvements and buildings"""
@@ -1746,10 +1773,32 @@ func _cancel_elevation_mode() -> void:
 	if elevation_tool.is_active():
 		elevation_tool.cancel()
 		terrain_grid.set_elevation_overlay_active(false)
+	if terrain_toolbar:
+		terrain_toolbar.set_elevation_tool("")
 	if placement_preview:
 		placement_preview.set_elevation_mode(false)
 
+## Begin an elevation stroke. While a selector tool is active the two mouse
+## buttons paint in opposite directions: right click raises, left click lowers.
+func _start_elevation_painting(raising: bool) -> void:
+	if is_painting or GameManager.is_paused:
+		return
+	elevation_tool.set_mode(raising)
+	is_painting = true
+	_paint_elevation_at_mouse()
+
+## End the current elevation stroke; the selector tool stays selected.
+func _stop_elevation_painting() -> void:
+	if not is_painting:
+		return
+	is_painting = false
+	last_paint_vertex = Vector2i(-1, -1)
+	if elevation_tool.is_active():
+		elevation_tool.stop_stroke()
+
 func _paint_elevation_at_mouse() -> void:
+	if not elevation_tool.is_raising() and not elevation_tool.is_lowering():
+		return
 	var mouse_world = camera.get_mouse_world_position()
 	# Tile-space point: integers are grid vertices, so the brush snaps to corners.
 	var grid_point = terrain_grid.screen_to_grid_point(mouse_world)
@@ -1758,7 +1807,7 @@ func _paint_elevation_at_mouse() -> void:
 		return
 	last_paint_vertex = vertex
 
-	var changes = elevation_tool.paint_at_point(grid_point, terrain_grid, brush_size, entity_layer)
+	var changes = elevation_tool.paint_at_point(grid_point, terrain_grid, entity_layer)
 	if not changes.is_empty():
 		undo_manager.record_elevation_stroke(changes)
 

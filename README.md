@@ -33,7 +33,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 ### Course Designer
 
 - **Terrain painting** — 14 paintable course tiles: fairway, firm fairway, rough, deep rough, green, tee box, waste bunker, brush, bunker, pot bunker, water, stream, rocks, and out of bounds — plus paths, flower beds, trees and boulders
-- **Elevation system** — Raise/lower individual tiles (-5 to +5), with slope affecting shots and ball roll; gradient hillshade visualization with contour lines
+- **Elevation system** — Three selector tools (Vertex, Flat Square, Gradual Square) reshape the -5 to +5 elevation field: right click raises the selected terrain, left click lowers it. The Square tools carry their own Elevation Brush size/shape, separate from the terrain brush. Slope affects shots and ball roll; gradient hillshade visualization with contour lines
 - **Hole creation** — 3-step flow (tee box → green → flag); auto-calculates par based on yardage; holes numbered and renameable
 - **Tee aim arrows** — Every tee tile is painted with an arrow and a red tee marker either side of it, aimed at the hole's cup; doglegs get a curved arrow
 - **Object placement** — Theme-specific vegetation (oaks, pines, palms, cacti, fescue, heather, and more), 3 rock sizes, decorative flower beds

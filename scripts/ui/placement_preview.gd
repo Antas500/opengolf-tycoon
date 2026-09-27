@@ -9,12 +9,15 @@ var placement_manager: PlacementManager
 var camera: IsometricCamera
 var current_terrain_tool: int = -1  # Current terrain painting tool
 var terrain_painting_enabled: bool = false  # Whether to show terrain preview
-var elevation_mode_active: bool = false  # Whether elevation tool is active
-var elevation_raising: bool = true  # True = raising, false = lowering
-var elevation_sculpted: bool = false  # True = rolling hill / hollow brush
+var elevation_mode_active: bool = false  # Whether an elevation selector is active
+var elevation_tool_type: int = ElevationTool.Tool.NONE  # Which selector tool
+## Elevation Brush of the active Square Selector (separate from the terrain
+## brush: `brush_size`/`round_brush` belong to the Course Terrain tab).
+var elevation_brush_size: int = 3
+var elevation_brush_square := true
 var bulldozer_mode_active: bool = false  # Whether bulldozer mode is active
 var round_brush := true
-var brush_size: int = 1  # Current brush size (1, 3, or 5)
+var brush_size: int = 1  # Current terrain brush size (1, 3, 5, 7 or 9)
 var _hole_move_mode: int = 0  # 0=NONE, matches main.gd HoleMoveMode enum
 
 # Preview state
@@ -124,10 +127,17 @@ func set_terrain_painting_enabled(enabled: bool) -> void:
 func set_brush_size(size: int) -> void:
 	brush_size = size
 
-func set_elevation_mode(active: bool, raising: bool = true, sculpted: bool = false) -> void:
+func set_elevation_mode(active: bool) -> void:
 	elevation_mode_active = active
-	elevation_raising = raising
-	elevation_sculpted = sculpted
+	if not active:
+		elevation_tool_type = ElevationTool.Tool.NONE
+
+func set_elevation_tool(tool_type: int) -> void:
+	elevation_tool_type = tool_type
+
+func set_elevation_brush(size: int, square: bool) -> void:
+	elevation_brush_size = size
+	elevation_brush_square = square
 
 func set_bulldozer_mode(active: bool) -> void:
 	bulldozer_mode_active = active
@@ -286,28 +296,37 @@ func _draw_elevation_brush(alpha_mod: float) -> void:
 	if not terrain_grid.is_valid_vertex(center):
 		return
 
-	var brush_color: Color = Color(0.55, 0.78, 1.0, 0.85 * alpha_mod) if elevation_raising \
-		else Color(1.0, 0.6, 0.5, 0.85 * alpha_mod)
-	var vertices: Array[Vector2i] = ElevationTool.brush_vertices(
-		terrain_grid, center, brush_size, elevation_sculpted)
-	for vertex in vertices:
-		if vertex == center:
-			continue
-		_draw_vertex_marker(vertex, brush_color, 0.10)
-
-	var current_height: int = terrain_grid.get_vertex_elevation(center)
-	var step: int = ElevationTool.SCULPT_AMOUNT if elevation_sculpted else 1
-	if not elevation_raising:
-		step = -step
-	var next_height: int = clampi(current_height + step,
-		terrain_grid.MIN_ELEVATION, terrain_grid.MAX_ELEVATION)
-	_draw_vertex_marker(center, Color(1, 1, 1, 0.95 * alpha_mod), 0.18)
-
+	var area_color: Color = Color(0.55, 0.78, 1.0, 0.85 * alpha_mod)
 	var label: String
-	if current_height == next_height:
-		label = "%d (max)" % current_height if elevation_raising else "%d (min)" % current_height
-	else:
-		label = "%d -> %d" % [current_height, next_height]
+
+	match elevation_tool_type:
+		ElevationTool.Tool.VERTEX:
+			_draw_vertex_marker(center, Color(1, 1, 1, 0.95 * alpha_mod), 0.18)
+			label = "%d" % terrain_grid.get_vertex_elevation(center)
+		ElevationTool.Tool.FLAT, ElevationTool.Tool.GRADUAL:
+			var size: int = elevation_brush_size
+			var middle: Array[Vector2i] = []
+			if elevation_tool_type == ElevationTool.Tool.GRADUAL:
+				middle = ElevationTool.middle_vertices(size, center)
+			else:
+				middle = [center]
+			var lowest: int = terrain_grid.MAX_ELEVATION
+			var highest: int = terrain_grid.MIN_ELEVATION
+			for vertex in ElevationTool.square_vertices(terrain_grid, center, size,
+					elevation_brush_square):
+				var height: int = terrain_grid.get_vertex_elevation(vertex)
+				lowest = mini(lowest, height)
+				highest = maxi(highest, height)
+				if middle.has(vertex):
+					_draw_vertex_marker(vertex, Color(1, 1, 1, 0.95 * alpha_mod), 0.16)
+				else:
+					_draw_vertex_marker(vertex, area_color, 0.10)
+			label = "%d" % terrain_grid.get_vertex_elevation(center) \
+					if elevation_tool_type == ElevationTool.Tool.GRADUAL \
+					else "%d..%d" % [lowest, highest]
+		_:
+			return
+
 	draw_string(
 		ThemeDB.fallback_font,
 		to_local(terrain_grid.grid_point_to_screen(Vector2(center))) + Vector2(10, -8),
@@ -383,10 +402,7 @@ func _draw_isometric_tile(grid_pos: Vector2i, is_valid: bool, alpha_mod: float, 
 func _get_terrain_preview_color() -> Color:
 	"""Get a preview color based on the current terrain tool or active mode"""
 	if elevation_mode_active:
-		if elevation_raising:
-			return Color(0.5, 0.7, 1.0, 0.5)  # Light blue for raise
-		else:
-			return Color(1.0, 0.5, 0.5, 0.5)  # Light red for lower
+		return Color(0.5, 0.7, 1.0, 0.5)  # Light blue for the elevation selectors
 	if bulldozer_mode_active:
 		return Color(1.0, 0.5, 0.3, 0.5)  # Orange for bulldozer
 	match current_terrain_tool:

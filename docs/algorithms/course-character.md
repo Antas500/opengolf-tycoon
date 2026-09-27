@@ -2,13 +2,16 @@
 
 ## Plain English
 
-Rolling hill and Hollow tools create rounded changes in the existing elevation
-map. They preserve paths, water, buildings, and land ownership, and use the
-existing undo/save system. Quick Start holes 2, 5, and 8 now have raised tees,
-crowned greens, and a shallow valley between them. Other courses are not
-reshaped on load. These are real elevation changes used by the simulation;
-the rendering still uses the existing world coordinates, without geometric
-terrain displacement or an isometric-grid migration.
+Player-facing elevation editing is done by the three selector tools on the
+Elevation tab — Vertex, Flat Square, and Gradual Square — which replace the old
+Rolling Hill, Hollow, Raise and Lower tools (see
+[elevation-tools.md](elevation-tools.md)). Right click raises the selected
+terrain, left click lowers it. The rounded hill/hollow falloff itself survives
+as `SculptedTerrain`, now used by course generation: Quick Start holes 2, 5,
+and 8 get raised tees, crowned greens, and a shallow valley between them.
+Other courses are not reshaped on load. These are real elevation changes used
+by the simulation; the rendering still uses the existing world coordinates,
+without geometric terrain displacement or an isometric-grid migration.
 
 Facilities share warm cream siding, green shutters, tiled gable roofs, and fixed
 window/door proportions. Clubhouses grow by adding facade bays at each upgrade.
@@ -35,9 +38,9 @@ poses accompany the existing score thoughts and walking/swing sprites.
 For a stamp of radius `r`, compute normalized distance `d = distance / r` and
 an elevation increment `round(amount * max(0, 1 - d²)²)`. Clamp resulting levels
 to -5..5. Collect each changed tile's old and new elevation for the existing undo
-manager. Built-in hill/hollow tools use +3/-3 and a brush diameter of at least 7.
-They are additional tools; the original one-level Raise and Lower remain.
-Quick Start uses smaller +2 green and +3 tee stamps, plus a -1 hollow.
+manager. The player's square selectors no longer use this falloff — they move
+whole squares and single vertices (see elevation-tools.md). Quick Start uses
++3 tee stamps, +2 green crowns, and a -1 hollow for the valley.
 
 The surface texture's blue channel stores `(base elevation + 5) / 10`. A second,
 linearly filtered sampler reads that same texture at ±1.5 tiles to estimate a
@@ -67,8 +70,8 @@ remain authoritative. Pause freezes the cosmetic timer.
 
 | Setting | Value | Effect |
 | --- | --- | --- |
-| Hill/hollow amount | +3 / -3 | Height change per stamp |
-| Sculpt brush | 7 or 9 tiles | Width of tapering slope |
+| Tee / green / hollow amount | +3 / +2 / -1 | Quick Start stamp strength |
+| Stamp radius | 4-5 tiles | Width of the tapering slope |
 | Green / tee radius | 5 / 4 tiles | Quick Start landform size |
 | Landscape gradient step | 1.5 tiles | Broader, more readable lighting |
 | Architecture redraw | 10 Hz | Bounded ambient drawing |

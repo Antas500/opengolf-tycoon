@@ -28,11 +28,11 @@ func test_sculpted_brush_tapers_preserves_surfaces_and_can_be_undone() -> void:
 	grid.set_tile(Vector2i(8, 7), TerrainTypes.Type.WATER)
 	grid.set_tile(Vector2i(7, 8), TerrainTypes.Type.PATH)
 	var saved := grid.serialize()
-	var tool := ElevationTool.new()
-	add_child_autofree(tool)
-	tool.start_raising()
-	tool.sculpted = true
-	var changes := tool.paint_elevation(Vector2i(8, 8), grid, 9)
+	# A 9-wide brush centred on tile (8, 8) stamps around vertex (9, 9) with a
+	# 4-vertex radius and a 3-step centre (the Rolling Hill/Hollow math, now
+	# only used by course generation).
+	var center := grid.nearest_vertex(Vector2(8, 8) + Vector2(0.5, 0.5))
+	var changes := SculptedTerrain.stamp(grid, center, SculptedTerrain.sculpt_radius(9), 3, null)
 	assert_eq(grid.get_vertex_elevation(Vector2i(9, 9)), 3)
 	assert_eq(grid.get_vertex_elevation(Vector2i(12, 9)), 1)
 	assert_eq(grid.get_vertex_elevation(Vector2i(13, 9)), 0)
