@@ -3,7 +3,8 @@ class_name ElevationSelectorButton
 ## An Elevation tab selector drawn as a small diamond of terrain tiles that
 ## demonstrates what the selector does to the ground. Every demo is a 5x5 tile
 ## grid with the central 3x3 tiles selected — the Square Selectors' default
-## Elevation Brush — outlined in gold:
+## Elevation Brush — outlined in gold. When the shared brush is round, the
+## clipped 3x3 footprint is shown as a cross:
 ##  - **vertex**: one grid vertex lifted a single step, its four tiles tilting
 ##    up to meet it.
 ##  - **flat**: the selected 3x3 tiles raised together into a level plateau.
@@ -34,6 +35,18 @@ const GRASS_COLOR := Color("5f9e45")
 const HIGHLIGHT_COLOR := Color(1.0, 0.85, 0.35)
 
 var _art: Node2D
+var _brush_square := true
+
+## The two Square Selector examples share the toolbar's Square/Circle setting.
+## Changing it redraws the selected footprint without changing the Vertex demo.
+func set_brush_square(square_shape: bool) -> void:
+	if _brush_square == square_shape:
+		return
+	_brush_square = square_shape
+	if is_instance_valid(_art):
+		_art.queue_free()
+		_art = null
+		_build_elevation_art()
 
 func button_size() -> Vector2:
 	return SELECTOR_TILE_SIZE
@@ -45,7 +58,7 @@ func _ready() -> void:
 
 ## Vertex heights (in steps) on a (GRID_TILES+1)^2 vertex grid showing the
 ## selector's effect.
-static func example_heights(kind: String) -> Array:
+static func example_heights(kind: String, square_shape: bool = true) -> Array:
 	var n := GRID_TILES + 1
 	var heights: Array = []
 	var mid := GRID_TILES / 2
@@ -58,12 +71,28 @@ static func example_heights(kind: String) -> Array:
 				"vertex":
 					h = 1 if x == mid and y == mid else 0
 				"flat":
-					h = 1 if x >= sel.x and x <= sel.y and y >= sel.x and y <= sel.y else 0
+					h = 1 if _vertex_is_in_selected_tiles(x, y, square_shape) else 0
 				"gradual":
-					h = maxi(0, (GRID_TILES - _centre_distance_doubled(x, y)) / 2)
+					if square_shape:
+						h = maxi(0, (GRID_TILES - _centre_distance_doubled(x, y)) / 2)
+					elif _vertex_is_in_selected_tiles(x, y, false):
+						# The round 3x3 footprint has a 2x2 middle and one-step
+						# shoulders on each arm of its cross.
+						h = 2 if x >= mid and x <= mid + 1 and y >= mid and y <= mid + 1 else 1
 			row.append(h)
 		heights.append(row)
 	return heights
+
+
+## True when a preview vertex is a corner of at least one selected tile.
+static func _vertex_is_in_selected_tiles(x: int, y: int, square_shape: bool) -> bool:
+	var mid := GRID_TILES / 2
+	for offset in ElevationTool.tile_offsets(SELECTED_TILES, square_shape):
+		var tx: int = mid + offset.x
+		var ty: int = mid + offset.y
+		if x >= tx and x <= tx + 1 and y >= ty and y <= ty + 1:
+			return true
+	return false
 
 
 ## First and last vertex (per axis) of the selected tile block: the selected
@@ -94,7 +123,7 @@ func _build_elevation_art() -> void:
 		return
 	_art = Node2D.new()
 	_art.name = "ElevationPreviewArt"
-	var heights := example_heights(tool_type)
+	var heights := example_heights(tool_type, _brush_square)
 	# Back to front, so nearer (raised) tiles overlap the ones behind them.
 	for d in range(0, GRID_TILES * 2 - 1):
 		for x in GRID_TILES:
@@ -148,23 +177,44 @@ func _add_markers(heights: Array) -> void:
 		"vertex":
 			_add_dot(vertex_point(mid, mid, heights[mid][mid]))
 		"flat", "gradual":
-			var sel := _selected_vertex_range()
-			var outline := Line2D.new()
-			outline.points = PackedVector2Array([
-				vertex_point(sel.x, sel.x, heights[sel.x][sel.x]),
-				vertex_point(sel.y, sel.x, heights[sel.x][sel.y]),
-				vertex_point(sel.y, sel.y, heights[sel.y][sel.y]),
-				vertex_point(sel.x, sel.y, heights[sel.y][sel.x]),
-				vertex_point(sel.x, sel.x, heights[sel.x][sel.x])])
-			outline.width = 2.5
-			outline.default_color = HIGHLIGHT_COLOR
-			outline.antialiased = true
-			_art.add_child(outline)
+			_add_selected_tile_outline(heights)
 			if tool_type == "gradual":
 				# The dot sits on the hilltop, over the middle of the
 				# selection — the vertex pair a click raises or lowers.
 				_add_dot(vertex_point(GRID_TILES * 0.5, GRID_TILES * 0.5,
 						heights[mid][mid]))
+
+## Draw only the exposed edges of the selected tiles. For the round 3x3
+## brush this traces a cross instead of the square selector's 3x3 perimeter.
+func _add_selected_tile_outline(heights: Array) -> void:
+	var mid := GRID_TILES / 2
+	var sides := [
+		[Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, -1)], # north
+		[Vector2i(1, 0), Vector2i(1, 1), Vector2i(1, 0)],  # east
+		[Vector2i(1, 1), Vector2i(0, 1), Vector2i(0, 1)],  # south
+		[Vector2i(0, 1), Vector2i(0, 0), Vector2i(-1, 0)], # west
+	]
+	for offset in ElevationTool.tile_offsets(SELECTED_TILES, _brush_square):
+		var tx := mid + offset.x
+		var ty := mid + offset.y
+		for side in sides:
+			var neighbor: Vector2i = Vector2i(tx, ty) + side[2]
+			if _is_selected_tile(neighbor.x - mid, neighbor.y - mid, _brush_square):
+				continue
+			var start: Vector2i = Vector2i(tx, ty) + side[0]
+			var finish: Vector2i = Vector2i(tx, ty) + side[1]
+			var edge := Line2D.new()
+			edge.points = PackedVector2Array([
+				vertex_point(start.x, start.y, heights[start.y][start.x]),
+				vertex_point(finish.x, finish.y, heights[finish.y][finish.x])])
+			edge.width = 2.5
+			edge.default_color = HIGHLIGHT_COLOR
+			edge.antialiased = true
+			_art.add_child(edge)
+
+static func _is_selected_tile(offset_x: int, offset_y: int, square_shape: bool) -> bool:
+	return ElevationTool.tile_offsets(SELECTED_TILES, square_shape).has(
+			Vector2i(offset_x, offset_y))
 
 func _add_dot(center: Vector2) -> void:
 	var dot := Polygon2D.new()

@@ -1520,6 +1520,23 @@ func test_elevation_selectors_are_terrain_tile_previews() -> void:
 	var gradual: Array = ElevationSelectorButton.example_heights("gradual")
 	assert_gt(gradual[mid][mid], gradual[mid - 1][mid - 1], "gradual example peaks in the middle")
 
+func test_circle_selector_examples_show_the_3x3_brush_as_a_cross() -> void:
+	var flat: Array = ElevationSelectorButton.example_heights("flat", false)
+	var gradual: Array = ElevationSelectorButton.example_heights("gradual", false)
+	var selected_tiles := 0
+	for y in ElevationSelectorButton.GRID_TILES:
+		for x in ElevationSelectorButton.GRID_TILES:
+			var selected: bool = flat[y][x] > 0 and flat[y][x + 1] > 0 and flat[y + 1][x] > 0 and flat[y + 1][x + 1] > 0
+			var expected: bool = (x == 2 and y in [1, 2, 3]) or (y == 2 and x in [1, 2, 3])
+			assert_eq(selected, expected, "round 3x3 example selects a five-tile cross")
+			if selected:
+				selected_tiles += 1
+	assert_eq(selected_tiles, 5, "the circle's 3x3 footprint contains five tiles")
+	assert_eq(gradual[2][2], 2, "the round gradual example keeps its middle vertex raised")
+	assert_eq(gradual[3][3], 2, "the round gradual example raises all four middle vertices")
+	assert_eq(gradual[1][2], 1, "the cross arms slope down from the middle")
+	assert_eq(gradual[1][1], 0, "the round gradual example leaves diagonal corners flat")
+
 func test_square_selector_examples_are_5x5_grids_with_3x3_selected() -> void:
 	assert_eq(ElevationSelectorButton.GRID_TILES, 5, "the examples draw 5x5 tile grids")
 	assert_eq(ElevationSelectorButton.SELECTED_TILES, 3, "the examples select 3x3 tiles")
@@ -1691,6 +1708,10 @@ func test_elevation_brush_shape_cell_shows_the_shape_it_paints_with() -> void:
 		"The hover tooltip still names the control")
 	toolbar._on_elevation_brush_shape_toggled()
 	assert_eq(shape.caption, "○", "A round brush shows the round glyph")
+	assert_false(toolbar._tool_buttons["flat"]._brush_square,
+		"The Flat Square example follows the round brush shape")
+	assert_false(toolbar._tool_buttons["gradual"]._brush_square,
+		"The Gradual Square example follows the round brush shape")
 
 	var font := shape.get_theme_font("font")
 	var word := font.get_string_size(ElevationBrushNotchButton.LABEL_TEXT,

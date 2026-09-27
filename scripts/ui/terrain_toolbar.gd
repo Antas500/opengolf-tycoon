@@ -1102,6 +1102,7 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		btn = ElevationSelectorButton.new()
 		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
 			desc, cost, maintenance)
+		btn.set_brush_square(_elevation_square)
 	elif tool_def.get("tile_preview", false):
 		btn = TerrainTileButton.new()
 		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
@@ -1369,6 +1370,10 @@ func _set_elevation_brush_size(value: int) -> void:
 
 func _on_elevation_brush_shape_toggled() -> void:
 	_elevation_square = not _elevation_square
+	for tool_name in ["flat", "gradual"]:
+		var selector = _tool_buttons.get(tool_name)
+		if is_instance_valid(selector) and selector is ElevationSelectorButton:
+			selector.set_brush_square(_elevation_square)
 	for shape in _elevation_brush_shape_buttons:
 		if is_instance_valid(shape):
 			_update_elevation_brush_shape_button(shape)
