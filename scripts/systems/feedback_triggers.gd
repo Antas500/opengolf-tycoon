@@ -24,6 +24,10 @@ enum TriggerType {
 	TIRED,
 	HUNGRY,
 	NEEDS_RESTROOM,
+	THIRSTY,
+	REFRESHED,
+	CHEERED_UP,
+	PACED_UP,
 }
 
 ## Trigger data: messages array and sentiment
@@ -112,6 +116,26 @@ const TRIGGERS: Dictionary = {
 		"messages": ["Need a restroom!", "Where's the restroom?", "Nature calls...", "Bathroom break?"],
 		"sentiment": "negative",
 		"probability": 0.7,
+	},
+	TriggerType.THIRSTY: {
+		"messages": ["So thirsty...", "Need a drink", "Where's the drinks cart?", "Parched!"],
+		"sentiment": "negative",
+		"probability": 0.6,
+	},
+	TriggerType.REFRESHED: {
+		"messages": ["Ah, refreshing!", "Thanks for the drink!", "Just what I needed", "Cheers!"],
+		"sentiment": "positive",
+		"probability": 0.7,
+	},
+	TriggerType.CHEERED_UP: {
+		"messages": ["Great chat!", "What a friendly club!", "Nice to be welcomed", "Lovely staff!"],
+		"sentiment": "positive",
+		"probability": 0.6,
+	},
+	TriggerType.PACED_UP: {
+		"messages": ["Thanks, marshal!", "Back on pace", "Good to keep moving", "Appreciate the nudge!"],
+		"sentiment": "positive",
+		"probability": 0.6,
 	},
 }
 

@@ -103,6 +103,16 @@ var placement_preview: PlacementPreview = null
 var main_menu: MainMenu = null
 var event_feed_panel: EventFeedPanel = null
 
+# Staff on the course: a container for the wandering staff members, the weeds
+# they work on, and the overlay that draws their designated areas.
+var staff_container: Node2D = null
+var weed_container: Node2D = null
+var weed_manager: WeedManager = null
+var staff_area_overlay: StaffAreaOverlay = null
+## Index into StaffManager.hired_staff whose area the player is repositioning,
+## or -1 when not in that mode.
+var _staff_area_mode_index: int = -1
+
 # Hole context menu and move modes
 enum HoleMoveMode { NONE, MOVING_PIN, MOVING_TEE, MOVING_GREEN, MOVING_FORWARD_TEE, MOVING_MIDDLE_TEE }
 var _hole_move_mode: int = HoleMoveMode.NONE
@@ -129,6 +139,9 @@ func _ready() -> void:
 	# Create building info panel (added to UI layer later)
 	building_info_panel = BuildingInfoPanel.new()
 	building_info_panel.close_requested.connect(_on_building_panel_closed)
+
+	# On-course staff look customers up through GameManager.
+	GameManager.golfer_manager = golfer_manager
 
 	# Set up ball manager
 	ball_manager.set_terrain_grid(terrain_grid)
@@ -198,6 +211,29 @@ func _ready() -> void:
 	staff_mgr.name = "StaffManager"
 	add_child(staff_mgr)
 	GameManager.staff_manager = staff_mgr
+
+	# Staff bodies live under Entities, weeds just above the terrain surface.
+	staff_container = Node2D.new()
+	staff_container.name = "Staff"
+	staff_container.y_sort_enabled = true
+	$Entities.add_child(staff_container)
+	staff_mgr.set_staff_container(staff_container)
+
+	weed_container = Node2D.new()
+	weed_container.name = "Weeds"
+	weed_container.y_sort_enabled = true
+	$Entities.add_child(weed_container)
+	weed_manager = WeedManager.new()
+	weed_manager.name = "WeedManager"
+	add_child(weed_manager)
+	weed_manager.setup(terrain_grid, weed_container)
+	GameManager.weed_manager = weed_manager
+	staff_mgr.set_weed_manager(weed_manager)
+
+	staff_area_overlay = StaffAreaOverlay.new()
+	staff_area_overlay.name = "StaffAreaOverlay"
+	staff_area_overlay.set_terrain_grid(terrain_grid)
+	terrain_grid.add_child(staff_area_overlay)
 
 	var marketing_mgr = MarketingManager.new()
 	marketing_mgr.name = "MarketingManager"
@@ -585,6 +621,7 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.feed_pressed.connect(_toggle_event_feed)
 	terrain_toolbar.scorecard_pressed.connect(_toggle_course_scorecard_panel)
 	terrain_toolbar.golfer_row_clicked.connect(_on_toolbar_golfer_clicked)
+	terrain_toolbar.staff_area_move_requested.connect(_on_staff_area_move_requested)
 	terrain_toolbar.golfer_data_provider = _collect_golfer_rows
 
 	_sync_view_controls()
@@ -900,6 +937,11 @@ func _update_button_states() -> void:
 		ultra_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.ULTRA else Color(1, 1, 1, 1)
 
 func _start_painting() -> void:
+	# Repositioning a staff member's designated area takes the next click.
+	if _staff_area_mode_index >= 0:
+		_handle_staff_area_click(terrain_grid.screen_to_grid(camera.get_mouse_world_position()))
+		return
+
 	# Handle hole move mode clicks first
 	if _hole_move_mode != HoleMoveMode.NONE:
 		var mouse_world = camera.get_mouse_world_position()
@@ -1157,6 +1199,64 @@ func _update_measure_overlay() -> void:
 	if _measure_overlay:
 		_measure_overlay.update_measurement(_measure_start, _measure_end, _measuring)
 
+## Ask main to reposition a staff member's designated area (index >= 0) or to
+## leave that mode (index < 0).
+func _on_staff_area_move_requested(index: int) -> void:
+	if index < 0:
+		_cancel_staff_area_mode()
+		return
+	var sm = GameManager.staff_manager
+	if sm == null or index >= sm.hired_staff.size():
+		_cancel_staff_area_mode()
+		return
+	# Any other tool would fight the click, so clear it first.
+	_cancel_hole_move_mode()
+	_close_hole_context_menu()
+	placement_manager.cancel_placement()
+	_cancel_elevation_mode()
+	_cancel_bulldozer_mode()
+	is_painting = false
+	if terrain_toolbar:
+		terrain_toolbar.clear_selection()
+	if placement_preview:
+		placement_preview.set_terrain_painting_enabled(false)
+
+	_staff_area_mode_index = index
+	var record: Dictionary = sm.hired_staff[index]
+	if staff_area_overlay:
+		staff_area_overlay.highlight_index = index
+		staff_area_overlay.refresh()
+	if terrain_toolbar:
+		terrain_toolbar.set_staff_area_mode_index(index)
+	EventBus.notify("Click a tile to set %s's designated area." % record.get("name", "staff"), "info")
+
+func _cancel_staff_area_mode() -> void:
+	if _staff_area_mode_index < 0 and (staff_area_overlay == null or staff_area_overlay.highlight_index < 0):
+		return
+	_staff_area_mode_index = -1
+	if staff_area_overlay:
+		staff_area_overlay.highlight_index = -1
+		staff_area_overlay.refresh()
+	if terrain_toolbar:
+		terrain_toolbar.set_staff_area_mode_index(-1)
+
+func _handle_staff_area_click(grid_pos: Vector2i) -> void:
+	var sm = GameManager.staff_manager
+	if sm == null or _staff_area_mode_index < 0 \
+			or _staff_area_mode_index >= sm.hired_staff.size():
+		_cancel_staff_area_mode()
+		return
+	if not terrain_grid.is_valid_position(grid_pos):
+		EventBus.notify("That tile is off the course.", "error")
+		return
+	var record: Dictionary = sm.hired_staff[_staff_area_mode_index]
+	var staff_name: String = record.get("name", "staff")
+	if sm.move_staff_area(_staff_area_mode_index, grid_pos):
+		EventBus.notify("%s's area moved." % staff_name, "success")
+	else:
+		EventBus.notify("Could not move that area.", "error")
+	_cancel_staff_area_mode()
+
 func _cancel_action() -> void:
 	if is_painting:
 		_stop_painting()
@@ -1168,6 +1268,9 @@ func _cancel_action() -> void:
 	# Two-tier cancel: first ESC cancels the active operation, second deselects tool
 	var had_active_operation = false
 
+	if _staff_area_mode_index >= 0:
+		_cancel_staff_area_mode()
+		had_active_operation = true
 	if _hole_context_menu:
 		_close_hole_context_menu()
 		had_active_operation = true
@@ -1196,6 +1299,8 @@ func _cancel_action() -> void:
 
 func _has_active_tool() -> bool:
 	"""Check if any tool is currently active (not in null selector state)"""
+	if _staff_area_mode_index >= 0:
+		return true
 	if _hole_move_mode != HoleMoveMode.NONE:
 		return true
 	if bulldozer_mode:
@@ -1219,6 +1324,7 @@ func _on_tool_selected(tool_type: int) -> void:
 			return
 
 	# Cancel any building/tree placement, elevation mode, and bulldozer mode
+	_cancel_staff_area_mode()
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
@@ -1296,6 +1402,14 @@ func _snapshot_moving_entities() -> Array:
 		for ball in ball_manager.get_all_balls():
 			if is_instance_valid(ball):
 				snapshot.append([ball, terrain_grid.screen_to_grid_precise(ball.global_position)])
+	# Staff and weeds are live course objects too; a view rotation must carry
+	# them to their new projected positions.
+	for container in [staff_container, weed_container]:
+		if container == null:
+			continue
+		for child in container.get_children():
+			if child is Node2D and is_instance_valid(child):
+				snapshot.append([child, terrain_grid.screen_to_grid_precise(child.global_position)])
 	return snapshot
 
 func _restore_moving_entities(snapshot: Array) -> void:
@@ -1316,6 +1430,9 @@ func _after_view_change() -> void:
 		_measure_overlay.queue_redraw()
 	if routing_overlay:
 		routing_overlay.queue_redraw()
+	# Designated-area rings are projected per-point, so they redraw with the view.
+	if staff_area_overlay:
+		staff_area_overlay.refresh()
 
 func _reposition_placed_entities() -> void:
 	if not entity_layer:
@@ -1669,6 +1786,10 @@ func _on_new_game_started() -> void:
 	# so without this a stale tee box would even block the player's first tee.
 	if golfer_manager:
 		golfer_manager.clear_all_golfers()
+	if weed_manager:
+		weed_manager.clear_all()
+	if GameManager.staff_manager:
+		GameManager.staff_manager.clear_all_staff()
 	if entity_layer:
 		entity_layer.clear_all()
 	if hole_manager:
@@ -2123,6 +2244,11 @@ func _on_end_of_day(day_number: int) -> void:
 	var hole_count = GameManager.current_course.holes.size() if GameManager.current_course else 0
 	var building_costs = _calculate_building_operating_costs()
 	var decoration_costs = _calculate_decoration_operating_costs()
+
+	# Overnight weeds sprout before payroll, so condition reflects what was left
+	# on the course today.
+	if weed_manager:
+		weed_manager.grow_daily(GameManager.get_open_hole_count())
 
 	# Staff payroll
 	var staff_payroll: int = 0

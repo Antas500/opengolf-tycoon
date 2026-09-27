@@ -44,7 +44,8 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 - [Reputation System](reputation.md) — Daily decay, per-golfer mood-based gains, tournament bonuses, prestige multiplier
 - [Golfer Spawning & Tier System](golfer-spawning.md) — Spawn rates, tier selection weights, group sizes, landing zone safety
 - [Satisfaction & Feedback](satisfaction-feedback.md) — Located complaints, completed-visit reviews, returning customers and daily satisfaction
-- [Golfer Needs](golfer-needs.md) — Energy, comfort, hunger, pace needs that decay over time and are satisfied by buildings
+- [Golfer Needs](golfer-needs.md) — Energy, comfort, hunger, thirst, pace needs that decay over time and are satisfied by buildings and staff
+- [Staff on the Course & Weeds](staff-and-weeds.md) — Four job types with standard/premium hires, designated work areas, on-course behaviour and weed-driven course condition
 
 ### Events & Time
 - [Tournament System](tournament-system.md) — 4 tiers, qualification, scheduling, live scoring, revenue/reputation rewards
