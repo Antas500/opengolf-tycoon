@@ -1051,17 +1051,14 @@ func test_action_signals() -> void:
 	toolbar._on_tool_button_pressed("decoration")
 	assert_signal_emitted(toolbar, "decoration_placement_pressed")
 
-	toolbar._on_tool_button_pressed("raise")
-	assert_signal_emitted(toolbar, "raise_elevation_pressed")
+	toolbar._on_tool_button_pressed("vertex")
+	assert_signal_emitted_with_parameters(toolbar, "elevation_tool_pressed", ["vertex"])
 
-	toolbar._on_tool_button_pressed("lower")
-	assert_signal_emitted(toolbar, "lower_elevation_pressed")
+	toolbar._on_tool_button_pressed("flat")
+	assert_signal_emitted_with_parameters(toolbar, "elevation_tool_pressed", ["flat"])
 
-	toolbar._on_tool_button_pressed("mound")
-	assert_signal_emitted_with_parameters(toolbar, "sculpt_terrain_pressed", [true])
-
-	toolbar._on_tool_button_pressed("hollow")
-	assert_signal_emitted_with_parameters(toolbar, "sculpt_terrain_pressed", [false])
+	toolbar._on_tool_button_pressed("gradual")
+	assert_signal_emitted_with_parameters(toolbar, "elevation_tool_pressed", ["gradual"])
 
 	toolbar._on_tool_button_pressed("bulldozer")
 	assert_signal_emitted(toolbar, "bulldozer_pressed")
@@ -1496,3 +1493,305 @@ func test_theme_changes_keep_one_honeycomb_without_stale_tiles() -> void:
 			"*", "TileHoneycomb", true, false).size(), 1)
 	GameManager.current_theme = original_theme
 	EventBus.theme_changed.emit(original_theme)
+
+# =============================================================================
+# Elevation tab: selector tools + the separate Elevation Brush
+# =============================================================================
+
+func test_elevation_tab_has_the_three_selector_tools() -> void:
+	for tool_name in ["vertex", "flat", "gradual"]:
+		assert_true(tool_name in toolbar._tool_buttons, "%s selector button exists" % tool_name)
+		assert_eq(toolbar.TOOL_TAB_MAP[tool_name], TerrainToolbar.Tab.ELEVATION,
+				"%s lives on the Elevation tab" % tool_name)
+	for old_tool in ["mound", "hollow", "raise", "lower"]:
+		assert_false(old_tool in toolbar._tool_buttons, "old tool %s is gone" % old_tool)
+
+func test_elevation_selectors_are_terrain_tile_previews() -> void:
+	for tool_name in ["vertex", "flat", "gradual"]:
+		var btn = toolbar._tool_buttons[tool_name]
+		assert_true(btn is ElevationSelectorButton, "%s is a diamond of terrain tiles" % tool_name)
+		assert_not_null(btn.get_node_or_null("ElevationPreviewArt"), "%s shows its example" % tool_name)
+	var mid := ElevationSelectorButton.GRID_TILES / 2
+	var vertex: Array = ElevationSelectorButton.example_heights("vertex")
+	assert_eq(vertex[mid][mid], 1, "vertex example lifts one vertex")
+	assert_eq(vertex[mid][mid + 1], 0, "only one vertex moves")
+	var flat: Array = ElevationSelectorButton.example_heights("flat")
+	assert_eq(flat[mid - 1][mid - 1], flat[mid][mid], "flat example is level on top")
+	var gradual: Array = ElevationSelectorButton.example_heights("gradual")
+	assert_gt(gradual[mid][mid], gradual[mid - 1][mid - 1], "gradual example peaks in the middle")
+
+func test_circle_selector_examples_show_the_3x3_brush_as_a_cross() -> void:
+	var flat: Array = ElevationSelectorButton.example_heights("flat", false)
+	var gradual: Array = ElevationSelectorButton.example_heights("gradual", false)
+	var selected_tiles := 0
+	for y in ElevationSelectorButton.GRID_TILES:
+		for x in ElevationSelectorButton.GRID_TILES:
+			var selected: bool = flat[y][x] > 0 and flat[y][x + 1] > 0 and flat[y + 1][x] > 0 and flat[y + 1][x + 1] > 0
+			var expected: bool = (x == 2 and y in [1, 2, 3]) or (y == 2 and x in [1, 2, 3])
+			assert_eq(selected, expected, "round 3x3 example selects a five-tile cross")
+			if selected:
+				selected_tiles += 1
+	assert_eq(selected_tiles, 5, "the circle's 3x3 footprint contains five tiles")
+	assert_eq(gradual[2][2], 2, "the round gradual example keeps its middle vertex raised")
+	assert_eq(gradual[3][3], 2, "the round gradual example raises all four middle vertices")
+	assert_eq(gradual[1][2], 1, "the cross arms slope down from the middle")
+	assert_eq(gradual[1][1], 0, "the round gradual example leaves diagonal corners flat")
+
+func test_square_selector_examples_are_5x5_grids_with_3x3_selected() -> void:
+	assert_eq(ElevationSelectorButton.GRID_TILES, 5, "the examples draw 5x5 tile grids")
+	assert_eq(ElevationSelectorButton.SELECTED_TILES, 3, "the examples select 3x3 tiles")
+	var n: int = ElevationSelectorButton.GRID_TILES + 1
+	var lo: int = (ElevationSelectorButton.GRID_TILES - ElevationSelectorButton.SELECTED_TILES) / 2
+	var hi: int = lo + ElevationSelectorButton.SELECTED_TILES
+
+	# Flat: exactly the selected block's corner vertices lift, so the central
+	# 3x3 tiles rise together into one level slab and nothing else moves.
+	var flat: Array = ElevationSelectorButton.example_heights("flat")
+	assert_eq(flat.size(), n, "the flat example spans the whole 5x5 grid")
+	for y in n:
+		assert_eq(flat[y].size(), n, "each row of the flat example spans the whole 5x5 grid")
+		for x in n:
+			var on_slab: bool = x >= lo and x <= hi and y >= lo and y <= hi
+			assert_eq(flat[y][x], 1 if on_slab else 0,
+					"flat example lifts exactly the selected tiles' corners")
+	for y in ElevationSelectorButton.GRID_TILES:
+		for x in ElevationSelectorButton.GRID_TILES:
+			var slab: bool = flat[y][x] > 0 and flat[y][x + 1] > 0 and flat[y + 1][x] > 0 and flat[y + 1][x + 1] > 0
+			assert_eq(slab, x >= lo and x < hi and y >= lo and y < hi,
+					"flat example selects exactly the central 3x3 tiles")
+
+	# Gradual: the same central 3x3 tiles rise as a smooth hill — one step up
+	# at the selection's rim, two over the middle, never more than one step of
+	# slope between neighbouring vertices.
+	var gradual: Array = ElevationSelectorButton.example_heights("gradual")
+	assert_eq(gradual.size(), n, "the gradual example spans the whole 5x5 grid")
+	assert_eq(gradual[lo][lo], 1, "the hill's rim on the selection edge is one step up")
+	assert_eq(gradual[lo + 1][lo + 1], 2, "the hill peaks over the middle of the selection")
+	for y in n:
+		for x in n:
+			for step in [Vector2i(1, 0), Vector2i(0, 1)]:
+				var nx: int = x + step.x
+				var ny: int = y + step.y
+				if nx < n and ny < n:
+					assert_lte(absi(gradual[ny][nx] - gradual[y][x]), 1,
+							"gradual example keeps at most one step of slope")
+
+func test_elevation_selectors_are_twice_the_catalogue_tile_size() -> void:
+	var doubled := TerrainTileButton.BUTTON_SIZE * 2.0
+	for tool_name in ["vertex", "flat", "gradual"]:
+		var btn = toolbar._tool_buttons[tool_name]
+		assert_eq(btn.button_size(), doubled, "%s selector is double size" % tool_name)
+		assert_eq(btn.custom_minimum_size, doubled, "%s selector lays out at double size" % tool_name)
+		assert_true(btn._has_point(doubled * 0.5), "the centre of the big diamond is clickable")
+		assert_true(btn._has_point(Vector2(doubled.x * 0.9, doubled.y * 0.5)),
+				"the whole doubled diamond answers to the mouse")
+
+func test_elevation_brush_sizes_are_shared_by_the_square_tools() -> void:
+	toolbar.set_elevation_tool("flat")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"Flat offers 1x1 through 9x9")
+	toolbar.set_elevation_tool("gradual")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"Gradual offers the same 1x1 through 9x9")
+	toolbar.set_elevation_tool("vertex")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"The stepper keeps the shared sizes while Vertex is selected")
+	toolbar.set_elevation_tool("")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"The stepper keeps the shared sizes with no Square tool selected")
+
+func test_elevation_brush_controls_stay_enabled_without_a_square_tool() -> void:
+	toolbar.set_elevation_tool("flat")
+	for button in toolbar._elevation_brush_buttons:
+		assert_false(button.disabled, "flat: size buttons enabled")
+	assert_false(toolbar._elevation_brush_shape_buttons[0].disabled, "flat: shape enabled")
+	toolbar.set_elevation_tool("vertex")
+	for button in toolbar._elevation_brush_buttons:
+		assert_false(button.disabled, "vertex: size buttons stay enabled")
+	assert_false(toolbar._elevation_brush_shape_buttons[0].disabled, "vertex: shape stays enabled")
+	assert_false(toolbar._elevation_brush_size_notches[0].disabled, "vertex: size stepper stays on")
+	toolbar.set_elevation_tool("")
+	for button in toolbar._elevation_brush_buttons:
+		assert_false(button.disabled, "none: size buttons stay enabled")
+	assert_false(toolbar._elevation_brush_shape_buttons[0].disabled, "none: shape stays enabled")
+	assert_false(toolbar._elevation_brush_size_notches[0].disabled, "none: size stepper stays on")
+	toolbar._set_elevation_brush_size(2)
+	toolbar._on_elevation_brush_shape_toggled()
+	assert_eq(toolbar.get_elevation_brush_size(), 2, "size can change with no Square tool")
+	assert_false(toolbar.get_elevation_brush_square(), "shape can change with no Square tool")
+
+## The Elevation Brush belongs to the two Square Selectors, so its controls sit
+## in the notch between the Flat Square and Gradual Square tiles instead of in a
+## group of their own beside the row — the same treatment the Open Hole action
+## gets on the Course Terrain tab.
+func test_elevation_brush_nestles_between_the_two_square_selectors() -> void:
+	await _settle_layout()
+	var grid: TileHoneycomb = toolbar._elevation_selectors
+	var vertex: Control = toolbar._tool_buttons["vertex"]
+	var flat: Control = toolbar._tool_buttons["flat"]
+	var gradual: Control = toolbar._tool_buttons["gradual"]
+	var size_notch: ElevationBrushSizeNotch = toolbar._elevation_brush_size_notches[0]
+	var shape_notch: ElevationBrushNotchButton = toolbar._elevation_brush_shape_buttons[0]
+
+	# The selectors share one honeycomb of a single row, and the brush controls
+	# take no slot along it.
+	var tiles: Array[Control] = grid.flow_children()
+	assert_eq(tiles.size(), 3, "The tab is the three selectors, nothing else")
+	assert_eq(tiles[0], vertex, "Vertex opens the row")
+	assert_eq(tiles[1], flat, "Flat Square follows it")
+	assert_eq(tiles[2], gradual, "Gradual Square closes it")
+	for cell in [size_notch, shape_notch]:
+		assert_eq(cell.get_parent(), grid, "%s lives on the selector honeycomb" % cell.name)
+		assert_true(grid.is_notch_child(cell), "%s fills a notch instead of a tile slot" % cell.name)
+		assert_false(grid.flow_children().has(cell), "%s takes no slot along the row" % cell.name)
+	assert_eq(grid.notch_slot(size_notch), toolbar.ELEVATION_BRUSH_NOTCH_SLOT,
+		"The brush sits to the right of the Flat Square tile")
+	assert_eq(grid.notch_slot(shape_notch), toolbar.ELEVATION_BRUSH_NOTCH_SLOT)
+
+	# Where the two Square tiles face each other across the honeycomb's gap.
+	var meet := (flat.position + Vector2(flat.size.x, flat.size.y * 0.5)
+		+ gradual.position + Vector2(0.0, gradual.size.y * 0.5)) * 0.5
+	var half := ElevationSelectorButton.SELECTOR_TILE_SIZE * 0.5
+	for cell in [size_notch, shape_notch]:
+		assert_eq(cell.size, half, "%s is half a selector diamond" % cell.name)
+		assert_almost_eq(cell.size.x, cell.size.y * 2.0, 0.01,
+			"%s is an isometric diamond, like the tiles" % cell.name)
+		var centre: Vector2 = cell.position + cell.size * 0.5
+		assert_almost_eq(centre.x, meet.x, 0.01,
+			"%s is centred between the two Square tiles" % cell.name)
+		assert_almost_eq(
+			(grid.notch_centre(grid.notch_slot(cell), grid.notch_is_above(cell)) - centre).length(),
+			0.0, 0.01, "The honeycomb centres %s in its notch" % cell.name)
+		for tile in [flat, gradual]:
+			for point in _diamond_samples(cell.size):
+				assert_false(TerrainTileButton.point_on_tile(
+					cell.position + point - tile.position, tile.size),
+					"The %s diamond stays clear of the %s tile" % [cell.name, tile.tool_name])
+
+	# The size stepper takes the V above the point where the tiles meet, the
+	# shape toggle the V below it — the two gaps either side of that point.
+	assert_true(grid.notch_is_above(size_notch), "The size stepper sits above the Square tiles")
+	assert_false(grid.notch_is_above(shape_notch), "The shape toggle sits below them")
+	assert_almost_eq(size_notch.position.y + size_notch.size.y, meet.y, 0.01,
+		"The stepper's bottom point sits on the point where the Square tiles meet")
+	assert_almost_eq(shape_notch.position.y, meet.y, 0.01,
+		"The shape toggle's top point sits on the point where the Square tiles meet")
+
+	# Only the diamonds answer to the mouse: a click in the empty corner of
+	# either bounding box falls through to the tile underneath.
+	assert_true(shape_notch._has_point(shape_notch.size * 0.5), "The middle of the shape cell is clickable")
+	assert_false(shape_notch._has_point(Vector2(1, 1)),
+		"The empty corner of the shape cell's box falls through to the tiles")
+
+## The stepper's three cells sit inside the diamond, so the whole stepper reads
+## as one control in the notch rather than three loose buttons.
+func test_elevation_brush_size_stepper_cells_stay_inside_the_diamond() -> void:
+	await _settle_layout()
+	var notch: ElevationBrushSizeNotch = toolbar._elevation_brush_size_notches[0]
+	for cell in [notch.decrease_button, notch.size_label, notch.increase_button]:
+		for corner in [Vector2.ZERO, Vector2(cell.size.x, 0.0), cell.size, Vector2(0.0, cell.size.y)]:
+			assert_true(TerrainTileButton.point_on_tile(cell.position + corner, notch.size),
+				"The %s cell stays inside the notch diamond" % cell.name)
+	assert_lt(notch.decrease_button.position.x, notch.size_label.position.x,
+		"Smaller comes first")
+	assert_lt(notch.size_label.position.x, notch.increase_button.position.x,
+		"The size it paints with sits between the two steps")
+
+## The shape cell carries the brush's state as a glyph over a word naming it,
+## both small enough to stay inside the diamond.
+func test_elevation_brush_shape_cell_shows_the_shape_it_paints_with() -> void:
+	await _settle_layout()
+	var shape: ElevationBrushNotchButton = toolbar._elevation_brush_shape_buttons[0]
+	toolbar.set_elevation_tool("flat")
+	assert_eq(shape.caption, "□", "A square brush shows the square glyph")
+	assert_string_contains(shape.tooltip_text, "Square elevation brush",
+		"The hover tooltip still names the control")
+	toolbar._on_elevation_brush_shape_toggled()
+	assert_eq(shape.caption, "○", "A round brush shows the round glyph")
+	assert_false(toolbar._tool_buttons["flat"]._brush_square,
+		"The Flat Square example follows the round brush shape")
+	assert_false(toolbar._tool_buttons["gradual"]._brush_square,
+		"The Gradual Square example follows the round brush shape")
+
+	var font := shape.get_theme_font("font")
+	var word := font.get_string_size(ElevationBrushNotchButton.LABEL_TEXT,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, ElevationBrushNotchButton.LABEL_FONT_SIZE)
+	# The word's far corner must stay inside the diamond: |x|/a + |y|/b <= 1.
+	var corner := Vector2(word.x * 0.5, ElevationBrushNotchButton.LABEL_DROP + word.y * 0.5)
+	assert_lte(corner.x / (shape.size.x * 0.5) + corner.y / (shape.size.y * 0.5), 1.0,
+		"The word under the glyph stays inside the diamond at the height it rides at")
+
+## Moving the controls into the notch leaves the brush itself working exactly as
+## it did in its own group.
+func test_elevation_brush_notch_cells_still_change_the_brush() -> void:
+	await _settle_layout()
+	toolbar.set_elevation_tool("flat")
+	var notch: ElevationBrushSizeNotch = toolbar._elevation_brush_size_notches[0]
+	var shape: ElevationBrushNotchButton = toolbar._elevation_brush_shape_buttons[0]
+	watch_signals(toolbar)
+
+	notch.increase_button.pressed.emit()
+	assert_signal_emitted(toolbar, "elevation_brush_size_changed")
+	assert_eq(toolbar.get_elevation_brush_size(), 4, "Bigger paints one size up")
+	assert_eq(notch.size_label.text, "4x4", "The readout keeps up with the tool")
+	notch.decrease_button.pressed.emit()
+	assert_eq(toolbar.get_elevation_brush_size(), 3, "Smaller paints one size down")
+
+	shape.pressed.emit()
+	assert_signal_emitted(toolbar, "elevation_brush_shape_changed")
+	assert_false(toolbar.get_elevation_brush_square(), "The shape toggle still flips the brush")
+
+## The selectors' single row of doubled diamonds fills the same page height as
+## the two interlocking course rows, so the toolbar never changes height with
+## the tab.
+func test_elevation_selectors_fill_the_same_page_height_as_the_course_tiles() -> void:
+	await _settle_layout()
+	assert_almost_eq(toolbar._elevation_selectors.get_combined_minimum_size().y,
+		toolbar._course_tiles.get_combined_minimum_size().y, 0.01,
+		"One row of doubled selector diamonds fills the page two course rows fill")
+
+func test_elevation_tab_is_just_the_selector_honeycomb() -> void:
+	var content: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.ELEVATION)
+	assert_eq(content.get_child_count(), 1,
+		"The Elevation tab is just the selector honeycomb — the brush rides in its notch")
+	assert_eq(content.get_child(0).get_child(0), toolbar._elevation_selectors,
+		"The honeycomb is the tab's only group")
+
+func test_elevation_brush_shares_settings_between_square_tools() -> void:
+	toolbar.set_elevation_tool("flat")
+	toolbar._set_elevation_brush_size(7)
+	toolbar._on_elevation_brush_shape_toggled()  # square -> round
+	assert_eq(toolbar.get_elevation_brush_size(), 7)
+	assert_false(toolbar.get_elevation_brush_square())
+
+	toolbar.set_elevation_tool("gradual")
+	# Gradual uses the same size and shape Flat just set.
+	assert_eq(toolbar.get_elevation_brush_size(), 7)
+	assert_false(toolbar.get_elevation_brush_square())
+
+	toolbar.set_elevation_tool("vertex")
+	assert_eq(toolbar.get_elevation_brush_size(), 7, "Vertex keeps the shared size")
+	assert_false(toolbar.get_elevation_brush_square(), "Vertex keeps the shared shape")
+
+	toolbar.set_elevation_tool("flat")
+	assert_eq(toolbar.get_elevation_brush_size(), 7, "flat still has the shared size")
+	assert_false(toolbar.get_elevation_brush_square(), "flat still has the shared shape")
+
+func test_elevation_brush_size_1x1_is_shared_with_gradual() -> void:
+	toolbar.set_elevation_tool("flat")
+	toolbar._set_elevation_brush_size(1)
+	toolbar.set_elevation_tool("gradual")
+	assert_eq(toolbar.get_elevation_brush_size(), 1, "Gradual can use the shared 1x1 size")
+	toolbar.set_elevation_tool("vertex")
+	assert_eq(toolbar.get_elevation_brush_size(), 1, "1x1 stays set without a Square tool")
+	var sizes: Array = toolbar._elevation_brush_sizes()
+	for size in sizes:
+		assert_true(size in ElevationTool.BRUSH_SIZES)
+
+func test_elevation_brush_signals_report_the_new_settings() -> void:
+	watch_signals(toolbar)
+	toolbar.set_elevation_tool("flat")
+	toolbar._set_elevation_brush_size(5)
+	assert_signal_emitted_with_parameters(toolbar, "elevation_brush_size_changed", [5])
+	toolbar._on_elevation_brush_shape_toggled()
+	assert_signal_emitted_with_parameters(toolbar, "elevation_brush_shape_changed", [false])

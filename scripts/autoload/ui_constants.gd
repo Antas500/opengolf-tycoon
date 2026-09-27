@@ -129,8 +129,9 @@ const TOOL_ICONS := {
 	"rock": "[*]",
 	"flower": "[f]",
 	"building": "[B]",
-	"raise": "[+]",
-	"lower": "[-]",
+	"vertex": "[V]",
+	"flat": "[+]",
+	"gradual": "[-]",
 	"open_hole": "[H]",
 	"staff": "[P]",
 }
