@@ -4,6 +4,7 @@ class_name PlayerRoundManager
 signal session_opened
 
 const PROS = ["Pro Alex", "Pro Morgan", "Pro Riley"]
+var player_tab: PlayerTab
 var busy := false
 var active := false
 var player: Golfer
@@ -43,6 +44,7 @@ func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Contro
 	add_child(layer)
 	EventBus.game_mode_changed.connect(_on_mode_changed)
 	EventBus.load_completed.connect(_on_load_completed)
+	EventBus.new_game_started.connect(_on_new_game_started)
 
 func _exit_tree() -> void:
 	if EventBus.game_mode_changed.is_connected(_on_mode_changed):
@@ -54,11 +56,20 @@ func _on_mode_changed(_old: int, mode: int) -> void:
 	if busy and mode == GameManager.GameMode.MAIN_MENU:
 		leave_round(false)
 
+func _on_new_game_started() -> void:
+	_on_load_completed(true)
+
 func _on_load_completed(_success: bool) -> void:
 	if busy:
 		leave_round(false)
+	elif is_instance_valid(player_tab):
+		_build_setup()
 
 func _make_panel(full_screen: bool) -> void:
+	if is_instance_valid(player_tab):
+		content = player_tab.clear_page(0)
+		player_tab.select(0)
+		return
 	if is_instance_valid(overlay):
 		overlay.queue_free()
 	overlay = Control.new()
@@ -79,6 +90,8 @@ func _make_panel(full_screen: bool) -> void:
 func _label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
+	if is_instance_valid(player_tab):
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(label)
 	return label
 
@@ -89,7 +102,17 @@ func _button(text: String, action: Callable) -> Button:
 	content.add_child(button)
 	return button
 
+func attach_player_tab(tab: PlayerTab) -> void:
+	player_tab = tab
+	open_setup()
+
 func open_setup() -> void:
+	if is_instance_valid(player_tab):
+		if busy:
+			player_tab.select(0)
+			return
+		_build_setup()
+		return
 	if busy or GameManager.is_paused:
 		return
 	if GameManager.get_open_hole_count() == 0:
@@ -103,8 +126,18 @@ func open_setup() -> void:
 	previous_speed = GameManager.current_speed
 	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
 	session_opened.emit()
+	_build_setup()
+
+func _build_setup() -> void:
 	draft = PlayerGolferProfile.from_data(GameManager.player_profile.serialize())
-	_make_panel(true)
+	if is_instance_valid(player_tab):
+		for index in [1, 2, 3, 4]:
+			player_tab.clear_page(index)
+		content = player_tab.clear_page(0)
+		_label("Start a Practice Round, Play vs Pro, or Tournament to aim your shots.")
+		content = player_tab.pages[1]
+	else:
+		_make_panel(true)
 	_label("PLAY YOUR COURSE")
 	_label("Your golfer")
 	name_edit = LineEdit.new()
@@ -124,6 +157,9 @@ func open_setup() -> void:
 		color.custom_minimum_size = Vector2(100, 28)
 		color.color_changed.connect(func(value: Color): draft.appearance[key] = value.to_html(false))
 		row.add_child(color)
+	if is_instance_valid(player_tab):
+		_button("Save player", _save_player)
+		content = player_tab.pages[3]
 	_label("Round format")
 	mode_picker = OptionButton.new()
 	for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
@@ -135,6 +171,11 @@ func open_setup() -> void:
 	content.add_child(pro_picker)
 	pro_picker.disabled = true
 	mode_picker.item_selected.connect(func(index: int): pro_picker.disabled = index != 1)
+	if is_instance_valid(player_tab):
+		mode_picker.hide()
+		pro_picker.reparent(player_tab.pages[4])
+		pro_picker.disabled = false
+		content = player_tab.pages[2]
 	points_label = _label("")
 	_label("Each point adds 10% bonus. Maximum per skill: 990%.")
 	skill_labels.clear()
@@ -153,15 +194,60 @@ func open_setup() -> void:
 				draft.allocate(i, change)
 				_refresh_skills())
 			row.add_child(button)
-	start_button = _button("Tee off", start_round)
-	_button("Cancel", leave_round)
+	if is_instance_valid(player_tab):
+		_button("Save skills", _save_player)
+		for index in [3, 4, 5]:
+			content = player_tab.pages[index]
+			# The tournament page also contains the management tournament panel.
+			if index == 5:
+				for child in content.get_children():
+					if child.has_meta("owner_round_start"):
+						content.remove_child(child)
+						child.queue_free()
+			var button := _button(["Start practice round", "Play selected pro", "Play tournament (4 golfers)"][index - 3], _start_embedded.bind(index - 3))
+			button.set_meta("owner_round_start", true)
+		start_button = null
+	else:
+		start_button = _button("Tee off", start_round)
+		_button("Cancel", leave_round)
 	_refresh_skills()
 
 func _refresh_skills() -> void:
 	points_label.text = "Skills locked for this golfer" if draft.initialized else "%d of 10 points remaining" % draft.remaining()
 	for i in skill_labels.size():
 		skill_labels[i].text = "%s: %d%%" % [PlayerGolferProfile.SKILLS[i], draft.points[i] * 10]
-	start_button.disabled = not draft.initialized and draft.remaining() != 0
+	if is_instance_valid(start_button):
+		start_button.disabled = not draft.initialized and draft.remaining() != 0
+
+func _save_player() -> void:
+	if busy:
+		return
+	draft.golfer_name = name_edit.text.strip_edges()
+	if draft.golfer_name.is_empty():
+		draft.golfer_name = "Course Owner"
+	GameManager.player_profile = PlayerGolferProfile.from_data(draft.serialize())
+
+func _start_embedded(kind: int) -> void:
+	if busy or GameManager.is_paused:
+		EventBus.notify("Finish the current round and unpause before starting.", "info")
+		return
+	if GameManager.get_open_hole_count() == 0:
+		EventBus.notify("Open at least one complete hole before playing.", "warning")
+		return
+	if GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress():
+		EventBus.notify("Finish the management tournament before playing a round.", "warning")
+		return
+	if not draft.initialized and draft.remaining() != 0:
+		EventBus.notify("Allocate all 10 points in Player Skills first.", "info")
+		player_tab.select(2)
+		return
+	busy = true
+	previous_mode = GameManager.current_mode
+	previous_speed = GameManager.current_speed
+	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
+	mode_picker.select(kind)
+	session_opened.emit()
+	start_round()
 
 func start_round() -> void:
 	if not draft.initialized and draft.remaining() != 0:
@@ -176,6 +262,13 @@ func start_round() -> void:
 	round_kind = mode_picker.selected
 	var opponent := pro_picker.selected
 	active = true
+	if is_instance_valid(player_tab):
+		for index in [1, 2]:
+			for control in player_tab.pages[index].find_children("*", "Control", true, false):
+				if control is BaseButton:
+					control.disabled = true
+				elif control is LineEdit:
+					control.editable = false
 
 	# Ensure simulation is active so all golfers can play (day always runs)
 	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
@@ -378,3 +471,6 @@ func leave_round(_restore_mode: bool = true) -> void:
 		if GameManager.current_mode != GameManager.GameMode.SIMULATING:
 			GameManager.set_mode(GameManager.GameMode.SIMULATING)
 		GameManager.set_speed(previous_speed if GameManager.current_mode == GameManager.GameMode.SIMULATING else GameManager.GameSpeed.NORMAL)
+
+	if is_instance_valid(player_tab):
+		_build_setup()

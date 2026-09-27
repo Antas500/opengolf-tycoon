@@ -320,3 +320,46 @@ func test_camera_focuses_only_when_aiming_shot() -> void:
 	assert_eq(cam._target_position, p.global_position, "Camera focuses on player when turn to aim arrives")
 
 	rounds.leave_round()
+
+func test_embedded_player_navigation_and_setup() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	assert_eq(tab.buttons.size(), 6)
+	assert_eq(tab.buttons[0].text, "Aiming Shot")
+	assert_eq(tab.buttons[5].text, "Tournament")
+	assert_false(rounds.busy, "Editing a player does not reserve a round")
+	assert_null(rounds.overlay, "Embedded setup creates no floating overlay")
+	assert_eq(rounds.name_edit.get_parent(), tab.pages[1])
+	assert_eq(rounds.points_label.get_parent(), tab.pages[2])
+	assert_eq(rounds.pro_picker.get_parent(), tab.pages[4])
+	for index in 6:
+		tab.buttons[index].pressed.emit()
+		for page in 6:
+			assert_eq(tab.pages[page].get_parent().visible, page == index)
+
+func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds._start_embedded(1)
+	assert_true(rounds.active)
+	assert_eq(rounds.participants.size(), 2)
+	assert_eq(tab.selected, 0)
+	assert_eq(rounds.status.get_parent(), tab.pages[0])
+	assert_null(rounds.overlay)
+	assert_false(rounds.name_edit.editable, "Appearance stays locked during the round")
+	rounds.leave_round()
+	assert_false(rounds.busy)
+	assert_true(rounds.name_edit.editable)
+	assert_eq(tab.pages[5].get_child_count(), 1, "Rebuilding does not duplicate tournament launch buttons")
+
+func test_embedded_round_requires_skill_allocation() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	rounds._start_embedded(0)
+	assert_false(rounds.busy)
+	assert_eq(tab.selected, 2)

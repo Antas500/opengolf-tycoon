@@ -4,6 +4,7 @@ class_name TournamentPanel
 
 signal close_requested
 
+var embedded := false
 var _tournament_manager: TournamentManager = null
 var _content_vbox: VBoxContainer = null
 var _status_label: Label = null
@@ -11,6 +12,9 @@ var _title_label: Label = null
 
 func _ready() -> void:
 	super._ready()
+	if embedded:
+		size_flags_vertical = Control.SIZE_EXPAND_FILL
+		show()
 	# Connect to tournament events
 	EventBus.tournament_scheduled.connect(_on_tournament_scheduled)
 	EventBus.tournament_started.connect(_on_tournament_started)
@@ -25,7 +29,7 @@ func _exit_tree() -> void:
 		EventBus.tournament_completed.disconnect(_on_tournament_completed)
 
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(340, 480)
+	custom_minimum_size = Vector2(0, 0) if embedded else Vector2(340, 480)
 
 	var margin = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
@@ -53,6 +57,7 @@ func _build_ui() -> void:
 	close_btn.custom_minimum_size = Vector2(30, 30)
 	close_btn.pressed.connect(_on_close_pressed)
 	title_row.add_child(close_btn)
+	close_btn.visible = not embedded
 
 	main_vbox.add_child(HSeparator.new())
 
@@ -67,8 +72,10 @@ func _build_ui() -> void:
 	# Scrollable content area
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	if embedded:
+		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0, 350)
+	scroll.custom_minimum_size = Vector2(0, 350) if not embedded else Vector2.ZERO
 	main_vbox.add_child(scroll)
 
 	_content_vbox = VBoxContainer.new()
@@ -78,6 +85,7 @@ func _build_ui() -> void:
 
 func setup(tournament_manager: TournamentManager) -> void:
 	_tournament_manager = tournament_manager
+	_refresh_display()
 
 func toggle() -> void:
 	if visible:

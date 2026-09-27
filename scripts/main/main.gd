@@ -266,6 +266,7 @@ func _ready() -> void:
 	player_round = PlayerRoundManager.new()
 	add_child(player_round)
 	player_round.setup(golfer_manager, $IsometricCamera, $UI/HUD)
+	player_round.attach_player_tab(terrain_toolbar.player_tab)
 	player_round.session_opened.connect(func():
 		# Clear both tiers of tool selection before mouse input becomes shot input.
 		_cancel_action()
@@ -648,10 +649,7 @@ func _on_toolbar_golfer_clicked(golfer_id: int) -> void:
 		_on_golfer_clicked(golfer)
 
 func _on_play_course_pressed() -> void:
-	if player_round.busy:
-		EventBus.notify("Finish your current round first.", "info")
-		return
-	player_round.open_setup()
+	terrain_toolbar.select_player_section(3)
 
 func _initialize_game() -> void:
 	# Show main menu instead of auto-starting
@@ -3195,12 +3193,11 @@ func _show_hole_stats(hole_number: int) -> void:
 
 func _setup_tournament_panel() -> void:
 	"""Add tournament panel to the HUD."""
-	var hud = $UI/HUD
-
 	tournament_panel = TournamentPanel.new()
+	tournament_panel.embedded = true
 	tournament_panel.name = "TournamentPanel"
 	tournament_panel.close_requested.connect(_on_tournament_panel_closed)
-	hud.add_child(tournament_panel)
+	terrain_toolbar.player_tab.pages[5].add_child(tournament_panel)
 	tournament_panel.setup(tournament_manager)
 
 func _on_tournament_panel_closed() -> void:
@@ -3211,7 +3208,8 @@ func _on_tournament_panel_closed() -> void:
 
 func _toggle_tournament_panel() -> void:
 	"""Toggle the tournament panel visibility."""
-	_toggle_panel(tournament_panel)
+	terrain_toolbar.select_player_section(5)
+	tournament_panel._refresh_display()
 
 func _on_tournament_completed(_tier: int, results: Dictionary) -> void:
 	"""Show tournament results popup when a tournament finishes."""
