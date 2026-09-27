@@ -71,22 +71,26 @@ func test_modes_are_driven_by_the_mouse_button() -> void:
 	tool.stop_stroke()
 	assert_eq(tool.elevation_mode, ElevationTool.ElevationMode.NONE)
 
-func test_brush_sizes_are_separate_per_tool() -> void:
+func test_brush_sizes_are_shared_by_the_square_tools() -> void:
 	tool.select_tool(ElevationTool.Tool.FLAT)
-	assert_eq(tool.brush_sizes(), ElevationTool.FLAT_BRUSH_SIZES)
+	assert_eq(tool.brush_sizes(), ElevationTool.BRUSH_SIZES)
 	tool.set_brush_size(1)
 	assert_eq(tool.brush_size, 1)
 	tool.set_brush_size(9)
 	assert_eq(tool.brush_size, 9)
 	tool.select_tool(ElevationTool.Tool.GRADUAL)
-	assert_eq(tool.brush_sizes(), ElevationTool.GRADUAL_BRUSH_SIZES)
+	assert_eq(tool.brush_sizes(), ElevationTool.BRUSH_SIZES)
 	tool.set_brush(5, true)
 	assert_eq(tool.brush_size, 5)
-	# Gradual cannot be 1x1; the vertex tool has no sizes at all.
+	# Gradual can be 1x1, the same sizes Flat offers; the vertex tool has none.
 	tool.set_brush_size(1)
-	assert_eq(tool.brush_size, 5)
+	assert_eq(tool.brush_size, 1)
 	tool.select_tool(ElevationTool.Tool.VERTEX)
 	assert_eq(tool.brush_sizes(), [])
+	# Size can still be set while Vertex is selected so the Square tools
+	# pick up the shared brush when they come back.
+	tool.set_brush_size(4)
+	assert_eq(tool.brush_size, 4)
 
 # =============================================================================
 # Brush area geometry (sizes are in tiles)
@@ -369,6 +373,17 @@ func test_flat_skips_vertices_under_buildings() -> void:
 # =============================================================================
 # Gradual Square Selector
 # =============================================================================
+
+func test_gradual_1x1_reshapes_the_single_tile_under_the_cursor() -> void:
+	tool.select_tool(ElevationTool.Tool.GRADUAL)
+	tool.set_brush(1, true)
+	tool.set_mode(true)
+	var changes := tool.paint_at_tile(Vector2i(8, 8), grid, null)
+	assert_eq(changes.size(), 4, "1 tile = 4 vertices")
+	for vertex in [Vector2i(8, 8), Vector2i(9, 8), Vector2i(8, 9), Vector2i(9, 9)]:
+		assert_eq(grid.get_vertex_elevation(vertex), 1, "corner %s of the tile" % vertex)
+	assert_eq(grid.get_vertex_elevation(Vector2i(7, 8)), 0)
+	assert_eq(grid.get_vertex_elevation(Vector2i(10, 9)), 0)
 
 func test_gradual_raising_lifts_the_middle_of_flat_ground() -> void:
 	tool.select_tool(ElevationTool.Tool.GRADUAL)

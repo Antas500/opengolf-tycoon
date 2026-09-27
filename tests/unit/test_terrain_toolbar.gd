@@ -1569,26 +1569,39 @@ func test_elevation_selectors_are_twice_the_catalogue_tile_size() -> void:
 		assert_true(btn._has_point(Vector2(doubled.x * 0.9, doubled.y * 0.5)),
 				"the whole doubled diamond answers to the mouse")
 
-func test_elevation_brush_sizes_depend_on_the_selected_tool() -> void:
+func test_elevation_brush_sizes_are_shared_by_the_square_tools() -> void:
 	toolbar.set_elevation_tool("flat")
 	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
 			"Flat offers 1x1 through 9x9")
 	toolbar.set_elevation_tool("gradual")
-	assert_eq(toolbar._elevation_brush_sizes(), [2, 3, 4, 5, 6, 7, 8, 9],
-			"Gradual offers 2x2 through 9x9")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"Gradual offers the same 1x1 through 9x9")
 	toolbar.set_elevation_tool("vertex")
-	assert_eq(toolbar._elevation_brush_sizes(), [], "Vertex has no brush sizes")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"The stepper keeps the shared sizes while Vertex is selected")
+	toolbar.set_elevation_tool("")
+	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],
+			"The stepper keeps the shared sizes with no Square tool selected")
 
-func test_elevation_brush_controls_are_disabled_for_the_vertex_tool() -> void:
+func test_elevation_brush_controls_stay_enabled_without_a_square_tool() -> void:
 	toolbar.set_elevation_tool("flat")
 	for button in toolbar._elevation_brush_buttons:
 		assert_false(button.disabled, "flat: size buttons enabled")
 	assert_false(toolbar._elevation_brush_shape_buttons[0].disabled, "flat: shape enabled")
 	toolbar.set_elevation_tool("vertex")
 	for button in toolbar._elevation_brush_buttons:
-		assert_true(button.disabled, "vertex: size buttons disabled")
-	assert_true(toolbar._elevation_brush_shape_buttons[0].disabled, "vertex: shape disabled")
-	assert_true(toolbar._elevation_brush_size_notches[0].disabled, "vertex: size stepper greyed out")
+		assert_false(button.disabled, "vertex: size buttons stay enabled")
+	assert_false(toolbar._elevation_brush_shape_buttons[0].disabled, "vertex: shape stays enabled")
+	assert_false(toolbar._elevation_brush_size_notches[0].disabled, "vertex: size stepper stays on")
+	toolbar.set_elevation_tool("")
+	for button in toolbar._elevation_brush_buttons:
+		assert_false(button.disabled, "none: size buttons stay enabled")
+	assert_false(toolbar._elevation_brush_shape_buttons[0].disabled, "none: shape stays enabled")
+	assert_false(toolbar._elevation_brush_size_notches[0].disabled, "none: size stepper stays on")
+	toolbar._set_elevation_brush_size(2)
+	toolbar._on_elevation_brush_shape_toggled()
+	assert_eq(toolbar.get_elevation_brush_size(), 2, "size can change with no Square tool")
+	assert_false(toolbar.get_elevation_brush_square(), "shape can change with no Square tool")
 
 ## The Elevation Brush belongs to the two Square Selectors, so its controls sit
 ## in the notch between the Flat Square and Gradual Square tiles instead of in a
@@ -1723,34 +1736,36 @@ func test_elevation_tab_is_just_the_selector_honeycomb() -> void:
 	assert_eq(content.get_child(0).get_child(0), toolbar._elevation_selectors,
 		"The honeycomb is the tab's only group")
 
-func test_elevation_brush_keeps_separate_settings_per_tool() -> void:
+func test_elevation_brush_shares_settings_between_square_tools() -> void:
 	toolbar.set_elevation_tool("flat")
 	toolbar._set_elevation_brush_size(7)
-	toolbar._on_elevation_brush_shape_toggled()  # flat -> round
+	toolbar._on_elevation_brush_shape_toggled()  # square -> round
 	assert_eq(toolbar.get_elevation_brush_size(), 7)
 	assert_false(toolbar.get_elevation_brush_square())
 
 	toolbar.set_elevation_tool("gradual")
-	# Gradual restores its own (default) settings, not flat's.
-	assert_eq(toolbar.get_elevation_brush_size(), 3)
-	assert_true(toolbar.get_elevation_brush_square())
+	# Gradual uses the same size and shape Flat just set.
+	assert_eq(toolbar.get_elevation_brush_size(), 7)
+	assert_false(toolbar.get_elevation_brush_square())
+
+	toolbar.set_elevation_tool("vertex")
+	assert_eq(toolbar.get_elevation_brush_size(), 7, "Vertex keeps the shared size")
+	assert_false(toolbar.get_elevation_brush_square(), "Vertex keeps the shared shape")
 
 	toolbar.set_elevation_tool("flat")
-	assert_eq(toolbar.get_elevation_brush_size(), 7, "flat settings were kept")
-	assert_false(toolbar.get_elevation_brush_square(), "flat shape was kept")
+	assert_eq(toolbar.get_elevation_brush_size(), 7, "flat still has the shared size")
+	assert_false(toolbar.get_elevation_brush_square(), "flat still has the shared shape")
 
-func test_elevation_brush_size_stays_inside_the_tools_range() -> void:
+func test_elevation_brush_size_1x1_is_shared_with_gradual() -> void:
 	toolbar.set_elevation_tool("flat")
-	toolbar._set_elevation_brush_size(1)  # 1x1 is a Flat-only size
+	toolbar._set_elevation_brush_size(1)
 	toolbar.set_elevation_tool("gradual")
-	# Gradual shows its own stored size, which is always within 2x2..9x9.
-	assert_eq(toolbar.get_elevation_brush_size(), 3)
-	toolbar.set_elevation_tool("flat")
-	assert_eq(toolbar.get_elevation_brush_size(), 1, "flat kept its 1x1 size")
-	# The stepper only ever offers the tool's own sizes.
-	var flat_sizes: Array = toolbar._elevation_brush_sizes()
-	for size in flat_sizes:
-		assert_true(size in ElevationTool.FLAT_BRUSH_SIZES)
+	assert_eq(toolbar.get_elevation_brush_size(), 1, "Gradual can use the shared 1x1 size")
+	toolbar.set_elevation_tool("vertex")
+	assert_eq(toolbar.get_elevation_brush_size(), 1, "1x1 stays set without a Square tool")
+	var sizes: Array = toolbar._elevation_brush_sizes()
+	for size in sizes:
+		assert_true(size in ElevationTool.BRUSH_SIZES)
 
 func test_elevation_brush_signals_report_the_new_settings() -> void:
 	watch_signals(toolbar)

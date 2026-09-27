@@ -1585,8 +1585,8 @@ func _on_elevation_tool_pressed(tool_name: String) -> void:
 	is_painting = false
 	if terrain_toolbar:
 		terrain_toolbar.clear_selection()
-	# The Square Selectors carry their own Elevation Brush, separate from the
-	# terrain brush: hand the tool the settings its own controls are showing.
+	# The Square Selectors share one Elevation Brush, separate from the
+	# terrain brush: hand the tool the size and shape the controls are showing.
 	terrain_toolbar.set_elevation_tool(tool_name)
 	elevation_tool.select_tool(new_tool)
 	elevation_tool.set_brush(terrain_toolbar.get_elevation_brush_size(),
