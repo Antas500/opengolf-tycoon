@@ -1506,6 +1506,20 @@ func test_elevation_tab_has_the_three_selector_tools() -> void:
 	for old_tool in ["mound", "hollow", "raise", "lower"]:
 		assert_false(old_tool in toolbar._tool_buttons, "old tool %s is gone" % old_tool)
 
+func test_elevation_selectors_are_terrain_tile_previews() -> void:
+	for tool_name in ["vertex", "flat", "gradual"]:
+		var btn = toolbar._tool_buttons[tool_name]
+		assert_true(btn is ElevationSelectorButton, "%s is a diamond of terrain tiles" % tool_name)
+		assert_not_null(btn.get_node_or_null("ElevationPreviewArt"), "%s shows its example" % tool_name)
+	var mid := ElevationSelectorButton.GRID_TILES / 2
+	var vertex: Array = ElevationSelectorButton.example_heights("vertex")
+	assert_eq(vertex[mid][mid], 1, "vertex example lifts one vertex")
+	assert_eq(vertex[mid][mid + 1], 0, "only one vertex moves")
+	var flat: Array = ElevationSelectorButton.example_heights("flat")
+	assert_eq(flat[mid - 1][mid - 1], flat[mid][mid], "flat example is level on top")
+	var gradual: Array = ElevationSelectorButton.example_heights("gradual")
+	assert_gt(gradual[mid][mid], gradual[mid - 1][mid - 1], "gradual example peaks in the middle")
+
 func test_elevation_brush_sizes_depend_on_the_selected_tool() -> void:
 	toolbar.set_elevation_tool("flat")
 	assert_eq(toolbar._elevation_brush_sizes(), [1, 2, 3, 4, 5, 6, 7, 8, 9],

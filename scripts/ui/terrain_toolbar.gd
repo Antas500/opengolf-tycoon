@@ -805,9 +805,9 @@ func _build_elevation_tab(hbox: HBoxContainer) -> void:
 	var selector_box = HBoxContainer.new()
 	selector_box.add_theme_constant_override("separation", 4)
 	selector_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(selector_box, {"type": "vertex", "name": "Vertex", "icon": "◆", "hotkey": "V", "desc": "Right click raises, left click lowers, a single grid vertex by one step"})
-	_add_tool_button(selector_box, {"type": "flat", "name": "Flat Square", "icon": "■", "hotkey": "+", "desc": "Right click: even the square up, then raise it. Left click: even it down, then lower it. Whole square moves together"})
-	_add_tool_button(selector_box, {"type": "gradual", "name": "Gradual Square", "icon": "▲", "hotkey": "-", "desc": "Right click raises, left click lowers, the middle of the square; nearby vertices keep at most one step of slope"})
+	_add_tool_button(selector_box, {"type": "vertex", "elevation_preview": true, "name": "Vertex", "icon": "◆", "hotkey": "V", "desc": "Right click raises, left click lowers, a single grid vertex by one step"})
+	_add_tool_button(selector_box, {"type": "flat", "elevation_preview": true, "name": "Flat Square", "icon": "■", "hotkey": "+", "desc": "Right click: even the square up, then raise it. Left click: even it down, then lower it. Whole square moves together"})
+	_add_tool_button(selector_box, {"type": "gradual", "elevation_preview": true, "name": "Gradual Square", "icon": "▲", "hotkey": "-", "desc": "Right click raises, left click lowers, the middle of the square; nearby vertices keep at most one step of slope"})
 	hbox.add_child(_make_tab_group("", selector_box))
 
 	hbox.add_child(_make_separator())
@@ -1020,7 +1020,11 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 	# Every Course Terrain paint tile overwrites every other tile on the tab.
 	if tool_type is int and TOOL_TAB_MAP.get(tool_type, -1) == Tab.TERRAIN:
 		desc = _with_course_tile_replacement(desc)
-	if tool_def.get("tile_preview", false):
+	if tool_def.get("elevation_preview", false):
+		btn = ElevationSelectorButton.new()
+		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
+			desc, cost, maintenance)
+	elif tool_def.get("tile_preview", false):
 		btn = TerrainTileButton.new()
 		btn.configure(tool_type, tool_def["name"], "", tool_def.get("hotkey", ""),
 			desc, cost, maintenance)
