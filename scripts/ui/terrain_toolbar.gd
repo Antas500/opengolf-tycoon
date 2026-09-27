@@ -6,7 +6,7 @@ class_name TerrainToolbar
 ##  - Course Terrain: one course, hazard & landscape tiles honeycomb, with the brush controls pinned to the page's bottom-left corner so they ride above the tiles instead of scrolling with them; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
-##  - Elevation:      the Vertex, Flat Square and Gradual Square selector tools, plus the Elevation Brush (size and shape) that belongs to the Square tools alone — the terrain brush stays the Course Terrain tab's own
+##  - Elevation:      the Vertex, Flat Square and Gradual Square selector tools in one honeycomb, with the Elevation Brush (size and shape) that belongs to the two Square tools alone nestled into the notch between them — the size stepper in the V above the point where those tiles meet, the shape toggle in the V below it — while the terrain brush stays the Course Terrain tab's own
 ##  - Holes:          one button per course hole, three to a column, each opening that hole's context menu (the buttons are filled by main.gd)
 ##  - Golfers:        who is on the course, four golfers to a column, beside the recent rounds, six rounds to a column
 ##  - Player:         play the course, tournaments, player skills
@@ -133,6 +133,16 @@ const IMPROVEMENTS_LEAD_TILES := 1
 const TILE_H_SEPARATION := 8
 const TILE_V_SEPARATION := 20
 const TILE_V_PADDING := 20
+## The Elevation tab's three Square Selectors share one honeycomb of a single
+## row — Vertex, Flat Square, Gradual Square.
+const ELEVATION_SELECTOR_COLUMNS := 3
+## Flow slot of the Flat Square selector: the tile to the left of the notch the
+## Elevation Brush fills, with Gradual Square following it along the row.
+const ELEVATION_BRUSH_NOTCH_SLOT := 1
+## Half the course tabs' vertical padding: the selector diamonds are twice as
+## tall, so their single row fills the same page height as the two interlocking
+## course rows and the toolbar never changes height with the tab.
+const ELEVATION_V_PADDING := 15
 const MAX_RECENT_ROUNDS := 30
 const BRUSH_SIZES := [1, 3, 5, 7, 9]
 ## Brush controls pinned to the Course Terrain page's bottom-left corner: a
@@ -184,16 +194,18 @@ var _brush_buttons: Array[Button] = []
 var _brush_shape_buttons: Array[Button] = []
 # Elevation brush: the Square Selector tools carry their own size and shape,
 # separate from the terrain paint brush above. Values are kept per tool so
-# switching between Flat and Gradual restores each one's own settings.
+# switching between Flat and Gradual restores each one's own settings. The two
+# controls themselves are notch cells between the Square selectors, not a group
+# of their own beside the row (see _add_elevation_brush_notches).
 var _elevation_tool: String = ""  # "vertex" | "flat" | "gradual" | "" (none)
 var _flat_brush_size: int = 3
 var _flat_brush_square := true
 var _gradual_brush_size: int = 3
 var _gradual_brush_square := true
-var _elevation_brush_group: Control = null
+var _elevation_brush_size_notches: Array[ElevationBrushSizeNotch] = []
 var _elevation_brush_labels: Array[Label] = []
 var _elevation_brush_buttons: Array[Button] = []
-var _elevation_brush_shape_buttons: Array[Button] = []
+var _elevation_brush_shape_buttons: Array[ElevationBrushNotchButton] = []
 var _open_hole_buttons: Array[ToolButton] = []
 var _green_tile_button: TerrainTileButton = null
 var _tee_tile_button: TerrainTileButton = null
@@ -213,6 +225,7 @@ var _decoration_shelf: TileHoneycomb = null
 var _decoration_tiles: Dictionary = {}  # decoration type -> DecorationTileButton
 var _path_tile: TerrainTileButton = null  # Walking path tile leading the shelf
 var _course_tiles: TileHoneycomb = null
+var _elevation_selectors: TileHoneycomb = null  # Vertex / Flat Square / Gradual Square
 var _landscape_buttons: Array[Node] = []
 var _selected_string_tool: String = ""
 var _feed_unread: int = 0
@@ -802,17 +815,83 @@ func decoration_unlock_text(decoration_data: Dictionary) -> String:
 	return ""
 
 func _build_elevation_tab(hbox: HBoxContainer) -> void:
-	var selector_box = HBoxContainer.new()
-	selector_box.add_theme_constant_override("separation", 4)
-	selector_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(selector_box, {"type": "vertex", "elevation_preview": true, "name": "Vertex", "icon": "◆", "hotkey": "V", "desc": "Right click raises, left click lowers, a single grid vertex by one step"})
-	_add_tool_button(selector_box, {"type": "flat", "elevation_preview": true, "name": "Flat Square", "icon": "■", "hotkey": "+", "desc": "Right click: even the square up, then raise it. Left click: even it down, then lower it. Whole square moves together"})
-	_add_tool_button(selector_box, {"type": "gradual", "elevation_preview": true, "name": "Gradual Square", "icon": "▲", "hotkey": "-", "desc": "Right click raises, left click lowers, the middle of the square; nearby vertices keep at most one step of slope"})
-	hbox.add_child(_make_tab_group("", selector_box))
+	# The three Square Selectors share one honeycomb of interlocking diamonds —
+	# Vertex, Flat Square and Gradual Square in a single row — and the Elevation
+	# Brush that belongs to the two Square tools nestles into the notch between
+	# them instead of standing in a group of its own beside the row: the size
+	# stepper in the V above the point where those tiles meet, the shape toggle
+	# in the V below it. The same treatment the Open Hole action gets on the
+	# Course Terrain tab (see TileHoneycomb.set_notch_child).
+	var selectors = TileHoneycomb.new()
+	selectors.name = "ElevationSelectors"
+	_elevation_selectors = selectors
+	selectors.columns = ELEVATION_SELECTOR_COLUMNS
+	selectors.tile_size = ElevationSelectorButton.SELECTOR_TILE_SIZE
+	selectors.h_separation = TILE_H_SEPARATION
+	selectors.v_separation = TILE_V_SEPARATION
+	selectors.v_padding = ELEVATION_V_PADDING
+	selectors.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_add_tool_button(selectors, {"type": "vertex", "elevation_preview": true, "name": "Vertex", "icon": "◆", "hotkey": "V", "desc": "Right click raises, left click lowers, a single grid vertex by one step"})
+	_add_tool_button(selectors, {"type": "flat", "elevation_preview": true, "name": "Flat Square", "icon": "■", "hotkey": "+", "desc": "Right click: even the square up, then raise it. Left click: even it down, then lower it. Whole square moves together"})
+	_add_tool_button(selectors, {"type": "gradual", "elevation_preview": true, "name": "Gradual Square", "icon": "▲", "hotkey": "-", "desc": "Right click raises, left click lowers, the middle of the square; nearby vertices keep at most one step of slope"})
+	# The grid carries its own breathing room above and below the row, so it keeps
+	# that spacing instead of stretching to fill the whole page height.
+	hbox.add_child(_make_tab_group("", selectors, true))
 
-	hbox.add_child(_make_separator())
+	# The brush controls ride in the notch between the two Square tools, so they
+	# are added after the tiles: a nestled child takes no slot, and the row stays
+	# exactly Vertex, Flat Square, Gradual Square.
+	_add_elevation_brush_notches(selectors)
 
-	hbox.add_child(_make_elevation_brush_group())
+## Nestle the Elevation Brush controls into the notch between the Elevation
+## tab's Flat Square and Gradual Square tiles — the two tools the brush belongs
+## to. The size stepper takes the V above the point where those tiles meet (the
+## same notch the Open Hole action fills on the Course Terrain tab) and the shape
+## toggle the V below it, where the next row of a honeycomb would tuck in.
+func _add_elevation_brush_notches(selectors: TileHoneycomb) -> void:
+	selectors.set_notch_child(_make_elevation_brush_size_notch(), ELEVATION_BRUSH_NOTCH_SLOT, true)
+	selectors.set_notch_child(_make_elevation_brush_shape_notch(), ELEVATION_BRUSH_NOTCH_SLOT, false)
+	# No elevation tool is selected yet, so the brush starts switched off.
+	_update_elevation_brush_group()
+
+## The Elevation Brush size stepper — smaller, the size it paints with, bigger —
+## as a half-size selector diamond in the V above the Square tiles. Its three
+## cells keep the wiring they had when they stood in a brush group of their own:
+## the same `_elevation_brush_buttons` and `_elevation_brush_labels` the toolbar
+## refreshes as the tool changes.
+func _make_elevation_brush_size_notch() -> ElevationBrushSizeNotch:
+	var notch := ElevationBrushSizeNotch.new()
+	notch.name = "ElevationBrushSizeNotch"
+
+	var decrease := notch.decrease_button
+	decrease.tooltip_text = "Smaller elevation brush"
+	decrease.accessibility_name = decrease.tooltip_text
+	decrease.accessibility_description = decrease.tooltip_text
+	decrease.pressed.connect(_on_elevation_brush_decrease)
+	_elevation_brush_buttons.append(decrease)
+
+	_elevation_brush_labels.append(notch.size_label)
+
+	var increase := notch.increase_button
+	increase.tooltip_text = "Bigger elevation brush"
+	increase.accessibility_name = increase.tooltip_text
+	increase.accessibility_description = increase.tooltip_text
+	increase.pressed.connect(_on_elevation_brush_increase)
+	_elevation_brush_buttons.append(increase)
+
+	_elevation_brush_size_notches.append(notch)
+	return notch
+
+## The Elevation Brush shape toggle — square or round — as a half-size selector
+## diamond in the V below the Square tiles.
+func _make_elevation_brush_shape_notch() -> ElevationBrushNotchButton:
+	var notch := ElevationBrushNotchButton.new()
+	notch.name = "ElevationBrushShapeNotch"
+	notch.focus_mode = Control.FOCUS_NONE
+	notch.toggle_mode = true
+	notch.pressed.connect(_on_elevation_brush_shape_toggled)
+	_elevation_brush_shape_buttons.append(notch)
+	return notch
 
 func _build_holes_tab(hbox: HBoxContainer) -> void:
 	# The Course Terrain tab owns the Open Hole action, and each hole's context
@@ -1207,58 +1286,6 @@ func _make_brush_group() -> VBoxContainer:
 	_apply_brush_limit()
 	return group
 
-## Elevation Brush controls for the Square Selector tools: the same shape /
-## size layout as the terrain brush, but with their own state. The Vertex
-## tool needs neither, so the whole group is disabled while it is selected.
-func _make_elevation_brush_group() -> VBoxContainer:
-	var group = VBoxContainer.new()
-	group.name = "ElevationBrushGroup"
-	group.add_theme_constant_override("separation", 2)
-	group.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	var shape := Button.new()
-	shape.focus_mode = Control.FOCUS_NONE
-	shape.custom_minimum_size = Vector2(32, 26)
-	shape.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	shape.toggle_mode = true
-	shape.pressed.connect(_on_elevation_brush_shape_toggled)
-	_elevation_brush_shape_buttons.append(shape)
-	group.add_child(shape)
-
-	var row = HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 3)
-
-	var decrease := Button.new()
-	decrease.text = "-"
-	decrease.custom_minimum_size = Vector2(24, 26)
-	decrease.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	decrease.pressed.connect(_on_elevation_brush_decrease)
-	row.add_child(decrease)
-	_elevation_brush_buttons.append(decrease)
-
-	var label := Label.new()
-	label.text = "3x3"
-	label.custom_minimum_size = Vector2(30, 0)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
-	row.add_child(label)
-	_elevation_brush_labels.append(label)
-
-	var increase := Button.new()
-	increase.text = "+"
-	increase.custom_minimum_size = Vector2(24, 26)
-	increase.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	increase.pressed.connect(_on_elevation_brush_increase)
-	row.add_child(increase)
-	_elevation_brush_buttons.append(increase)
-
-	group.add_child(row)
-	_elevation_brush_group = group
-	_update_elevation_brush_group()
-	return group
-
 ## The sizes the Elevation Brush offers for the selected Square Selector tool.
 func _elevation_brush_sizes() -> Array:
 	match _elevation_tool:
@@ -1276,7 +1303,8 @@ func _elevation_brush_square() -> bool:
 	return _flat_brush_square if _elevation_tool == "flat" else _gradual_brush_square
 
 ## Set the selected elevation selector tool and sync the brush controls: the
-## group mirrors that tool's own size and shape (the Vertex tool disables it).
+## notch cells mirror that tool's own size and shape (the Vertex tool disables
+## them both).
 func set_elevation_tool(tool_name: String) -> void:
 	_elevation_tool = tool_name
 	_update_elevation_brush_group()
@@ -1288,6 +1316,9 @@ func get_elevation_brush_size() -> int:
 func get_elevation_brush_square() -> bool:
 	return _elevation_brush_square()
 
+## Mirror the selected Square tool's own brush settings in the two notch cells.
+## The Vertex tool paints a single vertex and has no brush at all, so both cells
+## grey out while it is selected.
 func _update_elevation_brush_group() -> void:
 	var enabled: bool = _elevation_tool == "flat" or _elevation_tool == "gradual"
 	for button in _elevation_brush_buttons:
@@ -1295,8 +1326,11 @@ func _update_elevation_brush_group() -> void:
 			button.disabled = not enabled
 	for shape in _elevation_brush_shape_buttons:
 		if is_instance_valid(shape):
-			shape.disabled = not enabled
+			shape.set_brush_enabled(enabled)
 			_update_elevation_brush_shape_button(shape)
+	for notch in _elevation_brush_size_notches:
+		if is_instance_valid(notch):
+			notch.set_brush_enabled(enabled)
 	_update_elevation_brush_label()
 
 func _update_elevation_brush_label() -> void:
@@ -1315,12 +1349,12 @@ func _update_elevation_brush_label() -> void:
 			label.text = text
 			label.tooltip_text = "Elevation brush size %s tiles" % text
 
-func _update_elevation_brush_shape_button(btn: Button) -> void:
+func _update_elevation_brush_shape_button(btn: ElevationBrushNotchButton) -> void:
 	if _elevation_brush_square():
-		btn.text = "□"
+		btn.set_caption("□")
 		btn.tooltip_text = "Square elevation brush — click for Round"
 	else:
-		btn.text = "○"
+		btn.set_caption("○")
 		btn.tooltip_text = "Round elevation brush — click for Square"
 	btn.button_pressed = not _elevation_brush_square()
 	btn.accessibility_name = "Elevation brush shape"

@@ -30,6 +30,14 @@ Terrain Brush controls on the Course Terrain tab. Flat offers 1×1 through 9×9;
 Gradual offers 2×2 through 9×9 (a one-tile brush has no room to be gradual).
 Each tool remembers its own size and shape.
 
+Both controls ride in the notch between the two Square tiles on the Elevation
+tab rather than in a group of their own beside the row: the size stepper
+(smaller, the size it paints with, bigger) fills the V above the point where
+Flat Square and Gradual Square meet, and the shape toggle fills the V below it.
+Each is a half-size selector diamond, drawn the same way the Open Hole action is
+drawn on the Course Terrain tab, so the brush sits exactly where the two tools
+it belongs to meet.
+
 **Elevation Brush sizes are counted in tiles**, not vertices: a brush reshapes
 the tiles it covers by moving their corner vertices, so it always holds one
 more vertex than tile per side.
