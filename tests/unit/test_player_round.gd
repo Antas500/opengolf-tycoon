@@ -330,11 +330,11 @@ func test_embedded_player_navigation_and_setup() -> void:
 	assert_eq(tab.buttons[PlayerTab.PAGE_SKILLS].text, "Player Skills")
 	assert_false(rounds.busy, "Editing a player does not reserve a round")
 	assert_null(rounds.overlay, "Embedded setup creates no floating overlay")
-	assert_eq(rounds.name_edit.get_parent(), tab.pages[PlayerTab.PAGE_EDIT])
-	assert_eq(rounds.points_label.get_parent(), tab.pages[PlayerTab.PAGE_SKILLS])
-	assert_eq(rounds.pro_picker.get_parent(), tab.pages[PlayerTab.PAGE_PLAY])
+	assert_true(tab.pages[PlayerTab.PAGE_EDIT].is_ancestor_of(rounds.name_edit))
+	assert_true(tab.pages[PlayerTab.PAGE_SKILLS].is_ancestor_of(rounds.points_label))
+	assert_true(tab.pages[PlayerTab.PAGE_PLAY].is_ancestor_of(rounds.pro_picker))
 	var starters := 0
-	for child in tab.pages[PlayerTab.PAGE_PLAY].get_children():
+	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
 			starters += 1
 	assert_eq(starters, 3, "Play Course combines the practice, vs pro and tournament starters")
@@ -354,7 +354,7 @@ func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	assert_true(rounds.active)
 	assert_eq(rounds.participants.size(), 2)
 	assert_eq(tab.selected, PlayerTab.PAGE_PLAY)
-	assert_eq(rounds.status.get_parent(), tab.aim_page)
+	assert_true(tab.aim_page.is_ancestor_of(rounds.status))
 	assert_true(tab.aim_scroll.visible, "Play Course swaps to the aiming view while playing")
 	assert_false(tab.pages[PlayerTab.PAGE_PLAY].visible, "Setup content hides during the round")
 	assert_null(rounds.overlay)
@@ -365,7 +365,7 @@ func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	assert_false(tab.aim_scroll.visible, "Play Course returns to setup after the round")
 	assert_true(tab.pages[PlayerTab.PAGE_PLAY].visible)
 	var starters := 0
-	for child in tab.pages[PlayerTab.PAGE_PLAY].get_children():
+	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
 			starters += 1
 	assert_eq(starters, 3, "Rebuilding does not duplicate round-start buttons")
@@ -377,3 +377,99 @@ func test_embedded_round_requires_skill_allocation() -> void:
 	rounds._start_embedded(0)
 	assert_false(rounds.busy)
 	assert_eq(tab.selected, PlayerTab.PAGE_SKILLS)
+
+## Exercise the real toolbar so header, panel margins and scrollbars count
+## against the same height budget as the course tiles.
+func _embedded_toolbar() -> TerrainToolbar:
+	var toolbar := TerrainToolbar.new()
+	fixture.add_child(toolbar)
+	toolbar.size = Vector2(1000, UIConstants.BOTTOM_BAR_HEIGHT)
+	var panel := TournamentPanel.new()
+	panel.embedded = true
+	toolbar.player_tab.add_persistent(panel)
+	var tournaments := TournamentManager.new()
+	fixture.add_child(tournaments)
+	panel.setup(tournaments)
+	rounds.attach_player_tab(toolbar.player_tab)
+	toolbar.select_tab(TerrainToolbar.Tab.PLAYER)
+	return toolbar
+
+func _assert_shelf_fits(shelf: HBoxContainer) -> void:
+	var scroll := shelf.get_parent() as ScrollContainer
+	assert_lte(scroll.size.y, scroll.get_parent().size.y, "Scroll viewport fits the allocated tab height")
+	assert_eq(scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO)
+	assert_eq(scroll.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED)
+	assert_false(scroll.get_v_scroll_bar().visible, "No vertical scrolling in the Player tab")
+	var available := scroll.size.y
+	if scroll.get_h_scroll_bar().visible:
+		available -= scroll.get_h_scroll_bar().size.y
+	assert_lte(shelf.get_combined_minimum_size().y, available,
+		"All content fits above the horizontal scrollbar")
+	for control in shelf.find_children("*", "Control", true, false):
+		if control.is_visible_in_tree() and not control is Popup:
+			assert_lte(control.get_global_rect().end.y, scroll.get_global_rect().position.y + available + 1,
+				"%s stays inside the shelf" % control.get_class())
+
+func test_embedded_pages_fit_toolbar_and_overflow_horizontally() -> void:
+	var toolbar := _embedded_toolbar()
+	var tab := toolbar.player_tab
+	for width in [1000, 600, 1600]:
+		toolbar.size.x = width
+		for index in 3:
+			tab.select(index)
+			await wait_frames(5)
+			assert_eq(toolbar.size.y, float(UIConstants.BOTTOM_BAR_HEIGHT), "Switching pages never grows the bar")
+			_assert_shelf_fits(tab.pages[index])
+			if width == 600:
+				var scroll := tab.pages[index].get_parent() as ScrollContainer
+				assert_true(scroll.get_h_scroll_bar().visible, "Narrow pages scroll sideways")
+				var navigation_x := tab.buttons[0].global_position.x
+				var event := InputEventMouseButton.new()
+				event.button_index = MOUSE_BUTTON_WHEEL_DOWN
+				event.pressed = true
+				tab._on_scroll_gui_input(event, scroll)
+				assert_gt(scroll.scroll_horizontal, 0, "Mouse wheel scrolls horizontally")
+				assert_eq(tab.buttons[0].global_position.x, navigation_x,
+					"Navigation stays pinned while content scrolls")
+	toolbar.select_tab(TerrainToolbar.Tab.TERRAIN)
+	await wait_frames(5)
+	assert_eq(toolbar.size.y, float(UIConstants.BOTTOM_BAR_HEIGHT))
+
+func test_embedded_tournament_survives_rebuilds_and_fits_all_states() -> void:
+	var toolbar := _embedded_toolbar()
+	var tab := toolbar.player_tab
+	var panel: TournamentPanel
+	for child in tab.pages[PlayerTab.PAGE_PLAY].get_children():
+		if child is TournamentPanel:
+			panel = child
+	for state in TournamentSystem.TournamentState.values():
+		panel._tournament_manager.current_tournament_state = state
+		panel._tournament_manager.current_tournament_tier = 0
+		panel._tournament_manager.tournament_results = {
+			"winner_name": "Tournament Winner", "winning_score": 70, "par": 72}
+		panel._refresh_display()
+		rounds._build_setup()
+		await wait_frames(5)
+		assert_eq(panel.get_parent(), tab.pages[PlayerTab.PAGE_PLAY])
+		_assert_shelf_fits(tab.pages[PlayerTab.PAGE_PLAY])
+
+func test_embedded_aim_and_full_scorecards_fit_toolbar() -> void:
+	var toolbar := _embedded_toolbar()
+	var tab := toolbar.player_tab
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
+	rounds._start_embedded(2)
+	rounds._process(0.0)
+	await wait_frames(5)
+	_assert_shelf_fits(tab.aim_page)
+	assert_false(tab.pages[PlayerTab.PAGE_PLAY].get_parent().visible,
+		"Setup scrollbar is hidden during a round")
+	for golfer in rounds.participants:
+		golfer.hole_scores.clear()
+		for hole in 18:
+			golfer.hole_scores.append({"hole": hole + 1, "strokes": 4, "par": 4})
+	rounds._show_results()
+	await wait_frames(5)
+	_assert_shelf_fits(tab.aim_page)
+	assert_eq(toolbar.size.y, float(UIConstants.BOTTOM_BAR_HEIGHT))

@@ -977,6 +977,9 @@ func _build_golfers_tab(hbox: HBoxContainer) -> void:
 
 func _build_player_tab(hbox: HBoxContainer) -> void:
 	player_tab = PlayerTab.new()
+	# Match the terrain shelf, not the full bottom bar (which includes tabs).
+	player_tab.custom_minimum_size.y = TerrainTileButton.BUTTON_SIZE.y * 1.5 \
+		+ TILE_V_SEPARATION + 2.0 * TILE_V_PADDING
 	hbox.add_child(player_tab)
 
 func select_player_section(index: int) -> void:

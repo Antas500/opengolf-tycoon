@@ -6,7 +6,7 @@ signal close_requested
 
 var embedded := false
 var _tournament_manager: TournamentManager = null
-var _content_vbox: VBoxContainer = null
+var _content_vbox: BoxContainer = null
 var _status_label: Label = null
 var _title_label: Label = null
 
@@ -29,7 +29,10 @@ func _exit_tree() -> void:
 		EventBus.tournament_completed.disconnect(_on_tournament_completed)
 
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(0, 0) if embedded else Vector2(340, 480)
+	if embedded:
+		_build_embedded_ui()
+		return
+	custom_minimum_size = Vector2(340, 480)
 
 	var margin = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
@@ -57,7 +60,6 @@ func _build_ui() -> void:
 	close_btn.custom_minimum_size = Vector2(30, 30)
 	close_btn.pressed.connect(_on_close_pressed)
 	title_row.add_child(close_btn)
-	close_btn.visible = not embedded
 
 	main_vbox.add_child(HSeparator.new())
 
@@ -72,16 +74,36 @@ func _build_ui() -> void:
 	# Scrollable content area
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	if embedded:
-		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0, 350) if not embedded else Vector2.ZERO
+	scroll.custom_minimum_size = Vector2(0, 350)
 	main_vbox.add_child(scroll)
 
 	_content_vbox = VBoxContainer.new()
 	_content_vbox.add_theme_constant_override("separation", 6)
 	_content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_content_vbox)
+
+## Embedded tournaments use short side-by-side cards on the Player shelf,
+## not the standalone dialog's tall list or a nested vertical scrollbar.
+func _build_embedded_ui() -> void:
+	add_theme_font_size_override("font_size", 12)
+	var margin := MarginContainer.new()
+	for edge in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + edge, 4)
+	add_child(margin)
+	var shelf := HBoxContainer.new()
+	shelf.add_theme_constant_override("separation", 16)
+	margin.add_child(shelf)
+	var heading := PlayerTab.add_column(shelf, 180)
+	_title_label = Label.new()
+	_title_label.text = "Host a tournament"
+	heading.add_child(_title_label)
+	_status_label = Label.new()
+	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	heading.add_child(_status_label)
+	_content_vbox = HBoxContainer.new()
+	_content_vbox.add_theme_constant_override("separation", 16)
+	shelf.add_child(_content_vbox)
 
 func setup(tournament_manager: TournamentManager) -> void:
 	_tournament_manager = tournament_manager
@@ -100,6 +122,7 @@ func _refresh_display() -> void:
 
 	# Clear content
 	for child in _content_vbox.get_children():
+		_content_vbox.remove_child(child)
 		child.queue_free()
 
 	# Check current tournament status
@@ -123,11 +146,15 @@ func _show_available_tournaments() -> void:
 		var tier_data = TournamentSystem.get_tier_data(tier)
 		var can_schedule = _tournament_manager.can_schedule_tournament(tier)
 
+		var card: BoxContainer = _content_vbox
+		if embedded:
+			card = PlayerTab.add_column(_content_vbox as HBoxContainer, 210)
+
 		# Tournament name
 		var name_label = Label.new()
 		name_label.text = tier_data.name
 		name_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-		_content_vbox.add_child(name_label)
+		card.add_child(name_label)
 
 		# Requirements row
 		var req_row = _create_stat_row(
@@ -135,7 +162,7 @@ func _show_available_tournaments() -> void:
 			"%d holes, %.1f stars" % [tier_data.min_holes, tier_data.min_rating],
 			UIConstants.COLOR_TEXT_DIM
 		)
-		_content_vbox.add_child(req_row)
+		card.add_child(req_row)
 
 		# Cost/Prize row
 		var cost_row = _create_stat_row(
@@ -143,7 +170,7 @@ func _show_available_tournaments() -> void:
 			"$%d / $%d" % [tier_data.entry_cost, tier_data.prize_pool],
 			UIConstants.COLOR_SUCCESS_DIM
 		)
-		_content_vbox.add_child(cost_row)
+		card.add_child(cost_row)
 
 		# Reward row
 		var reward_row = _create_stat_row(
@@ -151,12 +178,12 @@ func _show_available_tournaments() -> void:
 			"+%d (%d days)" % [tier_data.reputation_reward, tier_data.duration_days],
 			UIConstants.COLOR_INFO_DIM
 		)
-		_content_vbox.add_child(reward_row)
+		card.add_child(reward_row)
 
 		# Host button
 		var btn_container = HBoxContainer.new()
 		btn_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_content_vbox.add_child(btn_container)
+		card.add_child(btn_container)
 
 		var spacer = Control.new()
 		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -164,7 +191,7 @@ func _show_available_tournaments() -> void:
 
 		var host_btn = Button.new()
 		host_btn.text = "Host Tournament"
-		host_btn.custom_minimum_size = Vector2(140, 32)
+		host_btn.custom_minimum_size = Vector2(140, 26 if embedded else 32)
 		host_btn.disabled = not can_schedule.can_schedule
 		if can_schedule.can_schedule:
 			host_btn.pressed.connect(_on_host_pressed.bind(tier))
@@ -172,7 +199,8 @@ func _show_available_tournaments() -> void:
 			host_btn.tooltip_text = can_schedule.reason
 		btn_container.add_child(host_btn)
 
-		_content_vbox.add_child(HSeparator.new())
+		if not embedded:
+			card.add_child(HSeparator.new())
 
 func _show_current_tournament(info: Dictionary) -> void:
 	var state_text = ""
@@ -186,6 +214,10 @@ func _show_current_tournament(info: Dictionary) -> void:
 
 	_status_label.text = "%s\n%s" % [info.name, state_text]
 
+	var card: BoxContainer = _content_vbox
+	if embedded:
+		card = PlayerTab.add_column(_content_vbox as HBoxContainer, 260)
+
 	# Show tournament info
 	var info_label = Label.new()
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -193,33 +225,36 @@ func _show_current_tournament(info: Dictionary) -> void:
 
 	if info.state == TournamentSystem.TournamentState.IN_PROGRESS:
 		info_label.text = "Professional golfers are competing on your course. Watch the tournament — use >> / >>> to speed up time."
-		_content_vbox.add_child(info_label)
+		card.add_child(info_label)
 
 		var hint_label = Label.new()
 		hint_label.text = "The live leaderboard is shown on the right side of the screen."
 		hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint_label.add_theme_font_size_override("font_size", 11)
 		hint_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-		_content_vbox.add_child(hint_label)
+		card.add_child(hint_label)
 	else:
 		info_label.text = "Tournament scheduled. Professional golfers will compete on your course."
-		_content_vbox.add_child(info_label)
+		card.add_child(info_label)
 
 	# Show last results if available
 	if not _tournament_manager.tournament_results.is_empty():
-		_content_vbox.add_child(HSeparator.new())
+		if embedded:
+			card = PlayerTab.add_column(_content_vbox as HBoxContainer, 230)
+		else:
+			card.add_child(HSeparator.new())
 
 		var results_title = Label.new()
 		results_title.text = "Previous Tournament Results"
 		results_title.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
-		_content_vbox.add_child(results_title)
+		card.add_child(results_title)
 
 		var results = _tournament_manager.tournament_results
 		var winner_row = _create_stat_row("Winner:", results.get("winner_name", "Unknown"), UIConstants.COLOR_GOLD)
-		_content_vbox.add_child(winner_row)
+		card.add_child(winner_row)
 
 		var score_row = _create_stat_row("Score:", "%d (Par %d)" % [results.get("winning_score", 0), results.get("par", 72)], Color.WHITE)
-		_content_vbox.add_child(score_row)
+		card.add_child(score_row)
 
 func _create_stat_row(label_text: String, value_text: String, value_color: Color) -> HBoxContainer:
 	var row = HBoxContainer.new()
