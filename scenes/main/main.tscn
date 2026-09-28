@@ -8,6 +8,8 @@
 [ext_resource type="Script" uid="uid://b553if6sdqr2o" path="res://scripts/managers/ball_manager.gd" id="6_ball_manager"]
 [ext_resource type="Script" uid="uid://dtiy6dga88tfe" path="res://scripts/managers/hole_manager.gd" id="7_hole_manager"]
 [ext_resource type="Theme" uid="uid://c6xth2qvp8yxk" path="res://assets/themes/game_theme.tres" id="8_theme"]
+[ext_resource type="Script" uid="uid://bxvw45y4l7r28" path="res://scripts/ui/components/rotate_view_button.gd" id="9_rotate_view_button"]
+[ext_resource type="Script" uid="uid://cj0rmiyg4sh74" path="res://scripts/ui/components/compass_needle.gd" id="10_compass_needle"]
 
 [node name="Main" type="Node2D" unique_id=1113796788]
 script = ExtResource("1_main")
@@ -87,7 +89,11 @@ alignment = 1
 custom_minimum_size = Vector2(28, 24)
 layout_mode = 2
 tooltip_text = "Rotate course counter-clockwise (Q)"
-text = "⟲"
+script = ExtResource("9_rotate_view_button")
+
+[node name="OrientationNeedle" type="Control" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=612554033]
+layout_mode = 2
+script = ExtResource("10_compass_needle")
 
 [node name="OrientationLabel" type="Label" parent="UI/HUD/BottomBar/LeftControls/RotateViewControls" unique_id=334192875]
 custom_minimum_size = Vector2(18, 0)
@@ -100,7 +106,8 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(28, 24)
 layout_mode = 2
 tooltip_text = "Rotate course clockwise (Shift+Q)"
-text = "⟳"
+script = ExtResource("9_rotate_view_button")
+clockwise = true
 
 [node name="SpeedControls" type="HBoxContainer" parent="UI/HUD/BottomBar/LeftControls" unique_id=1574521636]
 layout_mode = 2
