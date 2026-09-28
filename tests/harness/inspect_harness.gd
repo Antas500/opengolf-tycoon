@@ -34,6 +34,31 @@ func _run() -> void:
 	_check(main.inspect_btn.position.y >= menu.position.y + menu.size.y, "Inspect is below Menu")
 	_check(main.left_controls.size.y <= UIConstants.BOTTOM_BAR_HEIGHT, "Controls still fit the bottom bar")
 
+	# Map toggle: an icon button in the minimap's bottom-left corner, not in the stack.
+	var map_btn: Button = main.map_btn
+	_check(not main.left_controls.is_ancestor_of(map_btn), "Map button left the control stack")
+	_check(map_btn.get_parent() == main.mini_map.get_parent(), "Map button is a minimap sibling")
+	_check(map_btn.icon != null and map_btn.text.is_empty(), "Map button uses a map icon")
+	var map_rect: Rect2 = main.mini_map.get_global_rect()
+	var btn_rect: Rect2 = map_btn.get_global_rect()
+	_check(map_rect.encloses(btn_rect), "Map button sits inside the minimap bounds")
+	_check(btn_rect.position.x - map_rect.position.x <= 4.0 and map_rect.end.y - btn_rect.end.y <= 4.0,
+		"Map button is in the minimap's bottom-left corner")
+	var covers_map := false
+	for corner in [btn_rect.position, Vector2(btn_rect.end.x, btn_rect.position.y), btn_rect.end, Vector2(btn_rect.position.x, btn_rect.end.y)]:
+		if main.mini_map._is_within_map(corner - map_rect.position):
+			covers_map = true
+	_check(not covers_map, "Map button does not cover the minimap diamond")
+	_check(map_btn.button_pressed and main.mini_map.visible, "Map starts shown and pressed")
+	map_btn.button_pressed = false
+	_check(not main.mini_map.visible and map_btn.is_visible_in_tree(), "Map button hides minimap but stays visible")
+	map_btn.button_pressed = true
+	_check(main.mini_map.visible, "Map button shows minimap again")
+	main.mini_map.visible = false
+	_check(not map_btn.button_pressed, "Hiding minimap (Tab) unpresses Map button")
+	main.mini_map.visible = true
+	_check(map_btn.button_pressed, "Showing minimap re-presses Map button")
+
 	main._on_tool_selected(TerrainTypes.Type.FAIRWAY)
 	main.inspect_btn.button_pressed = true
 	_check(main.inspect_mode and main._has_active_tool(), "Inspect toggles on")

@@ -71,7 +71,8 @@ var mini_map: MiniMap = null
 var inspect_mode: bool = false
 var inspect_btn: Button = null
 var tile_inspector: TileInspector = null
-var map_btn: Button = null  # Toggles the minimap; kept in sync with MiniMap visibility
+var map_btn: Button = null  # Map-icon toggle in the minimap's bottom-left corner; synced with MiniMap visibility
+const MAP_BUTTON_SIZE: float = 26.0
 var hole_stats_panel: HoleStatsPanel = null
 var tournament_manager: TournamentManager = null
 var tournament_panel: TournamentPanel = null
@@ -2352,7 +2353,7 @@ func _on_mode_toggle_pressed() -> void:
 # --- Menu / Save/Load ---
 
 func _create_menu_buttons() -> void:
-	"""Top row of the left control stack (above Rotate View): Menu button with a Map toggle beside it."""
+	"""Top row of the left control stack (above Rotate View): the Menu button."""
 	var menu_row = HBoxContainer.new()
 	menu_row.name = "MenuControls"
 	menu_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2367,18 +2368,6 @@ func _create_menu_buttons() -> void:
 	menu_btn.pressed.connect(_on_menu_pressed)
 	menu_row.add_child(menu_btn)
 
-	# Map toggle: stays pressed while the minimap is visible. Its state is synced from the
-	# minimap itself (see _setup_mini_map) so the Tab hotkey and menu transitions keep it accurate.
-	map_btn = Button.new()
-	map_btn.name = "MapBtn"
-	map_btn.text = "Map"
-	map_btn.tooltip_text = "Show / hide the minimap (Tab)"
-	map_btn.toggle_mode = true
-	map_btn.set_pressed_no_signal(true)  # Minimap starts visible
-	map_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
-	map_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map_btn.toggled.connect(_on_map_toggled)
-	menu_row.add_child(map_btn)
 
 	left_controls.add_child(menu_row)
 	left_controls.move_child(menu_row, 0)
@@ -2391,7 +2380,7 @@ func _create_menu_buttons() -> void:
 	inspect_btn.custom_minimum_size.y = UIConstants.TOOL_BUTTON_HEIGHT
 	inspect_btn.toggled.connect(_on_inspect_toggled)
 	left_controls.add_child(inspect_btn)
-	left_controls.move_child(inspect_btn, 1)  # Directly below Menu / Map.
+	left_controls.move_child(inspect_btn, 1)  # Directly below Menu.
 
 	tile_inspector = TileInspector.new()
 	tile_inspector.name = "TileInspector"
@@ -3212,7 +3201,65 @@ func _setup_mini_map() -> void:
 	mini_map.visibility_changed.connect(_sync_map_button)
 
 	hud.add_child(mini_map)
+	_create_map_button(hud)
 	_sync_map_button()
+
+func _create_map_button(hud: Control) -> void:
+	"""Map toggle: a map-icon button tucked into the minimap's bottom-left corner.
+
+	It is a HUD sibling rather than a child of the minimap so it stays on screen (and
+	clickable) while the minimap is hidden. The corner lies outside the minimap's
+	diamond, so the button never covers any of the course. It stays pressed while the
+	minimap is visible; its state is synced from the minimap (see _sync_map_button)
+	so the Tab hotkey and menu transitions keep it accurate."""
+	map_btn = Button.new()
+	map_btn.name = "MapBtn"
+	map_btn.icon = _make_map_icon()
+	map_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	map_btn.tooltip_text = "Show / hide the minimap (Tab)"
+	map_btn.toggle_mode = true
+	map_btn.set_pressed_no_signal(true)  # Minimap starts visible
+	map_btn.focus_mode = Control.FOCUS_NONE  # Keep Space/Enter for gameplay hotkeys
+	map_btn.toggled.connect(_on_map_toggled)
+
+	# Anchor to the same bottom-left corner as the minimap (just above the bottom bar).
+	var inset := MiniMap.BORDER_WIDTH
+	map_btn.anchor_left = 0
+	map_btn.anchor_top = 1
+	map_btn.anchor_right = 0
+	map_btn.anchor_bottom = 1
+	map_btn.offset_left = inset
+	map_btn.offset_right = inset + MAP_BUTTON_SIZE
+	map_btn.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT + inset)
+	map_btn.offset_top = map_btn.offset_bottom - MAP_BUTTON_SIZE
+	map_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN  # Never spill into the bottom bar
+
+	hud.add_child(map_btn)  # Added after the minimap so it draws on top.
+
+	# The theme's text-button padding would make an icon-only button too big for the
+	# corner, so use tighter copies of the themed styleboxes (read once in the tree,
+	# since the theme is inherited from the HUD).
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		var box := map_btn.get_theme_stylebox(state)
+		if box:
+			box = box.duplicate()
+			box.set_content_margin_all(3)
+			map_btn.add_theme_stylebox_override(state, box)
+
+static func _make_map_icon() -> Texture2D:
+	"""A folded paper map with a location pin, rendered from inline SVG so no imported
+	asset is required."""
+	var svg := """<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+<path d="M1.5 4 L6 2 L12 4 L16.5 2 L16.5 14 L12 16 L6 14 L1.5 16 Z" fill="#e8e2c8" stroke="#f4f1e4" stroke-width="1" stroke-linejoin="round"/>
+<path d="M6 2 L6 14 M12 4 L12 16" stroke="#8a8468" stroke-width="1"/>
+<path d="M1.5 4 L6 2 L6 14 L1.5 16 Z M12 4 L16.5 2 L16.5 14 L12 16 Z" fill="#6fae5a" opacity="0.85"/>
+<path d="M9 5 C7.3 5 6.4 6.3 6.9 7.9 C7.4 9.3 9 11.5 9 11.5 C9 11.5 10.6 9.3 11.1 7.9 C11.6 6.3 10.7 5 9 5 Z" fill="#d9483b"/>
+<circle cx="9" cy="7.4" r="1" fill="#f4f1e4"/>
+</svg>"""
+	var img := Image.new()
+	if img.load_svg_from_string(svg) != OK:
+		return null
+	return ImageTexture.create_from_image(img)
 
 func _on_mini_map_camera_move(world_position: Vector2) -> void:
 	"""Move camera to the position clicked on mini-map."""
