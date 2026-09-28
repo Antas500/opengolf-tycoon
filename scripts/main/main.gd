@@ -17,8 +17,9 @@ var hole_grid: GridContainer = null  # Lives in the toolbar's Holes tab (set up 
 @onready var orientation_label: Label = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationLabel
 @onready var pause_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn
 @onready var play_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn
+## One fast-forward button for both accelerated tiers: it reads ">>" at Fast
+## and ">>>" at Ultra, and a press swaps between the two (see GameManager).
 @onready var fast_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn
-var ultra_btn: Button = null
 @onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/SpeedControls
 const VIEW_ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
 ## Every hole button opens that hole's context menu, so they all read at one
@@ -570,20 +571,14 @@ func _connect_ui_buttons() -> void:
 
 	$UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.PAUSED))
 	$UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.NORMAL))
-	$UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.FAST))
+	# Fast and Ultra share this one button, so it cannot bind a fixed speed —
+	# each press asks GameManager for the next tier instead.
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn.pressed.connect(_on_fast_forward_pressed)
 
 	# Rotate view controls (now above speed controls in BottomBar)
 	rotate_ccw_btn.pressed.connect(_on_view_rotate_ccw)
 	rotate_cw_btn.pressed.connect(_on_view_rotate_cw)
 	iso_toggle_btn.toggled.connect(_on_view_isometric_toggled)
-
-	# Create dedicated ultra speed button
-	ultra_btn = Button.new()
-	ultra_btn.text = ">>>"
-	ultra_btn.name = "UltraBtn"
-	ultra_btn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.ULTRA))
-	speed_controls.add_child(ultra_btn)
-	speed_controls.move_child(ultra_btn, fast_btn.get_index() + 1)
 
 func _setup_terrain_toolbar() -> void:
 	"""Dock the tabbed toolbar into the bottom bar (right section, flush after left controls)"""
@@ -925,23 +920,21 @@ func _update_button_states() -> void:
 	pause_btn.visible = true
 	play_btn.visible = true
 	fast_btn.visible = true
-	if ultra_btn:
-		ultra_btn.visible = true
 	pause_btn.disabled = false
 	play_btn.disabled = false
 	fast_btn.disabled = false
-	if ultra_btn:
-		ultra_btn.disabled = false
 	play_btn.text = ">"
 	pause_btn.text = "||"
-	fast_btn.text = ">>"
+	# The fast-forward button doubles as the Fast/Ultra toggle: its face shows
+	# the tier that is running and its tooltip names the tier a press switches to.
+	var speed: int = GameManager.current_speed
+	fast_btn.text = fast_forward_label(speed)
+	fast_btn.tooltip_text = fast_forward_tooltip(speed)
 
 	# Highlight active speed button
 	pause_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.PAUSED else Color(1, 1, 1, 1)
 	play_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.NORMAL else Color(1, 1, 1, 1)
-	fast_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.FAST else Color(1, 1, 1, 1)
-	if ultra_btn:
-		ultra_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.ULTRA else Color(1, 1, 1, 1)
+	fast_btn.modulate = Color(1, 1, 1, 0.5) if not GameManager.is_fast_forward_speed(speed) else Color(1, 1, 1, 1)
 
 func _start_painting() -> void:
 	if inspect_mode:
@@ -1554,6 +1547,31 @@ func _refresh_hole_layout_ui() -> void:
 
 func _on_speed_selected(speed: int) -> void:
 	GameManager.set_speed(speed)
+
+func _on_fast_forward_pressed() -> void:
+	"""The single fast-forward button swaps between Fast (3x) and Ultra (8x)."""
+	GameManager.cycle_fast_forward_speed()
+
+## Face of the fast-forward button: ">>" at Fast (and while idle), ">>>" at Ultra.
+static func fast_forward_label(speed: int) -> String:
+	return ">>>" if speed == GameManager.GameSpeed.ULTRA else ">>"
+
+## Tooltip that names the running tier and the tier the next press switches to.
+static func fast_forward_tooltip(speed: int) -> String:
+	if not GameManager.is_fast_forward_speed(speed):
+		return "Fast-forward time — click for Fast (3x), click again for Ultra (8x)"
+	var next_speed: int = GameManager.next_fast_forward_speed(speed)
+	return "%s (%dx) — click for %s (%dx)" % [
+		_speed_tier_name(speed), int(speed),
+		_speed_tier_name(next_speed), int(next_speed),
+	]
+
+static func _speed_tier_name(speed: int) -> String:
+	if speed == GameManager.GameSpeed.ULTRA:
+		return "Ultra"
+	if speed == GameManager.GameSpeed.FAST:
+		return "Fast"
+	return "Normal"
 
 var _game_over_shown: bool = false
 

@@ -194,6 +194,7 @@ make test          # Using Makefile
 ```bash
 godot --headless --path . res://tests/harness/walking_path_harness.tscn
 godot --headless --path . res://tests/harness/bulldozer_harness.tscn   # Bulldozer remit: demolishes improvements/buildings, never course terrain
+godot --headless --path . res://tests/harness/speed_controls_harness.tscn  # Speed controls: one fast-forward button for Fast (3x) and Ultra (8x)
 ```
 
 **Test coverage:** GameManager, SaveManager, CourseRatingSystem, CourseRecords, DailyStatistics, GolferTier.
@@ -207,7 +208,7 @@ godot --headless --path . res://tests/harness/bulldozer_harness.tscn   # Bulldoz
 When running the game for playtesting via the Godot MCP tools:
 1. Use **Quick Start** to generate a 9-hole course instantly
 2. Click **Start Day** then click **>>** twice to reach **>>> (ULTRA, 8x speed)** — a full game day completes in ~90 seconds of real time
-3. Speed tiers: `>` = Normal (1x), `>>` = Fast (3x), `>>>` = Ultra (8x). Speed uses `Engine.time_scale` so all systems (golfer movement, ball flight, tweens) scale uniformly.
+3. Speed tiers: `>` = Normal (1x), `>>` = Fast (3x), `>>>` = Ultra (8x). Fast and Ultra share one button: pressing it swaps between the two tiers (`GameManager.next_fast_forward_speed`). Speed uses `Engine.time_scale` so all systems (golfer movement, ball flight, tweens) scale uniformly.
 4. Playtest findings should be logged in `playtest_findings.md` at the project root
 
 **Detailed MCP playtesting guide** (node paths, gotchas, navigation tips) is in the auto-memory file `playtesting.md`. Consult it before starting a visual playtest session.
