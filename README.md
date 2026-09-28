@@ -102,7 +102,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Camera while paused** — the game freezes but the camera stays controllable: pan with W/A/S/D or middle-mouse drag, zoom with the scroll wheel (also works from behind the pause and settings overlays)
 - **Settings menu** — Display, audio, and gameplay options
 - **Tool palette** — Terrain tools, object placement, hole creation, elevation tools
-- **Speed controls** — Play / Pause / Fast / Ultra with keyboard shortcuts
+- **Speed controls** — Pause / Play / Fast-forward; the single fast-forward button toggles between Fast (3x) and Ultra (8x), and Space pauses or resumes
 - **Mini-map** — Course overview with terrain colors, hole markers, buildings, golfers; click to navigate (toggle with the **Map** button next to **Menu**, or Tab)
 - **Inspect** — Toggle the **Inspect** button below **Menu**, then hover over a tile to see its Terrain, Improvements, and Buildings. Includes paths and multi-tile objects; does not modify the course. Toggle off, press Esc/right-click, or select another tool to exit.
 - **Financial dashboard** — Click money display to open; shows daily and yesterday income/expense breakdown

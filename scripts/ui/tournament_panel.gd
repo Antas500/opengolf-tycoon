@@ -224,11 +224,11 @@ func _show_current_tournament(info: Dictionary) -> void:
 	info_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
 
 	if info.state == TournamentSystem.TournamentState.IN_PROGRESS:
-		info_label.text = "Professional golfers are competing on your course. Watch the tournament — use >> / >>> to speed up time."
+		info_label.text = "Professional golfers are competing on your course. Watch the tournament — use >> to speed up time."
 		card.add_child(info_label)
 
 		var hint_label = Label.new()
-		hint_label.text = "The live leaderboard is shown on the right side of the screen."
+		hint_label.text = "Press >> again for Ultra (8x) — the live leaderboard is on the right."
 		hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint_label.add_theme_font_size_override("font_size", 11)
 		hint_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
