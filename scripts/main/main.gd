@@ -13,12 +13,13 @@ var hole_grid: GridContainer = null  # Lives in the toolbar's Holes tab (set up 
 @onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
 @onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
 @onready var rotate_cw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCWBtn
-@onready var iso_toggle_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/IsoBtn
 @onready var orientation_label: Label = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationLabel
+@onready var orientation_needle: CompassNeedle = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationNeedle
 @onready var pause_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn
 @onready var play_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn
+## One fast-forward button for both accelerated tiers: it reads ">>" at Fast
+## and ">>>" at Ultra, and a press swaps between the two (see GameManager).
 @onready var fast_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn
-var ultra_btn: Button = null
 @onready var speed_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/SpeedControls
 const VIEW_ORIENTATION_LABELS: Array[String] = ["N", "E", "S", "W"]
 ## Every hole button opens that hole's context menu, so they all read at one
@@ -70,8 +71,10 @@ var financial_panel: FinancialPanel = null
 var mini_map: MiniMap = null
 var inspect_mode: bool = false
 var inspect_btn: Button = null
+var feed_btn: Button = null  # Event feed toggle in the left control stack, between Menu and Inspect
 var tile_inspector: TileInspector = null
-var map_btn: Button = null  # Toggles the minimap; kept in sync with MiniMap visibility
+var map_btn: Button = null  # Map-icon toggle in the minimap's bottom-left corner; synced with MiniMap visibility
+const MAP_BUTTON_SIZE: float = 26.0
 var hole_stats_panel: HoleStatsPanel = null
 var tournament_manager: TournamentManager = null
 var tournament_panel: TournamentPanel = null
@@ -253,6 +256,7 @@ func _ready() -> void:
 	_setup_rain_overlay()
 	_setup_placement_preview()
 	_create_menu_buttons()
+	_fill_left_control_stack()
 	_setup_building_info_panel()
 	_setup_financial_panel()
 	_setup_mini_map()
@@ -449,10 +453,6 @@ func _input(event: InputEvent) -> void:
 				else:
 					_on_view_rotate_ccw()
 				get_viewport().set_input_as_handled()
-			elif event.keycode == KEY_I:
-				# Toggle between isometric diamonds and top-down squares.
-				_on_view_isometric_toggled(not terrain_grid.is_view_isometric())
-				get_viewport().set_input_as_handled()
 			elif event.keycode == KEY_SPACE:
 				# Space = pause/play toggle
 				if GameManager.current_mode == GameManager.GameMode.SIMULATING:
@@ -570,20 +570,13 @@ func _connect_ui_buttons() -> void:
 
 	$UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.PAUSED))
 	$UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.NORMAL))
-	$UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.FAST))
+	# Fast and Ultra share this one button, so it cannot bind a fixed speed —
+	# each press asks GameManager for the next tier instead.
+	$UI/HUD/BottomBar/LeftControls/SpeedControls/FastBtn.pressed.connect(_on_fast_forward_pressed)
 
 	# Rotate view controls (now above speed controls in BottomBar)
 	rotate_ccw_btn.pressed.connect(_on_view_rotate_ccw)
 	rotate_cw_btn.pressed.connect(_on_view_rotate_cw)
-	iso_toggle_btn.toggled.connect(_on_view_isometric_toggled)
-
-	# Create dedicated ultra speed button
-	ultra_btn = Button.new()
-	ultra_btn.text = ">>>"
-	ultra_btn.name = "UltraBtn"
-	ultra_btn.pressed.connect(_on_speed_selected.bind(GameManager.GameSpeed.ULTRA))
-	speed_controls.add_child(ultra_btn)
-	speed_controls.move_child(ultra_btn, fast_btn.get_index() + 1)
 
 func _setup_terrain_toolbar() -> void:
 	"""Dock the tabbed toolbar into the bottom bar (right section, flush after left controls)"""
@@ -628,7 +621,6 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.land_pressed.connect(_toggle_land_panel)
 	terrain_toolbar.marketing_pressed.connect(_toggle_marketing_panel)
 	terrain_toolbar.milestones_pressed.connect(_toggle_milestones_panel)
-	terrain_toolbar.feed_pressed.connect(_toggle_event_feed)
 	terrain_toolbar.scorecard_pressed.connect(_toggle_course_scorecard_panel)
 	terrain_toolbar.golfer_row_clicked.connect(_on_toolbar_golfer_clicked)
 	terrain_toolbar.staff_area_move_requested.connect(_on_staff_area_move_requested)
@@ -885,6 +877,11 @@ func _setup_bottom_bar() -> void:
 	if speed_controls:
 		speed_controls.alignment = BoxContainer.ALIGNMENT_CENTER
 		speed_controls.add_theme_constant_override("separation", 4)
+	# The fast-forward face flips between ">>" and ">>>". Size the button for
+	# the widest face up front so toggling tiers can never resize it or nudge
+	# the row of speed controls that holds it.
+	if fast_btn:
+		lock_button_width_to_faces(fast_btn, [">>", ">>>"])
 	if orientation_label:
 		orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 		orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
@@ -925,23 +922,21 @@ func _update_button_states() -> void:
 	pause_btn.visible = true
 	play_btn.visible = true
 	fast_btn.visible = true
-	if ultra_btn:
-		ultra_btn.visible = true
 	pause_btn.disabled = false
 	play_btn.disabled = false
 	fast_btn.disabled = false
-	if ultra_btn:
-		ultra_btn.disabled = false
 	play_btn.text = ">"
 	pause_btn.text = "||"
-	fast_btn.text = ">>"
+	# The fast-forward button doubles as the Fast/Ultra toggle: its face shows
+	# the tier that is running and its tooltip names the tier a press switches to.
+	var speed: int = GameManager.current_speed
+	fast_btn.text = fast_forward_label(speed)
+	fast_btn.tooltip_text = fast_forward_tooltip(speed)
 
 	# Highlight active speed button
 	pause_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.PAUSED else Color(1, 1, 1, 1)
 	play_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.NORMAL else Color(1, 1, 1, 1)
-	fast_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.FAST else Color(1, 1, 1, 1)
-	if ultra_btn:
-		ultra_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.ULTRA else Color(1, 1, 1, 1)
+	fast_btn.modulate = Color(1, 1, 1, 0.5) if not GameManager.is_fast_forward_speed(speed) else Color(1, 1, 1, 1)
 
 func _start_painting() -> void:
 	if inspect_mode:
@@ -1385,15 +1380,6 @@ func _on_view_rotate_cw() -> void:
 func _on_view_rotate_ccw() -> void:
 	_change_view_projection(false)
 
-func _on_view_isometric_toggled(enabled: bool) -> void:
-	if terrain_grid.is_view_isometric() == enabled:
-		# The widget was flipped but the grid already matches - resync it.
-		_sync_view_controls()
-		return
-	var focus_grid := _begin_view_change()
-	terrain_grid.set_view_isometric(enabled)
-	_finish_view_change(focus_grid)
-
 func _change_view_projection(clockwise: bool) -> void:
 	var focus_grid := _begin_view_change()
 	if clockwise:
@@ -1496,10 +1482,13 @@ func _sync_camera_bounds_to_view() -> void:
 
 func _sync_view_controls() -> void:
 	# Rotate view controls now live above SpeedControls in BottomBar; keep toolbar stub for compat.
-	if terrain_grid and orientation_label and iso_toggle_btn:
+	if terrain_grid and orientation_label:
 		var orientation: int = terrain_grid.get_view_orientation()
 		orientation_label.text = VIEW_ORIENTATION_LABELS[wrapi(orientation, 0, VIEW_ORIENTATION_LABELS.size())]
-		iso_toggle_btn.set_pressed_no_signal(terrain_grid.is_view_isometric())
+		# The needle beside the letter takes the same quarter turn the course
+		# just took, so the pair reads as a compass rather than a stray initial.
+		if orientation_needle:
+			orientation_needle.orientation = orientation
 	# Keep toolbar in sync if it still has the deprecated method
 	if terrain_toolbar and terrain_grid and terrain_toolbar.has_method("set_view_state"):
 		terrain_toolbar.set_view_state(terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
@@ -1554,6 +1543,43 @@ func _refresh_hole_layout_ui() -> void:
 
 func _on_speed_selected(speed: int) -> void:
 	GameManager.set_speed(speed)
+
+func _on_fast_forward_pressed() -> void:
+	"""The single fast-forward button swaps between Fast (3x) and Ultra (8x)."""
+	GameManager.cycle_fast_forward_speed()
+
+## Size `button` for the widest of `faces` and never let a face change shrink
+## it. Toggling a button whose face changes with state (like the fast-forward
+## ">>" / ">>>" pair) then cannot resize the button or nudge the row holding it.
+static func lock_button_width_to_faces(button: Button, faces: Array) -> void:
+	var face: String = button.text
+	var widest: float = button.custom_minimum_size.x
+	for candidate in faces:
+		button.text = str(candidate)
+		widest = maxf(widest, button.get_combined_minimum_size().x)
+	button.text = face
+	button.custom_minimum_size.x = widest
+
+## Face of the fast-forward button: ">>" at Fast (and while idle), ">>>" at Ultra.
+static func fast_forward_label(speed: int) -> String:
+	return ">>>" if speed == GameManager.GameSpeed.ULTRA else ">>"
+
+## Tooltip that names the running tier and the tier the next press switches to.
+static func fast_forward_tooltip(speed: int) -> String:
+	if not GameManager.is_fast_forward_speed(speed):
+		return "Fast-forward time — click for Fast (3x), click again for Ultra (8x)"
+	var next_speed: int = GameManager.next_fast_forward_speed(speed)
+	return "%s (%dx) — click for %s (%dx)" % [
+		_speed_tier_name(speed), int(speed),
+		_speed_tier_name(next_speed), int(next_speed),
+	]
+
+static func _speed_tier_name(speed: int) -> String:
+	if speed == GameManager.GameSpeed.ULTRA:
+		return "Ultra"
+	if speed == GameManager.GameSpeed.FAST:
+		return "Fast"
+	return "Normal"
 
 var _game_over_shown: bool = false
 
@@ -2350,7 +2376,7 @@ func _on_mode_toggle_pressed() -> void:
 # --- Menu / Save/Load ---
 
 func _create_menu_buttons() -> void:
-	"""Top row of the left control stack (above Rotate View): Menu button with a Map toggle beside it."""
+	"""Top rows of the left control stack (above Rotate View): Menu, Feed and Inspect."""
 	var menu_row = HBoxContainer.new()
 	menu_row.name = "MenuControls"
 	menu_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2365,21 +2391,19 @@ func _create_menu_buttons() -> void:
 	menu_btn.pressed.connect(_on_menu_pressed)
 	menu_row.add_child(menu_btn)
 
-	# Map toggle: stays pressed while the minimap is visible. Its state is synced from the
-	# minimap itself (see _setup_mini_map) so the Tab hotkey and menu transitions keep it accurate.
-	map_btn = Button.new()
-	map_btn.name = "MapBtn"
-	map_btn.text = "Map"
-	map_btn.tooltip_text = "Show / hide the minimap (Tab)"
-	map_btn.toggle_mode = true
-	map_btn.set_pressed_no_signal(true)  # Minimap starts visible
-	map_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
-	map_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map_btn.toggled.connect(_on_map_toggled)
-	menu_row.add_child(map_btn)
 
 	left_controls.add_child(menu_row)
 	left_controls.move_child(menu_row, 0)
+
+	feed_btn = Button.new()
+	feed_btn.name = "FeedBtn"
+	feed_btn.text = "Feed"
+	feed_btn.tooltip_text = "Course event feed (N)"
+	feed_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
+	feed_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	feed_btn.pressed.connect(_toggle_event_feed)
+	left_controls.add_child(feed_btn)
+	left_controls.move_child(feed_btn, 1)
 
 	inspect_btn = Button.new()
 	inspect_btn.name = "InspectBtn"
@@ -2389,11 +2413,28 @@ func _create_menu_buttons() -> void:
 	inspect_btn.custom_minimum_size.y = UIConstants.TOOL_BUTTON_HEIGHT
 	inspect_btn.toggled.connect(_on_inspect_toggled)
 	left_controls.add_child(inspect_btn)
-	left_controls.move_child(inspect_btn, 1)  # Directly below Menu / Map.
+	left_controls.move_child(inspect_btn, 2)  # Directly below Feed.
 
 	tile_inspector = TileInspector.new()
 	tile_inspector.name = "TileInspector"
 	$UI/HUD.add_child(tile_inspector)
+
+func _fill_left_control_stack() -> void:
+	"""Stretch the left control stack over the full height of the bottom bar.
+
+	Every row of the stack (Menu, Feed, Inspect, the Rotate pair, the speed
+	controls) grows to share the bar's height, and every button grows to fill
+	its row — so the buttons run the full height of the stack instead of
+	floating in a short centred strip. The compass needle and its letter keep
+	their tight, centred slots inside the Rotate row."""
+	if not left_controls:
+		return
+	left_controls.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	for row in left_controls.get_children():
+		row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		for child in row.get_children():
+			if child is Button:
+				child.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 func _on_inspect_toggled(enabled: bool) -> void:
 	if not enabled:
@@ -3201,7 +3242,7 @@ func _setup_mini_map() -> void:
 	mini_map.anchor_right = 0
 	mini_map.anchor_bottom = 1
 	mini_map.offset_left = 0
-	mini_map.offset_top = -(UIConstants.BOTTOM_BAR_HEIGHT  + 184)
+	mini_map.offset_top = -(UIConstants.BOTTOM_BAR_HEIGHT + MiniMap.MAP_SIZE / 2.0 + MiniMap.BORDER_WIDTH * 2)
 	mini_map.offset_right = 184
 	mini_map.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT)
 
@@ -3210,7 +3251,65 @@ func _setup_mini_map() -> void:
 	mini_map.visibility_changed.connect(_sync_map_button)
 
 	hud.add_child(mini_map)
+	_create_map_button(hud)
 	_sync_map_button()
+
+func _create_map_button(hud: Control) -> void:
+	"""Map toggle: a map-icon button tucked into the minimap's bottom-left corner.
+
+	It is a HUD sibling rather than a child of the minimap so it stays on screen (and
+	clickable) while the minimap is hidden. The corner lies outside the minimap's
+	diamond, so the button never covers any of the course. It stays pressed while the
+	minimap is visible; its state is synced from the minimap (see _sync_map_button)
+	so the Tab hotkey and menu transitions keep it accurate."""
+	map_btn = Button.new()
+	map_btn.name = "MapBtn"
+	map_btn.icon = _make_map_icon()
+	map_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	map_btn.tooltip_text = "Show / hide the minimap (Tab)"
+	map_btn.toggle_mode = true
+	map_btn.set_pressed_no_signal(true)  # Minimap starts visible
+	map_btn.focus_mode = Control.FOCUS_NONE  # Keep Space/Enter for gameplay hotkeys
+	map_btn.toggled.connect(_on_map_toggled)
+
+	# Anchor to the same bottom-left corner as the minimap (just above the bottom bar).
+	var inset := MiniMap.BORDER_WIDTH
+	map_btn.anchor_left = 0
+	map_btn.anchor_top = 1
+	map_btn.anchor_right = 0
+	map_btn.anchor_bottom = 1
+	map_btn.offset_left = inset
+	map_btn.offset_right = inset + MAP_BUTTON_SIZE
+	map_btn.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT + inset)
+	map_btn.offset_top = map_btn.offset_bottom - MAP_BUTTON_SIZE
+	map_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN  # Never spill into the bottom bar
+
+	hud.add_child(map_btn)  # Added after the minimap so it draws on top.
+
+	# The theme's text-button padding would make an icon-only button too big for the
+	# corner, so use tighter copies of the themed styleboxes (read once in the tree,
+	# since the theme is inherited from the HUD).
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		var box := map_btn.get_theme_stylebox(state)
+		if box:
+			box = box.duplicate()
+			box.set_content_margin_all(3)
+			map_btn.add_theme_stylebox_override(state, box)
+
+static func _make_map_icon() -> Texture2D:
+	"""A folded paper map with a location pin, rendered from inline SVG so no imported
+	asset is required."""
+	var svg := """<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+<path d="M1.5 4 L6 2 L12 4 L16.5 2 L16.5 14 L12 16 L6 14 L1.5 16 Z" fill="#e8e2c8" stroke="#f4f1e4" stroke-width="1" stroke-linejoin="round"/>
+<path d="M6 2 L6 14 M12 4 L12 16" stroke="#8a8468" stroke-width="1"/>
+<path d="M1.5 4 L6 2 L6 14 L1.5 16 Z M12 4 L16.5 2 L16.5 14 L12 16 Z" fill="#6fae5a" opacity="0.85"/>
+<path d="M9 5 C7.3 5 6.4 6.3 6.9 7.9 C7.4 9.3 9 11.5 9 11.5 C9 11.5 10.6 9.3 11.1 7.9 C11.6 6.3 10.7 5 9 5 Z" fill="#d9483b"/>
+<circle cx="9" cy="7.4" r="1" fill="#f4f1e4"/>
+</svg>"""
+	var img := Image.new()
+	if img.load_svg_from_string(svg) != OK:
+		return null
+	return ImageTexture.create_from_image(img)
 
 func _on_mini_map_camera_move(world_position: Vector2) -> void:
 	"""Move camera to the position clicked on mini-map."""
@@ -3643,16 +3742,17 @@ func _setup_event_feed() -> void:
 			event_feed_panel.append_event(entry)
 	)
 
-	# Surface the unread badge on the toolbar's Club tab Feed button
-	EventFeedManager.unread_count_changed.connect(func(count: int):
-		if terrain_toolbar:
-			terrain_toolbar.set_feed_unread(count)
-	)
+	# Surface the unread badge on the Feed button in the left control stack
+	EventFeedManager.unread_count_changed.connect(_update_feed_unread)
 
 func _toggle_event_feed() -> void:
 	# Event feed is a side panel, not a CenteredPanel, so handle independently
 	if event_feed_panel:
 		event_feed_panel.toggle()
+
+func _update_feed_unread(count: int) -> void:
+	if feed_btn:
+		feed_btn.text = "Feed (%d)" % count if count > 0 else "Feed"
 
 func _navigate_to_hole(hole_number: int) -> void:
 	if not GameManager.current_course:

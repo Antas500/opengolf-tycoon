@@ -188,12 +188,6 @@ func test_a_curved_marker_fits_inside_the_tee_tile() -> void:
 	assert_eq(overlay.route_for(TEE).size(), 3)
 	_assert_marker_inside_tile(TEE, "dogleg")
 
-func test_the_marker_fits_in_the_top_down_view_too() -> void:
-	_paint_waiting_pair()
-	grid.set_view_isometric(false)
-	overlay.rebuild()
-	_assert_marker_inside_tile(TEE, "top-down")
-
 func test_the_marker_fits_a_tee_tile_on_sculpted_ground() -> void:
 	# Corner elevations move the edges of the grass the tile paints, so the fit
 	# has to follow the ground rather than the flat diamond.

@@ -238,6 +238,28 @@ func set_mode(new_mode: GameMode) -> void:
 	_sync_time_scale()
 	EventBus.game_mode_changed.emit(old_mode, new_mode)
 
+## The speed controls carry a single fast-forward button that owns both
+## accelerated tiers, so it steps between them instead of the player hunting
+## for a separate ULTRA button.
+static func is_fast_forward_speed(speed: int) -> bool:
+	"""True while running at one of the accelerated tiers the toggle owns."""
+	return speed == GameSpeed.FAST or speed == GameSpeed.ULTRA
+
+static func next_fast_forward_speed(current: int) -> GameSpeed:
+	"""Speed the fast-forward button switches to when pressed at `current`.
+
+	From either tier it flips to the other one. From normal or paused it enters
+	Fast first, so one press never jumps straight to the 8x tier.
+	"""
+	if current == GameSpeed.FAST:
+		return GameSpeed.ULTRA
+	return GameSpeed.FAST
+
+func cycle_fast_forward_speed() -> GameSpeed:
+	"""Press the combined fast-forward button: swap between Fast and Ultra."""
+	set_speed(next_fast_forward_speed(current_speed))
+	return current_speed
+
 func set_speed(new_speed: GameSpeed) -> void:
 	current_speed = new_speed
 	# Use Engine.time_scale so ALL game systems (golfer movement, ball flight,

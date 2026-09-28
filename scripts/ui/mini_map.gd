@@ -10,7 +10,7 @@ const BORDER_WIDTH: int = 2
 var _terrain_grid: TerrainGrid = null
 var _entity_layer = null  # EntityLayer reference
 var _golfer_manager = null  # GolferManager reference
-var _camera_rect: Rect2 = Rect2()  # Current camera viewport in grid coords
+var _camera_rect: Rect2 = Rect2()  # Camera viewport in world coordinates
 var _map_texture: ImageTexture = null
 var _needs_redraw: bool = true
 var _update_timer: float = 0.0
@@ -79,7 +79,7 @@ const BOUNDARY_COLOR = Color(0.9, 0.6, 0.2, 1.0)  # Orange/gold property line
 const UNOWNED_TINT = Color(0.3, 0.2, 0.2, 0.4)    # Subtle dark tint on unowned
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(MAP_SIZE + BORDER_WIDTH * 2, MAP_SIZE + BORDER_WIDTH * 2)
+	custom_minimum_size = Vector2(MAP_SIZE + BORDER_WIDTH * 2, MAP_SIZE / 2.0 + BORDER_WIDTH * 2)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_build_terrain_colors()
 	# Listen for theme changes to update colors
@@ -123,20 +123,7 @@ func _on_land_boundary_changed() -> void:
 	queue_redraw()
 
 func set_camera_rect(viewport_rect: Rect2, _grid_width: int, _grid_height: int) -> void:
-	var proj := _terrain_grid.projection
-	var corners: Array[Vector2] = [
-		proj.unproject(viewport_rect.position),
-		proj.unproject(Vector2(viewport_rect.end.x, viewport_rect.position.y)),
-		proj.unproject(viewport_rect.end),
-		proj.unproject(Vector2(viewport_rect.position.x, viewport_rect.end.y)),
-	]
-	var min_g: Vector2 = corners[0]
-	var max_g: Vector2 = corners[0]
-	for point in corners:
-		min_g = Vector2(minf(min_g.x, point.x), minf(min_g.y, point.y))
-		max_g = Vector2(maxf(max_g.x, point.x), maxf(max_g.y, point.y))
-	var grid_size := Vector2(float(_terrain_grid.grid_width), float(_terrain_grid.grid_height))
-	_camera_rect = Rect2(min_g / grid_size, (max_g - min_g) / grid_size)
+	_camera_rect = viewport_rect
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -172,12 +159,16 @@ func _regenerate_map_texture() -> void:
 	_map_texture = ImageTexture.create_from_image(img)
 
 func _draw() -> void:
-	# Draw border
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.3, 0.3, 0.3), true)
-
-	# Draw map texture
+	if not _terrain_grid:
+		return
+	var outline := _map_polygon()
+	# Project the grid-space texture onto the same diamond as the course.
 	if _map_texture:
-		draw_texture(_map_texture, Vector2(BORDER_WIDTH, BORDER_WIDTH))
+		draw_polygon(outline, PackedColorArray([Color.WHITE]),
+			PackedVector2Array([Vector2.ZERO, Vector2(1, 0), Vector2.ONE, Vector2(0, 1)]), _map_texture)
+	var border := outline.duplicate()
+	border.append(border[0])
+	draw_polyline(border, Color(0.3, 0.3, 0.3), BORDER_WIDTH, true)
 
 	# Draw land boundary (property lines)
 	_draw_land_boundary()
@@ -213,10 +204,9 @@ func _draw_buildings() -> void:
 
 	var buildings = _entity_layer.get_all_buildings()
 	for building in buildings:
-		var pos = _grid_to_map_pos(building.grid_position)
-		var w = max(2, building.width * MAP_SIZE / _terrain_grid.grid_width)
-		var h = max(2, building.height * MAP_SIZE / _terrain_grid.grid_height)
-		draw_rect(Rect2(pos, Vector2(w, h)), Color(0.6, 0.4, 0.2))  # Brown
+		var start := Vector2(building.grid_position)
+		var end := start + Vector2(building.width, building.height)
+		draw_colored_polygon(_grid_rect_polygon(start, end), Color(0.6, 0.4, 0.2))
 
 func _draw_golfers() -> void:
 	if not _golfer_manager:
@@ -233,23 +223,18 @@ func _draw_camera_rect() -> void:
 	if _camera_rect.size.x <= 0 or _camera_rect.size.y <= 0:
 		return
 
-	# Convert normalized camera rect to map pixels
-	var rect_pos = Vector2(
-		BORDER_WIDTH + _camera_rect.position.x * MAP_SIZE,
-		BORDER_WIDTH + _camera_rect.position.y * MAP_SIZE
-	)
-	var rect_size = Vector2(
-		_camera_rect.size.x * MAP_SIZE,
-		_camera_rect.size.y * MAP_SIZE
-	)
-
-	# Clamp to map bounds
-	rect_pos.x = clamp(rect_pos.x, BORDER_WIDTH, BORDER_WIDTH + MAP_SIZE)
-	rect_pos.y = clamp(rect_pos.y, BORDER_WIDTH, BORDER_WIDTH + MAP_SIZE)
-
-	# Draw viewport rectangle outline
-	var rect = Rect2(rect_pos, rect_size)
-	draw_rect(rect, Color(1, 1, 1, 0.8), false, 2.0)
+	var rect := _camera_rect
+	var viewport_polygon := PackedVector2Array([
+		_world_to_map_pos(rect.position),
+		_world_to_map_pos(Vector2(rect.end.x, rect.position.y)),
+		_world_to_map_pos(rect.end),
+		_world_to_map_pos(Vector2(rect.position.x, rect.end.y)),
+	])
+	for clipped in Geometry2D.intersect_polygons(viewport_polygon, _map_polygon()):
+		if clipped.size() < 3:
+			continue
+		clipped.append(clipped[0])
+		draw_polyline(clipped, Color(1, 1, 1, 0.8), 2.0, true)
 
 func _draw_land_boundary() -> void:
 	if not GameManager.land_manager or not _terrain_grid:
@@ -269,10 +254,7 @@ func _draw_land_boundary() -> void:
 				# Calculate parcel bounds in map pixels (account for grid offset)
 				var grid_start = Vector2i(offset + px * parcel_size, offset + py * parcel_size)
 				var grid_end = Vector2i(offset + (px + 1) * parcel_size, offset + (py + 1) * parcel_size)
-				var map_start = _grid_to_map_pos(grid_start)
-				var map_end = _grid_to_map_pos(grid_end)
-				var rect = Rect2(map_start, map_end - map_start)
-				draw_rect(rect, UNOWNED_TINT)
+				draw_colored_polygon(_grid_rect_polygon(Vector2(grid_start), Vector2(grid_end)), UNOWNED_TINT)
 
 	# Draw property lines at parcel boundaries
 	for px in range(cols):
@@ -335,22 +317,34 @@ func _draw_land_boundary() -> void:
 				var end = _grid_to_map_pos(Vector2i(grid_x + parcel_size, grid_y + parcel_size))
 				draw_line(start, end, BOUNDARY_COLOR, 1.5)
 
-func _grid_to_map_pos(grid_pos: Vector2i) -> Vector2:
+func _map_scale() -> float:
+	return float(MAP_SIZE) / _terrain_grid.projection.world_bounds().size.x
+
+func _world_to_map_pos(world_pos: Vector2) -> Vector2:
+	return Vector2(BORDER_WIDTH, BORDER_WIDTH) + (world_pos - _terrain_grid.projection.world_bounds().position) * _map_scale()
+
+func _grid_to_map_pos(grid_pos: Vector2) -> Vector2:
 	if not _terrain_grid:
 		return Vector2.ZERO
-	var nx = float(grid_pos.x) / _terrain_grid.grid_width
-	var ny = float(grid_pos.y) / _terrain_grid.grid_height
-	return Vector2(BORDER_WIDTH + nx * MAP_SIZE, BORDER_WIDTH + ny * MAP_SIZE)
+	return _world_to_map_pos(_terrain_grid.projection.project(grid_pos))
+
+func _grid_rect_polygon(start: Vector2, end: Vector2) -> PackedVector2Array:
+	return PackedVector2Array([
+		_grid_to_map_pos(start), _grid_to_map_pos(Vector2(end.x, start.y)),
+		_grid_to_map_pos(end), _grid_to_map_pos(Vector2(start.x, end.y)),
+	])
+
+func _map_polygon() -> PackedVector2Array:
+	return _grid_rect_polygon(Vector2.ZERO, Vector2(_terrain_grid.grid_width, _terrain_grid.grid_height))
 
 func _map_to_world_pos(map_pos: Vector2) -> Vector2:
 	if not _terrain_grid:
 		return Vector2.ZERO
-	# Convert map pixel position to world position
-	var nx = (map_pos.x - BORDER_WIDTH) / MAP_SIZE
-	var ny = (map_pos.y - BORDER_WIDTH) / MAP_SIZE
-	var gx = nx * _terrain_grid.grid_width
-	var gy = ny * _terrain_grid.grid_height
-	return _terrain_grid.grid_to_screen_center(Vector2i(int(gx), int(gy)))
+	return (map_pos - Vector2(BORDER_WIDTH, BORDER_WIDTH)) / _map_scale() + _terrain_grid.projection.world_bounds().position
+
+# Transparent corners should not intercept clicks intended for the course.
+func _has_point(point: Vector2) -> bool:
+	return _is_within_map(point)
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -376,8 +370,7 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 
 func _is_within_map(local_pos: Vector2) -> bool:
-	return local_pos.x >= BORDER_WIDTH and local_pos.x < BORDER_WIDTH + MAP_SIZE \
-		and local_pos.y >= BORDER_WIDTH and local_pos.y < BORDER_WIDTH + MAP_SIZE
+	return _terrain_grid != null and Geometry2D.is_point_in_polygon(local_pos, _map_polygon())
 
 func _input(event: InputEvent) -> void:
 	# Don't process any gameplay hotkeys while in main menu

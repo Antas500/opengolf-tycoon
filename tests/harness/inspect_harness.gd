@@ -31,8 +31,47 @@ func _run() -> void:
 	await get_tree().process_frame
 	_check(not main.tile_inspector.visible, "Showing HUD does not show inspector")
 	var menu: Control = main.left_controls.get_node("MenuControls")
+	var feed: Control = main.left_controls.get_node("FeedBtn")
+	_check(feed.position.y >= menu.position.y + menu.size.y, "Feed is below Menu")
+	_check(main.inspect_btn.position.y >= feed.position.y + feed.size.y, "Inspect is below Feed")
 	_check(main.inspect_btn.position.y >= menu.position.y + menu.size.y, "Inspect is below Menu")
 	_check(main.left_controls.size.y <= UIConstants.BOTTOM_BAR_HEIGHT, "Controls still fit the bottom bar")
+
+	# Feed toggle: the button that used to live on the Club tab now rides in the
+	# left control stack and opens the same event feed panel.
+	main.feed_btn.pressed.emit()
+	_check(main.event_feed_panel.visible, "Feed button opens the event feed")
+	main.feed_btn.pressed.emit()
+	_check(not main.event_feed_panel.visible, "Feed button closes the event feed")
+	main._update_feed_unread(3)
+	_check(main.feed_btn.text == "Feed (3)", "Unread count badges the Feed button")
+	main._update_feed_unread(0)
+	_check(main.feed_btn.text == "Feed", "Unread count clears the badge")
+
+	# Map toggle: an icon button in the minimap's bottom-left corner, not in the stack.
+	var map_btn: Button = main.map_btn
+	_check(not main.left_controls.is_ancestor_of(map_btn), "Map button left the control stack")
+	_check(map_btn.get_parent() == main.mini_map.get_parent(), "Map button is a minimap sibling")
+	_check(map_btn.icon != null and map_btn.text.is_empty(), "Map button uses a map icon")
+	var map_rect: Rect2 = main.mini_map.get_global_rect()
+	var btn_rect: Rect2 = map_btn.get_global_rect()
+	_check(map_rect.encloses(btn_rect), "Map button sits inside the minimap bounds")
+	_check(btn_rect.position.x - map_rect.position.x <= 4.0 and map_rect.end.y - btn_rect.end.y <= 4.0,
+		"Map button is in the minimap's bottom-left corner")
+	var covers_map := false
+	for corner in [btn_rect.position, Vector2(btn_rect.end.x, btn_rect.position.y), btn_rect.end, Vector2(btn_rect.position.x, btn_rect.end.y)]:
+		if main.mini_map._is_within_map(corner - map_rect.position):
+			covers_map = true
+	_check(not covers_map, "Map button does not cover the minimap diamond")
+	_check(map_btn.button_pressed and main.mini_map.visible, "Map starts shown and pressed")
+	map_btn.button_pressed = false
+	_check(not main.mini_map.visible and map_btn.is_visible_in_tree(), "Map button hides minimap but stays visible")
+	map_btn.button_pressed = true
+	_check(main.mini_map.visible, "Map button shows minimap again")
+	main.mini_map.visible = false
+	_check(not map_btn.button_pressed, "Hiding minimap (Tab) unpresses Map button")
+	main.mini_map.visible = true
+	_check(map_btn.button_pressed, "Showing minimap re-presses Map button")
 
 	main._on_tool_selected(TerrainTypes.Type.FAIRWAY)
 	main.inspect_btn.button_pressed = true
@@ -103,10 +142,9 @@ func _run() -> void:
 	_check(main.terrain_grid.get_bunker_depth(hovered_tile) == depth_before,
 		"Shift-click in Inspect does not alter bunker depth")
 	main._on_view_rotate_cw()
-	main._on_view_isometric_toggled(false)
 	main.camera.force_update_scroll()
 	main._update_tile_inspector()
-	_check(main.inspect_mode and main.tile_inspector.visible, "Inspect survives rotation and top-down toggle")
+	_check(main.inspect_mode and main.tile_inspector.visible, "Inspect survives rotation")
 	GameManager.set_speed(GameManager.GameSpeed.PAUSED)
 	main._update_tile_inspector()
 	_check(main.tile_inspector.visible, "Speed pause still allows inspection")
