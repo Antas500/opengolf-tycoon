@@ -256,6 +256,7 @@ func _ready() -> void:
 	_setup_rain_overlay()
 	_setup_placement_preview()
 	_create_menu_buttons()
+	_fill_left_control_stack()
 	_setup_building_info_panel()
 	_setup_financial_panel()
 	_setup_mini_map()
@@ -876,6 +877,11 @@ func _setup_bottom_bar() -> void:
 	if speed_controls:
 		speed_controls.alignment = BoxContainer.ALIGNMENT_CENTER
 		speed_controls.add_theme_constant_override("separation", 4)
+	# The fast-forward face flips between ">>" and ">>>". Size the button for
+	# the widest face up front so toggling tiers can never resize it or nudge
+	# the row of speed controls that holds it.
+	if fast_btn:
+		lock_button_width_to_faces(fast_btn, [">>", ">>>"])
 	if orientation_label:
 		orientation_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 		orientation_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
@@ -1541,6 +1547,18 @@ func _on_speed_selected(speed: int) -> void:
 func _on_fast_forward_pressed() -> void:
 	"""The single fast-forward button swaps between Fast (3x) and Ultra (8x)."""
 	GameManager.cycle_fast_forward_speed()
+
+## Size `button` for the widest of `faces` and never let a face change shrink
+## it. Toggling a button whose face changes with state (like the fast-forward
+## ">>" / ">>>" pair) then cannot resize the button or nudge the row holding it.
+static func lock_button_width_to_faces(button: Button, faces: Array) -> void:
+	var face: String = button.text
+	var widest: float = button.custom_minimum_size.x
+	for candidate in faces:
+		button.text = str(candidate)
+		widest = maxf(widest, button.get_combined_minimum_size().x)
+	button.text = face
+	button.custom_minimum_size.x = widest
 
 ## Face of the fast-forward button: ">>" at Fast (and while idle), ">>>" at Ultra.
 static func fast_forward_label(speed: int) -> String:
@@ -2400,6 +2418,23 @@ func _create_menu_buttons() -> void:
 	tile_inspector = TileInspector.new()
 	tile_inspector.name = "TileInspector"
 	$UI/HUD.add_child(tile_inspector)
+
+func _fill_left_control_stack() -> void:
+	"""Stretch the left control stack over the full height of the bottom bar.
+
+	Every row of the stack (Menu, Feed, Inspect, the Rotate pair, the speed
+	controls) grows to share the bar's height, and every button grows to fill
+	its row — so the buttons run the full height of the stack instead of
+	floating in a short centred strip. The compass needle and its letter keep
+	their tight, centred slots inside the Rotate row."""
+	if not left_controls:
+		return
+	left_controls.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	for row in left_controls.get_children():
+		row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		for child in row.get_children():
+			if child is Button:
+				child.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 func _on_inspect_toggled(enabled: bool) -> void:
 	if not enabled:

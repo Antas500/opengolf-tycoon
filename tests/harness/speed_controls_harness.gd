@@ -58,11 +58,30 @@ func _run() -> void:
 	_check(main.speed_controls.get_node_or_null("UltraBtn") == null,
 			"No separate ULTRA button is created")
 
+	# The buttons use up the full height of the left control stack: the stack
+	# itself fills the bottom bar, its rows run top to bottom inside it, and
+	# the buttons fill their rows.
+	var stack: VBoxContainer = main.left_controls
+	var top_row: Control = stack.get_child(0)
+	var bottom_row: Control = stack.get_child(stack.get_child_count() - 1)
+	_check(absf(stack.size.y - main.bottom_bar.size.y) <= 0.5,
+			"The stack fills the full height of the bottom bar (%s of %s)" % [
+				stack.size.y, main.bottom_bar.size.y])
+	_check(top_row.position.y <= 0.5
+			and bottom_row.position.y + bottom_row.size.y >= stack.size.y - 0.5,
+			"The stack's rows run its full height, with no dead space above or below")
+	_check(absf(main.fast_btn.size.y - main.speed_controls.size.y) <= 0.5,
+			"The speed buttons fill the full height of their row (%s of %s)" % [
+				main.fast_btn.size.y, main.speed_controls.size.y])
+
 	# Idle: the toggle advertises the tier it starts at, and stays dimmed.
 	_check(main.fast_btn.text == ">>", "Idle fast-forward button reads >> (got '%s')" % main.fast_btn.text)
 	_check(main.fast_btn.modulate.a < 1.0, "Idle fast-forward button is dimmed")
 	_check("Fast (3x)" in main.fast_btn.tooltip_text and "Ultra (8x)" in main.fast_btn.tooltip_text,
 			"Idle tooltip teaches both tiers (got '%s')" % main.fast_btn.tooltip_text)
+	# The one width both faces must keep, so toggling never resizes the button
+	# or nudges the row of speed controls that holds it.
+	var fast_width: float = main.fast_btn.size.x
 
 	# First press: Fast, and the shared button lights up.
 	await _click(main.fast_btn)
@@ -70,6 +89,8 @@ func _run() -> void:
 			"First press runs at Fast (3x)")
 	_check(Engine.time_scale == 3.0, "Fast press scales the engine to 3.0 (got %s)" % Engine.time_scale)
 	_check(main.fast_btn.text == ">>", "Fast keeps the >> face")
+	_check(absf(main.fast_btn.size.x - fast_width) <= 0.5,
+			"The >> face keeps the button's width (%s -> %s)" % [fast_width, main.fast_btn.size.x])
 	_check(main.fast_btn.modulate.a == 1.0, "The shared button lights up while Fast runs")
 	_check("Ultra (8x)" in main.fast_btn.tooltip_text,
 			"Fast tooltip offers Ultra next (got '%s')" % main.fast_btn.tooltip_text)
@@ -80,6 +101,8 @@ func _run() -> void:
 			"Second press runs at Ultra (8x)")
 	_check(Engine.time_scale == 8.0, "Ultra press scales the engine to 8.0 (got %s)" % Engine.time_scale)
 	_check(main.fast_btn.text == ">>>", "Ultra reads >>> (got '%s')" % main.fast_btn.text)
+	_check(absf(main.fast_btn.size.x - fast_width) <= 0.5,
+			"The wider >>> face keeps the button's width (%s -> %s)" % [fast_width, main.fast_btn.size.x])
 	_check(main.fast_btn.modulate.a == 1.0, "The shared button stays lit at Ultra")
 	_check("Fast (3x)" in main.fast_btn.tooltip_text,
 			"Ultra tooltip offers Fast next (got '%s')" % main.fast_btn.tooltip_text)
@@ -90,6 +113,8 @@ func _run() -> void:
 			"Third press drops back to Fast")
 	_check(Engine.time_scale == 3.0, "Back to Fast scales the engine to 3.0")
 	_check(main.fast_btn.text == ">>", "Fast reads >> again")
+	_check(absf(main.fast_btn.size.x - fast_width) <= 0.5,
+			"Back to >> the button still keeps its width (%s -> %s)" % [fast_width, main.fast_btn.size.x])
 
 	# Pause and play still own their own buttons and clear the highlight.
 	await _click(main.pause_btn)

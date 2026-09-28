@@ -102,3 +102,38 @@ func test_button_tooltip_names_the_tier_a_press_switches_to() -> void:
 	var idle: String = MainScript.fast_forward_tooltip(GameManager.GameSpeed.NORMAL)
 	assert_string_contains(idle, "Fast (3x)", "Idle tooltip teaches the first press")
 	assert_string_contains(idle, "Ultra (8x)", "Idle tooltip teaches the second press")
+
+
+# --- Button width ---
+
+func test_button_keeps_one_width_across_both_faces() -> void:
+	# Sized loose, the two faces measure differently: ">>" fits the button's
+	# old 28px slot, ">>>" needs more, and every tier toggle would resize the
+	# button and nudge the speed-controls row. The lock sizes it for the widest
+	# face once so both faces then claim the same width.
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(28, 24)
+	add_child_autofree(button)
+
+	var widths: Dictionary = {}
+	for face in [">>", ">>>"]:
+		button.text = face
+		widths[face] = button.get_combined_minimum_size().x
+	assert_gt(widths[">>>"], widths[">>"],
+			"The three-chevron face really is the wider one, so the lock is needed")
+
+	button.custom_minimum_size = Vector2(28, 24)
+	MainScript.lock_button_width_to_faces(button, [">>", ">>>"])
+	for face in [">>", ">>>"]:
+		button.text = face
+		assert_eq(button.get_combined_minimum_size().x, widths[">>>"],
+				"Locked, the %s face keeps the width of the widest face" % face)
+
+func test_width_lock_keeps_the_face_it_was_given() -> void:
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(28, 24)
+	button.text = ">>"
+	add_child_autofree(button)
+
+	MainScript.lock_button_width_to_faces(button, [">>", ">>>"])
+	assert_eq(button.text, ">>", "The lock measures both faces but leaves the face it found")
