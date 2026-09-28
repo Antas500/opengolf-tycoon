@@ -22,11 +22,11 @@ const PROPERTIES: Dictionary = {
 	Type.GREEN: {"name": "Green", "color": Color(0.35, 0.88, 0.45), "playable": true, "placement_cost": 20, "maintenance_cost": 2, "shot_difficulty": 0.0},
 	Type.TEE_BOX: {"name": "Tee Box", "color": Color(0.45, 0.75, 0.42), "playable": true, "placement_cost": 12, "maintenance_cost": 1, "shot_difficulty": 0.0},
 	Type.BUNKER: {"name": "Bunker", "color": Color(0.95, 0.88, 0.65), "playable": true, "placement_cost": 10, "maintenance_cost": 1, "shot_difficulty": 0.6, "is_hazard": true},
-	Type.WATER: {"name": "Water", "color": Color(0.25, 0.55, 0.85), "playable": false, "placement_cost": 20, "maintenance_cost": 1, "is_hazard": true, "penalty_strokes": 1},
+	Type.WATER: {"name": "Water", "color": Color(0.25, 0.55, 0.85), "playable": false, "placement_cost": 20, "maintenance_cost": 0, "is_hazard": true, "penalty_strokes": 1},
 	Type.PATH: {"name": "Cart Path", "color": Color(0.78, 0.75, 0.68), "playable": true, "placement_cost": 8, "maintenance_cost": 0, "shot_difficulty": 0.1, "speed_modifier": 1.5},
 	Type.OUT_OF_BOUNDS: {"name": "Out of Bounds", "color": Color(0.42, 0.35, 0.32), "playable": false, "placement_cost": 0, "maintenance_cost": 0, "penalty_strokes": 1},
 	Type.TREES: {"name": "Trees", "color": Color(0.22, 0.45, 0.22), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
-	Type.FLOWER_BED: {"name": "Flower Bed", "color": Color(0.85, 0.5, 0.6), "playable": false, "placement_cost": 15, "maintenance_cost": 1, "beauty_bonus": 5},
+	Type.FLOWER_BED: {"name": "Wild Flowers", "color": Color(0.85, 0.5, 0.6), "playable": false, "placement_cost": 15, "maintenance_cost": 0, "beauty_bonus": 5},
 	# Rocky ground. Painted Rocks tiles render as stony ground; a boulder
 	# placed on other terrain stamps this type too, but keeps its native turf
 	# look (see TerrainGrid.set_object_footprint).
@@ -37,7 +37,7 @@ const PROPERTIES: Dictionary = {
 	Type.POT_BUNKER: {"name": "Pot Bunker", "color": Color(0.84, 0.76, 0.54), "playable": true, "placement_cost": 18, "maintenance_cost": 2, "shot_difficulty": 0.85, "is_hazard": true},
 	# Narrow running water (a burn/creek). Same penalty as Water, but golfers
 	# can still walk across it, so it can cut through the middle of a hole.
-	Type.STREAM: {"name": "Stream", "color": Color(0.33, 0.62, 0.76), "playable": false, "placement_cost": 15, "maintenance_cost": 1, "is_hazard": true, "penalty_strokes": 1, "beauty_bonus": 2},
+	Type.STREAM: {"name": "Stream", "color": Color(0.33, 0.62, 0.76), "playable": false, "placement_cost": 15, "maintenance_cost": 0, "is_hazard": true, "penalty_strokes": 1, "beauty_bonus": 2},
 	# Knee-high unmown grass: the ball sits down and is hard to advance.
 	Type.DEEP_ROUGH: {"name": "Deep Rough", "color": Color(0.36, 0.46, 0.26), "playable": true, "placement_cost": 1, "maintenance_cost": 0, "shot_difficulty": 0.6, "speed_modifier": 0.85},
 	# Natural sandy scrubland. Not a hazard (no raking, club may be grounded).
@@ -102,13 +102,13 @@ static func is_rough(type: int) -> bool:
 	return type == Type.ROUGH or type == Type.HEAVY_ROUGH or type == Type.DEEP_ROUGH
 
 ## Tooltip sentence shared by every Course Terrain tile. Each one overwrites
-## every other tile on that tab — ground, flower beds, trees and boulders.
+## every other tile on that tab — ground, wild flowers, trees and boulders.
 const REPLACES_ANY_COURSE_TILE := "Replaces any other Course Terrain tile."
 
 ## Every terrain type the player can paint from the Course Terrain tab, in
 ## toolbar order: row 1 (tee box, green, bunker, rough, pot bunker, stream,
 ## water) then row 2 (fairway, firm fairway, deep rough, waste bunker, brush,
-## rocks, out of bounds). Flower beds, trees and boulders share the tab and
+## rocks, out of bounds). Wild flowers, trees and boulders share the tab and
 ## the same replacement rule; they are appended beside this list.
 const COURSE_PAINT_TYPES: Array[int] = [
 	Type.TEE_BOX, Type.GREEN, Type.BUNKER, Type.ROUGH, Type.POT_BUNKER,
@@ -117,9 +117,30 @@ const COURSE_PAINT_TYPES: Array[int] = [
 	Type.BRUSH, Type.ROCKS, Type.OUT_OF_BOUNDS,
 ]
 
+## Landscape terrain tiles beside COURSE_PAINT_TYPES on the Course Terrain tab.
+const COURSE_LANDSCAPE_TERRAIN_TYPES: Array[int] = [Type.FLOWER_BED, Type.TREES]
+
+## Terrain tiles available on the Course Terrain tab that natural generation may
+## use. Keep this derived from the tab inventory and upkeep data so generated
+## terrain cannot introduce a hidden daily maintenance bill.
+static func get_natural_generation_types() -> Array[int]:
+	var eligible: Array[int] = []
+	for type in COURSE_PAINT_TYPES:
+		if get_maintenance_cost(type) == 0:
+			eligible.append(type)
+	for type in COURSE_LANDSCAPE_TERRAIN_TYPES:
+		if get_maintenance_cost(type) == 0:
+			eligible.append(type)
+	return eligible
+
+## Is this a zero-upkeep terrain tile the Course Terrain tab actually offers?
+static func is_natural_generation_type(type: int) -> bool:
+	var is_course_tab_tile := type in COURSE_PAINT_TYPES or type in COURSE_LANDSCAPE_TERRAIN_TYPES
+	return is_course_tab_tile and get_maintenance_cost(type) == 0
+
 ## Ground the walking-path improvement can be laid over (the Path tool in the
 ## Improvements tab): the rough and scrubby Course Terrain tiles, painted
-## Rocks and boulder ground (Rocks), streams and flower beds, plus tree tiles.
+## Rocks and boulder ground (Rocks), streams and wild flowers, plus tree tiles.
 ## The path sits on top of these tiles without replacing the terrain.
 const WALKING_PATH_TERRAINS: Array[int] = [
 	Type.ROUGH, Type.DEEP_ROUGH, Type.WASTE_BUNKER, Type.BRUSH,

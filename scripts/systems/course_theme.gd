@@ -457,7 +457,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(10, 25), # Larger clusters
 				"tree_density": Vector2(0.25, 0.45),    # Denser within clusters
 				"rocks": Vector2i(40, 80),
-				"rough_patches": Vector2i(8, 14),      # Overgrown areas
 				"heavy_rough_patches": Vector2i(4, 8),  # Wild undergrowth
 				"flower_patches": Vector2i(3, 6),       # Wildflower meadows
 			}
@@ -471,7 +470,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(5, 12),
 				"tree_density": Vector2(0.10, 0.20),
 				"rocks": Vector2i(100, 180),            # Rocky desert landscape
-				"rough_patches": Vector2i(10, 18),      # Scrubland patches
 				"heavy_rough_patches": Vector2i(2, 4),   # Sparse brush
 				"flower_patches": Vector2i(0, 1),        # Rare desert blooms
 			}
@@ -487,7 +485,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(4, 10),
 				"tree_density": Vector2(0.10, 0.20),
 				"rocks": Vector2i(30, 60),
-				"rough_patches": Vector2i(14, 22),     # Heavy fescue rough everywhere
 				"heavy_rough_patches": Vector2i(8, 14), # Deep fescue dunes
 				"flower_patches": Vector2i(1, 3),       # Sea grass clumps
 			}
@@ -501,7 +498,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(12, 28), # Large forest areas
 				"tree_density": Vector2(0.30, 0.50),    # Very dense clusters
 				"rocks": Vector2i(80, 150),             # Rocky mountain terrain
-				"rough_patches": Vector2i(6, 12),       # Mountain grass patches
 				"heavy_rough_patches": Vector2i(5, 10), # Dense undergrowth
 				"flower_patches": Vector2i(2, 5),        # Mountain wildflowers
 			}
@@ -515,7 +511,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(6, 14),
 				"tree_density": Vector2(0.15, 0.30),
 				"rocks": Vector2i(10, 25),
-				"rough_patches": Vector2i(4, 8),        # Unmowed city lots
 				"heavy_rough_patches": Vector2i(2, 5),
 				"flower_patches": Vector2i(2, 4),        # Overgrown flower beds
 			}
@@ -531,7 +526,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(10, 22),
 				"tree_density": Vector2(0.25, 0.40),
 				"rocks": Vector2i(20, 40),
-				"rough_patches": Vector2i(6, 10),       # Tropical undergrowth
 				"heavy_rough_patches": Vector2i(3, 6),
 				"flower_patches": Vector2i(5, 10),       # Abundant tropical flowers
 			}
@@ -545,7 +539,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(6, 14),
 				"tree_density": Vector2(0.15, 0.30),
 				"rocks": Vector2i(30, 60),
-				"rough_patches": Vector2i(16, 26),     # Heavy heather coverage
 				"heavy_rough_patches": Vector2i(10, 18), # Dense gorse thickets
 				"flower_patches": Vector2i(4, 8),       # Heather blooms
 			}
@@ -559,7 +552,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(12, 30), # Large forest blocks
 				"tree_density": Vector2(0.35, 0.55),   # Very dense within clusters
 				"rocks": Vector2i(30, 60),             # Forest floor rocks
-				"rough_patches": Vector2i(6, 10),      # Undergrowth
 				"heavy_rough_patches": Vector2i(4, 8),  # Bracken/fern patches
 				"flower_patches": Vector2i(1, 3),       # Sparse forest wildflowers
 			}
@@ -575,7 +567,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(8, 20),
 				"tree_density": Vector2(0.25, 0.45),
 				"rocks": Vector2i(80, 140),            # Volcanic rock outcroppings
-				"rough_patches": Vector2i(8, 14),      # Jungle undergrowth
 				"heavy_rough_patches": Vector2i(5, 10), # Dense jungle
 				"flower_patches": Vector2i(4, 8),       # Tropical flowers
 			}
@@ -591,7 +582,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"tree_cluster_radius": Vector2(8, 18),
 				"tree_density": Vector2(0.20, 0.35),
 				"rocks": Vector2i(15, 30),             # Minimal rocks
-				"rough_patches": Vector2i(12, 20),     # Marsh grass everywhere
 				"heavy_rough_patches": Vector2i(8, 14), # Dense reed beds
 				"flower_patches": Vector2i(2, 5),       # Marsh wildflowers
 			}

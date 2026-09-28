@@ -1154,14 +1154,14 @@ func test_mouse_wheel_horizontal_scroll_input() -> void:
 	assert_eq(scroll.scroll_horizontal, 100)
 
 func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab() -> void:
-	# Flower Bed is a TerrainTileButton in the Course Terrain tab
+	# Wild Flowers is a TerrainTileButton in the Course Terrain tab
 	var fb_btn: ToolButton = toolbar._tool_buttons[TerrainTypes.Type.FLOWER_BED]
-	assert_true(fb_btn is TerrainTileButton, "Flower Bed should be a TerrainTileButton")
+	assert_true(fb_btn is TerrainTileButton, "Wild Flowers should be a TerrainTileButton")
 	assert_eq(TerrainToolbar.TOOL_TAB_MAP[TerrainTypes.Type.FLOWER_BED], TerrainToolbar.Tab.TERRAIN,
-		"Flower Bed should belong to the Course Terrain tab")
-	assert_eq(fb_btn.tool_name, "Flower Bed")
+		"Wild Flowers should belong to the Course Terrain tab")
+	assert_eq(fb_btn.tool_name, "Wild Flowers")
 	assert_eq(fb_btn.get_parent(), toolbar._course_tiles,
-		"Flower Bed should live on the unified honeycomb in Course Terrain tab")
+		"Wild Flowers should live on the unified honeycomb in Course Terrain tab")
 
 	# Boulders are BoulderTileButtons (which inherit TerrainTileButton) in Course Terrain tab
 	for b_id in ["boulder_small", "rock", "boulder_large"]:
@@ -1205,14 +1205,14 @@ func test_improvements_tab_holds_paths_and_every_decoration_tile() -> void:
 
 	var imp_hbox: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.IMPROVEMENTS)
 
-	# Verify Trees, Boulders, Flower Bed are NOT in Improvements tab
+	# Verify Trees, Boulders, Wild Flowers are NOT in Improvements tab
 	var tool_names: Array[String] = []
 	for btn in imp_hbox.find_children("*", "ToolButton", true, false):
 		tool_names.append(btn.tool_name)
 
 	assert_false(tool_names.has("Trees"), "Improvements tab must not contain Trees")
 	assert_false(tool_names.has("Boulders"), "Improvements tab must not contain Boulders")
-	assert_false(tool_names.has("Flower Bed"), "Improvements tab must not contain Flower Bed")
+	assert_false(tool_names.has("Wild Flowers"), "Improvements tab must not contain Wild Flowers")
 	assert_true(tool_names.has("Path"), "Improvements tab should contain Path")
 	assert_false(tool_names.has("Decorations"),
 		"The Garden Shed's Decorations button is replaced by the decoration tiles")
@@ -1464,7 +1464,7 @@ func test_tree_and_boulder_tile_selection_signals() -> void:
 	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["small"])
 	assert_true(toolbar.has_selection())
 
-	# Selecting Flower Bed selects tool TerrainTypes.Type.FLOWER_BED
+	# Selecting Wild Flowers selects tool TerrainTypes.Type.FLOWER_BED
 	toolbar._on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
 	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.FLOWER_BED])
 	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.FLOWER_BED)

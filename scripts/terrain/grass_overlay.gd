@@ -5,9 +5,12 @@ class_name GrassOverlay
 var _terrain_grid: TerrainGrid = null
 var _grass_positions: Dictionary = {}  # tile_pos -> Array of blade positions
 var _is_web: bool = false
-# Note: Native GRASS excluded to avoid per-tile blade boundaries creating grid pattern
-# The terrain shader provides sufficient procedural variation for GRASS
-const GRASS_TYPES = [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.ROUGH, TerrainTypes.Type.HEAVY_ROUGH]
+# Note: Native GRASS (the blank canvas) and ROUGH (the base turf terrain
+# generation paints) are excluded: per-tile blade boundaries create a visible
+# grid pattern across a uniform surface. The terrain shader provides
+# sufficient procedural variation for both, so blades are kept for the tiles
+# that break the base up — fairways and heavy-rough clumps.
+const GRASS_TYPES = [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.HEAVY_ROUGH]
 
 func _ready() -> void:
 	z_index = 1

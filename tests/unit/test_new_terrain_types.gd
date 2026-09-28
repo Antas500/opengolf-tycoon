@@ -54,6 +54,7 @@ func test_every_type_has_properties_names_and_costs() -> void:
 	assert_eq(TerrainTypes.get_type_name(T.FIRM_FAIRWAY), "Firm Fairway")
 	assert_eq(TerrainTypes.get_type_name(T.POT_BUNKER), "Pot Bunker")
 	assert_eq(TerrainTypes.get_type_name(T.STREAM), "Stream")
+	assert_eq(TerrainTypes.get_type_name(T.FLOWER_BED), "Wild Flowers", "The flower tile is sold as Wild Flowers")
 	assert_eq(TerrainTypes.get_type_name(T.DEEP_ROUGH), "Deep Rough")
 	assert_eq(TerrainTypes.get_type_name(T.WASTE_BUNKER), "Waste Bunker")
 	assert_eq(TerrainTypes.get_type_name(T.ROCKS), "Rocks")
@@ -64,6 +65,9 @@ func test_upkeep_and_hazard_flags() -> void:
 		"Revetted faces need rebuilding more often than a bunker is raked")
 	assert_eq(TerrainTypes.get_maintenance_cost(T.WASTE_BUNKER), 0, "Waste areas are never raked")
 	assert_eq(TerrainTypes.get_maintenance_cost(T.DEEP_ROUGH), 0, "Deep rough is left unmown")
+	assert_eq(TerrainTypes.get_maintenance_cost(T.STREAM), 0, "Streams are natural and maintain themselves")
+	assert_eq(TerrainTypes.get_maintenance_cost(T.WATER), 0, "Water hazards maintain themselves")
+	assert_eq(TerrainTypes.get_maintenance_cost(T.FLOWER_BED), 0, "Wild flowers grow on their own")
 	assert_true(TerrainTypes.is_hazard(T.POT_BUNKER))
 	assert_true(TerrainTypes.is_hazard(T.STREAM))
 	assert_false(TerrainTypes.is_hazard(T.WASTE_BUNKER), "A waste bunker is not a hazard")
@@ -80,6 +84,8 @@ func test_json_mirror_lists_every_type() -> void:
 	for type in NEW_TYPES:
 		assert_eq(by_id[type].name, TerrainTypes.get_type_name(type))
 		assert_eq(int(by_id[type].placement_cost), TerrainTypes.get_placement_cost(type))
+	assert_eq(by_id[T.FLOWER_BED].name, TerrainTypes.get_type_name(T.FLOWER_BED),
+		"The mirror follows the Wild Flowers rename")
 
 func test_new_tiles_round_trip_through_a_save() -> void:
 	var grid := _grid(8)
