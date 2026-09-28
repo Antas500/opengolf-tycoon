@@ -13,7 +13,6 @@ var hole_grid: GridContainer = null  # Lives in the toolbar's Holes tab (set up 
 @onready var rotate_view_controls: HBoxContainer = $UI/HUD/BottomBar/LeftControls/RotateViewControls
 @onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
 @onready var rotate_cw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCWBtn
-@onready var iso_toggle_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/IsoBtn
 @onready var orientation_label: Label = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationLabel
 @onready var pause_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn
 @onready var play_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn
@@ -450,10 +449,6 @@ func _input(event: InputEvent) -> void:
 				else:
 					_on_view_rotate_ccw()
 				get_viewport().set_input_as_handled()
-			elif event.keycode == KEY_I:
-				# Toggle between isometric diamonds and top-down squares.
-				_on_view_isometric_toggled(not terrain_grid.is_view_isometric())
-				get_viewport().set_input_as_handled()
 			elif event.keycode == KEY_SPACE:
 				# Space = pause/play toggle
 				if GameManager.current_mode == GameManager.GameMode.SIMULATING:
@@ -578,7 +573,6 @@ func _connect_ui_buttons() -> void:
 	# Rotate view controls (now above speed controls in BottomBar)
 	rotate_ccw_btn.pressed.connect(_on_view_rotate_ccw)
 	rotate_cw_btn.pressed.connect(_on_view_rotate_cw)
-	iso_toggle_btn.toggled.connect(_on_view_isometric_toggled)
 
 func _setup_terrain_toolbar() -> void:
 	"""Dock the tabbed toolbar into the bottom bar (right section, flush after left controls)"""
@@ -1378,15 +1372,6 @@ func _on_view_rotate_cw() -> void:
 func _on_view_rotate_ccw() -> void:
 	_change_view_projection(false)
 
-func _on_view_isometric_toggled(enabled: bool) -> void:
-	if terrain_grid.is_view_isometric() == enabled:
-		# The widget was flipped but the grid already matches - resync it.
-		_sync_view_controls()
-		return
-	var focus_grid := _begin_view_change()
-	terrain_grid.set_view_isometric(enabled)
-	_finish_view_change(focus_grid)
-
 func _change_view_projection(clockwise: bool) -> void:
 	var focus_grid := _begin_view_change()
 	if clockwise:
@@ -1489,10 +1474,9 @@ func _sync_camera_bounds_to_view() -> void:
 
 func _sync_view_controls() -> void:
 	# Rotate view controls now live above SpeedControls in BottomBar; keep toolbar stub for compat.
-	if terrain_grid and orientation_label and iso_toggle_btn:
+	if terrain_grid and orientation_label:
 		var orientation: int = terrain_grid.get_view_orientation()
 		orientation_label.text = VIEW_ORIENTATION_LABELS[wrapi(orientation, 0, VIEW_ORIENTATION_LABELS.size())]
-		iso_toggle_btn.set_pressed_no_signal(terrain_grid.is_view_isometric())
 	# Keep toolbar in sync if it still has the deprecated method
 	if terrain_toolbar and terrain_grid and terrain_toolbar.has_method("set_view_state"):
 		terrain_toolbar.set_view_state(terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
@@ -3219,7 +3203,7 @@ func _setup_mini_map() -> void:
 	mini_map.anchor_right = 0
 	mini_map.anchor_bottom = 1
 	mini_map.offset_left = 0
-	mini_map.offset_top = -(UIConstants.BOTTOM_BAR_HEIGHT  + 184)
+	mini_map.offset_top = -(UIConstants.BOTTOM_BAR_HEIGHT + MiniMap.MAP_SIZE / 2.0 + MiniMap.BORDER_WIDTH * 2)
 	mini_map.offset_right = 184
 	mini_map.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT)
 

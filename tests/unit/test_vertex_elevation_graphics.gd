@@ -84,19 +84,6 @@ func test_screen_to_grid_point_inverts_elevation_displacement() -> void:
 	assert_almost_eq(unprojected.x, target_grid.x, 0.05)
 	assert_almost_eq(unprojected.y, target_grid.y, 0.05)
 
-func test_top_down_view_has_no_elevation_displacement() -> void:
-	grid.set_view_isometric(false)
-	assert_false(grid.view_isometric)
-
-	var v := Vector2i(4, 4)
-	grid.set_vertex_elevation(v, BASE + 4)
-	var disp := grid.get_vertex_elevation_displacement(v)
-	assert_eq(disp, Vector2.ZERO)
-
-	var screen_pos := grid.grid_point_to_screen(Vector2(v))
-	var flat_proj := grid.projection.project(Vector2(v))
-	assert_eq(screen_pos, flat_proj)
-
 func test_course_surface_shader_uniforms_configured() -> void:
 	assert_not_null(grid._course_surface)
 	var mat := grid._course_surface.material as ShaderMaterial

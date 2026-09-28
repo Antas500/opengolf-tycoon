@@ -106,7 +106,6 @@ func _build_ui() -> void:
 		["While paused", "Camera can still pan & zoom"],
 		["Q", "Rotate course counter-clockwise"],
 		["Shift+Q", "Rotate course clockwise"],
-		["I", "Isometric / top-down view"],
 		["Tab", "Toggle minimap"],
 		["V", "Shot heatmap"],
 		["Shift+V", "Cycle heatmap mode"],

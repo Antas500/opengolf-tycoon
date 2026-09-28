@@ -6,7 +6,7 @@ class_name TerrainGrid
 @export var grid_height: int = 128
 @export var tile_width: int = 64
 @export var tile_height: int = 32
-@export var view_isometric: bool = true
+const view_isometric: bool = true
 @export_range(0, 3) var view_orientation: int = 0
 
 ## Grid <-> world projection shared by every renderer and the input handlers.
@@ -284,7 +284,6 @@ func _initialize_grid() -> void:
 
 func _init_projection() -> void:
 	projection.configure(Vector2i(grid_width, grid_height), Vector2(tile_width, tile_height))
-	projection.set_isometric(view_isometric)
 	projection.set_orientation(view_orientation)
 	view_orientation = projection.orientation
 
@@ -369,13 +368,10 @@ static func _apply_projection_uniforms(shader_material: ShaderMaterial, proj: Gr
 	shader_material.set_shader_parameter("surface_origin", proj.world_bounds().position)
 
 func rotate_view_cw() -> void:
-	_apply_view(projection.orientation + 1, projection.isometric)
+	_apply_view(projection.orientation + 1)
 
 func rotate_view_ccw() -> void:
-	_apply_view(projection.orientation - 1, projection.isometric)
-
-func set_view_isometric(enabled: bool) -> void:
-	_apply_view(projection.orientation, enabled)
+	_apply_view(projection.orientation - 1)
 
 func is_view_isometric() -> bool:
 	return projection.isometric
@@ -384,13 +380,11 @@ func get_view_orientation() -> int:
 	return projection.orientation
 
 func set_view_orientation(orientation: int) -> void:
-	_apply_view(orientation, projection.isometric)
+	_apply_view(orientation)
 
-func _apply_view(orientation: int, isometric: bool) -> void:
+func _apply_view(orientation: int) -> void:
 	projection.set_orientation(orientation)
-	projection.set_isometric(isometric)
 	view_orientation = projection.orientation
-	view_isometric = projection.isometric
 	_sync_projection_dependents()
 	view_rotated.emit(projection.orientation, projection.isometric)
 	EventBus.view_rotated.emit(projection.orientation, projection.isometric)

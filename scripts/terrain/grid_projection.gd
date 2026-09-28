@@ -6,7 +6,7 @@ const ORIENTATION_COUNT: int = 4
 
 var grid_size: Vector2i = Vector2i(128, 128)
 var tile_size: Vector2 = Vector2(64, 32)
-var isometric: bool = true
+const isometric: bool = true
 var orientation: int = 0
 
 # Cached projection state, rebuilt whenever an input above changes.
@@ -18,10 +18,9 @@ var _bounds := Rect2()
 var _dirty := true
 
 func _init(size: Vector2i = Vector2i(128, 128), tile: Vector2 = Vector2(64, 32),
-		iso: bool = true, facing: int = 0) -> void:
+		facing: int = 0) -> void:
 	grid_size = size
 	tile_size = tile
-	isometric = iso
 	orientation = wrapi(facing, 0, ORIENTATION_COUNT)
 
 func configure(size: Vector2i, tile: Vector2) -> void:
@@ -50,47 +49,30 @@ func _refresh() -> void:
 
 	var rx := _rotate(Vector2(1, 0), orientation)
 	var ry := _rotate(Vector2(0, 1), orientation)
-	if isometric:
-		var half_w := tile_size.x * 0.5
-		var half_h := tile_size.y * 0.5
-		_axis_x = Vector2((rx.x - rx.y) * half_w, (rx.x + rx.y) * half_h)
-		_axis_y = Vector2((ry.x - ry.y) * half_w, (ry.x + ry.y) * half_h)
-	else:
-		_axis_x = Vector2(rx.x * tile_size.x, rx.y * tile_size.y)
-		_axis_y = Vector2(ry.x * tile_size.x, ry.y * tile_size.y)
-
-	var half := _rotate(_center, orientation)
-	half = Vector2(absf(half.x), absf(half.y))
-	if isometric:
-		var span := half.x + half.y
-		_bounds = Rect2(Vector2.ZERO, Vector2(span * tile_size.x, span * tile_size.y))
-	else:
-		_bounds = Rect2(Vector2.ZERO,
-				Vector2(half.x * 2.0 * tile_size.x, half.y * 2.0 * tile_size.y))
+	var half_w := tile_size.x * 0.5
+	var half_h := tile_size.y * 0.5
+	_axis_x = Vector2((rx.x - rx.y) * half_w, (rx.x + rx.y) * half_h)
+	_axis_y = Vector2((ry.x - ry.y) * half_w, (ry.x + ry.y) * half_h)
+	var span := _center.x + _center.y
+	_bounds = Rect2(Vector2.ZERO, Vector2(span * tile_size.x, span * tile_size.y))
 	_origin = _bounds.get_center()
 	_dirty = false
 
 func project(grid_pos: Vector2) -> Vector2:
 	_ensure_fresh()
 	var r := _rotate(grid_pos - _center, orientation)
-	if isometric:
-		return _origin + Vector2(
-				(r.x - r.y) * tile_size.x * 0.5,
-				(r.x + r.y) * tile_size.y * 0.5)
-	return _origin + Vector2(r.x * tile_size.x, r.y * tile_size.y)
+	return _origin + Vector2(
+			(r.x - r.y) * tile_size.x * 0.5,
+			(r.x + r.y) * tile_size.y * 0.5)
 
 
 ## Fractional grid-space point for a world position. Exact inverse of project().
 func unproject(world_pos: Vector2) -> Vector2:
 	_ensure_fresh()
 	var d := world_pos - _origin
-	var r: Vector2
-	if isometric:
-		var a := d.x / (tile_size.x * 0.5)
-		var b := d.y / (tile_size.y * 0.5)
-		r = Vector2((a + b) * 0.5, (b - a) * 0.5)
-	else:
-		r = Vector2(d.x / tile_size.x, d.y / tile_size.y)
+	var a := d.x / (tile_size.x * 0.5)
+	var b := d.y / (tile_size.y * 0.5)
+	var r := Vector2((a + b) * 0.5, (b - a) * 0.5)
 	return _rotate(r, ORIENTATION_COUNT - orientation) + _center
 
 func cell_corner(cell: Vector2i) -> Vector2:
@@ -143,8 +125,4 @@ func rotate_ccw() -> void:
 
 func set_orientation(facing: int) -> void:
 	orientation = wrapi(facing, 0, ORIENTATION_COUNT)
-	_dirty = true
-
-func set_isometric(enabled: bool) -> void:
-	isometric = enabled
 	_dirty = true

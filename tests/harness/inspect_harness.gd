@@ -103,10 +103,9 @@ func _run() -> void:
 	_check(main.terrain_grid.get_bunker_depth(hovered_tile) == depth_before,
 		"Shift-click in Inspect does not alter bunker depth")
 	main._on_view_rotate_cw()
-	main._on_view_isometric_toggled(false)
 	main.camera.force_update_scroll()
 	main._update_tile_inspector()
-	_check(main.inspect_mode and main.tile_inspector.visible, "Inspect survives rotation and top-down toggle")
+	_check(main.inspect_mode and main.tile_inspector.visible, "Inspect survives rotation")
 	GameManager.set_speed(GameManager.GameSpeed.PAUSED)
 	main._update_tile_inspector()
 	_check(main.tile_inspector.visible, "Speed pause still allows inspection")
