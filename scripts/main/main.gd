@@ -68,6 +68,9 @@ var entity_layer: EntityLayer = null
 var building_info_panel: BuildingInfoPanel = null
 var financial_panel: FinancialPanel = null
 var mini_map: MiniMap = null
+var inspect_mode: bool = false
+var inspect_btn: Button = null
+var tile_inspector: TileInspector = null
 var map_btn: Button = null  # Toggles the minimap; kept in sync with MiniMap visibility
 var hole_stats_panel: HoleStatsPanel = null
 var tournament_manager: TournamentManager = null
@@ -322,6 +325,7 @@ func _load_decorations_data() -> void:
 func _process(_delta: float) -> void:
 	_update_ui()
 	_update_mini_map_camera()
+	_update_tile_inspector()
 
 func _input(event: InputEvent) -> void:
 	# Finish strokes even when the mouse is released over a panel.
@@ -484,6 +488,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Block terrain painting/placement when popups are showing
 	if GameManager.is_paused:
+		return
+
+	# Inspection is read-only, including modified clicks and entity picking.
+	if inspect_mode and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		get_viewport().set_input_as_handled()
 		return
 
 	# Ctrl+click drag measurement tool — intercept before painting
@@ -786,7 +795,7 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel"]
+	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:
@@ -935,6 +944,8 @@ func _update_button_states() -> void:
 		ultra_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.ULTRA else Color(1, 1, 1, 1)
 
 func _start_painting() -> void:
+	if inspect_mode:
+		return
 	# Repositioning a staff member's designated area takes the next click.
 	if _staff_area_mode_index >= 0:
 		_handle_staff_area_click(terrain_grid.screen_to_grid(camera.get_mouse_world_position()))
@@ -1200,6 +1211,7 @@ func _update_measure_overlay() -> void:
 ## Ask main to reposition a staff member's designated area (index >= 0) or to
 ## leave that mode (index < 0).
 func _on_staff_area_move_requested(index: int) -> void:
+	_cancel_inspect_mode()
 	if index < 0:
 		_cancel_staff_area_mode()
 		return
@@ -1266,6 +1278,10 @@ func _cancel_action() -> void:
 	# Two-tier cancel: first ESC cancels the active operation, second deselects tool
 	var had_active_operation = false
 
+	if inspect_mode:
+		_cancel_inspect_mode()
+		had_active_operation = true
+
 	if _staff_area_mode_index >= 0:
 		_cancel_staff_area_mode()
 		had_active_operation = true
@@ -1297,6 +1313,8 @@ func _cancel_action() -> void:
 
 func _has_active_tool() -> bool:
 	"""Check if any tool is currently active (not in null selector state)"""
+	if inspect_mode:
+		return true
 	if _staff_area_mode_index >= 0:
 		return true
 	if _hole_move_mode != HoleMoveMode.NONE:
@@ -1312,6 +1330,7 @@ func _has_active_tool() -> bool:
 	return false
 
 func _on_tool_selected(tool_type: int) -> void:
+	_cancel_inspect_mode()
 	# Tee Box is unselectable while an unused tee waits.
 	if tool_type == TerrainTypes.Type.TEE_BOX:
 		if not HoleLayout.can_place_tee_box(terrain_grid, GameManager.current_course):
@@ -1614,6 +1633,7 @@ func _rebuild_hole_list() -> void:
 
 func _prepare_for_nature_placement() -> void:
 	"""Leave other placement modes before starting a tree or boulder placement."""
+	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
@@ -1623,6 +1643,7 @@ func _prepare_for_nature_placement() -> void:
 
 func _on_building_type_selected_from_toolbar(building_type: String) -> void:
 	"""Start placement immediately for a building card in the Buildings tab."""
+	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
@@ -1665,6 +1686,7 @@ func _on_decoration_placement_pressed() -> void:
 
 func _on_decoration_type_selected_from_toolbar(decoration_type: String) -> void:
 	"""Start placement immediately for a decoration tile in the Improvements tab."""
+	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
@@ -1682,6 +1704,7 @@ func _on_decoration_type_selected_from_toolbar(decoration_type: String) -> void:
 ## Select one of the three elevation selector tools. While it is active,
 ## right clicking raises the selected terrain and left clicking lowers it.
 func _on_elevation_tool_pressed(tool_name: String) -> void:
+	_cancel_inspect_mode()
 	var new_tool: ElevationTool.Tool
 	match tool_name:
 		ElevationTool.TOOL_VERTEX:
@@ -1734,6 +1757,7 @@ func _sync_elevation_preview() -> void:
 
 func _on_bulldozer_pressed() -> void:
 	"""Activate bulldozer mode to demolish improvements and buildings"""
+	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
@@ -1765,6 +1789,7 @@ func _disable_terrain_painting_preview() -> void:
 
 func _on_new_game_started() -> void:
 	"""Generate natural terrain when a new game starts"""
+	_cancel_inspect_mode()
 	_game_over_shown = false
 	_close_hole_context_menu()
 	_cancel_hole_move_mode()
@@ -2346,6 +2371,60 @@ func _create_menu_buttons() -> void:
 	left_controls.add_child(menu_row)
 	left_controls.move_child(menu_row, 0)
 
+	inspect_btn = Button.new()
+	inspect_btn.name = "InspectBtn"
+	inspect_btn.text = "Inspect"
+	inspect_btn.tooltip_text = "Hover over a tile to inspect terrain, improvements and buildings. Esc or right-click to exit."
+	inspect_btn.toggle_mode = true
+	inspect_btn.custom_minimum_size.y = UIConstants.TOOL_BUTTON_HEIGHT
+	inspect_btn.toggled.connect(_on_inspect_toggled)
+	left_controls.add_child(inspect_btn)
+	left_controls.move_child(inspect_btn, 1)  # Directly below Menu / Map.
+
+	tile_inspector = TileInspector.new()
+	tile_inspector.name = "TileInspector"
+	$UI/HUD.add_child(tile_inspector)
+
+func _on_inspect_toggled(enabled: bool) -> void:
+	if not enabled:
+		_cancel_inspect_mode()
+		return
+	# Finish any stroke and leave all editing operations before inspecting.
+	_cancel_action()
+	_cancel_staff_area_mode()
+	_cancel_hole_move_mode()
+	_close_hole_context_menu()
+	placement_manager.cancel_placement()
+	_cancel_elevation_mode()
+	_cancel_bulldozer_mode()
+	current_tool = -1
+	if terrain_toolbar:
+		terrain_toolbar.clear_selection()
+	_disable_terrain_painting_preview()
+	inspect_mode = true
+	inspect_btn.set_pressed_no_signal(true)
+
+func _cancel_inspect_mode() -> void:
+	inspect_mode = false
+	if inspect_btn:
+		inspect_btn.set_pressed_no_signal(false)
+	if tile_inspector:
+		tile_inspector.hide()
+
+func _update_tile_inspector() -> void:
+	if not tile_inspector:
+		return
+	var viewport := get_viewport()
+	var mouse := viewport.get_mouse_position()
+	# UI, modal menus and off-course positions must not reveal tiles behind them.
+	if not inspect_mode or GameManager.current_mode == GameManager.GameMode.MAIN_MENU \
+			or GameManager.is_paused or viewport.gui_get_hovered_control() != null \
+			or not viewport.get_visible_rect().has_point(mouse):
+		tile_inspector.hide()
+		return
+	var tile := terrain_grid.screen_to_grid(camera.get_mouse_world_position())
+	tile_inspector.show_tile(terrain_grid, entity_layer, tile, mouse)
+
 func _on_menu_pressed() -> void:
 	# Open the game menu (pause menu) overlay
 	_toggle_pause_menu()
@@ -2396,6 +2475,7 @@ func _on_quit_to_menu() -> void:
 	get_tree().reload_current_scene()
 
 func _on_load_completed(success: bool) -> void:
+	_cancel_inspect_mode()
 	_just_loaded_game = success
 	_close_hole_context_menu()
 	_cancel_hole_move_mode()
@@ -2535,6 +2615,7 @@ func _find_hole_data(hole_number: int) -> GameManager.HoleData:
 	return null
 
 func _enter_hole_move_mode(mode: int, hole_data: GameManager.HoleData) -> void:
+	_cancel_inspect_mode()
 	_hole_move_mode = mode
 	_hole_move_data = hole_data
 	hole_manager.highlight_hole(hole_data.hole_number, true)
