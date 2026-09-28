@@ -10,7 +10,7 @@ class_name TerrainToolbar
 ##  - Holes:          one button per course hole, three to a column, each opening that hole's context menu (the buttons are filled by main.gd)
 ##  - Golfers:        who is on the course, four golfers to a column, beside the recent rounds, six rounds to a column
 ##  - Player:         play the course, tournaments, player skills
-##  - Club:           land, marketing, milestones, feed, scorecard
+##  - Club:           land, marketing, milestones, scorecard
 ##  - Staff:          hire/fire staff, course condition, payroll, and effects
 ##
 ## Content within tabs is laid out horizontally and scrolls horizontally when
@@ -41,7 +41,6 @@ signal tournaments_pressed
 signal land_pressed
 signal marketing_pressed
 signal milestones_pressed
-signal feed_pressed
 signal scorecard_pressed
 signal golfer_row_clicked(golfer_id: int)
 ## Ask main.gd to start (index >= 0) or cancel (index < 0) repositioning a staff
@@ -107,7 +106,6 @@ const TOOL_TAB_MAP := {
 	"land": Tab.CLUB,
 	"marketing": Tab.CLUB,
 	"milestones": Tab.CLUB,
-	"feed": Tab.CLUB,
 	"scorecard": Tab.CLUB,
 }
 
@@ -220,7 +218,6 @@ var _recent_rounds: Array[Dictionary] = []
 var player_tab: PlayerTab
 var _skill_labels: Array[Label] = []
 var _player_points_label: Label = null
-var _feed_button: Button = null
 var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
 var _decoration_registry: Dictionary = {}
@@ -231,7 +228,6 @@ var _course_tiles: TileHoneycomb = null
 var _elevation_selectors: TileHoneycomb = null  # Vertex / Flat Square / Gradual Square
 var _landscape_buttons: Array[Node] = []
 var _selected_string_tool: String = ""
-var _feed_unread: int = 0
 var _refresh_timer: Timer = null
 var _staff_panel: StaffPanel = null
 
@@ -993,7 +989,6 @@ func _build_club_tab(hbox: HBoxContainer) -> void:
 	_add_tool_button(ops_box, {"type": "land", "name": "Land", "icon": "[L]", "hotkey": "L", "desc": "Buy land parcels to expand the course"})
 	_add_tool_button(ops_box, {"type": "marketing", "name": "Marketing", "icon": "[M]", "hotkey": "M", "desc": "Marketing campaigns to attract golfers"})
 	_add_tool_button(ops_box, {"type": "milestones", "name": "Milestones", "icon": "[G]", "hotkey": "G", "desc": "Goals and achievements"})
-	_add_tool_button(ops_box, {"type": "feed", "name": "Feed", "icon": "[N]", "hotkey": "N", "desc": "Course event feed"})
 	_add_tool_button(ops_box, {"type": "scorecard", "name": "Scorecard", "icon": "[K]", "hotkey": "K", "desc": "Course scorecard and records"})
 	ops_box.add_child(_make_review_button())
 	hbox.add_child(_make_tab_group("OPERATIONS", ops_box))
@@ -1108,9 +1103,7 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 		btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 		btn.add_theme_constant_override("icon_max_width", 18)
 
-	if tool_type is String and tool_type == "feed":
-		_feed_button = btn
-	elif not (tool_type is String and _is_menu_action(tool_type)):
+	if not (tool_type is String and _is_menu_action(tool_type)):
 		_tool_buttons[tool_type] = btn
 		if tool_type is int:
 			if tool_type == TerrainTypes.Type.GREEN:
@@ -1121,7 +1114,7 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 	return btn
 
 func _is_menu_action(tool_type: String) -> bool:
-	return tool_type in ["land", "marketing", "milestones", "feed", "scorecard", "tournaments", "play_course"]
+	return tool_type in ["land", "marketing", "milestones", "scorecard", "tournaments", "play_course"]
 
 func _make_small_group_label(text: String) -> Label:
 	var lbl = Label.new()
@@ -1605,15 +1598,6 @@ func _refresh_player_skills() -> void:
 		_player_points_label.text = "%d of 10 pts remaining" % profile.remaining()
 
 # =============================================================================
-# Club tab
-# =============================================================================
-
-func set_feed_unread(count: int) -> void:
-	_feed_unread = count
-	if _feed_button:
-		_feed_button.text = "Feed (%d)" % count if count > 0 else "Feed"
-
-# =============================================================================
 # Tool selection
 # =============================================================================
 
@@ -1683,8 +1667,6 @@ func _on_tool_button_pressed(tool_type) -> void:
 					marketing_pressed.emit()
 				"milestones":
 					milestones_pressed.emit()
-				"feed":
-					feed_pressed.emit()
 				"scorecard":
 					scorecard_pressed.emit()
 

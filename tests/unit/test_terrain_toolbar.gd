@@ -1025,12 +1025,20 @@ func test_empty_golfer_lists_keep_one_column() -> void:
 	assert_eq(toolbar._recent_rounds_box.get_child(0).get_child_count(), 1,
 		"That column holds only the message")
 
-func test_feed_unread_badge() -> void:
-	toolbar.set_feed_unread(5)
-	assert_eq(toolbar._feed_button.text, "Feed (5)")
-
-	toolbar.set_feed_unread(0)
-	assert_eq(toolbar._feed_button.text, "Feed")
+## The Feed button moved out of the Club tab into the left control stack
+## (between Menu and Inspect, built in main.gd), so the toolbar no longer
+## builds one or tracks its unread count.
+func test_feed_button_no_longer_lives_on_the_club_tab() -> void:
+	assert_false(TerrainToolbar.TOOL_TAB_MAP.has("feed"),
+		"The toolbar no longer maps a feed tool to a tab")
+	var page: HBoxContainer = toolbar.page_content(TerrainToolbar.Tab.CLUB)
+	var ops_box: HBoxContainer = page.get_child(0).get_child(1)
+	var tool_types: Array = []
+	for child in ops_box.get_children():
+		if child is ToolButton:
+			tool_types.append(child.tool_type)
+	assert_eq(tool_types, ["land", "marketing", "milestones", "scorecard"],
+		"The Club tab's operations no longer include feed")
 
 func test_action_signals() -> void:
 	watch_signals(toolbar)
@@ -1077,9 +1085,6 @@ func test_action_signals() -> void:
 
 	toolbar._on_tool_button_pressed("milestones")
 	assert_signal_emitted(toolbar, "milestones_pressed")
-
-	toolbar._on_tool_button_pressed("feed")
-	assert_signal_emitted(toolbar, "feed_pressed")
 
 	toolbar._on_tool_button_pressed("scorecard")
 	assert_signal_emitted(toolbar, "scorecard_pressed")

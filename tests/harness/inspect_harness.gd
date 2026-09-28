@@ -31,8 +31,22 @@ func _run() -> void:
 	await get_tree().process_frame
 	_check(not main.tile_inspector.visible, "Showing HUD does not show inspector")
 	var menu: Control = main.left_controls.get_node("MenuControls")
+	var feed: Control = main.left_controls.get_node("FeedBtn")
+	_check(feed.position.y >= menu.position.y + menu.size.y, "Feed is below Menu")
+	_check(main.inspect_btn.position.y >= feed.position.y + feed.size.y, "Inspect is below Feed")
 	_check(main.inspect_btn.position.y >= menu.position.y + menu.size.y, "Inspect is below Menu")
 	_check(main.left_controls.size.y <= UIConstants.BOTTOM_BAR_HEIGHT, "Controls still fit the bottom bar")
+
+	# Feed toggle: the button that used to live on the Club tab now rides in the
+	# left control stack and opens the same event feed panel.
+	main.feed_btn.pressed.emit()
+	_check(main.event_feed_panel.visible, "Feed button opens the event feed")
+	main.feed_btn.pressed.emit()
+	_check(not main.event_feed_panel.visible, "Feed button closes the event feed")
+	main._update_feed_unread(3)
+	_check(main.feed_btn.text == "Feed (3)", "Unread count badges the Feed button")
+	main._update_feed_unread(0)
+	_check(main.feed_btn.text == "Feed", "Unread count clears the badge")
 
 	# Map toggle: an icon button in the minimap's bottom-left corner, not in the stack.
 	var map_btn: Button = main.map_btn

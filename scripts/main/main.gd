@@ -71,6 +71,7 @@ var financial_panel: FinancialPanel = null
 var mini_map: MiniMap = null
 var inspect_mode: bool = false
 var inspect_btn: Button = null
+var feed_btn: Button = null  # Event feed toggle in the left control stack, between Menu and Inspect
 var tile_inspector: TileInspector = null
 var map_btn: Button = null  # Map-icon toggle in the minimap's bottom-left corner; synced with MiniMap visibility
 const MAP_BUTTON_SIZE: float = 26.0
@@ -619,7 +620,6 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.land_pressed.connect(_toggle_land_panel)
 	terrain_toolbar.marketing_pressed.connect(_toggle_marketing_panel)
 	terrain_toolbar.milestones_pressed.connect(_toggle_milestones_panel)
-	terrain_toolbar.feed_pressed.connect(_toggle_event_feed)
 	terrain_toolbar.scorecard_pressed.connect(_toggle_course_scorecard_panel)
 	terrain_toolbar.golfer_row_clicked.connect(_on_toolbar_golfer_clicked)
 	terrain_toolbar.staff_area_move_requested.connect(_on_staff_area_move_requested)
@@ -2358,7 +2358,7 @@ func _on_mode_toggle_pressed() -> void:
 # --- Menu / Save/Load ---
 
 func _create_menu_buttons() -> void:
-	"""Top row of the left control stack (above Rotate View): the Menu button."""
+	"""Top rows of the left control stack (above Rotate View): Menu, Feed and Inspect."""
 	var menu_row = HBoxContainer.new()
 	menu_row.name = "MenuControls"
 	menu_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2377,6 +2377,16 @@ func _create_menu_buttons() -> void:
 	left_controls.add_child(menu_row)
 	left_controls.move_child(menu_row, 0)
 
+	feed_btn = Button.new()
+	feed_btn.name = "FeedBtn"
+	feed_btn.text = "Feed"
+	feed_btn.tooltip_text = "Course event feed (N)"
+	feed_btn.custom_minimum_size = Vector2(60, UIConstants.TOOL_BUTTON_HEIGHT)
+	feed_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	feed_btn.pressed.connect(_toggle_event_feed)
+	left_controls.add_child(feed_btn)
+	left_controls.move_child(feed_btn, 1)
+
 	inspect_btn = Button.new()
 	inspect_btn.name = "InspectBtn"
 	inspect_btn.text = "Inspect"
@@ -2385,7 +2395,7 @@ func _create_menu_buttons() -> void:
 	inspect_btn.custom_minimum_size.y = UIConstants.TOOL_BUTTON_HEIGHT
 	inspect_btn.toggled.connect(_on_inspect_toggled)
 	left_controls.add_child(inspect_btn)
-	left_controls.move_child(inspect_btn, 1)  # Directly below Menu.
+	left_controls.move_child(inspect_btn, 2)  # Directly below Feed.
 
 	tile_inspector = TileInspector.new()
 	tile_inspector.name = "TileInspector"
@@ -3697,16 +3707,17 @@ func _setup_event_feed() -> void:
 			event_feed_panel.append_event(entry)
 	)
 
-	# Surface the unread badge on the toolbar's Club tab Feed button
-	EventFeedManager.unread_count_changed.connect(func(count: int):
-		if terrain_toolbar:
-			terrain_toolbar.set_feed_unread(count)
-	)
+	# Surface the unread badge on the Feed button in the left control stack
+	EventFeedManager.unread_count_changed.connect(_update_feed_unread)
 
 func _toggle_event_feed() -> void:
 	# Event feed is a side panel, not a CenteredPanel, so handle independently
 	if event_feed_panel:
 		event_feed_panel.toggle()
+
+func _update_feed_unread(count: int) -> void:
+	if feed_btn:
+		feed_btn.text = "Feed (%d)" % count if count > 0 else "Feed"
 
 func _navigate_to_hole(hole_number: int) -> void:
 	if not GameManager.current_course:
