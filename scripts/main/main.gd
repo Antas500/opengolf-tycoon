@@ -14,6 +14,7 @@ var hole_grid: GridContainer = null  # Lives in the toolbar's Holes tab (set up 
 @onready var rotate_ccw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCCWBtn
 @onready var rotate_cw_btn: Button = $UI/HUD/BottomBar/LeftControls/RotateViewControls/RotateCWBtn
 @onready var orientation_label: Label = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationLabel
+@onready var orientation_needle: CompassNeedle = $UI/HUD/BottomBar/LeftControls/RotateViewControls/OrientationNeedle
 @onready var pause_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PauseBtn
 @onready var play_btn: Button = $UI/HUD/BottomBar/LeftControls/SpeedControls/PlayBtn
 ## One fast-forward button for both accelerated tiers: it reads ">>" at Fast
@@ -1478,6 +1479,10 @@ func _sync_view_controls() -> void:
 	if terrain_grid and orientation_label:
 		var orientation: int = terrain_grid.get_view_orientation()
 		orientation_label.text = VIEW_ORIENTATION_LABELS[wrapi(orientation, 0, VIEW_ORIENTATION_LABELS.size())]
+		# The needle beside the letter takes the same quarter turn the course
+		# just took, so the pair reads as a compass rather than a stray initial.
+		if orientation_needle:
+			orientation_needle.orientation = orientation
 	# Keep toolbar in sync if it still has the deprecated method
 	if terrain_toolbar and terrain_grid and terrain_toolbar.has_method("set_view_state"):
 		terrain_toolbar.set_view_state(terrain_grid.get_view_orientation(), terrain_grid.is_view_isometric())
