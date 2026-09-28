@@ -721,7 +721,7 @@ func walking_path_placement_error(pos: Vector2i) -> String:
 	if not is_valid_position(pos):
 		return "Outside the course."
 	if not TerrainTypes.can_host_walking_path(get_tile(pos)):
-		return "Walking paths are laid on rough, deep rough, waste bunker, brush, rocks, streams, flower beds, boulders and trees."
+		return "Walking paths are laid on rough, deep rough, waste bunker, brush, rocks, streams, wild flowers, boulders and trees."
 	return ""
 
 ## Lay (or remove) the walking path on a tile. Returns true when the layer

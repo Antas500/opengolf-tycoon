@@ -60,7 +60,7 @@ func _build_ui() -> void:
 		["Shift+6", "Stream"],
 		["Shift+7", "Rocks"],
 		["Shift+8", "Brush"],
-		["Shift+F", "Flower Bed"],
+		["Shift+F", "Wild Flowers"],
 	])
 
 	_add_section(vbox, "Objects & Placement", [

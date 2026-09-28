@@ -3,7 +3,7 @@ class_name TerrainToolbar
 ## TerrainToolbar - Tabbed toolbar docked on the right end of the bottom bar.
 ##
 ## Nine tabs:
-##  - Course Terrain: one course, hazard & landscape tiles honeycomb, with the brush controls pinned to the page's bottom-left corner so they ride above the tiles instead of scrolling with them; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, flower beds, trees and boulders) and is never touched by the Bulldozer.
+##  - Course Terrain: one course, hazard & landscape tiles honeycomb, with the brush controls pinned to the page's bottom-left corner so they ride above the tiles instead of scrolling with them; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, wild flowers, trees and boulders) and is never touched by the Bulldozer.
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
 ##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
 ##  - Elevation:      the Vertex, Flat Square and Gradual Square selector tools in one honeycomb, with the Elevation Brush (size and shape) the two Square tools share nestled into the notch between them — the size stepper in the V above the point where those tiles meet, the shape toggle in the V below it — while the terrain brush stays the Course Terrain tab's own
@@ -595,7 +595,7 @@ func _add_path_tile() -> void:
 		"type": TerrainTypes.Type.PATH,
 		"name": "Path",
 		"hotkey": "8",
-		"desc": "Thin dirt walking path laid over rough, deep rough, waste bunker, brush, rocks, streams, flower beds, boulders and trees. Each tile is a dot; edge-adjacent dots join into one trail, and a trail that reaches the clubhouse is paved.",
+		"desc": "Thin dirt walking path laid over rough, deep rough, waste bunker, brush, rocks, streams, wild flowers, boulders and trees. Each tile is a dot; edge-adjacent dots join into one trail, and a trail that reaches the clubhouse is paved.",
 		"tile_preview": true,
 	}) as TerrainTileButton
 
@@ -622,10 +622,10 @@ func _populate_landscape_tiles() -> void:
 	var total_tiles: int = 1 + 3 + theme_trees.size()
 	_course_tiles.columns = COURSE_TILE_COLUMNS + ceili(float(total_tiles) / TILE_ROWS)
 
-	# 1. Flower Bed terrain tile
+	# 1. Wild Flowers terrain tile
 	var fb_btn := _add_tool_button(_course_tiles, {
 		"type": TerrainTypes.Type.FLOWER_BED,
-		"name": "Flower Bed",
+		"name": "Wild Flowers",
 		"hotkey": "Shift+F",
 		"desc": "Colorful landscaping",
 		"tile_preview": true

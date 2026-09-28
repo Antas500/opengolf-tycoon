@@ -77,7 +77,7 @@ func _run() -> void:
 	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.BUNKER)
 	main._paint_terrain_stamp(flowers_tile)
 	_check(grid.get_tile(flowers_tile) == TerrainTypes.Type.BUNKER,
-			"painting Bunker over Flower Bed replaces it")
+			"painting Bunker over Wild Flowers replaces it")
 	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.STREAM)
 	main._paint_terrain_stamp(water_tile)
 	_check(grid.get_tile(water_tile) == TerrainTypes.Type.STREAM,
@@ -122,9 +122,9 @@ func _run() -> void:
 	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
 	main._paint_terrain_stamp(boulder_over_flowers)
 	_check(grid.get_tile(boulder_over_flowers) == TerrainTypes.Type.FLOWER_BED,
-			"painting Flower Bed over a boulder replaces it")
+			"painting Wild Flowers over a boulder replaces it")
 	_check(main.entity_layer.get_rock_at(boulder_over_flowers) == null,
-			"the boulder is gone after Flower Bed replaces it")
+			"the boulder is gone after Wild Flowers replaces it")
 
 	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.ROCKS)
 	main._paint_terrain_stamp(tree_on_boulder)

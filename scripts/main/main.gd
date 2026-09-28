@@ -1068,7 +1068,7 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	var blocked_by_land = false
 	var blocked_by_money = false
 	# Every Course Terrain paint replaces the tile it lands on, including a
-	# tree or boulder standing there. Rough, brush, rocks and flower beds used
+	# tree or boulder standing there. Rough, brush, rocks and wild flowers used
 	# to grow around them; they replace them now, the same as fairway does.
 	# Buildings and decorations are improvements — the Bulldozer removes those.
 	_suppress_tile_undo = true
@@ -1157,7 +1157,7 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 
 ## The Path improvement: lay a thin walking path ON TOP of the tile instead of
 ## repainting its terrain. Hostable ground is TerrainTypes.WALKING_PATH_TERRAINS
-## (rough, deep rough, waste bunker, brush, rocks/boulders, stream, flower bed,
+## (rough, deep rough, waste bunker, brush, rocks/boulders, stream, wild flowers,
 ## trees). One tile per stamp; the brush is capped at 1x1 by HoleLayout.
 func _paint_walking_path_stamp(grid_pos: Vector2i) -> void:
 	if not terrain_grid.is_valid_position(grid_pos):
