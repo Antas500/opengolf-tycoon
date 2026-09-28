@@ -1044,6 +1044,16 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 		_paint_walking_path_stamp(grid_pos)
 		return
 
+	# No tool selected: painting the first tee deselects the tee tool (it is
+	# unselectable while that tee waits), so a follow-up stamp must do nothing
+	# instead of repainting the ground to Empty. _paint_at_mouse() refuses a
+	# stamp without a tool too; the stamp itself has to hold the same line.
+	if current_tool <= TerrainTypes.Type.EMPTY:
+		return
+
+	# Capture the name now: the tee rules may deselect the tool mid-stroke and
+	# the transaction log should still name what was painted.
+	var stamp_tool_name := TerrainTypes.get_type_name(current_tool)
 	var cost = TerrainTypes.get_placement_cost(current_tool)
 	if cost > 0 and not GameManager.can_afford(cost):
 		if GameManager.is_bankrupt():
@@ -1160,7 +1170,7 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 		EventBus.log_transaction("Clear obstacles", -obstacle_removal_cost)
 	if total_cost > 0:
 		GameManager.modify_money(-total_cost)
-		EventBus.log_transaction("Terrain: " + TerrainTypes.get_type_name(current_tool), -total_cost)
+		EventBus.log_transaction("Terrain: " + stamp_tool_name, -total_cost)
 
 	# Painting a tee box or a green changes what may be placed next, and whether a
 	# hole is ready to open.

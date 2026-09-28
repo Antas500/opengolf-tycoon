@@ -188,7 +188,10 @@ static func _generate_scoped_elevation(
 					terrain_grid.set_vertex_elevation(vertex, new_elev)
 
 
-## Generate rough and heavy rough patches within the parcel bounds.
+## Generate rough and heavy rough patches within the parcel bounds. The
+## generated base turf is already Rough, so on current courses these patches
+## mostly raise Heavy Rough clumps; on pre-rough-base saves the open turf is
+## still Natural Grass and gets converted to Rough as before.
 static func _generate_scoped_rough(
 	bounds: Rect2i,
 	terrain_grid: TerrainGrid,
@@ -209,7 +212,8 @@ static func _generate_scoped_rough(
 				var pos := Vector2i(x, y)
 				if not terrain_grid.is_valid_position(pos):
 					continue
-				if terrain_grid.get_tile(pos) != TerrainTypes.Type.GRASS:
+				var tile := terrain_grid.get_tile(pos)
+				if tile != TerrainTypes.Type.GRASS and tile != TerrainTypes.Type.ROUGH:
 					continue
 				var dist := Vector2(x, y).distance_to(center)
 				if dist <= radius:
@@ -218,7 +222,9 @@ static func _generate_scoped_rough(
 						var rough_type := TerrainTypes.Type.ROUGH
 						if dist < radius * 0.4 and rng.randf() < 0.3:
 							rough_type = TerrainTypes.Type.HEAVY_ROUGH
-						terrain_grid.set_tile_natural(pos, rough_type)
+						# Skip the no-op on a Rough base: only paint real changes.
+						if rough_type != tile:
+							terrain_grid.set_tile_natural(pos, rough_type)
 
 
 ## Generate scattered rocks within the parcel bounds.

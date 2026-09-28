@@ -11,6 +11,11 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 	var rng = RandomNumberGenerator.new()
 	rng.seed = seed_value if seed_value != 0 else int(Time.get_unix_time_from_system())
 
+	# Terrain generation never leaves Natural Grass behind: the blank grid's
+	# base turf is painted over with Rough up front, so every pass below
+	# paints onto Rough and no Natural Grass tile survives generation.
+	_replace_natural_grass_with_rough(terrain_grid)
+
 	# Generate elevation first (hills and valleys)
 	_generate_elevation(terrain_grid, rng)
 
@@ -18,8 +23,8 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 	_generate_large_water_body(terrain_grid, rng)
 	_generate_water(terrain_grid, rng)
 
-	# Generate rough and deep-rough patches (overgrown undeveloped land)
-	_generate_rough_patches(terrain_grid, rng)
+	# Generate deep-rough patches (overgrown undeveloped land)
+	_generate_deep_rough_patches(terrain_grid, rng)
 	_generate_flower_patches(terrain_grid, rng)
 
 	# Generate trees (clusters + scattered)
@@ -36,6 +41,20 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 static func _set_generated_tile(terrain_grid: TerrainGrid, pos: Vector2i, type: int) -> void:
 	if TerrainTypes.is_natural_generation_type(type):
 		terrain_grid.set_tile_natural(pos, type)
+
+## The base turf of a generated course is Rough, not Natural Grass: sweep the
+## blank canvas first so generation neither keeps nor re-paints Natural Grass
+## anywhere on the map. Rough is offered on the Course Terrain tab and has no
+## upkeep, so the sweep goes through the same eligibility filter as every
+## other generated tile.
+static func _replace_natural_grass_with_rough(terrain_grid: TerrainGrid) -> void:
+	var width = terrain_grid.grid_width
+	var height = terrain_grid.grid_height
+	for x in range(width):
+		for y in range(height):
+			var pos = Vector2i(x, y)
+			if terrain_grid.get_tile(pos) == TerrainTypes.Type.GRASS:
+				_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.ROUGH)
 
 static func _generate_elevation(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate natural elevation using FastNoiseLite for organic distribution.
@@ -255,54 +274,19 @@ static func _generate_water(terrain_grid: TerrainGrid, rng: RandomNumberGenerato
 						(int(base_radius) + 3) * 2, (int(base_radius) + 3) * 2),
 				TerrainTypes.Type.WATER, terrain_grid.BASE_ELEVATION - 1)
 
-static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
-	## Generate patches of rough and deep rough to simulate overgrown undeveloped land
+static func _generate_deep_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
+	## Generate patches of deep rough (dense brush, overgrown areas) on the
+	## Rough base turf. The base itself is already Rough (see
+	## _replace_natural_grass_with_rough), so only the deeper patches remain
+	## to break up the open land. Heavy Rough is not offered on the Course
+	## Terrain tab; Deep Rough is its no-upkeep natural equivalent and is
+	## eligible for generation.
 	var width = terrain_grid.grid_width
 	var height = terrain_grid.grid_height
 
 	var params = CourseTheme.get_generation_params(GameManager.current_theme)
-	var rough_range: Vector2i = params.get("rough_patches", Vector2i(6, 12))
 	var heavy_range: Vector2i = params.get("heavy_rough_patches", Vector2i(3, 6))
 
-	# Generate regular rough patches (tall grass, unmowed areas)
-	var rough_count = rng.randi_range(rough_range.x, rough_range.y)
-	for i in range(rough_count):
-		var center_x = rng.randi_range(8, width - 8)
-		var center_y = rng.randi_range(8, height - 8)
-		var radius_x = rng.randf_range(6, 16)
-		var radius_y = rng.randf_range(6, 16)
-
-		# Use noise for organic blob shape
-		var blob_noise = FastNoiseLite.new()
-		blob_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-		blob_noise.seed = rng.randi()
-		blob_noise.frequency = 0.1
-
-		var search_r = int(max(radius_x, radius_y)) + 3
-		for x in range(center_x - search_r, center_x + search_r):
-			for y in range(center_y - search_r, center_y + search_r):
-				if x < 0 or x >= width or y < 0 or y >= height:
-					continue
-
-				var pos = Vector2i(x, y)
-				# Only convert grass tiles (don't overwrite water etc.)
-				if terrain_grid.get_tile(pos) != TerrainTypes.Type.GRASS:
-					continue
-
-				var dx = float(x - center_x) / radius_x
-				var dy = float(y - center_y) / radius_y
-				var normalized_dist = sqrt(dx * dx + dy * dy)
-
-				var noise_val = blob_noise.get_noise_2d(float(x), float(y)) * 0.35
-				if normalized_dist < 1.0 + noise_val:
-					# Density falls off at edges - some tiles stay as grass for natural look
-					var edge_factor = 1.0 - normalized_dist
-					if rng.randf() < 0.6 + edge_factor * 0.4:
-						_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.ROUGH)
-
-	# Generate deep rough patches (dense brush, overgrown areas). Heavy Rough
-	# is not offered on the Course Terrain tab; Deep Rough is its no-upkeep
-	# natural equivalent and is eligible for generation.
 	var heavy_count = rng.randi_range(heavy_range.x, heavy_range.y)
 	for i in range(heavy_count):
 		var center_x = rng.randi_range(10, width - 10)
@@ -323,8 +307,8 @@ static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumber
 
 				var pos = Vector2i(x, y)
 				var tile = terrain_grid.get_tile(pos)
-				# Only convert grass or rough (don't overwrite water, etc.)
-				if tile != TerrainTypes.Type.GRASS and tile != TerrainTypes.Type.ROUGH:
+				# Only convert the Rough base (don't overwrite water, etc.)
+				if tile != TerrainTypes.Type.ROUGH:
 					continue
 
 				var dist = Vector2(x, y).distance_to(center)
@@ -347,7 +331,7 @@ static func _generate_flower_patches(terrain_grid: TerrainGrid, rng: RandomNumbe
 		var center_x = rng.randi_range(10, width - 10)
 		var center_y = rng.randi_range(10, height - 10)
 		var center = Vector2(center_x, center_y)
-		# Flower patches are smaller than rough patches
+		# Flower patches are smaller than the deep-rough patches
 		var radius = rng.randf_range(3, 7)
 
 		for x in range(center_x - int(radius) - 2, center_x + int(radius) + 2):
@@ -357,8 +341,8 @@ static func _generate_flower_patches(terrain_grid: TerrainGrid, rng: RandomNumbe
 
 				var pos = Vector2i(x, y)
 				var tile = terrain_grid.get_tile(pos)
-				# Only place flowers on grass or rough
-				if tile != TerrainTypes.Type.GRASS and tile != TerrainTypes.Type.ROUGH:
+				# Only place flowers on the Rough base
+				if tile != TerrainTypes.Type.ROUGH:
 					continue
 
 				var dist = Vector2(x, y).distance_to(center)
@@ -436,19 +420,12 @@ static func _generate_trees(terrain_grid: TerrainGrid, entity_layer: EntityLayer
 		if tile_type == TerrainTypes.Type.WATER or tile_type == TerrainTypes.Type.FLOWER_BED:
 			continue
 
+		# Check if already has a tree or rock
 		if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
 			continue
 
-		# Trees are more likely to appear in rough/deep rough (overgrown areas)
-		var place_chance = 1.0
-		if tile_type == TerrainTypes.Type.ROUGH or tile_type == TerrainTypes.Type.DEEP_ROUGH:
-			place_chance = 1.0  # Always attempt in rough areas
-		elif tile_type == TerrainTypes.Type.GRASS:
-			place_chance = 0.8  # Slightly less likely on open grass
-
-		if rng.randf() > place_chance:
-			continue
-
+		# The open land is all Rough now, so scattered trees land anywhere on
+		# it; water, flowers and built tiles were filtered out above.
 		var tree_type = tree_types[rng.randi_range(0, tree_types.size() - 1)]
 		entity_layer.place_tree(pos, tree_type)
 

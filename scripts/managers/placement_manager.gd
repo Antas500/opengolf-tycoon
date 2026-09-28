@@ -208,7 +208,10 @@ func _can_place_decoration(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> boo
 	var valid_types: Array = []
 	for terrain_name in placeable:
 		match terrain_name:
-			"grass": valid_types.append(TerrainTypes.Type.GRASS)
+			# "grass" ground includes Rough: terrain generation opens every
+			# course on Rough as its base turf, so lawn decorations that used
+			# to sit anywhere on Natural Grass must accept it too.
+			"grass": valid_types.append_array([TerrainTypes.Type.GRASS, TerrainTypes.Type.ROUGH])
 			"fairway": valid_types.append_array([TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY])
 			"rough": valid_types.append_array([TerrainTypes.Type.ROUGH, TerrainTypes.Type.DEEP_ROUGH])
 			"heavy_rough": valid_types.append(TerrainTypes.Type.HEAVY_ROUGH)
