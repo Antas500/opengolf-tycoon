@@ -18,7 +18,7 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 	_generate_large_water_body(terrain_grid, rng)
 	_generate_water(terrain_grid, rng)
 
-	# Generate rough/heavy rough patches (overgrown undeveloped land)
+	# Generate rough and deep-rough patches (overgrown undeveloped land)
 	_generate_rough_patches(terrain_grid, rng)
 	_generate_flower_patches(terrain_grid, rng)
 
@@ -30,6 +30,12 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 
 	# Generate rocks
 	_generate_rocks(terrain_grid, entity_layer, rng)
+
+## All naturally painted terrain passes through the Course Terrain inventory
+## and zero-maintenance filter, even if a future generation pass adds a type.
+static func _set_generated_tile(terrain_grid: TerrainGrid, pos: Vector2i, type: int) -> void:
+	if TerrainTypes.is_natural_generation_type(type):
+		terrain_grid.set_tile_natural(pos, type)
 
 static func _generate_elevation(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate natural elevation using FastNoiseLite for organic distribution.
@@ -101,7 +107,7 @@ static func _generate_coastal_water(terrain_grid: TerrainGrid, rng: RandomNumber
 			var effective_depth := _coast_effective_depth(x, y, edge, base_depth, shore_noise, detail_noise)
 
 			if dist_from_edge < effective_depth:
-				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
+				_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.WATER)
 
 	var bed_depth := func(vertex: Vector2i) -> int:
 		var dist := _coast_distance_from_edge(vertex.x, vertex.y, edge, width, height)
@@ -164,7 +170,7 @@ static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerat
 			noise_val += sin(angle * 2) * 0.1 + cos(angle * 3) * 0.08
 
 			if normalized_dist < 1.0 + noise_val:
-				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
+				_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.WATER)
 
 	# Lagoon bed: deeper in the middle, shallow at the enclosed rim (see vertices).
 	var lagoon_bounds := Rect2i(int(center_x) - search_radius, int(center_y) - search_radius,
@@ -195,7 +201,7 @@ static func _generate_lagoon(terrain_grid: TerrainGrid, rng: RandomNumberGenerat
 			var angle = atan2(y - pond2_y, x - pond2_x)
 			var noise_offset = sin(angle * 3) * 1.5 + cos(angle * 5) * 1.0
 			if dist <= pond2_radius + noise_offset:
-				terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
+				_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.WATER)
 
 	terrain_grid.set_enclosed_elevation(
 			Rect2i(pond2_x - int(pond2_radius) - 3, pond2_y - int(pond2_radius) - 3,
@@ -240,7 +246,7 @@ static func _generate_water(terrain_grid: TerrainGrid, rng: RandomNumberGenerato
 				var effective_radius = base_radius + noise_offset
 
 				if dist <= effective_radius:
-					terrain_grid.set_tile_natural(pos, TerrainTypes.Type.WATER)
+					_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.WATER)
 
 		# Ponds sit in low ground: depress the vertices the pond encloses so the
 		# surrounding land keeps its height and the banks slope down to the water.
@@ -250,7 +256,7 @@ static func _generate_water(terrain_grid: TerrainGrid, rng: RandomNumberGenerato
 				TerrainTypes.Type.WATER, terrain_grid.BASE_ELEVATION - 1)
 
 static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
-	## Generate patches of rough and heavy rough to simulate overgrown undeveloped land
+	## Generate patches of rough and deep rough to simulate overgrown undeveloped land
 	var width = terrain_grid.grid_width
 	var height = terrain_grid.grid_height
 
@@ -292,9 +298,11 @@ static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumber
 					# Density falls off at edges - some tiles stay as grass for natural look
 					var edge_factor = 1.0 - normalized_dist
 					if rng.randf() < 0.6 + edge_factor * 0.4:
-						terrain_grid.set_tile_natural(pos, TerrainTypes.Type.ROUGH)
+						_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.ROUGH)
 
-	# Generate heavy rough patches (dense brush, overgrown areas)
+	# Generate deep rough patches (dense brush, overgrown areas). Heavy Rough
+	# is not offered on the Course Terrain tab; Deep Rough is its no-upkeep
+	# natural equivalent and is eligible for generation.
 	var heavy_count = rng.randi_range(heavy_range.x, heavy_range.y)
 	for i in range(heavy_count):
 		var center_x = rng.randi_range(10, width - 10)
@@ -324,7 +332,7 @@ static func _generate_rough_patches(terrain_grid: TerrainGrid, rng: RandomNumber
 				if dist <= radius + noise_val:
 					var edge_factor = 1.0 - (dist / (radius + noise_val))
 					if rng.randf() < 0.5 + edge_factor * 0.4:
-						terrain_grid.set_tile_natural(pos, TerrainTypes.Type.HEAVY_ROUGH)
+						_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.DEEP_ROUGH)
 
 static func _generate_flower_patches(terrain_grid: TerrainGrid, rng: RandomNumberGenerator) -> void:
 	## Generate wildflower patches for visual variety
@@ -359,7 +367,7 @@ static func _generate_flower_patches(terrain_grid: TerrainGrid, rng: RandomNumbe
 				if dist <= radius + noise_offset:
 					# Scattered placement, not solid fill
 					if rng.randf() < 0.5:
-						terrain_grid.set_tile_natural(pos, TerrainTypes.Type.FLOWER_BED)
+						_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.FLOWER_BED)
 
 static func _generate_trees(terrain_grid: TerrainGrid, entity_layer: EntityLayer, rng: RandomNumberGenerator) -> void:
 	## Generate scattered trees across the terrain
@@ -431,9 +439,9 @@ static func _generate_trees(terrain_grid: TerrainGrid, entity_layer: EntityLayer
 		if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
 			continue
 
-		# Trees are more likely to appear in rough/heavy rough (overgrown areas)
+		# Trees are more likely to appear in rough/deep rough (overgrown areas)
 		var place_chance = 1.0
-		if tile_type == TerrainTypes.Type.ROUGH or tile_type == TerrainTypes.Type.HEAVY_ROUGH:
+		if tile_type == TerrainTypes.Type.ROUGH or tile_type == TerrainTypes.Type.DEEP_ROUGH:
 			place_chance = 1.0  # Always attempt in rough areas
 		elif tile_type == TerrainTypes.Type.GRASS:
 			place_chance = 0.8  # Slightly less likely on open grass

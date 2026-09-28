@@ -117,6 +117,27 @@ const COURSE_PAINT_TYPES: Array[int] = [
 	Type.BRUSH, Type.ROCKS, Type.OUT_OF_BOUNDS,
 ]
 
+## Landscape terrain tiles beside COURSE_PAINT_TYPES on the Course Terrain tab.
+const COURSE_LANDSCAPE_TERRAIN_TYPES: Array[int] = [Type.FLOWER_BED, Type.TREES]
+
+## Terrain tiles available on the Course Terrain tab that natural generation may
+## use. Keep this derived from the tab inventory and upkeep data so generated
+## terrain cannot introduce a hidden daily maintenance bill.
+static func get_natural_generation_types() -> Array[int]:
+	var eligible: Array[int] = []
+	for type in COURSE_PAINT_TYPES:
+		if get_maintenance_cost(type) == 0:
+			eligible.append(type)
+	for type in COURSE_LANDSCAPE_TERRAIN_TYPES:
+		if get_maintenance_cost(type) == 0:
+			eligible.append(type)
+	return eligible
+
+## Is this a zero-upkeep terrain tile the Course Terrain tab actually offers?
+static func is_natural_generation_type(type: int) -> bool:
+	var is_course_tab_tile := type in COURSE_PAINT_TYPES or type in COURSE_LANDSCAPE_TERRAIN_TYPES
+	return is_course_tab_tile and get_maintenance_cost(type) == 0
+
 ## Ground the walking-path improvement can be laid over (the Path tool in the
 ## Improvements tab): the rough and scrubby Course Terrain tiles, painted
 ## Rocks and boulder ground (Rocks), streams and wild flowers, plus tree tiles.
