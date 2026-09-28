@@ -217,6 +217,7 @@ var _tee_box_blocker: String = ""
 var _active_golfers_box: HBoxContainer = null  # Shelf of columns, four golfers deep
 var _recent_rounds_box: HBoxContainer = null  # Shelf of columns, six rounds deep
 var _recent_rounds: Array[Dictionary] = []
+var player_tab: PlayerTab
 var _skill_labels: Array[Label] = []
 var _player_points_label: Label = null
 var _feed_button: Button = null
@@ -975,40 +976,15 @@ func _build_golfers_tab(hbox: HBoxContainer) -> void:
 	hbox.add_child(recent_group)
 
 func _build_player_tab(hbox: HBoxContainer) -> void:
-	var actions_box = HBoxContainer.new()
-	actions_box.add_theme_constant_override("separation", 4)
-	actions_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_tool_button(actions_box, {"type": "play_course", "name": "Play Course", "icon": "▶", "hotkey": "", "desc": "Grab your clubs and play a round on your own course"})
-	_add_tool_button(actions_box, {"type": "tournaments", "name": "Tournaments", "icon": "[U]", "hotkey": "U", "desc": "Host tournaments to earn prestige and revenue"})
-	hbox.add_child(_make_tab_group("ACTIONS", actions_box))
+	player_tab = PlayerTab.new()
+	# Match the terrain shelf, not the full bottom bar (which includes tabs).
+	player_tab.custom_minimum_size.y = TerrainTileButton.BUTTON_SIZE.y * 1.5 \
+		+ TILE_V_SEPARATION + 2.0 * TILE_V_PADDING
+	hbox.add_child(player_tab)
 
-	hbox.add_child(_make_separator())
-
-	var skills_box = HBoxContainer.new()
-	skills_box.add_theme_constant_override("separation", 8)
-	skills_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	skills_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_skill_labels.clear()
-	for i in PlayerGolferProfile.SKILLS.size():
-		var label = Label.new()
-		label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-		label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
-		skills_box.add_child(label)
-		_skill_labels.append(label)
-	hbox.add_child(_make_tab_group("OWNER SKILLS", skills_box))
-
-	hbox.add_child(_make_separator())
-
-	var points_box = HBoxContainer.new()
-	points_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	points_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_player_points_label = Label.new()
-	_player_points_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	_player_points_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
-	points_box.add_child(_player_points_label)
-	hbox.add_child(_make_tab_group("POINTS", points_box))
-
-	_refresh_player_skills()
+func select_player_section(index: int) -> void:
+	select_tab(Tab.PLAYER)
+	player_tab.select(index)
 
 func _build_club_tab(hbox: HBoxContainer) -> void:
 	var ops_box = HBoxContainer.new()

@@ -4,6 +4,7 @@ class_name PlayerRoundManager
 signal session_opened
 
 const PROS = ["Pro Alex", "Pro Morgan", "Pro Riley"]
+var player_tab: PlayerTab
 var busy := false
 var active := false
 var player: Golfer
@@ -43,6 +44,7 @@ func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Contro
 	add_child(layer)
 	EventBus.game_mode_changed.connect(_on_mode_changed)
 	EventBus.load_completed.connect(_on_load_completed)
+	EventBus.new_game_started.connect(_on_new_game_started)
 
 func _exit_tree() -> void:
 	if EventBus.game_mode_changed.is_connected(_on_mode_changed):
@@ -54,11 +56,22 @@ func _on_mode_changed(_old: int, mode: int) -> void:
 	if busy and mode == GameManager.GameMode.MAIN_MENU:
 		leave_round(false)
 
+func _on_new_game_started() -> void:
+	_on_load_completed(true)
+
 func _on_load_completed(_success: bool) -> void:
 	if busy:
 		leave_round(false)
+	elif is_instance_valid(player_tab):
+		_build_setup()
 
 func _make_panel(full_screen: bool) -> void:
+	if is_instance_valid(player_tab):
+		# The Play Course tab swaps its setup sections for the aiming HUD.
+		content = PlayerTab.add_column(player_tab.clear_aim_page(), 320)
+		player_tab.set_playing(true)
+		player_tab.select(PlayerTab.PAGE_PLAY)
+		return
 	if is_instance_valid(overlay):
 		overlay.queue_free()
 	overlay = Control.new()
@@ -79,6 +92,8 @@ func _make_panel(full_screen: bool) -> void:
 func _label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
+	if is_instance_valid(player_tab):
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(label)
 	return label
 
@@ -89,7 +104,18 @@ func _button(text: String, action: Callable) -> Button:
 	content.add_child(button)
 	return button
 
+func attach_player_tab(tab: PlayerTab) -> void:
+	player_tab = tab
+	open_setup()
+
 func open_setup() -> void:
+	if is_instance_valid(player_tab):
+		if busy:
+			# Mid-round: jump to the Play Course tab showing the aiming HUD.
+			player_tab.select(PlayerTab.PAGE_PLAY)
+			return
+		_build_setup()
+		return
 	if busy or GameManager.is_paused:
 		return
 	if GameManager.get_open_hole_count() == 0:
@@ -103,20 +129,39 @@ func open_setup() -> void:
 	previous_speed = GameManager.current_speed
 	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
 	session_opened.emit()
+	_build_setup()
+
+func _build_setup() -> void:
 	draft = PlayerGolferProfile.from_data(GameManager.player_profile.serialize())
-	_make_panel(true)
+	if is_instance_valid(player_tab):
+		player_tab.set_playing(false)
+		for index in [PlayerTab.PAGE_EDIT, PlayerTab.PAGE_SKILLS]:
+			player_tab.clear_page(index)
+		player_tab.clear_aim_page()
+		# The management tournament panel survives on the Play Course page.
+		player_tab.clear_play_page()
+		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_EDIT])
+	else:
+		_make_panel(true)
 	_label("PLAY YOUR COURSE")
 	_label("Your golfer")
 	name_edit = LineEdit.new()
 	name_edit.max_length = 32
 	name_edit.text = draft.golfer_name
 	content.add_child(name_edit)
+	if is_instance_valid(player_tab):
+		_button("Save player", _save_player)
+	var color_index := 0
 	for key in PlayerGolferProfile.COLORS:
+		if is_instance_valid(player_tab) and color_index % 3 == 0:
+			content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_EDIT], 260)
+		color_index += 1
 		var row := HBoxContainer.new()
 		content.add_child(row)
 		var label := Label.new()
 		label.text = key.replace("_", " ").capitalize()
-		label.custom_minimum_size.x = 180
+		label.custom_minimum_size.x = 140 if is_instance_valid(player_tab) else 180
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
 		var color := ColorPickerButton.new()
 		color.color = Color(draft.appearance[key])
@@ -124,21 +169,46 @@ func open_setup() -> void:
 		color.custom_minimum_size = Vector2(100, 28)
 		color.color_changed.connect(func(value: Color): draft.appearance[key] = value.to_html(false))
 		row.add_child(color)
-	_label("Round format")
-	mode_picker = OptionButton.new()
-	for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
-		mode_picker.add_item(title)
-	content.add_child(mode_picker)
-	pro_picker = OptionButton.new()
-	for pro in PROS:
-		pro_picker.add_item(pro)
-	content.add_child(pro_picker)
-	pro_picker.disabled = true
-	mode_picker.item_selected.connect(func(index: int): pro_picker.disabled = index != 1)
+	if is_instance_valid(player_tab):
+		# Short round-choice columns share one horizontally scrolling shelf.
+		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_PLAY])
+		_label("Practice Round")
+		mode_picker = OptionButton.new()
+		for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
+			mode_picker.add_item(title)
+		mode_picker.hide()  # Each section starts its own format below.
+		content.add_child(mode_picker)
+		var practice_button := _button("Start practice round", _start_embedded.bind(0))
+		practice_button.set_meta("owner_round_start", true)
+		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_PLAY])
+		_label("Play vs Pro")
+		pro_picker = OptionButton.new()
+		for pro in PROS:
+			pro_picker.add_item(pro)
+		content.add_child(pro_picker)
+		var pro_button := _button("Play selected pro", _start_embedded.bind(1))
+		pro_button.set_meta("owner_round_start", true)
+		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_SKILLS], 250)
+	else:
+		_label("Round format")
+		mode_picker = OptionButton.new()
+		for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
+			mode_picker.add_item(title)
+		content.add_child(mode_picker)
+		pro_picker = OptionButton.new()
+		for pro in PROS:
+			pro_picker.add_item(pro)
+		pro_picker.disabled = true
+		content.add_child(pro_picker)
+		mode_picker.item_selected.connect(func(index: int): pro_picker.disabled = index != 1)
 	points_label = _label("")
 	_label("Each point adds 10% bonus. Maximum per skill: 990%.")
+	if is_instance_valid(player_tab):
+		_button("Save skills", _save_player)
 	skill_labels.clear()
 	for i in PlayerGolferProfile.SKILLS.size():
+		if is_instance_valid(player_tab) and i % 3 == 0:
+			content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_SKILLS], 290)
 		var row := HBoxContainer.new()
 		content.add_child(row)
 		var label := Label.new()
@@ -153,15 +223,55 @@ func open_setup() -> void:
 				draft.allocate(i, change)
 				_refresh_skills())
 			row.add_child(button)
-	start_button = _button("Tee off", start_round)
-	_button("Cancel", leave_round)
+	if is_instance_valid(player_tab):
+		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_PLAY], 250)
+		_label("Tournament")
+		_label("Compete against all three pros.")
+		player_tab.restage_persistent()
+		var tournament_button := _button("Play tournament (4 golfers)", _start_embedded.bind(2))
+		tournament_button.set_meta("owner_round_start", true)
+		start_button = null
+	else:
+		start_button = _button("Tee off", start_round)
+		_button("Cancel", leave_round)
 	_refresh_skills()
 
 func _refresh_skills() -> void:
 	points_label.text = "Skills locked for this golfer" if draft.initialized else "%d of 10 points remaining" % draft.remaining()
 	for i in skill_labels.size():
 		skill_labels[i].text = "%s: %d%%" % [PlayerGolferProfile.SKILLS[i], draft.points[i] * 10]
-	start_button.disabled = not draft.initialized and draft.remaining() != 0
+	if is_instance_valid(start_button):
+		start_button.disabled = not draft.initialized and draft.remaining() != 0
+
+func _save_player() -> void:
+	if busy:
+		return
+	draft.golfer_name = name_edit.text.strip_edges()
+	if draft.golfer_name.is_empty():
+		draft.golfer_name = "Course Owner"
+	GameManager.player_profile = PlayerGolferProfile.from_data(draft.serialize())
+
+func _start_embedded(kind: int) -> void:
+	if busy or GameManager.is_paused:
+		EventBus.notify("Finish the current round and unpause before starting.", "info")
+		return
+	if GameManager.get_open_hole_count() == 0:
+		EventBus.notify("Open at least one complete hole before playing.", "warning")
+		return
+	if GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress():
+		EventBus.notify("Finish the management tournament before playing a round.", "warning")
+		return
+	if not draft.initialized and draft.remaining() != 0:
+		EventBus.notify("Allocate all 10 points in Player Skills first.", "info")
+		player_tab.select(PlayerTab.PAGE_SKILLS)
+		return
+	busy = true
+	previous_mode = GameManager.current_mode
+	previous_speed = GameManager.current_speed
+	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
+	mode_picker.select(kind)
+	session_opened.emit()
+	start_round()
 
 func start_round() -> void:
 	if not draft.initialized and draft.remaining() != 0:
@@ -176,6 +286,14 @@ func start_round() -> void:
 	round_kind = mode_picker.selected
 	var opponent := pro_picker.selected
 	active = true
+	if is_instance_valid(player_tab):
+		# Lock the Edit Player and Player Skills pages while the round runs.
+		for index in [PlayerTab.PAGE_EDIT, PlayerTab.PAGE_SKILLS]:
+			for control in player_tab.pages[index].find_children("*", "Control", true, false):
+				if control is BaseButton:
+					control.disabled = true
+				elif control is LineEdit:
+					control.editable = false
 
 	# Ensure simulation is active so all golfers can play (day always runs)
 	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
@@ -221,6 +339,10 @@ func start_round() -> void:
 	_make_panel(false)
 	_label("PLAY THE COURSE · " + ["Practice", "Vs Pro", "Tournament"][round_kind])
 	status = _label("")
+	if is_instance_valid(player_tab):
+		status.add_theme_font_size_override("font_size", 12)
+		status.autowrap_mode = TextServer.AUTOWRAP_OFF
+		content = PlayerTab.add_column(player_tab.aim_page)
 	shapes = OptionButton.new()
 	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot"]:
 		shapes.add_item(title)
@@ -230,8 +352,14 @@ func start_round() -> void:
 	punch.text = "Low punch shot"
 	punch.toggled.connect(func(value: bool): player.player_punch = value)
 	content.add_child(punch)
-	_label("Aim with the mouse · Click to shoot\nYellow arc = intended carry · dotted trail = roll until it stops\nGuide assumes a clean strike; wind, lie and slope still apply.\nPutting on the green is automatic.")
-	_button("End round / Return to management", leave_round)
+	if is_instance_valid(player_tab):
+		_button("End round / Return to management", leave_round)
+		content = PlayerTab.add_column(player_tab.aim_page, 420)
+	var instructions := _label("Aim with the mouse · Click to shoot\nYellow arc = intended carry · dotted trail = roll until it stops\nGuide assumes a clean strike; wind, lie and slope still apply.\nPutting on the green is automatic.")
+	if is_instance_valid(player_tab):
+		instructions.add_theme_font_size_override("font_size", 14)
+	else:
+		_button("End round / Return to management", leave_round)
 	_was_aiming = false
 
 func _spawn(golfer_name: String, tier: int, group_id: int) -> Golfer:
@@ -346,14 +474,28 @@ func _show_results() -> void:
 		for golfer in participants:
 			if golfer.total_strokes == participants[0].total_strokes:
 				winners.append(golfer.golfer_name)
-		_label(("Tie: " if winners.size() > 1 else "Winner: ") + ", ".join(winners))
+		var result := _label(("Tie: " if winners.size() > 1 else "Winner: ") + ", ".join(winners))
+		result.autowrap_mode = TextServer.AUTOWRAP_OFF
+	if is_instance_valid(player_tab):
+		_button("Return to management", leave_round)
 	for golfer in participants:
-		_label("%s — %d strokes (%+d)" % [golfer.golfer_name, golfer.total_strokes, golfer.total_strokes - golfer.total_par])
+		if is_instance_valid(player_tab):
+			content = PlayerTab.add_column(player_tab.aim_page, 280)
+		var summary := _label("%s — %d strokes (%+d)" % [golfer.golfer_name, golfer.total_strokes, golfer.total_strokes - golfer.total_par])
+		summary.autowrap_mode = TextServer.AUTOWRAP_OFF
 		var scores := ""
-		for hole in golfer.hole_scores:
+		for i in golfer.hole_scores.size():
+			if is_instance_valid(player_tab) and i % 4 == 0 and i > 0:
+				_label(scores.trim_suffix("\n"))
+				content = PlayerTab.add_column(player_tab.aim_page, 280)
+				var heading := _label(golfer.golfer_name + " · continued")
+				heading.autowrap_mode = TextServer.AUTOWRAP_OFF
+				scores = ""
+			var hole: Dictionary = golfer.hole_scores[i]
 			scores += "Hole %d: %d / Par %d\n" % [hole.hole, hole.strokes, hole.par]
-		_label(scores)
-	_button("Return to management", leave_round)
+		_label(scores.trim_suffix("\n"))
+	if not is_instance_valid(player_tab):
+		_button("Return to management", leave_round)
 
 func leave_round(_restore_mode: bool = true) -> void:
 	var had_round := busy
@@ -378,3 +520,6 @@ func leave_round(_restore_mode: bool = true) -> void:
 		if GameManager.current_mode != GameManager.GameMode.SIMULATING:
 			GameManager.set_mode(GameManager.GameMode.SIMULATING)
 		GameManager.set_speed(previous_speed if GameManager.current_mode == GameManager.GameMode.SIMULATING else GameManager.GameSpeed.NORMAL)
+
+	if is_instance_valid(player_tab):
+		_build_setup()
