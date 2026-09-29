@@ -457,7 +457,10 @@ On the green, the arc is replaced by:
 
 ### 10.1 Score Tracker HUD
 
-A persistent overlay during PLAYING mode, docked to the top-right corner:
+A persistent overlay during PLAYING mode, docked to the top-left corner of the
+screen — `RoundScoresPanel` (`scripts/ui/round_scores_panel.gd`) inside the HUD's
+`ScoresDock`, over the course view. The shot controls stay on the Player tab's Play
+Course page in the bottom bar; only the scores moved to the corner.
 
 ```
 ┌──────────────────────────────┐
@@ -478,8 +481,12 @@ A persistent overlay during PLAYING mode, docked to the top-right corner:
 ```
 
 **Features:**
-- Shows current hole number, par, and stroke count
-- Scrollable scorecard grid (hole-by-hole results)
+- Shows current hole number, par, and stroke count (the shot status line stays with
+  the shot controls; the card carries the scores)
+- One row per player while the round is live ("-1 · thru 4"), a scrollable
+  hole-by-hole card once it is complete
+- The card grows to fit its content and scrolls inside a cap, so it never covers
+  more of the course than it has to
 - Color coding: red for bogey+, white for par, green for birdie, gold for eagle+
 - Running total relative to par ("+3", "E", "-2")
 - Total absolute strokes and holes completed

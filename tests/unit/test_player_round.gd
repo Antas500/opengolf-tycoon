@@ -3,6 +3,7 @@ extends GutTest
 var fixture: Node2D
 var rounds: PlayerRoundManager
 var golfers: GolferManager
+var hud: Control
 var saved: Dictionary
 
 func before_each() -> void:
@@ -45,7 +46,7 @@ func before_each() -> void:
 	balls.set_terrain_grid(grid)
 	var camera := IsometricCamera.new()
 	fixture.add_child(camera)
-	var hud := Control.new()
+	hud = Control.new()
 	fixture.add_child(hud)
 	rounds = PlayerRoundManager.new()
 	fixture.add_child(rounds)
@@ -451,18 +452,20 @@ func test_embedded_tournament_survives_rebuilds_and_fits_all_states() -> void:
 		assert_eq(panel.get_parent(), tab.pages[PlayerTab.PAGE_PLAY])
 		_assert_shelf_fits(tab.pages[PlayerTab.PAGE_PLAY])
 
-func test_tournament_scorecard_and_shot_controls_share_play_course() -> void:
+## The game's top-left score corner, as main.gd builds it: the round card first,
+## the tournament board docked under it.
+func _scores_dock() -> ScoresDock:
+	var dock := ScoresDock.new()
+	hud.add_child(dock)
+	rounds.attach_scores_panel(dock.round_scores)
+	return dock
+
+func test_tournament_board_and_shot_controls_share_the_corner() -> void:
 	var toolbar := _embedded_toolbar()
 	var tab := toolbar.player_tab
+	var dock := _scores_dock()
 	var leaderboard := TournamentLeaderboard.new()
-	leaderboard.embedded = true
-	var scorecard_slot := Control.new()
-	scorecard_slot.custom_minimum_size.x = TournamentLeaderboard.PANEL_WIDTH
-	scorecard_slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scorecard_slot.clip_contents = true
-	scorecard_slot.add_child(leaderboard)
-	leaderboard.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	tab.add_aim_persistent(scorecard_slot)
+	dock.attach_leaderboard(leaderboard)
 	leaderboard.show_for_tournament("Local Tournament", 12)
 	leaderboard.register_golfer(0, "Owner", 0, true)
 
@@ -474,10 +477,104 @@ func test_tournament_scorecard_and_shot_controls_share_play_course() -> void:
 	assert_eq(tab.selected, PlayerTab.PAGE_PLAY)
 	assert_true(tab.playing)
 	assert_true(tab.aim_scroll.visible)
-	assert_true(tab.aim_page.is_ancestor_of(leaderboard), "Tournament scores live in Play Course")
-	assert_true(tab.aim_page.is_ancestor_of(rounds.status), "Tournament shot status lives in Play Course")
+	assert_true(dock.is_ancestor_of(leaderboard), "Tournament scores live in the top-left corner")
+	assert_false(tab.aim_page.is_ancestor_of(leaderboard),
+		"Tournament scores no longer sit in the Play Course page")
+	assert_true(tab.aim_page.is_ancestor_of(rounds.status), "Tournament shot status stays with the controls")
 	assert_true(tab.aim_page.is_ancestor_of(rounds._tournament_hud_column))
 	_assert_shelf_fits(tab.aim_page)
+
+func test_scores_dock_hugs_the_top_left_corner() -> void:
+	var dock := _scores_dock()
+	var leaderboard := TournamentLeaderboard.new()
+	dock.attach_leaderboard(leaderboard)
+	await wait_frames(2)
+	assert_eq(dock.anchor_left, 0.0)
+	assert_eq(dock.anchor_top, 0.0)
+	assert_eq(dock.offset_left, float(UIConstants.HUD_COLUMN_MARGIN))
+	assert_eq(dock.offset_top, float(UIConstants.HUD_COLUMN_MARGIN))
+	assert_true(dock.round_scores.get_parent() == dock, "The round card leads the corner")
+	assert_true(leaderboard.get_parent() == dock, "The board docks under it")
+	leaderboard.show_for_tournament("Local Tournament", 4)
+	await wait_frames(2)
+	assert_eq(dock.size.x, float(ScoresDock.WIDTH),
+		"The corner is wide enough for the board's columns")
+	for i in 40:
+		leaderboard.register_golfer(i, "Golfer %d" % i, i)
+	await wait_frames(2)
+	assert_eq(leaderboard._scroll.custom_minimum_size.y,
+		TournamentLeaderboard.DOCK_BODY_MAX_HEIGHT,
+		"A big field is capped so the board cannot run down the screen")
+	assert_true(leaderboard._scroll.get_v_scroll_bar().visible, "The rest of the field scrolls")
+
+func test_practice_round_scores_read_out_top_left() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	var dock := _scores_dock()
+	var card := dock.round_scores
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(1)
+	await wait_frames(2)
+	assert_true(card.visible, "The round card shows while playing")
+	assert_eq(card.title_label.text, "Vs Pro · Pro Alex")
+	assert_false(tab.aim_page.is_ancestor_of(card), "The scorecard is out of the Play Course page")
+	assert_true(dock.is_ancestor_of(card), "The scorecard sits in the top-left corner")
+	var rows := card.score_rows()
+	assert_eq(rows.size(), 2, "One row per player in the group")
+	assert_eq(rows[0].name, "Test Owner (you)")
+	assert_eq(rows[0].value, "-", "No holes in yet")
+	# One hole in: the card shows the score against par and the holes completed.
+	var owner: Golfer = rounds.player
+	owner.hole_scores.append({"hole": 1, "strokes": 2, "par": 3})
+	owner.total_strokes = 2
+	owner.total_par = 3
+	rounds._process(0.0)
+	assert_eq(card.score_rows()[0].value, "-1 · thru 1")
+	await wait_frames(2)
+	assert_true(card._scroll.custom_minimum_size.y < RoundScoresPanel.MAX_BODY_HEIGHT,
+		"A short card does not reserve empty space over the course")
+	rounds.leave_round()
+	await wait_frames(2)
+	assert_false(card.visible, "Leaving the round drops the card")
+
+func test_round_complete_scores_land_on_the_card() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	var dock := _scores_dock()
+	var card := dock.round_scores
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	await wait_frames(2)
+	for golfer in rounds.participants:
+		golfer.hole_scores.clear()
+		for hole in 18:
+			golfer.hole_scores.append({"hole": hole + 1, "strokes": 4, "par": 4})
+		golfer.total_strokes = 72
+		golfer.total_par = 72
+	rounds._show_results()
+	await wait_frames(2)
+	assert_eq(card.title_label.text, "Round complete")
+	var lines: Array[String] = []
+	for child in card.body.get_children():
+		if child is Label:
+			lines.append(child.text)
+	assert_true(lines.any(func(line): return line.begins_with("Test Owner — 72 strokes")),
+		"The card carries the finished scorecard: " + str(lines))
+	assert_true("Hole 18: 4 / Par 4" in lines, "Every hole of the card is on it")
+	assert_eq(card._scroll.custom_minimum_size.y, RoundScoresPanel.MAX_BODY_HEIGHT,
+		"A long card is capped so it cannot cover the course")
+	assert_true(card._scroll.get_v_scroll_bar().visible, "The rest of the card scrolls")
+	var return_buttons := 0
+	for button in tab.aim_page.find_children("*", "Button", true, false):
+		if button.text == "Return to management":
+			return_buttons += 1
+	assert_eq(return_buttons, 1, "The round page keeps the way out of the round")
 
 func test_embedded_aim_and_full_scorecards_fit_toolbar() -> void:
 	var toolbar := _embedded_toolbar()

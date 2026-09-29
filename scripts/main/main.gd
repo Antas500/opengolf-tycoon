@@ -89,6 +89,8 @@ var analytics_panel_ui: AnalyticsPanel = null
 var golfer_info_popup: GolferInfoPopup = null
 var round_summary_popup: RoundSummaryPopup = null
 var tournament_leaderboard: TournamentLeaderboard = null
+## Top-left corner of the screen: round scores and the live tournament board.
+var scores_dock: ScoresDock = null
 var tournament_results_popup: TournamentResultsPopup = null
 var pause_menu: PauseMenu = null
 var _was_paused_before_pause_menu: bool = false
@@ -201,8 +203,9 @@ func _ready() -> void:
 	tournament_leaderboard.name = "TournamentLeaderboard"
 	tournament_manager.setup(golfer_manager, tournament_leaderboard)
 
-	# Final event details remain in the dedicated results dialog; live scores and
-	# owner shots are shown inside the Play Course page.
+	# Final event details remain in the dedicated results dialog; live scores
+	# dock to the top-left corner of the HUD (see _setup_scores_dock) and the
+	# owner's shots are played from the Play Course page.
 	tournament_results_popup = TournamentResultsPopup.new()
 	tournament_results_popup.name = "TournamentResultsPopup"
 	$UI/HUD.add_child(tournament_results_popup)
@@ -255,6 +258,7 @@ func _ready() -> void:
 	_connect_ui_buttons()
 	_setup_bottom_bar()
 	_setup_hud_status_column()
+	_setup_scores_dock()
 	_setup_rain_overlay()
 	_setup_placement_preview()
 	_create_menu_buttons()
@@ -276,6 +280,7 @@ func _ready() -> void:
 	add_child(player_round)
 	player_round.setup(golfer_manager, $IsometricCamera, $UI/HUD)
 	player_round.attach_player_tab(terrain_toolbar.player_tab)
+	player_round.attach_scores_panel(scores_dock.round_scores)
 	# The owner plays their own shots during a tournament: the manager spawns the
 	# field, but aiming for their live golfer is handed to the PlayerRoundManager.
 	tournament_manager.set_aim_controller(player_round)
@@ -798,6 +803,17 @@ func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	for child in hud.get_children():
 		if child.name not in popup_panels:
 			child.visible = visible_flag
+
+## Scores for the owner's rounds read out in the top-left corner of the screen,
+## away from the shot controls in the bottom bar: the round card (practice round,
+## vs pro) and the live tournament board share one dock, one under the other.
+func _setup_scores_dock() -> void:
+	scores_dock = ScoresDock.new()
+	$UI/HUD.add_child(scores_dock)
+	scores_dock.attach_leaderboard(tournament_leaderboard)
+	tournament_leaderboard.return_to_course.connect(func():
+		terrain_toolbar.select_player_section(PlayerTab.PAGE_PLAY)
+		terrain_toolbar.player_tab.set_playing(false))
 
 func _setup_hud_status_column() -> void:
 	"""Replace the legacy full-width TopBar with the top-right status column."""
@@ -3389,27 +3405,13 @@ func _show_hole_stats(hole_number: int) -> void:
 # --- Tournament Panel ---
 
 func _setup_tournament_panel() -> void:
-	"""Put tournament hosting and live play on the Player tab's Play Course page."""
+	"""Put tournament hosting on the Player tab's Play Course page."""
 	tournament_panel = TournamentPanel.new()
 	tournament_panel.embedded = true
 	tournament_panel.name = "TournamentPanel"
 	tournament_panel.close_requested.connect(_on_tournament_panel_closed)
 	terrain_toolbar.player_tab.add_persistent(tournament_panel)
 	tournament_panel.setup(tournament_manager)
-
-	# The live scorecard occupies a persistent column beside the shot controls on
-	# the Play Course aiming page instead of a separate HUD window.
-	tournament_leaderboard.embedded = true
-	var scorecard_slot := Control.new()
-	scorecard_slot.custom_minimum_size.x = TournamentLeaderboard.PANEL_WIDTH
-	scorecard_slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scorecard_slot.clip_contents = true
-	scorecard_slot.add_child(tournament_leaderboard)
-	tournament_leaderboard.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	terrain_toolbar.player_tab.add_aim_persistent(scorecard_slot)
-	tournament_leaderboard.return_to_course.connect(func():
-		terrain_toolbar.select_player_section(PlayerTab.PAGE_PLAY)
-		terrain_toolbar.player_tab.set_playing(false))
 
 func _on_tournament_panel_closed() -> void:
 	"""Hide the tournament panel."""

@@ -2,15 +2,18 @@ extends PanelContainer
 class_name TournamentLeaderboard
 ## Live leaderboard panel shown during tournaments.
 ## Supports multi-round display with per-round score columns, cut line,
-## and MC (missed cut) labels. In the game HUD it lives beside the player's
-## tournament shot controls in the Play Course tab; standalone mode remains
-## useful to isolated tools and tests.
+## and MC (missed cut) labels. In the game HUD it is docked to the top-left
+## corner of the screen, above the course view, where the scores can be read
+## without leaving the round; standalone mode remains useful to isolated tools
+## and tests.
 
 signal return_to_course
 
 const PANEL_WIDTH: float = 340.0
 # Top margin is measured at runtime so the board clears the status column.
 const RIGHT_MARGIN: float = 10.0
+## Tallest the row area grows while docked before it scrolls inside the board.
+const DOCK_BODY_MAX_HEIGHT: float = 200.0
 
 var _entries: Array = []  # Array of entry dicts
 var _grid: GridContainer = null
@@ -280,6 +283,19 @@ func _refresh_display() -> void:
 		var row = _create_entry_row(rank_text, entry.name, entry.round_scores,
 			score_text, thru_text, score_color, entry.missed_cut, entry.get("is_player", false))
 		_grid.add_child(row)
+
+	if embedded:
+		_fit_body.call_deferred()
+
+## Grow the board to fit its field, up to the cap, so a small field does not
+## leave an empty card behind. A ScrollContainer does not inherit its child's
+## minimum size, so the board has to measure for it while docked.
+func _fit_body() -> void:
+	if not embedded or not is_inside_tree() or not is_instance_valid(_scroll) \
+			or not is_instance_valid(_grid):
+		return
+	_scroll.custom_minimum_size.y = clampf(_grid.get_combined_minimum_size().y,
+		0.0, DOCK_BODY_MAX_HEIGHT)
 
 func _create_header_row() -> HBoxContainer:
 	var row := HBoxContainer.new()

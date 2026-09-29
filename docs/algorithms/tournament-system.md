@@ -394,10 +394,11 @@ Disabled buttons carry `can_schedule_tournament().reason`, one requirement at a 
 
 While an event runs, the tier cards are replaced by a single in-progress card: the
 tier, current round, the owner's own scoreline (`You: -2 · rank 3 of 24 · 7
-holes in (round 1)`), and the **Play It Out** shortcut. The live scorecard and shot
-controls appear together on the Play Course aiming page. After completion, the final
-leaderboard remains there until the player returns to the course setup. During the
-cooldown the panel shows one line and no tier cards at all.
+holes in (round 1)`), and the **Play It Out** shortcut. The live scorecard docks to
+the top-left corner of the screen (`ScoresDock`, over the course view) while the shot
+controls stay on the Play Course aiming page in the bottom bar. After completion, the
+final leaderboard remains in that corner until the player returns to the course setup.
+During the cooldown the panel shows one line and no tier cards at all.
 
 The panel refreshes through `_process()`: `hole_created`, `hole_deleted`,
 `hole_toggled`, `money_changed`, `day_changed`, `new_game_started` and
@@ -407,9 +408,10 @@ whole shelf per signal was visible stutter on the frame a hole was toggled.
 
 ### Leaderboard and results
 
-`TournamentLeaderboard` (`scripts/ui/tournament_leaderboard.gd`) is embedded in the
-Play Course aiming page for live scores and final standings, with per-round scores,
-cut status, and the owner's row in gold. The post-event `TournamentResultsPopup`
+`TournamentLeaderboard` (`scripts/ui/tournament_leaderboard.gd`) is docked in the
+top-left score corner (`ScoresDock`) for live scores and final standings, with
+per-round scores, cut status, and the owner's row in gold. While docked it measures
+its field and grows to fit, up to `DOCK_BODY_MAX_HEIGHT`, then scrolls. The post-event `TournamentResultsPopup`
 continues to show highlights and the financial summary after the tournament.
 
 ### Event feed

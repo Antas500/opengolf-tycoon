@@ -315,7 +315,7 @@ func _show_current_tournament(info: Dictionary) -> void:
 		action_row.add_child(settle_btn)
 		_settle_button = settle_btn
 		var hint_label := Label.new()
-		hint_label.text = " · live board on the right"
+		hint_label.text = " · live board top left"
 		hint_label.add_theme_font_size_override("font_size", 11)
 		hint_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 		action_row.add_child(hint_label)

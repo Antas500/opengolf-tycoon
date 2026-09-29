@@ -134,10 +134,23 @@ func _run() -> void:
 	_check(int(tournaments.get_player_standing().get("field_size", 0)) == field_expected,
 		"the shelf scores the owner against the whole field")
 
+	# --- The scores read out in the top-left corner -------------------------
+	_check(main.tournament_leaderboard.get_parent() == main.scores_dock,
+		"the live board docks in the top-left scores corner")
+	_check(main.scores_dock.anchor_left == 0.0 and main.scores_dock.anchor_top == 0.0
+		and main.scores_dock.offset_left > 0.0,
+		"the corner is pinned to the top-left of the screen")
+	_check(main.tournament_leaderboard.visible, "the board shows while the event runs")
+	_check(not main.terrain_toolbar.player_tab.aim_page.is_ancestor_of(main.tournament_leaderboard),
+		"the board no longer sits in the Play Course page")
+	_check(not main.scores_dock.round_scores.visible, "the round card steps aside for the board")
+	_check(main.scores_dock.get_global_rect().end.y < main.bottom_bar.global_position.y,
+		"the corner clears the shot controls in the bottom bar")
+
 	# --- And the shelf says so ----------------------------------------------
 	main.tournament_panel._refresh_display()
 	await _frames(5)
-	_check("In Progress" in main.tournament_panel._status_label.text,
+	_check("In progress" in main.tournament_panel._status_label.text,
 		"the panel shows the running event (%s)" % main.tournament_panel._status_label.text.replace("\n", " | "))
 	_check(_panel_label("You:").begins_with("You:"),
 		"the panel shows the owner's scoreline (%s)" % _panel_label("You:"))

@@ -2,7 +2,9 @@ extends HBoxContainer
 class_name PlayerTab
 ## Persistent player navigation. Only the selected page participates in layout.
 ## "Play Course" combines the round sections — Practice Round, Play vs Pro and
-## Tournament — and swaps to the aiming HUD while a round is in progress.
+## Tournament — and swaps to the aiming HUD (the shot controls) while a round is
+## in progress. Scores are not part of it: they read out in the HUD's top-left
+## corner (ScoresDock), over the course view.
 const TITLES = ["Play Course", "Edit Player", "Player Skills"]
 ## Page indices inside `pages`, matching the order of TITLES.
 const PAGE_PLAY := 0
@@ -93,20 +95,14 @@ func clear_page(index: int) -> HBoxContainer:
 		child.queue_free()
 	return pages[index]
 
+## Empty the aiming page of round content. Scores are not part of it: they read
+## out in the HUD's top-left corner (see ScoresDock), so everything the round put
+## on this page is the shot controls and goes.
 func clear_aim_page() -> HBoxContainer:
 	for child in aim_page.get_children():
-		if child.has_meta(PERSISTENT_META):
-			continue
 		aim_page.remove_child(child)
 		child.queue_free()
 	return aim_page
-
-## Add a control that stays beside the aiming HUD across setup rebuilds. Live
-## tournament scores use this so the same board remains visible while the owner
-## switches between their shot controls and the course view.
-func add_aim_persistent(node: Node) -> void:
-	node.set_meta(PERSISTENT_META, true)
-	aim_page.add_child(node)
 
 ## Empty the Play Course page of round-setup content, keeping nodes added via
 ## add_persistent (the management tournament panel).

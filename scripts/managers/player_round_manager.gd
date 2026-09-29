@@ -5,6 +5,9 @@ signal session_opened
 
 const PROS = ["Pro Alex", "Pro Morgan", "Pro Riley"]
 var player_tab: PlayerTab
+## Top-left score card owned by the game HUD (null in isolated tools and tests,
+## which fall back to putting the scorecards on the round page).
+var scores: RoundScoresPanel = null
 var busy := false
 var active := false
 var player: Golfer
@@ -114,6 +117,10 @@ func attach_player_tab(tab: PlayerTab) -> void:
 	player_tab = tab
 	open_setup()
 
+## Hand the manager the top-left score card the HUD docked in the corner.
+func attach_scores_panel(panel: RoundScoresPanel) -> void:
+	scores = panel
+
 func open_setup() -> void:
 	if is_instance_valid(player_tab):
 		if busy:
@@ -139,6 +146,10 @@ func open_setup() -> void:
 
 func _build_setup() -> void:
 	draft = PlayerGolferProfile.from_data(GameManager.player_profile.serialize())
+	# A rebuilt page means no round is showing: drop whatever scores the last
+	# one left on the card.
+	if is_instance_valid(scores):
+		scores.dismiss()
 	if is_instance_valid(player_tab):
 		player_tab.set_playing(false)
 		for index in [PlayerTab.PAGE_EDIT, PlayerTab.PAGE_SKILLS]:
@@ -341,6 +352,10 @@ func start_round() -> void:
 	_make_panel(false)
 	_label("PLAY THE COURSE · " + ["Practice", "Vs Pro"][round_kind])
 	status = _label("")
+	if is_instance_valid(scores):
+		# The scores read out in the top-left corner of the screen: the round
+		# title, then a row per player (Practice Round / Vs Pro · Pro Alex).
+		scores.begin(["Practice Round", "Vs Pro · " + PROS[opponent]][round_kind])
 	if is_instance_valid(player_tab):
 		status.add_theme_font_size_override("font_size", 12)
 		status.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -390,6 +405,10 @@ func begin_tournament_aim(owner: Golfer) -> void:
 	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
 	previous_speed = GameManager.current_speed
 	session_opened.emit()
+	# The live tournament board is the score display for this round; the owner's
+	# round card would only repeat it, so it steps aside.
+	if is_instance_valid(scores):
+		scores.dismiss()
 	_build_tournament_aim_hud()
 
 ## Stop aiming for a tournament golfer. Leaves the golfer on the course — the
@@ -414,8 +433,9 @@ func end_tournament_aim() -> void:
 		overlay = null
 	content = null
 
-## Tournament shots use the same aiming page as practice and pro rounds. The
-## persistent live leaderboard sits beside this controls column in Play Course.
+## Tournament shots use the same aiming page as practice and pro rounds: this
+## column is the shot controls only. The live leaderboard keeps the scores in the
+## HUD's top-left corner (ScoresDock), above the course view.
 func _build_tournament_aim_hud() -> void:
 	if is_instance_valid(player_tab):
 		player_tab.set_playing(true)
@@ -535,9 +555,41 @@ func _process(delta: float) -> void:
 
 	status.text = "%s · Hole %d · Stroke %d\n%s" % [player.golfer_name, hole_num, player.current_strokes + 1, action_text]
 	if not tournament_aim:
-		for golfer in participants:
-			var g_hole = mini(golfer.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
-			status.text += "\n%s: %d strokes · Hole %d" % [golfer.golfer_name, golfer.total_strokes + golfer.current_strokes, g_hole]
+		_update_live_scores()
+
+## The top-left card carries the running scores: every player's score against par
+## and how many holes they have in. Rows refresh in place, so this can run from
+## `_process` without rebuilding the card each frame.
+func _update_live_scores() -> void:
+	if not is_instance_valid(scores):
+		return
+	var rows: Array = []
+	for golfer in participants:
+		if not is_instance_valid(golfer):
+			continue
+		rows.append({
+			"name": golfer.golfer_name + (" (you)" if golfer == player else ""),
+			"value": _score_text(golfer),
+			"color": _score_color(golfer),
+		})
+	scores.set_scores(rows)
+
+## "-1 · thru 4" once a card is filling up, "-" until the first hole is in.
+func _score_text(golfer: Golfer) -> String:
+	if golfer.hole_scores.is_empty():
+		return "-"
+	return "%s · thru %d" % [_format_diff(golfer.total_strokes - golfer.total_par),
+		golfer.hole_scores.size()]
+
+func _score_color(golfer: Golfer) -> Color:
+	if golfer.hole_scores.is_empty():
+		return UIConstants.COLOR_TEXT_DIM
+	return UIConstants.get_score_color(golfer.total_strokes - golfer.total_par)
+
+func _format_diff(diff: int) -> String:
+	if diff == 0:
+		return "E"
+	return "%+d" % diff
 
 ## Refresh the aim guide for the mouse position, or for an explicit grid target
 ## (`target_override`, used by tests). The guide clears whenever the owner is not
@@ -570,39 +622,65 @@ func _show_results() -> void:
 	if is_instance_valid(aim_guide):
 		aim_guide.clear()
 	_make_panel(true)
-	_label("ROUND COMPLETE")
 	participants.sort_custom(func(a: Golfer, b: Golfer): return a.total_strokes < b.total_strokes)
-	if round_kind > 0:
-		var winners: Array[String] = []
+	var result := _result_text()
+	if is_instance_valid(scores):
+		# The final cards belong on the top-left card with the live scores. The
+		# round page keeps the way out of the round.
+		scores.begin("Round complete", result)
 		for golfer in participants:
-			if golfer.total_strokes == participants[0].total_strokes:
-				winners.append(golfer.golfer_name)
-		var result := _label(("Tie: " if winners.size() > 1 else "Winner: ") + ", ".join(winners))
-		result.autowrap_mode = TextServer.AUTOWRAP_OFF
+			scores.add_heading("%s — %d strokes (%s)" % [golfer.golfer_name,
+				golfer.total_strokes, _format_diff(golfer.total_strokes - golfer.total_par)])
+			for hole in golfer.hole_scores:
+				scores.add_line("Hole %d: %d / Par %d" % [hole.hole, hole.strokes, hole.par])
+		_label("ROUND COMPLETE")
+		_button("Return to management", leave_round)
+		return
+	_show_results_on_page(result)
+
+## "Winner: Pro Alex" / "Tie: A, B" once a match is over, empty for a solo round.
+func _result_text() -> String:
+	if round_kind <= 0 or participants.is_empty():
+		return ""
+	var winners: Array[String] = []
+	for golfer in participants:
+		if golfer.total_strokes == participants[0].total_strokes:
+			winners.append(golfer.golfer_name)
+	return ("Tie: " if winners.size() > 1 else "Winner: ") + ", ".join(winners)
+
+## Scorecard fallback for rounds with no top-left card to write to (isolated
+## tools and tests): the round page carries the cards as it always did.
+func _show_results_on_page(result: String) -> void:
+	_label("ROUND COMPLETE")
+	if not result.is_empty():
+		var result_label := _label(result)
+		result_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	if is_instance_valid(player_tab):
 		_button("Return to management", leave_round)
 	for golfer in participants:
 		if is_instance_valid(player_tab):
 			content = PlayerTab.add_column(player_tab.aim_page, 280)
-		var summary := _label("%s — %d strokes (%+d)" % [golfer.golfer_name, golfer.total_strokes, golfer.total_strokes - golfer.total_par])
+		var summary := _label("%s — %d strokes (%s)" % [golfer.golfer_name, golfer.total_strokes, _format_diff(golfer.total_strokes - golfer.total_par)])
 		summary.autowrap_mode = TextServer.AUTOWRAP_OFF
-		var scores := ""
+		var card_lines := ""
 		for i in golfer.hole_scores.size():
 			if is_instance_valid(player_tab) and i % 4 == 0 and i > 0:
-				_label(scores.trim_suffix("\n"))
+				_label(card_lines.trim_suffix("\n"))
 				content = PlayerTab.add_column(player_tab.aim_page, 280)
 				var heading := _label(golfer.golfer_name + " · continued")
 				heading.autowrap_mode = TextServer.AUTOWRAP_OFF
-				scores = ""
+				card_lines = ""
 			var hole: Dictionary = golfer.hole_scores[i]
-			scores += "Hole %d: %d / Par %d\n" % [hole.hole, hole.strokes, hole.par]
-		_label(scores.trim_suffix("\n"))
+			card_lines += "Hole %d: %d / Par %d\n" % [hole.hole, hole.strokes, hole.par]
+		_label(card_lines.trim_suffix("\n"))
 	if not is_instance_valid(player_tab):
 		_button("Return to management", leave_round)
 
 func leave_round(_restore_mode: bool = true) -> void:
 	var was_tournament_aim := tournament_aim
 	var had_round := busy
+	if is_instance_valid(scores):
+		scores.dismiss()
 	active = false
 	busy = false
 	_was_aiming = false
