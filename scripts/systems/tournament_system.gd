@@ -33,7 +33,6 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 1000,      # Course pays out
 		"participant_count": 12,
 		"reputation_reward": 15,
-		"duration_days": 45,
 		"spectator_revenue": 800,       # Gate/concession revenue from spectators
 		"sponsorship_revenue": 500,     # Local sponsor deals
 	},
@@ -47,7 +46,6 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 5000,
 		"participant_count": 24,
 		"reputation_reward": 40,
-		"duration_days": 90,
 		"spectator_revenue": 4000,      # Regional media attention
 		"sponsorship_revenue": 3000,    # Regional sponsor packages
 	},
@@ -61,7 +59,6 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 25000,
 		"participant_count": 48,
 		"reputation_reward": 100,
-		"duration_days": 135,
 		"spectator_revenue": 20000,     # National TV coverage
 		"sponsorship_revenue": 15000,   # Major sponsor deals
 	},
@@ -75,7 +72,6 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 100000,
 		"participant_count": 72,
 		"reputation_reward": 300,
-		"duration_days": 180,
 		"spectator_revenue": 80000,     # Massive crowds + TV rights
 		"sponsorship_revenue": 60000,   # Premium global sponsors
 	},
@@ -247,12 +243,9 @@ static func get_tier_description(tier: TournamentTier) -> String:
 	var total_revenue = data.get("spectator_revenue", 0) + data.get("sponsorship_revenue", 0)
 	var rounds = get_round_count(tier)
 	var round_text = "%d round" % rounds + ("s" if rounds > 1 else "")
-	var days = data.get("duration_days", 1)
-	var day_text = "%d day" % days + ("s" if days > 1 else "")
-	return "%s (%s, %s)\nRequires: %d holes, %.1f★ rating, %d yards\nField: %d players | Entry: $%d | Revenue: $%d\nReward: +%d reputation" % [
+	return "%s (%s)\nRequires: %d holes, %.1f★ rating, %d yards\nField: %d players | Entry: $%d | Revenue: $%d\nReward: +%d reputation" % [
 		data.name,
 		round_text,
-		day_text,
 		data.min_holes,
 		data.min_rating,
 		data.min_yardage,

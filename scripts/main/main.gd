@@ -199,10 +199,10 @@ func _ready() -> void:
 	# Set up tournament leaderboard
 	tournament_leaderboard = TournamentLeaderboard.new()
 	tournament_leaderboard.name = "TournamentLeaderboard"
-	$UI/HUD.add_child(tournament_leaderboard)
 	tournament_manager.setup(golfer_manager, tournament_leaderboard)
 
-	# Set up tournament results popup
+	# Final event details remain in the dedicated results dialog; live scores and
+	# owner shots are shown inside the Play Course page.
 	tournament_results_popup = TournamentResultsPopup.new()
 	tournament_results_popup.name = "TournamentResultsPopup"
 	$UI/HUD.add_child(tournament_results_popup)
@@ -793,7 +793,7 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
+	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:
@@ -3389,13 +3389,27 @@ func _show_hole_stats(hole_number: int) -> void:
 # --- Tournament Panel ---
 
 func _setup_tournament_panel() -> void:
-	"""Add tournament panel to the HUD."""
+	"""Put tournament hosting and live play on the Player tab's Play Course page."""
 	tournament_panel = TournamentPanel.new()
 	tournament_panel.embedded = true
 	tournament_panel.name = "TournamentPanel"
 	tournament_panel.close_requested.connect(_on_tournament_panel_closed)
 	terrain_toolbar.player_tab.add_persistent(tournament_panel)
 	tournament_panel.setup(tournament_manager)
+
+	# The live scorecard occupies a persistent column beside the shot controls on
+	# the Play Course aiming page instead of a separate HUD window.
+	tournament_leaderboard.embedded = true
+	var scorecard_slot := Control.new()
+	scorecard_slot.custom_minimum_size.x = TournamentLeaderboard.PANEL_WIDTH
+	scorecard_slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scorecard_slot.clip_contents = true
+	scorecard_slot.add_child(tournament_leaderboard)
+	tournament_leaderboard.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	terrain_toolbar.player_tab.add_aim_persistent(scorecard_slot)
+	tournament_leaderboard.return_to_course.connect(func():
+		terrain_toolbar.select_player_section(PlayerTab.PAGE_PLAY)
+		terrain_toolbar.player_tab.set_playing(false))
 
 func _on_tournament_panel_closed() -> void:
 	"""Hide the tournament panel."""
@@ -3409,7 +3423,7 @@ func _toggle_tournament_panel() -> void:
 	tournament_panel._refresh_display()
 
 func _on_tournament_completed(_tier: int, results: Dictionary) -> void:
-	"""Show tournament results popup when a tournament finishes."""
+	"""Show the post-event financial and highlight summary."""
 	if tournament_results_popup:
 		var entries = results.get("all_entries", [])
 		tournament_results_popup.show_results(_tier, results, entries)

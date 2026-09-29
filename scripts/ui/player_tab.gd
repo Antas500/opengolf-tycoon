@@ -95,9 +95,18 @@ func clear_page(index: int) -> HBoxContainer:
 
 func clear_aim_page() -> HBoxContainer:
 	for child in aim_page.get_children():
+		if child.has_meta(PERSISTENT_META):
+			continue
 		aim_page.remove_child(child)
 		child.queue_free()
 	return aim_page
+
+## Add a control that stays beside the aiming HUD across setup rebuilds. Live
+## tournament scores use this so the same board remains visible while the owner
+## switches between their shot controls and the course view.
+func add_aim_persistent(node: Node) -> void:
+	node.set_meta(PERSISTENT_META, true)
+	aim_page.add_child(node)
 
 ## Empty the Play Course page of round-setup content, keeping nodes added via
 ## add_persistent (the management tournament panel).

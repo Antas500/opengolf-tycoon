@@ -14,13 +14,13 @@ class_name TournamentManager
 ## the start of play, and the owner is always one of them: hosting an event puts
 ## *you* in the field, in the first pairing, with your own golfer on the tee.
 ##
-## Multi-round events play one round per tournament phase:
+## Multi-round events play the following number of rounds:
 ## - LOCAL: 1 round
 ## - REGIONAL: 2 rounds
-## - NATIONAL: 4 rounds (rounds 3-4 share the final phase)
+## - NATIONAL: 4 rounds
 ## - CHAMPIONSHIP: 4 rounds
-## Each phase spans TOURNAMENT_PHASE_DAYS fast-calendar days (a day lasts 3.5 s),
-## so live golfers get several real minutes of play per round.
+## The live first round ends when every on-course competitor has finished. Any
+## additional rounds are then completed by the tournament simulator.
 
 signal tournament_scheduled(tier: int, start_day: int)
 signal tournament_started(tier: int)
@@ -29,21 +29,16 @@ signal tournament_completed(tier: int, results: Dictionary)
 var current_tournament_tier: int = -1  # -1 = no tournament
 var current_tournament_state: int = TournamentSystem.TournamentState.NONE
 var tournament_start_day: int = 0
-var tournament_end_day: int = 0
 var tournament_results: Dictionary = {}
 
 # Cooldown between tournaments (days on the fast calendar)
 const TOURNAMENT_COOLDOWN: int = 45
-## Length of one tournament phase: a round spans this many 3.5-second days so
-## live golfers get several real minutes of play per round.
-const TOURNAMENT_PHASE_DAYS: int = 45
 
 var last_tournament_end_day: int = -100
 
 # Multi-round state
 var current_round: int = 0           # 1-based round number (0 = not started)
 var total_rounds: int = 1            # Total rounds for this tier
-var _round_start_day: int = 0        # Calendar day the current round began on
 
 # Tournament field (persistent across rounds)
 var _sim_field: Array = []           # Array of TournamentSimulator.SimGolfer
@@ -114,7 +109,6 @@ func _release_aim() -> void:
 
 func _ready() -> void:
 	EventBus.day_changed.connect(_on_day_changed)
-	EventBus.end_of_day.connect(_on_end_of_day)
 	EventBus.golfer_finished_hole.connect(_on_golfer_finished_hole)
 	EventBus.golfer_finished_round.connect(_on_golfer_finished_round)
 
@@ -138,37 +132,10 @@ func _process(delta: float) -> void:
 			_spawn_next_group()
 
 func _on_day_changed(_new_day: int) -> void:
+	# Keep compatibility with a saved tournament booking, but running events are
+	# never ended by a calendar deadline. They finish when the field finishes.
 	if current_tournament_state == TournamentSystem.TournamentState.SCHEDULED:
 		_start_tournament()
-		return
-
-	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
-		return
-
-	# A round only wraps up when its window runs out — live golfers keep
-	# playing through the daily (3.5 s) rollovers until then.
-	_tick_round_window()
-
-## Settle a live round whose window has run out. Advancing to the next round is
-## the completion path's job (`_finish_round`), so rounds run back to back.
-func _tick_round_window() -> void:
-	if not _live_round_active or not _round_window_elapsed():
-		return
-	_end_current_day_round()
-
-## Has the current round had its full phase window? A round the field holes out of
-## earlier closes early; this is the point at which whatever has been played is
-## scored and the rest of each card is filled in off the course.
-func _round_window_elapsed() -> bool:
-	return GameManager.current_day - _round_start_day >= TOURNAMENT_PHASE_DAYS
-
-func _on_end_of_day(_day: int) -> void:
-	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
-		return
-
-	# A round's live field keeps playing until its phase window is up, so the
-	# daily rollover only settles things once that window has run out.
-	_tick_round_window()
 
 func _on_golfer_finished_hole(golfer_id: int, hole: int, strokes: int, par: int) -> void:
 	if not _live_round_active or golfer_id not in _tournament_golfer_ids:
@@ -265,11 +232,7 @@ func host_tournament(tier: int) -> bool:
 	current_tournament_tier = tier
 	total_rounds = ROUNDS_PER_TIER.get(tier, 1)
 	current_round = 0
-	# The event runs from today. Each round gets a phase, so the projected end
-	# day follows the rounds rather than the tier's nominal duration.
 	tournament_start_day = GameManager.current_day
-	tournament_end_day = tournament_start_day + maxi(tier_data.duration_days,
-		TOURNAMENT_PHASE_DAYS * total_rounds) - 1
 
 	# The event begins on the spot: no scheduled state, no lead-time wait.
 	tournament_scheduled.emit(tier, tournament_start_day)
@@ -380,7 +343,6 @@ func is_player_entry(sim_id: int) -> bool:
 ## Play a specific round. Round 1 uses live golfers; rounds 2+ are simulated.
 func _play_round(round_number: int) -> void:
 	current_round = round_number
-	_round_start_day = GameManager.current_day
 
 	var round_label = "Round %d/%d" % [round_number, total_rounds] if total_rounds > 1 else ""
 
@@ -527,7 +489,7 @@ func _spawn_next_group() -> void:
 				"is_finished": false,
 				"skill": avg_skill,
 				# Index of the hole they are on, plus the holes they have already
-				# carded, so a round settled by the clock knows exactly what is left.
+				# carded, so any remaining holes can be filled exactly once.
 				"current_hole": tee_hole,
 				"holes_played": {},
 			}
@@ -583,10 +545,9 @@ func _record_simulated_round(sg: TournamentSimulator.SimGolfer, round_number: in
 
 	return result.moments
 
-## Close the live round: settle anyone still out there, clear the course and hand
-## the round to `_finish_round`. Runs when the round's window expires or when the
-## live field has holed out.
-func _end_current_day_round() -> void:
+## Close the live round after the active field has holed out, clearing the course
+## and handing the completed cards to `_finish_round`.
+func _finish_live_round() -> void:
 	if not _live_round_active:
 		return
 
@@ -712,7 +673,7 @@ func _check_live_round_completion() -> void:
 	for gid in _tournament_golfer_ids:
 		if _tournament_scores.has(gid) and not _tournament_scores[gid].is_finished:
 			return
-	_end_current_day_round()
+	_finish_live_round()
 
 ## Record live round results into the persistent round_scores/cumulative_scores
 func _record_live_round_results() -> void:
@@ -803,7 +764,7 @@ func _complete_tournament() -> void:
 	var tier_data = TournamentSystem.get_tier_data(current_tournament_tier)
 
 	# Belt-and-braces: no aiming HUD should outlive the event, even if the live
-	# round was settled by a path that skipped _end_current_day_round().
+	# round was settled by a path that skipped _finish_live_round().
 	_release_aim()
 
 	# Build final standings
@@ -883,7 +844,7 @@ func _complete_tournament() -> void:
 		_pre_tournament_speed = -1
 
 	# Note: simulated round moments are emitted per-round in _simulate_round_headless().
-	# Live round moments are emitted in _end_current_day_round(). No re-emit needed here.
+	# Live round moments are emitted in _finish_live_round(). No re-emit needed here.
 
 	# The event is over: nobody stays on the course because of it.
 	if _golfer_manager:
@@ -915,7 +876,7 @@ func _complete_tournament() -> void:
 	EventBus.tournament_completed.emit(completed_tier, tournament_results)
 	EventBus.notify("Tournament complete! Winner: %s (%s)" % [winner_name, score_text], "success")
 
-## Called when End Day is pressed during a tournament
+## Called when the player chooses Play It Out during a live tournament.
 func simulate_remaining_and_complete() -> void:
 	if current_tournament_state == TournamentSystem.TournamentState.SCHEDULED:
 		_start_tournament()
@@ -923,10 +884,10 @@ func simulate_remaining_and_complete() -> void:
 	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
 		return
 
-	# Ending the live round chains straight into every remaining round, so one
-	# call settles the whole event.
+	# End the live round and chain through remaining rounds, so one call settles
+	# the whole event.
 	if _live_round_active:
-		_end_current_day_round()
+		_finish_live_round()
 
 	# Safety net: a round still pending for any other reason plays out now.
 	var guard := 0
@@ -1035,13 +996,8 @@ func get_tournament_info() -> Dictionary:
 		"tier": current_tournament_tier,
 		"name": tier_data.name,
 		"state": current_tournament_state,
-		"start_day": tournament_start_day,
-		"end_day": tournament_end_day,
 		"current_round": current_round,
 		"total_rounds": total_rounds,
-		# Never negative: a paused game can sit past the scheduled end day while
-		# the final round holes out, and the panel prints this as a countdown.
-		"days_remaining": maxi((tournament_end_day - GameManager.current_day + 1) if current_tournament_state == TournamentSystem.TournamentState.IN_PROGRESS else (tournament_start_day - GameManager.current_day), 0),
 	}
 
 func get_cooldown_remaining() -> int:
@@ -1091,7 +1047,6 @@ func get_save_data() -> Dictionary:
 		"current_tier": current_tournament_tier,
 		"state": current_tournament_state,
 		"start_day": tournament_start_day,
-		"end_day": tournament_end_day,
 		"last_end_day": last_tournament_end_day,
 	}
 
@@ -1104,5 +1059,4 @@ func load_save_data(data: Dictionary) -> void:
 	else:
 		current_tournament_state = loaded_state
 	tournament_start_day = data.get("start_day", 0)
-	tournament_end_day = data.get("end_day", 0)
 	last_tournament_end_day = data.get("last_end_day", -100)

@@ -121,6 +121,17 @@ func test_hosting_starts_live_play_immediately() -> void:
 	assert_true(tournaments._live_round_active, "Golfers are playing on the course already")
 	assert_gt(golfers.active_golfers.size(), 0, "Bodies appear on the course with the click")
 
+func test_tournament_does_not_end_on_a_calendar_deadline() -> void:
+	tournaments.host_tournament(LOCAL)
+	var later_day := GameManager.current_day + 500
+	GameManager.current_day = later_day
+	EventBus.day_changed.emit(later_day)
+	EventBus.end_of_day.emit(later_day)
+	await wait_frames(2)
+	assert_eq(tournaments.current_tournament_state, TournamentSystem.TournamentState.IN_PROGRESS,
+		"A tournament stays open until all competitors finish, regardless of elapsed days")
+	assert_true(tournaments._live_round_active, "The live field is not settled by a day rollover")
+
 func test_hosting_rejects_a_course_with_no_holes() -> void:
 	GameManager.current_course = GameManager.CourseData.new()
 	var check: Dictionary = tournaments.can_schedule_tournament(LOCAL)

@@ -21,14 +21,14 @@ diary, no "in 30 days", and no separate registration phase.
 | Round 1 | Live: real `Golfer` nodes on the course, scored hole by hole |
 | Rounds 2+ | Headless: `TournamentSimulator.simulate_round()` per competitor |
 | Between rounds | Cut line where the tier defines one |
-| Calendar | One phase of `TOURNAMENT_PHASE_DAYS` days per round |
+| Completion | Round 1 stays live until every on-course competitor finishes; later rounds simulate immediately |
 | Cooldown | `TOURNAMENT_COOLDOWN` days after the event finishes |
 
 ```
 Host Tournament (click) → charge entry fee → build field (owner + tier pros)
   → pair the field, one pairing per open hole → live round 1, scored as it is played
   → (per round) cut line where defined → rounds 2+ headless, back to back
-  → complete → results popup → leaderboard payout → prestige + reputation → cooldown
+  → complete → final in-tab leaderboard + results summary → payout → prestige + reputation → cooldown
 ```
 
 ---
@@ -39,12 +39,12 @@ Host Tournament (click) → charge entry fee → build field (owner + tier pros)
 
 From `TournamentSystem.TIER_DATA` (`scripts/systems/tournament_system.gd`):
 
-| Tier | Rounds | Entry cost | Prize pool | Nominal field | Min holes | Min rating | Min difficulty | Min yardage | Rep reward | Duration |
-|------|--------|-----------|------------|---------------|-----------|------------|----------------|-------------|------------|----------|
-| LOCAL | 1 | $500 | $1,000 | 12 | 4 | 2.0 | — | 1,500 | +15 | 45 days |
-| REGIONAL | 2 | $2,000 | $5,000 | 24 | 9 | 3.0 | 4.0 | 3,000 | +40 | 90 days |
-| NATIONAL | 4 | $10,000 | $25,000 | 48 | 18 | 4.0 | 5.0 | 6,000 | +100 | 135 days |
-| CHAMPIONSHIP | 4 | $50,000 | $100,000 | 72 | 18 | 4.5 | 6.0 | 6,500 | +300 | 180 days |
+| Tier | Rounds | Entry cost | Prize pool | Nominal field | Min holes | Min rating | Min difficulty | Min yardage | Rep reward |
+|------|--------|-----------|------------|---------------|-----------|------------|----------------|-------------|------------|
+| LOCAL | 1 | $500 | $1,000 | 12 | 4 | 2.0 | — | 1,500 | +15 |
+| REGIONAL | 2 | $2,000 | $5,000 | 24 | 9 | 3.0 | 4.0 | 3,000 | +40 |
+| NATIONAL | 4 | $10,000 | $25,000 | 48 | 18 | 4.0 | 5.0 | 6,000 | +100 |
+| CHAMPIONSHIP | 4 | $50,000 | $100,000 | 72 | 18 | 4.5 | 6.0 | 6,500 | +300 |
 
 `rounds` is `TournamentManager.ROUNDS_PER_TIER`; `min rating` and `min difficulty`
 are checked against `GameManager.course_rating` (`overall` and `difficulty`, both on
@@ -119,8 +119,6 @@ function host_tournament(tier) -> bool:
     total_rounds = ROUNDS_PER_TIER[tier]
     current_round = 0
     tournament_start_day = GameManager.current_day
-    tournament_end_day = tournament_start_day + max(tier.duration_days,
-        TOURNAMENT_PHASE_DAYS * total_rounds) - 1
 
     tournament_scheduled.emit(tier, tournament_start_day)   # state, not a wait
     EventBus.tournament_scheduled.emit(tier, tournament_start_day)
@@ -134,8 +132,9 @@ so a save that holds a `SCHEDULED` event resolves — `_process()` starts it whe
 day arrives, and `load_save_data()` downgrades a saved `IN_PROGRESS` event to
 `NONE` (a live round is not resumable, and it must not linger after a load).
 
-The event's end day is `duration_days` or one phase per round, whichever is longer,
-so the "days remaining" line on the shelf matches the rounds still to be played.
+There is no tournament end date or countdown. The live round remains active until
+every course competitor has finished; the round and event then complete from their
+scorecards rather than from calendar time.
 
 ---
 
@@ -191,10 +190,9 @@ Covered in [Tournament Simulation](tournament-simulation.md) — the same
 
 ## 6. Pacing and Rounds
 
-A phase is `TOURNAMENT_PHASE_DAYS = 45` fast-calendar days (a day lasts
-`GameManager.SECONDS_PER_GAME_DAY = 3.5` real seconds), and a round gets one phase.
-`_round_start_day` anchors the window on the day the round actually began, so
-hosting mid-calendar still gives the live field a whole phase.
+There is no calendar phase or deadline. The live first round stays on the course
+until every live competitor has holed out. Then the remaining unseated field is
+scored, and later rounds (when applicable) are simulated back to back.
 
 | Round | How it is played |
 |-------|------------------|
@@ -204,7 +202,6 @@ hosting mid-calendar still gives the live field a whole phase.
 ```
 function _play_round(n):
     current_round = n
-    _round_start_day = GameManager.current_day
     round_started.emit(...)
     if n == 1: _start_live_round()
     else:      _simulate_round_headless(n)
@@ -217,9 +214,9 @@ function _finish_round(moments, was_live):     # the only path that closes a rou
     _play_round(n + 1)
 ```
 
-Both ways a round can end funnel into `_finish_round()`: the live field holing out
-(`_check_live_round_completion()`) and the phase window expiring
-(`_tick_round_window()` on `end_of_day`/`day_changed`).
+The live round advances only when the final on-course competitor holes out
+(`_check_live_round_completion()`). There is no day-rollover shortcut; the **Play It
+Out** action is an explicit player choice to settle the field early.
 
 ### Round 1 — live play
 
@@ -254,10 +251,10 @@ Each live competitor is bound to their node (`TournamentLeaderboard.bind_live_go
 and scored from `EventBus.golfer_finished_hole`, which records strokes, par, the
 holes carded and the hole index.
 
-### Settling a round from the clock
+### Finishing the live round
 
-When the window expires, whatever is left is settled in one pass
-(`_end_current_day_round()`):
+After all live competitors finish (or the player explicitly chooses **Play It Out**),
+remaining entries are settled in one pass (`_finish_live_round()`):
 
 1. pairings whose tee time never came, and the field beyond the live seats, are
    scored headlessly for the whole round;
@@ -396,9 +393,11 @@ button's tooltip reads "Starts right away — you are in the field" when it is l
 Disabled buttons carry `can_schedule_tournament().reason`, one requirement at a time.
 
 While an event runs, the tier cards are replaced by a single in-progress card: the
-tier and phase countdown, the owner's own scoreline (`You: -2 · rank 3 of 24 · 7
-holes in (round 1)`), and the **Play It Out** shortcut. During the cooldown it shows
-one line and no tier cards at all.
+tier, current round, the owner's own scoreline (`You: -2 · rank 3 of 24 · 7
+holes in (round 1)`), and the **Play It Out** shortcut. The live scorecard and shot
+controls appear together on the Play Course aiming page. After completion, the final
+leaderboard remains there until the player returns to the course setup. During the
+cooldown the panel shows one line and no tier cards at all.
 
 The panel refreshes through `_process()`: `hole_created`, `hole_deleted`,
 `hole_toggled`, `money_changed`, `day_changed`, `new_game_started` and
@@ -406,11 +405,12 @@ The panel refreshes through `_process()`: `hole_created`, `hole_deleted`,
 `REFRESH_INTERVAL = 0.5` s and only while the panel is in the tree. Rebuilding the
 whole shelf per signal was visible stutter on the frame a hole was toggled.
 
-### Leaderboard and results popup
+### Leaderboard and results
 
-`TournamentLeaderboard` (`scripts/ui/tournament_leaderboard.gd`) — section 8.
-`TournamentResultsPopup` (`scripts/ui/tournament_results_popup.gd`) — final standings,
-per-round scores, dramatic moments, prize breakdown, with the owner's row in gold.
+`TournamentLeaderboard` (`scripts/ui/tournament_leaderboard.gd`) is embedded in the
+Play Course aiming page for live scores and final standings, with per-round scores,
+cut status, and the owner's row in gold. The post-event `TournamentResultsPopup`
+continues to show highlights and the financial summary after the tournament.
 
 ### Event feed
 
@@ -430,7 +430,7 @@ still announces its future start day.
 | Live seats | `TournamentSystem.get_live_field_size()` | holes × 2 | Golfers that get a body on the course |
 | Field size | `TournamentSystem.get_field_size()` | max(tier, live) | Nominal tier list is a floor |
 | Rounds per tier | `TournamentManager.ROUNDS_PER_TIER` | 1/2/4/4 | Event length |
-| Phase length | `TournamentManager.TOURNAMENT_PHASE_DAYS` | 45 | Days a round may run live |
+| Live round completion | `TournamentManager._check_live_round_completion()` | all live golfers finish | No calendar deadline |
 | Pairing interval | `TournamentManager.GROUP_SPAWN_INTERVAL` | 0.5 s | Game-seconds between tee times |
 | Cooldown | `TournamentManager.TOURNAMENT_COOLDOWN` | 45 | Days before the next event |
 | Cut rules | `TournamentManager.CUT_RULES` | 50%/40+ties after R2 | Field reduction |

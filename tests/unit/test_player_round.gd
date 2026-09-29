@@ -451,6 +451,34 @@ func test_embedded_tournament_survives_rebuilds_and_fits_all_states() -> void:
 		assert_eq(panel.get_parent(), tab.pages[PlayerTab.PAGE_PLAY])
 		_assert_shelf_fits(tab.pages[PlayerTab.PAGE_PLAY])
 
+func test_tournament_scorecard_and_shot_controls_share_play_course() -> void:
+	var toolbar := _embedded_toolbar()
+	var tab := toolbar.player_tab
+	var leaderboard := TournamentLeaderboard.new()
+	leaderboard.embedded = true
+	var scorecard_slot := Control.new()
+	scorecard_slot.custom_minimum_size.x = TournamentLeaderboard.PANEL_WIDTH
+	scorecard_slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scorecard_slot.clip_contents = true
+	scorecard_slot.add_child(leaderboard)
+	leaderboard.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tab.add_aim_persistent(scorecard_slot)
+	leaderboard.show_for_tournament("Local Tournament", 12)
+	leaderboard.register_golfer(0, "Owner", 0, true)
+
+	var owner := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 99)
+	owner.player_profile = GameManager.player_profile
+	rounds.begin_tournament_aim(owner)
+	await wait_frames(5)
+	assert_true(rounds.tournament_aim)
+	assert_eq(tab.selected, PlayerTab.PAGE_PLAY)
+	assert_true(tab.playing)
+	assert_true(tab.aim_scroll.visible)
+	assert_true(tab.aim_page.is_ancestor_of(leaderboard), "Tournament scores live in Play Course")
+	assert_true(tab.aim_page.is_ancestor_of(rounds.status), "Tournament shot status lives in Play Course")
+	assert_true(tab.aim_page.is_ancestor_of(rounds._tournament_hud_column))
+	_assert_shelf_fits(tab.aim_page)
+
 func test_embedded_aim_and_full_scorecards_fit_toolbar() -> void:
 	var toolbar := _embedded_toolbar()
 	var tab := toolbar.player_tab

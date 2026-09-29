@@ -32,6 +32,7 @@ var previous_camera: Vector2
 var round_kind := 0
 var aim_guide: AimGuide
 var _was_aiming: bool = false
+var _tournament_hud_column: VBoxContainer = null
 ## True while aiming for the owner's golfer inside a running tournament. The
 ## TournamentManager owns that round; this flag only tells our _process to skip
 ## the owner-round bookkeeping (driving the sim, showing round results) and to
@@ -392,8 +393,8 @@ func begin_tournament_aim(owner: Golfer) -> void:
 	_build_tournament_aim_hud()
 
 ## Stop aiming for a tournament golfer. Leaves the golfer on the course — the
-## TournamentManager clears it — and does not rebuild the setup shelf, so the
-## management tournament panel stays put.
+## TournamentManager clears it — and leaves the scorecard visible in the Play
+## Course tab after the shot controls are removed.
 func end_tournament_aim() -> void:
 	if not tournament_aim:
 		return
@@ -405,40 +406,33 @@ func end_tournament_aim() -> void:
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	if is_instance_valid(aim_guide):
 		aim_guide.clear()
+	if is_instance_valid(_tournament_hud_column):
+		_tournament_hud_column.queue_free()
+		_tournament_hud_column = null
 	if is_instance_valid(overlay):
 		overlay.queue_free()
 		overlay = null
 	content = null
 
-## A compact floating aiming HUD. It deliberately avoids the Player tab so the
-## management tournament panel and the live leaderboard stay on screen while the
-## owner plays their shots.
+## Tournament shots use the same aiming page as practice and pro rounds. The
+## persistent live leaderboard sits beside this controls column in Play Course.
 func _build_tournament_aim_hud() -> void:
-	if is_instance_valid(overlay):
-		overlay.queue_free()
-	overlay = Control.new()
-	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	# Pass course clicks through to _unhandled_input; only the panel's own
-	# controls consume input.
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(overlay)
-	var panel := PanelContainer.new()
-	overlay.add_child(panel)
-	var viewport_size := get_viewport_rect().size
-	panel.position = Vector2(24, maxf(24.0, viewport_size.y - 300.0))
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(360, 250)
-	panel.add_child(scroll)
-	content = VBoxContainer.new()
-	content.add_theme_constant_override("separation", 6)
-	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(content)
-	_label("TOURNAMENT · YOUR ROUND")
-	status = _label("")
+	if is_instance_valid(player_tab):
+		player_tab.set_playing(true)
+		player_tab.select(PlayerTab.PAGE_PLAY)
+		_tournament_hud_column = PlayerTab.add_column(player_tab.aim_page, 320)
+		_tournament_hud_column.add_theme_constant_override("separation", 1)
+		content = _tournament_hud_column
+	else:
+		# Fallback for isolated use without the game's Player tab.
+		_make_panel(false)
+		content.add_theme_constant_override("separation", 6)
+
+	status = _label("Your tournament round")
 	status.add_theme_font_size_override("font_size", 13)
 	status.autowrap_mode = TextServer.AUTOWRAP_OFF
-	content.add_child(HSeparator.new())
 	shapes = OptionButton.new()
+	shapes.custom_minimum_size.y = 24
 	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot"]:
 		shapes.add_item(title)
 	shapes.item_selected.connect(func(index: int):
@@ -446,15 +440,18 @@ func _build_tournament_aim_hud() -> void:
 			player.player_shape = index)
 	content.add_child(shapes)
 	punch = CheckButton.new()
+	punch.custom_minimum_size.y = 24
 	punch.text = "Low punch shot"
 	punch.toggled.connect(func(value: bool):
 		if is_instance_valid(player):
 			player.player_punch = value)
 	content.add_child(punch)
-	_button("Settle tournament (skip your round)", _on_settle_tournament)
-	var instructions := _label("Aim with the mouse · Click to shoot\nYellow arc = intended carry · dotted trail = roll until it stops\nGuide assumes a clean strike; wind, lie and slope still apply.\nPutting on the green is automatic.")
-	instructions.add_theme_font_size_override("font_size", 12)
+	var settle_button := _button("Settle tournament (skip your round)", _on_settle_tournament)
+	settle_button.custom_minimum_size.y = 24
+	var instructions := _label("Aim + click · Yellow: carry · Dots: roll")
+	instructions.add_theme_font_size_override("font_size", 11)
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	instructions.tooltip_text = "Aim with the mouse · Click to shoot\nYellow arc = intended carry · dotted trail = roll until it stops\nGuide assumes a clean strike; wind, lie and slope still apply.\nPutting on the green is automatic."
 	_was_aiming = false
 
 ## Skip the rest of the event from the cards as they stand (the Tournament

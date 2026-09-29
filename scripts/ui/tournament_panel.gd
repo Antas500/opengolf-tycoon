@@ -234,7 +234,7 @@ func _show_available_tournaments() -> void:
 		# Reward row
 		var reward_row = _create_stat_row(
 			"Reputation:",
-			"+%d (%d days)" % [tier_data.reputation_reward, tier_data.duration_days],
+			"+%d" % tier_data.reputation_reward,
 			UIConstants.COLOR_INFO_DIM
 		)
 		card.add_child(reward_row)
@@ -267,10 +267,10 @@ func _show_current_tournament(info: Dictionary) -> void:
 	var state_text = ""
 	match info.state:
 		TournamentSystem.TournamentState.SCHEDULED:
-			state_text = "Starts in %d days" % info.days_remaining
+			state_text = "Scheduled"
 			_status_label.add_theme_color_override("font_color", UIConstants.COLOR_WARNING_DIM)
 		TournamentSystem.TournamentState.IN_PROGRESS:
-			state_text = "In Progress - %d day(s) remaining" % info.days_remaining
+			state_text = "In progress · Round %d of %d" % [info.current_round, info.total_rounds]
 			_status_label.add_theme_color_override("font_color", UIConstants.COLOR_SUCCESS)
 
 	_status_label.text = "%s\n%s" % [info.name, state_text]

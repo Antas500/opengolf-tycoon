@@ -2,7 +2,11 @@ extends PanelContainer
 class_name TournamentLeaderboard
 ## Live leaderboard panel shown during tournaments.
 ## Supports multi-round display with per-round score columns, cut line,
-## and MC (missed cut) labels.
+## and MC (missed cut) labels. In the game HUD it lives beside the player's
+## tournament shot controls in the Play Course tab; standalone mode remains
+## useful to isolated tools and tests.
+
+signal return_to_course
 
 const PANEL_WIDTH: float = 340.0
 # Top margin is measured at runtime so the board clears the status column.
@@ -21,6 +25,7 @@ var _current_round: int = 1
 var _is_final: bool = false
 var _cut_advancing: Array = []
 var _cut_eliminated: Array = []
+var embedded := false
 
 func _ready() -> void:
 	_build_ui()
@@ -28,6 +33,8 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	custom_minimum_size = Vector2(PANEL_WIDTH, 0)
+	size_flags_vertical = Control.SIZE_EXPAND_FILL if embedded else Control.SIZE_SHRINK_BEGIN
+	size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if embedded else Control.SIZE_SHRINK_BEGIN
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var style := StyleBoxFlat.new()
@@ -63,8 +70,8 @@ func _build_ui() -> void:
 
 	_close_btn = Button.new()
 	_close_btn.text = "X"
-	_close_btn.custom_minimum_size = Vector2(24, 24)
-	_close_btn.pressed.connect(func(): hide())
+	_close_btn.custom_minimum_size = Vector2(52 if embedded else 24, 24)
+	_close_btn.pressed.connect(_on_close_pressed)
 	_close_btn.visible = false
 	title_row.add_child(_close_btn)
 
@@ -83,7 +90,7 @@ func _build_ui() -> void:
 	_scroll = ScrollContainer.new()
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_scroll.custom_minimum_size = Vector2(0, 200)
+	_scroll.custom_minimum_size = Vector2(0, 0 if embedded else 200)
 	vbox.add_child(_scroll)
 
 	_grid = GridContainer.new()
@@ -224,6 +231,9 @@ func apply_cut_line(advancing: Array, eliminated: Array) -> void:
 
 func show_final_results() -> void:
 	_is_final = true
+	if embedded:
+		_close_btn.text = "Return"
+		_close_btn.visible = true
 	if _participant_count > 0:
 		_title_label.text = "%s (%d) — FINAL" % [_tournament_name, _participant_count]
 	else:
@@ -378,7 +388,16 @@ func _get_score_color(diff: int, total_par: int) -> Color:
 		return UIConstants.COLOR_SCORE_PAR
 	return UIConstants.COLOR_SCORE_OVER
 
+func _on_close_pressed() -> void:
+	if embedded and _is_final:
+		hide()
+		return_to_course.emit()
+	else:
+		hide()
+
 func _position_panel() -> void:
+	if embedded:
+		return
 	await get_tree().process_frame
 	var vp_size = get_viewport().get_visible_rect().size
 	position = Vector2(vp_size.x - size.x - RIGHT_MARGIN, UIConstants.get_hud_column_clearance(self))
