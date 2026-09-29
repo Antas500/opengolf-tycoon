@@ -1,6 +1,8 @@
 extends Node2D
 ## Main - Primary game scene controller
 
+const GameManagerScript := preload("res://scripts/autoload/game_manager.gd")
+
 @onready var terrain_grid: TerrainGrid = $TerrainGrid
 @onready var camera: IsometricCamera = $IsometricCamera
 @onready var ball_manager: BallManager = $BallManager
@@ -937,7 +939,7 @@ func _update_button_states() -> void:
 	# Highlight active speed button
 	pause_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.PAUSED else Color(1, 1, 1, 1)
 	play_btn.modulate = Color(1, 1, 1, 0.5) if GameManager.current_speed != GameManager.GameSpeed.NORMAL else Color(1, 1, 1, 1)
-	fast_btn.modulate = Color(1, 1, 1, 0.5) if not GameManager.is_fast_forward_speed(speed) else Color(1, 1, 1, 1)
+	fast_btn.modulate = Color(1, 1, 1, 0.5) if not GameManagerScript.is_fast_forward_speed(speed) else Color(1, 1, 1, 1)
 
 func _start_painting() -> void:
 	if inspect_mode:
@@ -1567,9 +1569,9 @@ static func fast_forward_label(speed: int) -> String:
 
 ## Tooltip that names the running tier and the tier the next press switches to.
 static func fast_forward_tooltip(speed: int) -> String:
-	if not GameManager.is_fast_forward_speed(speed):
+	if not GameManagerScript.is_fast_forward_speed(speed):
 		return "Fast-forward time — click for Fast (3x), click again for Ultra (8x)"
-	var next_speed: int = GameManager.next_fast_forward_speed(speed)
+	var next_speed: int = GameManagerScript.next_fast_forward_speed(speed)
 	return "%s (%dx) — click for %s (%dx)" % [
 		_speed_tier_name(speed), int(speed),
 		_speed_tier_name(next_speed), int(next_speed),
@@ -2188,7 +2190,7 @@ const BULLDOZER_COSTS = {
 	"walking_path": 5,  # The Path improvement (thin walking trail)
 }
 
-func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.ZERO) -> void:
+func _handle_bulldozer_click(grid_pos: Vector2i, _mouse_world: Vector2 = Vector2.ZERO) -> void:
 	"""Handle bulldozer removal at a single tile. Supports both single-click and drag.
 
 	The Bulldozer only demolishes Improvements and Buildings — decorations,
@@ -2294,7 +2296,7 @@ func _calculate_decoration_operating_costs() -> int:
 			total += dec.daily_upkeep
 	return total
 
-func _on_end_of_day(day_number: int) -> void:
+func _on_end_of_day(_day_number: int) -> void:
 	"""Handle the bookkeeping for the day that just finished.
 	The course never closes: days roll over silently and the game keeps
 	running. The interruption-style summary now appears only at the end of

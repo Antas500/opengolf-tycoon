@@ -109,17 +109,17 @@ func _draw() -> void:
 	_draw_text(caption, CAPTION_FONT_SIZE, -CAPTION_LIFT, _caption_color())
 	_draw_text(LABEL_TEXT, LABEL_FONT_SIZE, LABEL_DROP, _label_color())
 
-## Draw `text` centred on the diamond, `y_offset` above (negative) or below
+## Draw `label_text` centred on the diamond, `y_offset` above (negative) or below
 ## (positive) its middle.
-func _draw_text(text: String, font_size: int, y_offset: float, color: Color) -> void:
+func _draw_text(label_text: String, font_size: int, y_offset: float, color: Color) -> void:
 	var font := get_theme_font("font")
-	if font == null or text.is_empty():
+	if font == null or label_text.is_empty():
 		return
 	var center := size * 0.5 + Vector2(0.0, y_offset)
-	var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var text_size := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	# draw_string() places the text's baseline, so centre the line on the diamond.
 	var baseline := center.y + (font.get_ascent(font_size) - font.get_descent(font_size)) * 0.5
-	draw_string(font, Vector2(center.x - text_size.x * 0.5, baseline), text,
+	draw_string(font, Vector2(center.x - text_size.x * 0.5, baseline), label_text,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 func _face_color() -> Color:

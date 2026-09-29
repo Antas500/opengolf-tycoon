@@ -45,14 +45,14 @@ func _init() -> void:
 	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-## Unit vector the needle points along for `orientation`: N up, E right, S down,
+## Unit vector the needle points along for `view_orientation`: N up, E right, S down,
 ## W left. Screen angles grow clockwise, so each step is a quarter turn right.
-static func needle_direction(orientation: int) -> Vector2:
-	return Vector2.UP.rotated(float(wrapi(orientation, 0, ORIENTATION_COUNT)) * TAU / float(ORIENTATION_COUNT))
+static func needle_direction(view_orientation: int) -> Vector2:
+	return Vector2.UP.rotated(float(wrapi(view_orientation, 0, ORIENTATION_COUNT)) * TAU / float(ORIENTATION_COUNT))
 
 ## Where the needle's tip lands, relative to the centre of the control.
-static func needle_tip(orientation: int, length: float = NEEDLE_LENGTH) -> Vector2:
-	return needle_direction(orientation) * length
+static func needle_tip(view_orientation: int, length: float = NEEDLE_LENGTH) -> Vector2:
+	return needle_direction(view_orientation) * length
 
 func _draw() -> void:
 	var center := size * 0.5

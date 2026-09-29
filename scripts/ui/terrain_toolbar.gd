@@ -1309,11 +1309,11 @@ func _update_elevation_brush_group() -> void:
 
 func _update_elevation_brush_label() -> void:
 	var sizes: Array = _elevation_brush_sizes()
-	var size: int = _elevation_brush_size()
-	if not sizes.is_empty() and not (size in sizes):
-		size = sizes.min() if size < sizes.min() else sizes.max()
-		_elevation_size = size
-	var text := "%dx%d" % [size, size]
+	var brush_size: int = _elevation_brush_size()
+	if not sizes.is_empty() and not (brush_size in sizes):
+		brush_size = sizes.min() if brush_size < sizes.min() else sizes.max()
+		_elevation_size = brush_size
+	var text := "%dx%d" % [brush_size, brush_size]
 	for label in _elevation_brush_labels:
 		if is_instance_valid(label):
 			label.text = text
