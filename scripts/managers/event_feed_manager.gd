@@ -38,8 +38,7 @@ enum NavigateType {
 
 ## Single event entry in the feed
 class EventEntry:
-	var timestamp_day: int = 0
-	var timestamp_hour: float = 0.0
+	var timestamp_day: int = 0  # Game day (see GameCalendar for date formatting)
 	var category: int = Category.GOLFERS
 	var priority: int = Priority.NORMAL
 	var message: String = ""
@@ -58,7 +57,7 @@ const CATEGORY_DATA: Dictionary = {
 	Category.TOURNAMENT: {"name": "Tournament", "icon": "!", "color_key": "purple"},
 	Category.MILESTONE: {"name": "Milestone", "icon": "+", "color_key": "orange"},
 	Category.COURSE: {"name": "Course", "icon": "=", "color_key": "warning"},
-	Category.DAILY: {"name": "Daily", "icon": ">", "color_key": "text_dim"},
+	Category.DAILY: {"name": "Period", "icon": ">", "color_key": "text_dim"},
 }
 
 signal event_added(entry: EventEntry)
@@ -77,9 +76,9 @@ var _ff_records_set: int = 0
 var _ff_revenue: int = 0
 var _ff_was_fast: bool = false  # True if we were at FAST or ULTRA speed
 
-## Batching: track recent NORMAL events per category per game-hour for dedup at ULTRA
-var _batch_counts: Dictionary = {}  # category -> count this game-hour
-var _batch_hour: float = -1.0  # Game hour of the current batch window
+## Batching: track recent NORMAL events per category per game-day for dedup at ULTRA
+var _batch_counts: Dictionary = {}  # category -> count this game-day
+var _batch_day: int = -1  # Game day of the current batch window
 var _is_loading: bool = false  # Suppress events during save file loading
 
 func _ready() -> void:
@@ -126,8 +125,9 @@ func _connect_signals() -> void:
 	EventBus.hole_deleted.connect(_on_hole_deleted)
 	EventBus.building_placed.connect(_on_building_placed)
 
-	# Day cycle
+	# Day cycle — the year rollover now carries the feed's period digest
 	EventBus.end_of_day.connect(_on_end_of_day)
+	EventBus.year_ended.connect(_on_year_ended)
 
 	# Game state
 	EventBus.new_game_started.connect(_on_new_game_started)
@@ -144,15 +144,14 @@ func add_event(category: int, priority: int, message: String,
 	# Track fast-forward stats for summary
 	_track_ff_stats(category, priority)
 
-	# At ULTRA speed, batch NORMAL events of the same category within the same hour
+	# At ULTRA speed, batch NORMAL events of the same category within the same day
 	if GameManager.current_speed == GameManager.GameSpeed.ULTRA and priority == Priority.NORMAL:
-		var current_hour = floorf(GameManager.current_hour)
-		if current_hour != _batch_hour:
+		if GameManager.current_day != _batch_day:
 			_batch_counts.clear()
-			_batch_hour = current_hour
+			_batch_day = GameManager.current_day
 		var count = _batch_counts.get(category, 0) + 1
 		_batch_counts[category] = count
-		# If >3 events of same category in same hour, consolidate
+		# If >3 events of same category in same day, consolidate
 		if count > 3:
 			# Still add to feed but don't emit event_added (suppresses toast)
 			return _add_entry_silent(category, priority, message, navigate_type, navigate_value)
@@ -185,7 +184,6 @@ func _create_entry(category: int, priority: int, message: String,
 		navigate_type: int, navigate_value: Variant) -> EventEntry:
 	var entry = EventEntry.new()
 	entry.timestamp_day = GameManager.current_day
-	entry.timestamp_hour = GameManager.current_hour
 	entry.category = category
 	entry.priority = priority
 	entry.message = message
@@ -373,12 +371,24 @@ func _on_building_placed(building_type: String, position: Vector2i) -> void:
 		NavigateType.POSITION, position)
 
 func _on_end_of_day(day_number: int) -> void:
-	# Generate daily summary
-	var stats = GameManager.daily_stats
+	# A silent monthly date header keeps the feed anchored on the calendar
+	# without flooding it — the period digest now arrives with the year summary.
+	if GameCalendar.is_last_day_of_year(day_number):
+		return  # The year digest below covers the rollover
+	if GameCalendar.get_month(day_number) != GameCalendar.get_month(day_number + 1):
+		add_event(Category.DAILY, Priority.INFO, GameCalendar.format_month(day_number + 1))
+
+func _on_year_ended(finished_year: int) -> void:
+	# Year digest — the feed's period summary (replaces the old daily digest).
+	var stats: GameManager.DailyStatistics = GameManager.previous_year_stats
+	if stats == null:
+		return
 	var revenue = stats.get_total_revenue()
 	var profit = stats.get_profit()
 	var golfers = stats.golfers_served
-	var satisfaction = FeedbackManager.get_satisfaction_rating() * 100.0
+	var satisfaction = 0.0
+	if GameManager.previous_year_satisfaction >= 0.0:
+		satisfaction = GameManager.previous_year_satisfaction * 100.0
 
 	var notable_parts: Array = []
 	if stats.holes_in_one > 0:
@@ -386,8 +396,8 @@ func _on_end_of_day(day_number: int) -> void:
 	if stats.eagles > 0:
 		notable_parts.append("%d eagle%s" % [stats.eagles, "s" if stats.eagles > 1 else ""])
 
-	var msg = "Day %d: %d golfers, $%s revenue, $%s profit, %.0f%% satisfaction" % [
-		day_number, golfers, _format_money(revenue), _format_money(profit), satisfaction
+	var msg = "%d: %d golfers, $%s revenue, $%s profit, %.0f%% satisfaction" % [
+		finished_year, golfers, _format_money(revenue), _format_money(profit), satisfaction
 	]
 	if not notable_parts.is_empty():
 		msg += " | " + ", ".join(notable_parts)
@@ -443,7 +453,7 @@ func _on_game_speed_changed(new_speed: int) -> void:
 			var revenue_change = GameManager.money - _ff_revenue
 			var parts: Array = []
 			if days_elapsed > 0:
-				parts.append("Day %d-%d" % [_ff_start_day, GameManager.current_day])
+				parts.append("%s → %s" % [GameCalendar.format_date_short(_ff_start_day), GameCalendar.format_date_short(GameManager.current_day)])
 			if _ff_rounds_completed > 0:
 				parts.append("%d rounds" % _ff_rounds_completed)
 			if _ff_records_set > 0:

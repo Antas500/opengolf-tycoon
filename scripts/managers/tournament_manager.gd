@@ -2,13 +2,14 @@ extends Node
 class_name TournamentManager
 ## TournamentManager - Handles tournament scheduling, execution, and rewards.
 ##
-## Supports multi-round tournaments with cut lines:
-## - LOCAL: 1 round, 1 day
-## - REGIONAL: 2 rounds, 2 days
-## - NATIONAL: 4 rounds, 3 days (rounds 3-4 on day 3)
-## - CHAMPIONSHIP: 4 rounds, 4 days
+## Supports multi-round tournaments with cut lines. Each round plays out over
+## one 45-day "phase" on the fast calendar (a day now lasts 3.5 seconds):
+## - LOCAL: 1 round, 45 days
+## - REGIONAL: 2 rounds, 90 days
+## - NATIONAL: 4 rounds, 135 days (rounds 3-4 share the final phase)
+## - CHAMPIONSHIP: 4 rounds, 180 days
 ##
-## Round 1 uses live golfer nodes on-course. Subsequent rounds and End Day
+## Round 1 uses live golfer nodes on-course. Subsequent rounds and end-of-phase
 ## fast-forward use TournamentSimulator for shot-by-shot headless simulation.
 
 signal tournament_scheduled(tier: int, start_day: int)
@@ -21,8 +22,11 @@ var tournament_start_day: int = 0
 var tournament_end_day: int = 0
 var tournament_results: Dictionary = {}
 
-# Cooldown between tournaments (days)
-const TOURNAMENT_COOLDOWN: int = 7
+# Cooldown between tournaments (days on the fast calendar)
+const TOURNAMENT_COOLDOWN: int = 45
+## Length of one tournament phase: a round spans this many 3.5-second days so
+## live golfers get several real minutes of play per round.
+const TOURNAMENT_PHASE_DAYS: int = 45
 var last_tournament_end_day: int = -100
 
 # Multi-round state
@@ -90,11 +94,6 @@ func _process(delta: float) -> void:
 	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
 		return
 
-	# Force-complete current round if past 10 PM
-	if _live_round_active and GameManager.current_hour >= GameManager.COURSE_CLOSE_HOUR + 2.0:
-		_end_current_day_round()
-		return
-
 	# Stagger group spawning for live round
 	if _live_round_active and _groups_spawned < _total_groups:
 		_spawn_timer += delta  # delta already scaled by Engine.time_scale
@@ -111,33 +110,41 @@ func _on_day_changed(new_day: int) -> void:
 	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
 		return
 
-	# Which tournament day is this? (0-based offset from start)
-	var tournament_day = new_day - tournament_start_day
+	# Which tournament phase is this? (each phase spans TOURNAMENT_PHASE_DAYS days)
+	var tournament_day = _phase_for_day(new_day)
 	if tournament_day < 0:
 		return
 
-	# Determine which rounds to play today
+	# Determine which rounds play during this phase
 	var rounds_today = _get_rounds_for_day(tournament_day)
 	if rounds_today.is_empty():
 		return
 
-	# Clear regular golfers for tournament day
+	# Clear regular golfers for the tournament phase
 	if _golfer_manager:
 		_golfer_manager.clear_all_golfers()
 
-	# Play each round scheduled for today
+	# Play each round scheduled for this phase
 	for round_num in rounds_today:
 		if round_num <= current_round:
 			continue  # Already played
 		_play_round(round_num)
 
-func _on_end_of_day(_day: int) -> void:
+func _on_end_of_day(day: int) -> void:
 	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
 		return
 
-	# If live round is active, simulate remaining and advance
-	if _live_round_active:
+	# A round only wraps up when its 45-day phase ends — otherwise live
+	# golfers keep playing through the daily (3.5 s) rollovers.
+	if not _live_round_active:
+		return
+	if _phase_for_day(day + 1) != _phase_for_day(day):
 		_end_current_day_round()
+
+## Which 0-based tournament phase a calendar day falls into (floori so days
+## before the start correctly report -1).
+func _phase_for_day(day: int) -> int:
+	return floori(float(day - tournament_start_day) / float(TOURNAMENT_PHASE_DAYS))
 
 func _on_golfer_finished_hole(golfer_id: int, hole: int, strokes: int, par: int) -> void:
 	if not _live_round_active or golfer_id not in _tournament_golfer_ids:
@@ -215,7 +222,9 @@ func schedule_tournament(tier: int) -> bool:
 	GameManager.daily_stats.tournament_entry_fee += tier_data.entry_cost
 	EventBus.log_transaction("Tournament entry fee (%s)" % tier_data.name, -tier_data.entry_cost)
 
-	var lead_days = 1 if tier == TournamentSystem.TournamentTier.LOCAL else 3
+	# Lead time on the fast calendar: a week for locals, a fortnight for bigger
+	# events (days tick at 3.5 seconds, so this stays a brief setup window).
+	var lead_days = 7 if tier == TournamentSystem.TournamentTier.LOCAL else 14
 
 	current_tournament_tier = tier
 	current_tournament_state = TournamentSystem.TournamentState.SCHEDULED
@@ -506,8 +515,8 @@ func _end_current_day_round() -> void:
 	if current_round >= total_rounds:
 		_complete_tournament()
 	else:
-		# Determine if more rounds play today
-		var tournament_day = GameManager.current_day - tournament_start_day
+		# Determine if more rounds play in this phase
+		var tournament_day = _phase_for_day(GameManager.current_day)
 		var rounds_today = _get_rounds_for_day(tournament_day)
 		for round_num in rounds_today:
 			if round_num > current_round:
@@ -581,8 +590,8 @@ func _check_live_round_completion() -> void:
 		if current_round >= total_rounds:
 			_complete_tournament()
 		else:
-			# Check if more rounds play today
-			var tournament_day = GameManager.current_day - tournament_start_day
+			# Check if more rounds play in this phase
+			var tournament_day = _phase_for_day(GameManager.current_day)
 			var rounds_today = _get_rounds_for_day(tournament_day)
 			for round_num in rounds_today:
 				if round_num > current_round:

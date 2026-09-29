@@ -23,8 +23,11 @@ const HOST_TURF: Array = [
 const WEEDS_PER_HOLE_FULL_PRESSURE: float = 4.0
 ## Absolute ceiling so an abandoned course does not litter every tile.
 const MAX_WEEDS: int = 80
-## Growth gained per day by weeds already on the course.
+## Growth gained per legacy day by weeds already on the course. Scaled down to
+## the 3.5-second day via GameManager.DAILY_RATE_SCALE for real-time parity.
 const DAILY_GROWTH: float = 0.22
+## New clumps sprouting per open hole per legacy day (fractional carry kept).
+const DAILY_SPROUTS_PER_HOLE: float = 0.5
 ## Attempts to find an open turf tile when sprouting. Fails gracefully.
 const SPAWN_ATTEMPTS: int = 80
 
@@ -32,6 +35,8 @@ const SPAWN_ATTEMPTS: int = 80
 var weeds: Dictionary = {}
 ## Vector2i grid tile -> growth 0.0-1.0, kept independently of the visuals.
 var growth: Dictionary = {}
+## Fractional sprout debt so sub-one daily rates are not rounded away.
+var _sprout_carry: float = 0.0
 var terrain_grid: TerrainGrid = null
 var container: Node2D = null
 
@@ -52,16 +57,20 @@ func get_growth(pos: Vector2i) -> float:
 	return float(growth.get(pos, 0.0))
 
 ## Sprout new clumps for the day and let existing ones grow a little taller.
-## Returns how many new clumps appeared.
+## Rates are scaled by GameManager.DAILY_RATE_SCALE so weeds accumulate at the
+## tune the legacy 6 AM–8 PM clock had. Returns how many new clumps appeared.
 func grow_daily(open_holes: int) -> int:
 	if terrain_grid == null:
 		return 0
+	var scaled_growth := DAILY_GROWTH * GameManager.DAILY_RATE_SCALE
 	for pos in growth.keys():
-		var next: float = minf(1.0, float(growth[pos]) + DAILY_GROWTH)
+		var next: float = minf(1.0, float(growth[pos]) + scaled_growth)
 		growth[pos] = next
 		_apply_growth(pos, next)
 
-	var wanted := maxi(1, int(round(open_holes * 0.5)))
+	_sprout_carry += open_holes * DAILY_SPROUTS_PER_HOLE * GameManager.DAILY_RATE_SCALE
+	var wanted := int(floor(_sprout_carry))
+	_sprout_carry -= wanted
 	var sprouted := 0
 	for i in wanted:
 		if growth.size() >= MAX_WEEDS:

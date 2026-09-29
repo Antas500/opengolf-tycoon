@@ -16,14 +16,16 @@ enum WeatherType {
 var weather_type: WeatherType = WeatherType.SUNNY
 var intensity: float = 0.0  # 0.0 = clear, 1.0 = severe
 
-## Weather transition
+## Weather transition (one game day per step — a full transition spans ~2 days)
 var _target_weather: WeatherType = WeatherType.SUNNY
 var _transition_progress: float = 1.0
-const TRANSITION_SPEED: float = 0.5  # How fast weather changes (per hour)
+const TRANSITION_SPEED: float = 0.5  # Transition fraction completed per game day
 
-## Weather persistence (how long current weather tends to last)
-var _hours_in_current_weather: float = 0.0
-var _weather_duration: float = 4.0  # Target hours before potential change
+## Weather persistence: spells last several days on the fast calendar
+var _days_in_current_weather: int = 0
+var _weather_duration_days: int = 5  # Spell length before a possible change
+const MIN_WEATHER_SPELL_DAYS: int = 4
+const MAX_WEATHER_SPELL_DAYS: int = 21
 
 func _ready() -> void:
 	_generate_daily_weather()
@@ -62,33 +64,33 @@ func _generate_daily_weather() -> void:
 
 	_target_weather = weather_type
 	_transition_progress = 1.0
-	_hours_in_current_weather = 0.0
-	_weather_duration = randf_range(3.0, 8.0)
+	_days_in_current_weather = 0
+	_weather_duration_days = randi_range(MIN_WEATHER_SPELL_DAYS, MAX_WEATHER_SPELL_DAYS)
 
 	_emit_weather_changed()
 	print("Weather for today: %s (intensity: %.1f)" % [get_weather_text(), intensity])
 
-## Update weather with hourly changes
-func update_weather(hours_elapsed: float) -> void:
-	_hours_in_current_weather += hours_elapsed
+## Advance the weather by one game day. Called on the day_changed signal:
+## weather now evolves daily since there is no intra-day clock.
+func update_weather_daily() -> void:
+	_days_in_current_weather += 1
 
-	# Check if weather should change
-	if _hours_in_current_weather >= _weather_duration:
+	# Once the current spell has run its course, weather may move on
+	if _days_in_current_weather >= _weather_duration_days:
 		_maybe_change_weather()
 
 	# Handle weather transitions
 	if _transition_progress < 1.0:
-		_transition_progress = minf(_transition_progress + TRANSITION_SPEED * hours_elapsed, 1.0)
+		_transition_progress = minf(_transition_progress + TRANSITION_SPEED, 1.0)
 		_update_intensity_for_transition()
 		_emit_weather_changed()
 
 func _maybe_change_weather() -> void:
 	# Weather tends to move in patterns (sunny -> cloudy -> rain -> clearing)
-	var change_chance = 0.3  # 30% chance per check
+	var change_chance = 0.55  # Chance to move on once a spell ends
 	if randf() > change_chance:
-		# Reset duration but keep current weather
-		_weather_duration = randf_range(2.0, 6.0)
-		_hours_in_current_weather = 0.0
+		# Extend the spell and keep current weather
+		_weather_duration_days = _days_in_current_weather + randi_range(3, 9)
 		return
 
 	# Determine new weather based on current
@@ -96,8 +98,8 @@ func _maybe_change_weather() -> void:
 	if new_weather != weather_type:
 		_target_weather = new_weather
 		_transition_progress = 0.0
-		_hours_in_current_weather = 0.0
-		_weather_duration = randf_range(2.0, 6.0)
+		_days_in_current_weather = 0
+		_weather_duration_days = randi_range(MIN_WEATHER_SPELL_DAYS, MAX_WEATHER_SPELL_DAYS)
 
 func _get_next_weather() -> WeatherType:
 	# Weather tends to follow patterns
@@ -274,7 +276,7 @@ func get_weather_icon() -> String:
 	return "?"
 
 func _on_day_changed(_new_day: int) -> void:
-	_generate_daily_weather()
+	update_weather_daily()
 
 func _emit_weather_changed() -> void:
 	EventBus.weather_changed.emit(weather_type, intensity)

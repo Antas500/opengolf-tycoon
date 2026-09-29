@@ -176,7 +176,7 @@ func append_event(entry: EventFeedManager.EventEntry) -> void:
 
 func _add_day_header(day: int) -> void:
 	var header = Label.new()
-	header.text = "--- Day %d ---" % day
+	header.text = "--- %s ---" % GameCalendar.format_date_short(day)
 	header.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	header.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -211,15 +211,10 @@ func _add_event_entry(entry: EventFeedManager.EventEntry) -> void:
 	top_line.add_theme_constant_override("separation", 6)
 	vbox.add_child(top_line)
 
-	# Timestamp
+	# Timestamp — a weekday+day-of-month marker (there is no intra-day clock)
 	var time_label = Label.new()
-	var hour_int = int(entry.timestamp_hour)
-	var minute_int = int((entry.timestamp_hour - hour_int) * 60)
-	var am_pm = "AM" if hour_int < 12 else "PM"
-	var display_hour = hour_int % 12
-	if display_hour == 0:
-		display_hour = 12
-	time_label.text = "%d:%02d%s" % [display_hour, minute_int, am_pm]
+	var date := GameCalendar.get_date(entry.timestamp_day)
+	time_label.text = "%s %d" % [GameCalendar.WEEKDAY_NAMES_SHORT[int(date.weekday)], int(date.day)]
 	time_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	time_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	time_label.custom_minimum_size = Vector2(52, 0)

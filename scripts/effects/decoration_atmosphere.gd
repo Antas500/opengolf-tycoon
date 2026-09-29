@@ -43,7 +43,8 @@ func _draw_fountain(phase: float) -> void:
 
 func _draw_bird_bath(phase: float) -> void:
 	var weather := GameManager.weather_system
-	if GameManager.current_hour >= 18.0 or (is_instance_valid(weather) and weather.is_raining()):
+	# Only rain keeps the birds from the bird bath now.
+	if is_instance_valid(weather) and weather.is_raining():
 		return
 	var visit := fposmod(phase, 16.0)
 	if visit > 8.0:

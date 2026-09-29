@@ -77,7 +77,8 @@ func _build_ui() -> void:
 	var total_hio = GameManager.course_records.get("total_hole_in_ones", 0)
 	var best_round = GameManager.course_records.get("lowest_round")
 
-	_add_stat_row(vbox, "Days Survived", str(days))
+	var years := GameCalendar.get_year(days) - GameCalendar.START_YEAR + 1
+	_add_stat_row(vbox, "Days Survived", "%d (%d year%s)" % [days, years, "s" if years != 1 else ""])
 	_add_stat_row(vbox, "Holes Built", str(holes))
 	_add_stat_row(vbox, "Best Course Rating", "%d star%s" % [rating, "s" if rating != 1 else ""])
 
@@ -88,8 +89,7 @@ func _build_ui() -> void:
 		_add_stat_row(vbox, "Course Record", "%d strokes by %s" % [best_round.value, best_round.golfer_name])
 
 	var season_name = SeasonSystem.get_season_name(SeasonSystem.get_season(days))
-	var year = SeasonSystem.get_year(days)
-	_add_stat_row(vbox, "Final Season", "%s, Year %d" % [season_name, year])
+	_add_stat_row(vbox, "Final Date", "%s (%s)" % [GameCalendar.format_date_short(days), season_name])
 
 	vbox.add_child(HSeparator.new())
 

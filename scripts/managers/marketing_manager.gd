@@ -13,39 +13,41 @@ enum Channel {
 	TOURNAMENT_PROMO # Very expensive, big spike
 }
 
+## Campaigns run for calendar spans on the fast clock (a day = 3.5 s), so
+## durations are stretched to keep the total spend in the same ballpark.
 const CHANNEL_DATA = {
 	Channel.LOCAL_ADS: {
 		"name": "Local Newspaper Ads",
-		"daily_cost": 50,
-		"duration_days": 5,
+		"daily_cost": 8,
+		"duration_days": 30,
 		"spawn_rate_bonus": 0.15,  # +15% spawn rate
 		"description": "Affordable local advertising in community newspapers",
 	},
 	Channel.SOCIAL_MEDIA: {
 		"name": "Social Media Campaign",
-		"daily_cost": 80,
-		"duration_days": 7,
+		"daily_cost": 9,
+		"duration_days": 60,
 		"spawn_rate_bonus": 0.20,
 		"description": "Targeted online ads reaching younger golfers",
 	},
 	Channel.GOLF_MAGAZINE: {
 		"name": "Golf Magazine Feature",
-		"daily_cost": 150,
-		"duration_days": 10,
+		"daily_cost": 17,
+		"duration_days": 90,
 		"spawn_rate_bonus": 0.30,
 		"description": "Premium magazine placement for serious golf enthusiasts",
 	},
 	Channel.RADIO: {
 		"name": "Radio Advertising",
-		"daily_cost": 100,
-		"duration_days": 7,
+		"daily_cost": 12,
+		"duration_days": 60,
 		"spawn_rate_bonus": 0.25,
 		"description": "Broad-reach radio spots during drive time",
 	},
 	Channel.TOURNAMENT_PROMO: {
 		"name": "Tournament Promotion",
-		"daily_cost": 250,
-		"duration_days": 3,
+		"daily_cost": 25,
+		"duration_days": 30,
 		"spawn_rate_bonus": 0.50,
 		"description": "Intensive promotion around tournament events",
 	},
@@ -74,7 +76,7 @@ func start_campaign(channel: int) -> bool:
 			EventBus.notify("Already running %s - stacking has diminishing returns" % data.name, "info")
 			break
 
-	var setup_cost = data.daily_cost * 2  # Upfront setup fee
+	var setup_cost = data.daily_cost * 5  # Upfront setup fee
 	if not GameManager.can_afford(setup_cost):
 		EventBus.notify("Not enough money! Setup cost: $%d" % setup_cost, "error")
 		return false

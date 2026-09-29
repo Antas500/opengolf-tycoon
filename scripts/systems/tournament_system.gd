@@ -33,7 +33,7 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 1000,      # Course pays out
 		"participant_count": 12,
 		"reputation_reward": 15,
-		"duration_days": 1,
+		"duration_days": 45,
 		"spectator_revenue": 800,       # Gate/concession revenue from spectators
 		"sponsorship_revenue": 500,     # Local sponsor deals
 	},
@@ -47,7 +47,7 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 5000,
 		"participant_count": 24,
 		"reputation_reward": 40,
-		"duration_days": 2,
+		"duration_days": 90,
 		"spectator_revenue": 4000,      # Regional media attention
 		"sponsorship_revenue": 3000,    # Regional sponsor packages
 	},
@@ -61,7 +61,7 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 25000,
 		"participant_count": 48,
 		"reputation_reward": 100,
-		"duration_days": 3,
+		"duration_days": 135,
 		"spectator_revenue": 20000,     # National TV coverage
 		"sponsorship_revenue": 15000,   # Major sponsor deals
 	},
@@ -75,7 +75,7 @@ const TIER_DATA: Dictionary = {
 		"prize_pool": 100000,
 		"participant_count": 72,
 		"reputation_reward": 300,
-		"duration_days": 4,
+		"duration_days": 180,
 		"spectator_revenue": 80000,     # Massive crowds + TV rights
 		"sponsorship_revenue": 60000,   # Premium global sponsors
 	},

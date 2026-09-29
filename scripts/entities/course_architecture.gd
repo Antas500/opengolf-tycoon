@@ -18,7 +18,11 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 func _draw() -> void:
-	draw_building(self, kind, footprint, level, clock, GameManager.current_hour)
+	# Window lights and warm glows track gloomy weather now that the course
+	# never closes: windows light up under clouds and rain.
+	var gloomy: bool = GameManager.weather_system != null \
+		and GameManager.weather_system.weather_type >= WeatherSystem.WeatherType.CLOUDY
+	draw_building(self, kind, footprint, level, clock, gloomy)
 
 static func body_width(kind_name: String, size: Vector2, tier: int) -> float:
 	if kind_name == "clubhouse":
@@ -136,17 +140,17 @@ static func house(c: CanvasItem, x: float, base: float, w: float, tall: float, d
 	line(c,left,right,"654f3c",3)
 	line(c,left+Vector2(0,2),right+Vector2(0,2),"f0dfb9",2)
 
-static func draw_building(c: CanvasItem, kind_name: String, size: Vector2, tier := 1, time := 0.0, hour := 10.0) -> void:
+static func draw_building(c: CanvasItem, kind_name: String, size: Vector2, tier := 1, time := 0.0, gloomy := false) -> void:
 	if kind_name == "bench":
 		c.draw_set_transform(Vector2(size.x*.5,size.y*.7))
 		PathFurniture.draw_item(c,"park_bench",Vector2i.DOWN)
 		c.draw_set_transform(Vector2.ZERO)
 		return
 	if kind_name in ["coffee_house", "halfway_house", "tea_pavilion", "ice_cream_kiosk", "locker_room", "garden_spa", "conservatory", "golf_academy"]:
-		draw_garden_facility(c, kind_name, size, hour)
+		draw_garden_facility(c, kind_name, size, gloomy)
 		return
 	var club := kind_name == "clubhouse"
-	var night := hour >= 17 or hour < 6
+	var night := gloomy
 	var w := body_width(kind_name,size,tier)
 	var x := (size.x-w)*.5
 	var base := size.y-25 if club or kind_name == "restaurant" else size.y-15
@@ -169,10 +173,10 @@ static func draw_building(c: CanvasItem, kind_name: String, size: Vector2, tier 
 		for j in range(3):
 			line(c,chimney+Vector2(0,-11+j*5),chimney+Vector2(8,-11+j*5),"c09771")
 		rect(c,chimney.x-2,chimney.y-17,13,3,"d0b68d")
-		if hour >= 6 and hour < 20:
-			for j in range(3):
-				var t := fmod(time*.22+j/3.0,1.0)
-				c.draw_circle(chimney+Vector2(4+sin(t*3)*5,-20-t*22),2+t*3,Color(.91,.9,.81,(1-t)*.28))
+		# Chimney smoke drifts whenever the course is open — which is always.
+		for j in range(3):
+			var t := fmod(time*.22+j/3.0,1.0)
+			c.draw_circle(chimney+Vector2(4+sin(t*3)*5,-20-t*22),2+t*3,Color(.91,.9,.81,(1-t)*.28))
 		# Recessed porch floor and shadow make the rail sit in front of the wall.
 		rect(c,x+7,base-16,w-13,17,"b8b08c")
 		rect(c,x+w*.5-10,base-16,20,16,"f0dfb9")
@@ -376,11 +380,11 @@ static func facility_details(c: CanvasItem, type: String, x: float, base: float,
 				line(c,Vector2(cx+side*6,eaves+1),Vector2(cx+side*21,eaves+1),"bdad70")
 			c.draw_circle(Vector2(cx,eaves+1),3,Color("eee4bf"))
 
-static func draw_garden_facility(c: CanvasItem, type: String, size: Vector2, hour: float) -> void:
+static func draw_garden_facility(c: CanvasItem, type: String, size: Vector2, gloomy: bool) -> void:
 	var x := 16.0
 	var w := size.x - 32
 	var base := size.y - 12
-	var night := hour >= 17 or hour < 6
+	var night := gloomy
 	poly(c,[Vector2(4,base-28),Vector2(size.x-12,base-28),Vector2(size.x,base+10),Vector2(16,base+10)],"d9c7a2")
 	for i in range(16,int(size.x)-6,14):
 		line(c,Vector2(i,base-24),Vector2(i+9,base+8),"baa989")

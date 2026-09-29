@@ -40,15 +40,15 @@ static func get_all_milestones() -> Array:
 
 		# Economy milestones
 		Milestone.new("first_profit", "In the Black", "Finish a day with positive profit", Category.ECONOMY, 0, 2.0),
-		Milestone.new("earn_10k", "Making Money", "Accumulate $10,000 total revenue in a day", Category.ECONOMY, 1000, 3.0),
-		Milestone.new("earn_50k", "Big Business", "Accumulate $50,000 total revenue in a day", Category.ECONOMY, 5000, 5.0),
-		Milestone.new("survive_30_days", "One Month", "Survive 30 days", Category.ECONOMY, 3000, 5.0),
-		Milestone.new("survive_100_days", "Seasoned Operator", "Survive 100 days", Category.ECONOMY, 10000, 10.0),
+		Milestone.new("earn_10k", "Making Money", "Accumulate $10,000 total revenue in a year", Category.ECONOMY, 1000, 3.0),
+		Milestone.new("earn_50k", "Big Business", "Accumulate $50,000 total revenue in a year", Category.ECONOMY, 5000, 5.0),
+		Milestone.new("survive_30_days", "One-Year Milestone", "Keep the course running for a full year (365 days)", Category.ECONOMY, 3000, 5.0),
+		Milestone.new("survive_100_days", "Seasoned Operator", "Keep the course running for five years (1,825 days)", Category.ECONOMY, 10000, 10.0),
 		Milestone.new("no_debt", "Debt Free", "Reach $100,000 with no loans", Category.ECONOMY, 0, 5.0),
 
 		# Golfer milestones
 		Milestone.new("first_golfer", "Open for Business", "Have your first golfer play a round", Category.GOLFERS, 0, 1.0),
-		Milestone.new("serve_50", "Getting Popular", "Serve 50 golfers in a single day", Category.GOLFERS, 2000, 5.0),
+		Milestone.new("serve_50", "Getting Popular", "Serve 50 golfers in a single year", Category.GOLFERS, 2000, 5.0),
 		Milestone.new("pro_visit", "Pro Tour Stop", "Attract a Pro-tier golfer", Category.GOLFERS, 3000, 8.0),
 		Milestone.new("full_house", "Tee Time Rush", "Have maximum concurrent golfers on course", Category.GOLFERS, 1000, 3.0),
 

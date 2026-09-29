@@ -65,9 +65,9 @@ func _refresh_display() -> void:
 	status_box.add_theme_constant_override("separation", 4)
 
 	var date_label = Label.new()
-	date_label.text = "%s, Year %d (Day %d of %d)" % [
+	date_label.text = "%s, %d (Day %d of %d)" % [
 		SeasonSystem.get_season_name(season), year,
-		day_in_season, SeasonSystem.DAYS_PER_SEASON
+		day_in_season, SeasonSystem.get_season_length(day)
 	]
 	date_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_MD)
 	date_label.add_theme_color_override("font_color", SeasonSystem.get_season_color(season))
@@ -159,15 +159,15 @@ func _refresh_display() -> void:
 	# Full year calendar
 	_content.add_child(HSeparator.new())
 	var cal_header = Label.new()
-	cal_header.text = "Year Overview (28-day year)"
+	cal_header.text = "Year Overview (12 calendar months)"
 	cal_header.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
 	cal_header.add_theme_color_override("font_color", UIConstants.COLOR_INFO)
 	_content.add_child(cal_header)
 
 	for s in range(4):
-		_add_season_row(_content, s, season, day_in_season)
+		_add_season_row(_content, s, season, GameCalendar.get_month(day))
 
-func _add_season_row(parent: VBoxContainer, s: int, current_season: int, current_day_in_season: int) -> void:
+func _add_season_row(parent: VBoxContainer, s: int, current_season: int, current_month: int) -> void:
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 
@@ -178,28 +178,29 @@ func _add_season_row(parent: VBoxContainer, s: int, current_season: int, current
 	name_label.custom_minimum_size = Vector2(60, 0)
 	row.add_child(name_label)
 
-	# Day indicators
-	for d in range(1, SeasonSystem.DAYS_PER_SEASON + 1):
-		var day_box = ColorRect.new()
-		day_box.custom_minimum_size = Vector2(14, 14)
+	# One box per month of this season, in calendar order
+	var months: Array[int]
+	match s:
+		SeasonSystem.Season.SPRING: months = [3, 4, 5]
+		SeasonSystem.Season.SUMMER: months = [6, 7, 8]
+		SeasonSystem.Season.FALL: months = [9, 10, 11]
+		_: months = [12, 1, 2]
 
-		if s == current_season and d == current_day_in_season:
-			day_box.color = Color.WHITE
-		elif s < current_season or (s == current_season and d < current_day_in_season):
-			day_box.color = SeasonSystem.get_season_color(s).darkened(0.6)
+	for m in months:
+		var month_box = ColorRect.new()
+		month_box.custom_minimum_size = Vector2(34, 14)
+
+		if s == current_season and m == current_month:
+			month_box.color = Color.WHITE
+		elif s < current_season or (s == current_season and m < current_month):
+			month_box.color = SeasonSystem.get_season_color(s).darkened(0.6)
 		else:
-			day_box.color = SeasonSystem.get_season_color(s).darkened(0.3)
-
-		# Check for event on this day
-		var has_event = false
-		for event in SeasonalEvents.get_season_events(s):
-			if d >= event.day_in_season and d < event.day_in_season + event.duration_days:
-				has_event = true
-				break
-		if has_event:
-			day_box.color = day_box.color.lightened(0.3)
-
-		row.add_child(day_box)
+			month_box.color = SeasonSystem.get_season_color(s).darkened(0.3)
+		var label = Label.new()
+		label.text = GameCalendar.MONTH_NAMES_SHORT[m - 1]
+		label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+		month_box.add_child(label)
+		row.add_child(month_box)
 
 	# Spawn modifier (theme-aware)
 	var spawn = SeasonSystem.get_spawn_modifier(s, GameManager.current_theme)

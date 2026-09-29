@@ -6,9 +6,8 @@ class_name WindSystem
 var wind_direction: float = 0.0  # Radians (0 = North/up, PI/2 = East)
 var wind_speed: float = 5.0      # MPH (0-30)
 
-## Wind drift per hour
-var _base_direction: float = 0.0
-var _drift_rate: float = 0.0
+## Chance that a day brings a full wind reshuffle (weather front passing)
+const DAILY_RESHUFFLE_CHANCE: float = 0.08
 
 ## Club sensitivity to wind — delegated to GolfRules for single source of truth
 
@@ -20,23 +19,26 @@ func _exit_tree() -> void:
 	if EventBus.day_changed.is_connected(_on_day_changed):
 		EventBus.day_changed.disconnect(_on_day_changed)
 
-## Public method to generate new daily wind (called by GameManager on day advance)
+## Public method to generate fresh wind conditions (used by debug tools)
 func generate_daily_wind() -> void:
 	_generate_new_wind()
 
-## Generate new wind conditions (called at start and each new day)
+## Generate new wind conditions (full reshuffle, e.g. a weather front passing)
 func _generate_new_wind() -> void:
-	_base_direction = randf() * TAU
-	wind_direction = _base_direction
+	wind_direction = randf() * TAU
 	wind_speed = randf_range(2.0, 20.0)
-	_drift_rate = randf_range(-0.3, 0.3)  # How much direction drifts per hour
 	_emit_wind_changed()
 
-## Update wind with hourly drift
-func update_wind_drift(hours_elapsed: float) -> void:
-	wind_direction = _base_direction + _drift_rate * hours_elapsed
+## Advance the wind by one game day: mostly a small random walk around the
+## current direction, with a rare full reshuffle when conditions change.
+func update_wind_daily() -> void:
+	if randf() < DAILY_RESHUFFLE_CHANCE:
+		_generate_new_wind()
+		return
+	# Drift the direction slightly day-to-day
+	wind_direction = fposmod(wind_direction + randf_range(-0.35, 0.35), TAU)
 	# Slight speed variation
-	wind_speed = clampf(wind_speed + randf_range(-0.5, 0.5), 0.0, 30.0)
+	wind_speed = clampf(wind_speed + randf_range(-1.5, 1.5), 0.0, 30.0)
 	_emit_wind_changed()
 
 ## Get wind displacement for a shot (in tiles)
@@ -112,7 +114,7 @@ func get_strength_text() -> String:
 		return "Very Strong"
 
 func _on_day_changed(_new_day: int) -> void:
-	_generate_new_wind()
+	update_wind_daily()
 
 func _emit_wind_changed() -> void:
 	EventBus.wind_changed.emit(wind_direction, wind_speed)

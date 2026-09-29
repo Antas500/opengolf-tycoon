@@ -50,7 +50,7 @@ func test_camera_pans_with_keyboard_while_menu_paused() -> void:
 	assert_eq(Engine.time_scale, 0.0, "precondition: engine must be frozen")
 
 	_camera = await _spawn_camera(Vector2(2000, 1000))
-	var hour_before := GameManager.current_hour
+	var day_before := GameManager.current_day
 
 	_press_key(KEY_D)  # pan right
 	await _await_real_seconds(0.5)
@@ -59,7 +59,7 @@ func test_camera_pans_with_keyboard_while_menu_paused() -> void:
 	var dx := _camera.global_position.x - 2000.0
 	assert_gt(dx, 100.0, "camera should pan right while the game is paused (dx=%.1f)" % dx)
 	assert_eq(_camera.global_position.y, 1000.0, "horizontal panning must not move the camera vertically")
-	assert_eq(GameManager.current_hour, hour_before, "simulation clock must stay frozen while the camera moves")
+	assert_eq(GameManager.current_day, day_before, "simulation clock must stay frozen while the camera moves")
 
 func test_camera_pans_with_keyboard_while_speed_paused() -> void:
 	GameManager.set_mode(GameManager.GameMode.SIMULATING)

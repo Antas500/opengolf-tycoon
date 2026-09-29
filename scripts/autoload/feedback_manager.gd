@@ -170,7 +170,7 @@ func record_incident(golfer, trigger: int) -> void:
 	for item in incidents:
 		if item.golfer_id == golfer.golfer_id and item.hole == hole and item.trigger == trigger: return
 	var position: Vector2i = GameManager.terrain_grid.screen_to_grid(golfer.global_position) if GameManager.terrain_grid else Vector2i.ZERO
-	incidents.append({"golfer_id":golfer.golfer_id,"name":golfer.golfer_name,"hole":hole,"trigger":trigger,"x":position.x,"y":position.y,"hour":GameManager.current_hour,"needs":golfer.needs.to_dict()})
+	incidents.append({"golfer_id":golfer.golfer_id,"name":golfer.golfer_name,"hole":hole,"trigger":trigger,"x":position.x,"y":position.y,"day":GameManager.current_day,"needs":golfer.needs.to_dict()})
 	if incidents.size() > 500: incidents.pop_front()
 
 func incident_title(trigger: int) -> String:

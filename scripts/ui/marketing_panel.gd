@@ -105,7 +105,7 @@ func _build_ui() -> void:
 
 func _add_campaign_button(parent: VBoxContainer, channel: int) -> void:
 	var data = MarketingManager.CHANNEL_DATA.get(channel, {})
-	var setup_cost = data.get("daily_cost", 50) * 2
+	var setup_cost = data.get("daily_cost", 50) * 5
 	var daily_cost = data.get("daily_cost", 50)
 	var duration = data.get("duration_days", 5)
 	var bonus = int(data.get("spawn_rate_bonus", 0.15) * 100)

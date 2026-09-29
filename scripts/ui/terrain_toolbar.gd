@@ -1557,19 +1557,20 @@ func _make_round_row(round_data: Dictionary) -> Control:
 	var diff: int = int(round_data.get("strokes", 0)) - int(round_data.get("par", 0))
 	var label = Label.new()
 	label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
-	label.text = "%s%s: %d (%s%d) · D%d" % [
+	var round_day: int = int(round_data.get("day", 1))
+	label.text = "%s%s: %d (%s%d) · %s" % [
 		"★ " if round_data.get("owner", false) else "",
 		round_data.get("name", "Golfer"),
 		round_data.get("strokes", 0),
 		"+" if diff > 0 else "",
 		diff,
-		round_data.get("day", 1),
+		GameCalendar.format_date_short(round_day),
 	]
 	label.add_theme_color_override("font_color", UIConstants.get_score_color(diff))
-	label.tooltip_text = "%s's round (%s) on Day %d: %d strokes (%+d)" % [
+	label.tooltip_text = "%s's round (%s) on %s: %d strokes (%+d)" % [
 		round_data.get("name", "Golfer"),
 		GolferTier.get_tier_name(round_data.get("tier", 1)),
-		round_data.get("day", 1),
+		GameCalendar.format_date(round_day),
 		round_data.get("strokes", 0),
 		diff,
 	]

@@ -59,14 +59,12 @@ func test_duck_family_route_stays_within_its_water_tile() -> void:
 		assert_lt(absf(offset.y) + 4.0, 16.0, "Waterline stays within the 32px tile")
 
 func test_season_and_weather_control_visitors() -> void:
-	assert_true(CourseWildlife.butterflies_active(10.0, SeasonSystem.Season.SUMMER, false))
-	assert_false(CourseWildlife.butterflies_active(10.0, SeasonSystem.Season.WINTER, false))
-	assert_false(CourseWildlife.butterflies_active(10.0, SeasonSystem.Season.SPRING, true))
-	assert_false(CourseWildlife.butterflies_active(19.0, SeasonSystem.Season.SUMMER, false))
-	assert_true(CourseWildlife.fireflies_active(19.0, SeasonSystem.Season.SUMMER, false))
-	assert_false(CourseWildlife.fireflies_active(10.0, SeasonSystem.Season.SUMMER, false))
-	assert_false(CourseWildlife.fireflies_active(19.0, SeasonSystem.Season.WINTER, false))
-	assert_false(CourseWildlife.fireflies_active(19.0, SeasonSystem.Season.SUMMER, true))
+	# With no day/night cycle, butterflies are out whenever it's fair season
+	# and dry; fireflies (a dusk/night effect) were removed entirely.
+	assert_true(CourseWildlife.butterflies_active(SeasonSystem.Season.SUMMER, false))
+	assert_false(CourseWildlife.butterflies_active(SeasonSystem.Season.WINTER, false))
+	assert_false(CourseWildlife.butterflies_active(SeasonSystem.Season.SPRING, true))
+	assert_true(CourseWildlife.butterflies_active(SeasonSystem.Season.FALL, false))
 
 func test_placed_and_removed_garden_updates_visitors() -> void:
 	var entities := EntityLayer.new()

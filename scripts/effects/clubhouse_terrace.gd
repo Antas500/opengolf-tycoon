@@ -43,8 +43,9 @@ func _draw() -> void:
 			draw_line(p + Vector2(club, -10), top, Color("bcbca6"), 1)
 			draw_line(top, top + Vector2(2, 0), Color("e1dfc3"), 2)
 	var weather := GameManager.weather_system
-	var open := GameManager.current_hour >= 7 and GameManager.current_hour < 19
-	if open and not (is_instance_valid(weather) and weather.is_raining()):
+	# The clubhouse never closes, so its terrace staff are always out —
+	# except when it's raining.
+	if not (is_instance_valid(weather) and weather.is_raining()):
 		# Cosmetic clubhouse staff: bounded to the entrance, never simulated golfers.
 		var t := _time * 0.4
 		var p := Vector2(footprint.x * 0.5 - 22 + sin(t) * 14, bottom - 3)

@@ -44,23 +44,25 @@ func run() -> void:
 		gm.weather_system.weather_type = gm.weather_system.WeatherType.PARTLY_CLOUDY
 		gm.weather_system._target_weather = gm.weather_system.WeatherType.PARTLY_CLOUDY
 		gm.weather_system.intensity = .1
-		gm.weather_system._weather_duration = 1000
+		gm.weather_system._weather_duration_days = 1000
 		gm.weather_system._transition_progress = 1.0
 		main._on_mode_toggle_pressed()
 		gm.set_speed(16)
+		var day_before: int = gm.current_day
 		var started := Time.get_ticks_msec()
-		while not gm._end_of_day_emitted and Time.get_ticks_msec()-started < 600000:
+		while gm.current_day == day_before and Time.get_ticks_msec()-started < 600000:
 			await create_timer(1,true,false,true).timeout
-		assert(gm._end_of_day_emitted)
-		var s = gm.daily_stats
+		assert(gm.current_day != day_before)
+		var s = gm.yesterday_stats if gm.yesterday_stats else gm.daily_stats
 		var row: Dictionary = fm.visit_summary()
 		row.merge({"day":gm.current_day,"fee":gm.green_fee,"booking_interval":gm.tee_booking_interval,"arrivals":s.golfers_arrived,"completed":s.golfers_served,"revenue":s.get_total_revenue(),"costs":s.operating_costs,"profit":s.get_profit(),"cash":gm.money,"condition":gm.staff_manager.course_condition,"reputation":gm.reputation,"positive_thoughts":fm.get_satisfaction_rating(),"hotspots":fm.get_hotspots()})
 		results.append(row)
 		print("CAMPAIGN_DAY ",JSON.stringify(row))
-		var panel = main.get_node_or_null("UI/HUD/EndOfDaySummary")
+		var panel = main.get_node_or_null("UI/HUD/YearSummary")
 		if panel:
 			panel.get_parent().remove_child(panel)
 			panel.queue_free()
+			gm.is_paused = false
 		var args := OS.get_cmdline_user_args()
 		if args.size() > 0:
 			var f := FileAccess.open(args[0],FileAccess.WRITE)
@@ -68,7 +70,7 @@ func run() -> void:
 		if day == 11 and args.size() > 1:
 			var save := FileAccess.open(args[1],FileAccess.WRITE)
 			save.store_string(JSON.stringify(sm._build_save_data()))
-		main._on_summary_build_mode()
+		gm.is_paused = false  # no daily summary to dismiss any more
 		await process_frame
 		if day == 5:
 			var before: int = fm.customers.size()

@@ -70,7 +70,7 @@ Detailed algorithm docs live in **`docs/algorithms/`** — see [`docs/algorithms
 
 **When modifying any algorithm or adding a new one, update the corresponding doc in `docs/algorithms/`.** If adding a new system, create a new markdown file and add it to the README index.
 
-Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/algorithms/putting-system.md) · [shot-ai](docs/algorithms/shot-ai-target-finding.md) · [ball-physics](docs/algorithms/ball-physics.md) · [wind](docs/algorithms/wind-system.md) · [weather](docs/algorithms/weather-system.md) · [course-rating](docs/algorithms/course-rating.md) · [difficulty](docs/algorithms/difficulty-calculator.md) · [stroke-index](docs/algorithms/stroke-index.md) · [economy](docs/algorithms/economy.md) · [reputation](docs/algorithms/reputation.md) · [golfer-spawning](docs/algorithms/golfer-spawning.md) · [satisfaction](docs/algorithms/satisfaction-feedback.md) · [golfer-needs](docs/algorithms/golfer-needs.md) · [tournaments](docs/algorithms/tournament-system.md) · [day-night](docs/algorithms/day-night-cycle.md) · [staff-and-weeds](docs/algorithms/staff-and-weeds.md)
+Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/algorithms/putting-system.md) · [shot-ai](docs/algorithms/shot-ai-target-finding.md) · [ball-physics](docs/algorithms/ball-physics.md) · [wind](docs/algorithms/wind-system.md) · [weather](docs/algorithms/weather-system.md) · [course-rating](docs/algorithms/course-rating.md) · [difficulty](docs/algorithms/difficulty-calculator.md) · [stroke-index](docs/algorithms/stroke-index.md) · [economy](docs/algorithms/economy.md) · [reputation](docs/algorithms/reputation.md) · [golfer-spawning](docs/algorithms/golfer-spawning.md) · [satisfaction](docs/algorithms/satisfaction-feedback.md) · [golfer-needs](docs/algorithms/golfer-needs.md) · [tournaments](docs/algorithms/tournament-system.md) · [game-calendar](docs/algorithms/game-calendar.md) · [staff-and-weeds](docs/algorithms/staff-and-weeds.md)
 
 ## Core Systems
 
@@ -107,9 +107,9 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 - Reputation: 0-100, daily decay by star level, per-golfer mood-based gains. See [reputation docs](docs/algorithms/reputation.md).
 
 ### Weather & Time
-- **WindSystem**: Per-day random direction/speed (0-30 mph), hourly drift. Club-specific sensitivity (Driver 1.0x, Putter 0.0x). See [wind docs](docs/algorithms/wind-system.md).
-- **WeatherSystem**: 6 types (SUNNY → HEAVY_RAIN). State machine transitions. See [weather docs](docs/algorithms/weather-system.md).
-- **DayNightSystem**: 6 AM - 8 PM course hours. Visual tinting with sunrise/sunset. See [day-night docs](docs/algorithms/day-night-cycle.md).
+- **WindSystem**: Per-day direction walk/speed (0-30 mph), rare daily reshuffles. Club-specific sensitivity (Driver 1.0x, Putter 0.0x). See [wind docs](docs/algorithms/wind-system.md).
+- **WeatherSystem**: 6 types (SUNNY → HEAVY_RAIN). State machine with multi-day spells. See [weather docs](docs/algorithms/weather-system.md).
+- **GameCalendar / tempo**: Real Gregorian calendar starting Sat 1 Jan 2000; day = 3.5 s at NORMAL, course never closes (no day/night cycle); YearSummary panel at year end; WeatherTintSystem tints by weather only. See [calendar docs](docs/algorithms/game-calendar.md).
 - **TournamentSystem**: 4 tiers (Local/Regional/National/Championship) with escalating requirements. See [tournament docs](docs/algorithms/tournament-system.md).
 
 ### Course Themes

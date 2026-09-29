@@ -6,7 +6,8 @@ extends Node
 ## Run:  godot --headless --path . res://tests/harness/sim_harness.tscn
 
 const DAYS_TO_SIMULATE := 12
-const FRAMES_PER_DAY := 500
+## At ULTRA speed a game day is 3.5 / 8 ≈ 0.44 s ≈ 27 frames.
+const FRAMES_PER_DAY := 60
 
 var main: Node2D
 
@@ -37,19 +38,13 @@ func _run() -> void:
 		print("HARNESS: === day %d ===" % GameManager.current_day)
 		await _exercise_panels(day)
 		await _exercise_staff_day(day)
+		# Days roll over on their own now — the course never closes. Just let
+		# the clock run; dismiss the year-end summary if it appears.
 		await _frames(FRAMES_PER_DAY)
-
-		# Force the day to close like a player fast-forwarding, then let the
-		# regular end-of-day flow (summary -> continue) run.
-		if not GameManager.is_end_of_day_pending():
-			GameManager.force_end_day()
-		await _frames(120)
 		var hud: Control = main.get_node("UI/HUD")
-		var summary: Control = hud.get_node_or_null("EndOfDaySummary")
+		var summary: Control = hud.get_node_or_null("YearSummary")
 		if summary:
 			summary.continue_pressed.emit()
-		else:
-			GameManager.advance_to_next_day()
 		await _frames(30)
 
 		if day == 5:

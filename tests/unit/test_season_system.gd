@@ -1,38 +1,48 @@
 extends GutTest
 ## Tests for SeasonSystem — theme-aware seasonal modifiers, blending, and helpers.
 
-# --- Season Calculation ---
+# --- Season Calculation (calendar quarters from GameCalendar) ---
 
-func test_get_season_spring() -> void:
-	assert_eq(SeasonSystem.get_season(1), SeasonSystem.Season.SPRING)
-	assert_eq(SeasonSystem.get_season(7), SeasonSystem.Season.SPRING)
+func test_get_season_winter_covers_january() -> void:
+	# Day 1 = 1 Jan 2000 → Winter (Dec-Feb)
+	assert_eq(SeasonSystem.get_season(1), SeasonSystem.Season.WINTER)
+	assert_eq(SeasonSystem.get_season(31), SeasonSystem.Season.WINTER, "31 Jan still Winter")
+	assert_eq(SeasonSystem.get_season(60), SeasonSystem.Season.WINTER, "29 Feb 2000 (leap) still Winter")
 
-func test_get_season_summer() -> void:
-	assert_eq(SeasonSystem.get_season(8), SeasonSystem.Season.SUMMER)
-	assert_eq(SeasonSystem.get_season(14), SeasonSystem.Season.SUMMER)
+func test_get_season_spring_from_march() -> void:
+	assert_eq(SeasonSystem.get_season(61), SeasonSystem.Season.SPRING, "1 Mar 2000 = Spring")
+	assert_eq(SeasonSystem.get_season(152), SeasonSystem.Season.SPRING, "31 May 2000 still Spring")
 
-func test_get_season_fall() -> void:
-	assert_eq(SeasonSystem.get_season(15), SeasonSystem.Season.FALL)
-	assert_eq(SeasonSystem.get_season(21), SeasonSystem.Season.FALL)
+func test_get_season_summer_from_june() -> void:
+	assert_eq(SeasonSystem.get_season(153), SeasonSystem.Season.SUMMER, "1 Jun 2000 = Summer")
+	assert_eq(SeasonSystem.get_season(244), SeasonSystem.Season.SUMMER, "31 Aug 2000 still Summer")
 
-func test_get_season_winter() -> void:
-	assert_eq(SeasonSystem.get_season(22), SeasonSystem.Season.WINTER)
-	assert_eq(SeasonSystem.get_season(28), SeasonSystem.Season.WINTER)
+func test_get_season_fall_from_september() -> void:
+	assert_eq(SeasonSystem.get_season(245), SeasonSystem.Season.FALL, "1 Sep 2000 = Fall")
+	assert_eq(SeasonSystem.get_season(335), SeasonSystem.Season.FALL, "30 Nov 2000 still Fall")
+
+func test_get_season_winter_from_december() -> void:
+	assert_eq(SeasonSystem.get_season(336), SeasonSystem.Season.WINTER, "1 Dec 2000 = Winter again")
 
 func test_get_season_wraps_year() -> void:
-	assert_eq(SeasonSystem.get_season(29), SeasonSystem.Season.SPRING, "Day 29 = new year Spring")
-	assert_eq(SeasonSystem.get_season(56), SeasonSystem.Season.WINTER, "Day 56 = year 2 Winter")
+	assert_eq(SeasonSystem.get_season(366), SeasonSystem.Season.WINTER, "1 Jan 2001 = Winter")
+	assert_eq(SeasonSystem.get_season(427), SeasonSystem.Season.SPRING, "1 Mar 2001 = Spring")
 
 func test_get_day_in_season() -> void:
-	assert_eq(SeasonSystem.get_day_in_season(1), 1)
-	assert_eq(SeasonSystem.get_day_in_season(7), 7)
-	assert_eq(SeasonSystem.get_day_in_season(8), 1, "First day of Summer")
-	assert_eq(SeasonSystem.get_day_in_season(14), 7, "Last day of Summer")
+	assert_eq(SeasonSystem.get_day_in_season(61), 1, "1 Mar = day 1 of Spring")
+	assert_eq(SeasonSystem.get_day_in_season(152), 92, "31 May = last day of Spring (Mar+Apr+May = 92)")
+	assert_eq(SeasonSystem.get_day_in_season(153), 1, "1 Jun = day 1 of Summer")
+	assert_eq(SeasonSystem.get_day_in_season(1), 32, "1 Jan = day 32 of Winter (Dec 1 = start)")
+
+func test_get_season_length() -> void:
+	assert_eq(SeasonSystem.get_season_length(61), 92, "Spring 2000 (Mar-May) = 92 days")
+	assert_eq(SeasonSystem.get_season_length(1), 91, "Winter 1999-2000 (Dec-Feb, leap Feb) = 31+31+29 = 91 days")
+	assert_eq(SeasonSystem.get_season_length(731), 90, "Winter 2001-2002 (non-leap Feb) = 31+31+28 = 90 days")
 
 func test_get_year() -> void:
-	assert_eq(SeasonSystem.get_year(1), 1)
-	assert_eq(SeasonSystem.get_year(28), 1)
-	assert_eq(SeasonSystem.get_year(29), 2)
+	assert_eq(SeasonSystem.get_year(1), 2000)
+	assert_eq(SeasonSystem.get_year(365), 2000, "Dec 31, 2000 still year 2000")
+	assert_eq(SeasonSystem.get_year(366), 2001)
 
 # --- Theme-Aware Modifiers (enum keys) ---
 
@@ -78,34 +88,32 @@ func test_all_themes_have_maintenance_modifiers() -> void:
 # --- Blending at Season Boundaries ---
 
 func test_blended_spawn_mid_season_equals_raw() -> void:
-	# Mid-season days (2-6) should return the raw modifier, no blending
+	# Mid-season days should return the raw modifier, no blending
 	var parkland = CourseTheme.Type.PARKLAND
-	for day_offset in range(1, 6):  # days 2-6 of Spring
-		var day = day_offset + 1
+	for day in [70, 90, 110, 130]:  # arbitrary days mid-Spring (61..152)
 		var raw = SeasonSystem.get_spawn_modifier(SeasonSystem.Season.SPRING, parkland)
 		var blended = SeasonSystem.get_blended_spawn_modifier(day, parkland)
 		assert_almost_eq(blended, raw, 0.001, "Day %d mid-season should equal raw" % day)
 
 func test_blended_spawn_last_day_of_season() -> void:
-	# Day 7 (last day of Spring): should blend toward Summer
+	# Day 152 (31 May, last day of Spring): should blend toward Summer
 	var parkland = CourseTheme.Type.PARKLAND
 	var spring_mod = SeasonSystem.get_spawn_modifier(SeasonSystem.Season.SPRING, parkland)  # 0.9
 	var summer_mod = SeasonSystem.get_spawn_modifier(SeasonSystem.Season.SUMMER, parkland)  # 1.4
-	var blended = SeasonSystem.get_blended_spawn_modifier(7, parkland)
-	# Should be lerp(0.9, 1.4, 0.34) = 0.9 + 0.5 * 0.34 = 1.07
+	var blended = SeasonSystem.get_blended_spawn_modifier(152, parkland)
 	var expected = lerpf(spring_mod, summer_mod, SeasonSystem.TRANSITION_BLEND_FACTOR)
-	assert_almost_eq(blended, expected, 0.001, "Day 7 should blend Spring toward Summer")
+	assert_almost_eq(blended, expected, 0.001, "Last day of Spring should blend toward Summer")
 	assert_gt(blended, spring_mod, "Blended should be higher than pure Spring")
 	assert_lt(blended, summer_mod, "Blended should be lower than pure Summer")
 
 func test_blended_spawn_first_day_of_season() -> void:
-	# Day 8 (first day of Summer): should blend toward Spring (previous)
+	# Day 153 (1 Jun, first day of Summer): should blend toward Spring (previous)
 	var parkland = CourseTheme.Type.PARKLAND
 	var summer_mod = SeasonSystem.get_spawn_modifier(SeasonSystem.Season.SUMMER, parkland)  # 1.4
 	var spring_mod = SeasonSystem.get_spawn_modifier(SeasonSystem.Season.SPRING, parkland)  # 0.9
-	var blended = SeasonSystem.get_blended_spawn_modifier(8, parkland)
+	var blended = SeasonSystem.get_blended_spawn_modifier(153, parkland)
 	var expected = lerpf(summer_mod, spring_mod, SeasonSystem.TRANSITION_BLEND_FACTOR)
-	assert_almost_eq(blended, expected, 0.001, "Day 8 should blend Summer toward Spring")
+	assert_almost_eq(blended, expected, 0.001, "First day of Summer should blend toward Spring")
 	assert_lt(blended, summer_mod, "Blended should be lower than pure Summer")
 	assert_gt(blended, spring_mod, "Blended should be higher than pure Spring")
 
@@ -114,35 +122,35 @@ func test_blended_maintenance_boundary() -> void:
 	var mountain = CourseTheme.Type.MOUNTAIN
 	var fall_mod = SeasonSystem.get_maintenance_modifier(SeasonSystem.Season.FALL, mountain)  # 0.8
 	var winter_mod = SeasonSystem.get_maintenance_modifier(SeasonSystem.Season.WINTER, mountain)  # 1.5
-	var blended = SeasonSystem.get_blended_maintenance_modifier(21, mountain)  # Day 21 = last day of Fall
+	var blended = SeasonSystem.get_blended_maintenance_modifier(335, mountain)  # Day 335 = 30 Nov, last day of Fall
 	var expected = lerpf(fall_mod, winter_mod, SeasonSystem.TRANSITION_BLEND_FACTOR)
-	assert_almost_eq(blended, expected, 0.001, "Day 21 Fall->Winter boundary should blend")
+	assert_almost_eq(blended, expected, 0.001, "Last day of Fall->Winter boundary should blend")
 
 func test_blended_winter_to_spring_wraps() -> void:
-	# Day 28 (last day of Winter) should blend toward Spring (wraps around)
+	# Day 60 (29 Feb 2000, last day of Winter) should blend toward Spring (wraps around)
 	var parkland = CourseTheme.Type.PARKLAND
 	var winter_mod = SeasonSystem.get_spawn_modifier(SeasonSystem.Season.WINTER, parkland)  # 0.3
 	var spring_mod = SeasonSystem.get_spawn_modifier(SeasonSystem.Season.SPRING, parkland)  # 0.9
-	var blended = SeasonSystem.get_blended_spawn_modifier(28, parkland)
+	var blended = SeasonSystem.get_blended_spawn_modifier(60, parkland)
 	var expected = lerpf(winter_mod, spring_mod, SeasonSystem.TRANSITION_BLEND_FACTOR)
-	assert_almost_eq(blended, expected, 0.001, "Day 28 Winter->Spring wrap should blend")
+	assert_almost_eq(blended, expected, 0.001, "29 Feb Winter->Spring wrap should blend")
 
 # --- Fee Tolerance ---
 
 func test_fee_tolerance_peak_season() -> void:
-	# Parkland Summer (day 10, mid-season): spawn_mod = 1.4, tolerance = clamp(0.5 + 1.4*0.55, 0.7, 1.3)
-	var tol = SeasonSystem.get_fee_tolerance(10, CourseTheme.Type.PARKLAND)
+	# Parkland Summer (day 170 = 18 Jun, mid-season): spawn_mod = 1.4, tolerance = clamp(0.5 + 1.4*0.55, 0.7, 1.3)
+	var tol = SeasonSystem.get_fee_tolerance(170, CourseTheme.Type.PARKLAND)
 	assert_almost_eq(tol, 1.27, 0.01, "Peak summer tolerance should be ~1.27")
 
 func test_fee_tolerance_off_season() -> void:
-	# Parkland Winter (day 25, mid-season): spawn_mod = 0.3, tolerance = clamp(0.5 + 0.3*0.55, 0.7, 1.3) = 0.665 -> clamped to 0.7
-	var tol = SeasonSystem.get_fee_tolerance(25, CourseTheme.Type.PARKLAND)
+	# Parkland Winter (day 20 = 20 Jan, mid-season): spawn_mod = 0.3, tolerance = clamp(0.5 + 0.3*0.55, 0.7, 1.3) = 0.665 -> clamped to 0.7
+	var tol = SeasonSystem.get_fee_tolerance(20, CourseTheme.Type.PARKLAND)
 	assert_almost_eq(tol, 0.7, 0.01, "Off-season tolerance should clamp to 0.7")
 
 func test_fee_tolerance_range() -> void:
 	# Fee tolerance should always be in [0.7, 1.3] for any theme/day combo
 	for theme_val in range(10):
-		for day in range(1, 29):
+		for day in range(1, 366):
 			var tol = SeasonSystem.get_fee_tolerance(day, theme_val)
 			assert_gte(tol, 0.7, "Theme %d day %d: fee tolerance should be >= 0.7" % [theme_val, day])
 			assert_lte(tol, 1.3, "Theme %d day %d: fee tolerance should be <= 1.3" % [theme_val, day])
@@ -151,12 +159,12 @@ func test_fee_tolerance_range() -> void:
 
 func test_tournament_prestige_themed() -> void:
 	# Parkland Fall = 1.2x prestige
-	var prestige = SeasonSystem.get_tournament_prestige(17, CourseTheme.Type.PARKLAND)  # Day 17 = Fall day 3
+	var prestige = SeasonSystem.get_tournament_prestige(247, CourseTheme.Type.PARKLAND)  # Day 247 = 3 Sep, Fall day 3
 	assert_almost_eq(prestige, 1.2, 0.01)
 
 func test_tournament_prestige_off_season() -> void:
 	# Parkland Winter = 0.5x prestige
-	var prestige = SeasonSystem.get_tournament_prestige(25, CourseTheme.Type.PARKLAND)
+	var prestige = SeasonSystem.get_tournament_prestige(20, CourseTheme.Type.PARKLAND)
 	assert_almost_eq(prestige, 0.5, 0.01)
 
 # --- Weather Modifiers ---
@@ -179,7 +187,7 @@ func test_theme_weather_modifiers_default_is_standard() -> void:
 func test_blended_weather_weights_valid_probabilities() -> void:
 	# For all themes and days, blended weather weights should be valid cumulative probs
 	for theme_val in [0, 1, 2, 8]:  # Parkland, Desert, Links, Tropical
-		for day in [4, 7, 8, 14]:  # mid-season, boundary, boundary, mid-season
+		for day in [20, 60, 61, 170]:  # mid-season, boundary, boundary, mid-season
 			var weights = SeasonSystem.get_blended_weather_weights(day, theme_val)
 			assert_eq(weights.size(), 6, "Should have 6 weather thresholds")
 			assert_gt(weights[0], 0.0, "First threshold should be positive")

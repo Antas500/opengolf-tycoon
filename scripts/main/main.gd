@@ -61,7 +61,7 @@ var undo_manager: UndoManager = UndoManager.new()
 var wind_system: WindSystem = null
 var weather_system: WeatherSystem = null
 var rain_overlay: RainOverlay = null
-var day_night_system: DayNightSystem = null
+var weather_tint_system: WeatherTintSystem = null
 var elevation_tool: ElevationTool = ElevationTool.new()
 var building_registry: Dictionary = {}
 var decoration_registry: Dictionary = {}
@@ -184,9 +184,9 @@ func _ready() -> void:
 	add_child(elevation_tool)
 
 	# Set up day/night cycle
-	day_night_system = DayNightSystem.new()
-	day_night_system.name = "DayNightSystem"
-	add_child(day_night_system)
+	weather_tint_system = WeatherTintSystem.new()
+	weather_tint_system.name = "WeatherTintSystem"
+	add_child(weather_tint_system)
 
 	# Set up tournament manager
 	tournament_manager = TournamentManager.new()
@@ -552,6 +552,7 @@ func _connect_signals() -> void:
 	# The hole menu can re-par a hole, so its button re-reads the hole.
 	EventBus.hole_updated.connect(_refresh_hole_button)
 	EventBus.end_of_day.connect(_on_end_of_day)
+	EventBus.year_ended.connect(_on_year_ended)
 	EventBus.load_completed.connect(_on_load_completed)
 	EventBus.new_game_started.connect(_on_new_game_started)
 	hole_manager.hole_selected.connect(_on_hole_flag_selected)
@@ -2274,7 +2275,7 @@ func _handle_bulldozer_click(grid_pos: Vector2i, mouse_world: Vector2 = Vector2.
 	if not dragging:
 		EventBus.notify("Nothing to bulldoze here", "info")
 
-# --- Day/Night Cycle ---
+# --- Daily & Yearly Cycle ---
 
 func _calculate_building_operating_costs() -> int:
 	"""Sum operating costs from all placed buildings."""
@@ -2294,11 +2295,11 @@ func _calculate_decoration_operating_costs() -> int:
 	return total
 
 func _on_end_of_day(day_number: int) -> void:
-	"""Handle end of day — show summary panel."""
-	# Pause the game while showing the summary
-	GameManager.is_paused = true
-
-	# Calculate and deduct operating costs BEFORE showing summary
+	"""Handle the bookkeeping for the day that just finished.
+	The course never closes: days roll over silently and the game keeps
+	running. The interruption-style summary now appears only at the end of
+	the year (see _on_year_ended)."""
+	# Calculate and deduct operating costs for the day that just ended
 	var terrain_cost = int(terrain_grid.get_total_maintenance_cost() * GameManager.get_maintenance_multiplier())
 	var hole_count = GameManager.current_course.holes.size() if GameManager.current_course else 0
 	var building_costs = _calculate_building_operating_costs()
@@ -2312,7 +2313,7 @@ func _on_end_of_day(day_number: int) -> void:
 	# Staff payroll
 	var staff_payroll: int = 0
 	if GameManager.staff_manager:
-		staff_payroll = GameManager.staff_manager.get_daily_payroll()
+		staff_payroll = GameManager.apply_daily_charge("staff_payroll", GameManager.staff_manager.get_daily_payroll())
 		GameManager.staff_manager.process_daily_maintenance()
 
 	# Marketing costs
@@ -2330,18 +2331,21 @@ func _on_end_of_day(day_number: int) -> void:
 		GameManager.modify_money(-total_cost)
 		EventBus.log_transaction("Daily operating costs", -total_cost)
 
-	# Update course rating before showing summary
+	# Keep the course rating fresh as the day closes
 	GameManager.update_course_rating()
+
+func _on_year_ended(finished_year: int) -> void:
+	"""Pause the game and present the year-in-review summary."""
+	GameManager.is_paused = true
 
 	# Prevent duplicate panels
 	var hud = $UI/HUD
-	var existing = hud.get_node_or_null("EndOfDaySummary")
+	var existing = hud.get_node_or_null("YearSummary")
 	if existing:
 		return
 
-	# Create and show the end of day summary panel
-	var summary = EndOfDaySummaryPanel.new(day_number)
-	summary.name = "EndOfDaySummary"
+	var summary = YearSummaryPanel.new(finished_year)
+	summary.name = "YearSummary"
 
 	# Connect signals BEFORE add_child (ready signal fires during add_child)
 	summary.continue_pressed.connect(_on_summary_continue)
@@ -2353,16 +2357,10 @@ func _on_end_of_day(day_number: int) -> void:
 	summary.position = (viewport_size - summary.custom_minimum_size) / 2
 
 func _on_summary_continue() -> void:
-	"""Called when player clicks Continue on the end of day summary."""
+	"""Called when player clicks Continue on the year summary."""
 	if tournament_leaderboard:
 		tournament_leaderboard.hide()
 	GameManager.is_paused = false
-	GameManager.advance_to_next_day()
-
-func _on_summary_build_mode() -> void:
-	"""Playtest compatibility: dismiss the day summary and open the next morning.
-	The day stays in play — there is no separate build mode."""
-	_on_summary_continue()
 
 func _on_mode_toggle_pressed() -> void:
 	"""Playtest compatibility. The day already runs, so this starts play only
@@ -4054,6 +4052,8 @@ func _exit_tree() -> void:
 		EventBus.hole_updated.disconnect(_refresh_hole_button)
 	if EventBus.end_of_day.is_connected(_on_end_of_day):
 		EventBus.end_of_day.disconnect(_on_end_of_day)
+	if EventBus.year_ended.is_connected(_on_year_ended):
+		EventBus.year_ended.disconnect(_on_year_ended)
 	if EventBus.load_completed.is_connected(_on_load_completed):
 		EventBus.load_completed.disconnect(_on_load_completed)
 	if EventBus.new_game_started.is_connected(_on_new_game_started):

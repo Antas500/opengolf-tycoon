@@ -82,13 +82,13 @@ Toast durations:
 ### 2. ULTRA Speed Batching
 
 ```
-Maintain per-category count per game-hour:
+Maintain per-category count per game-day:
   batch_counts: Dictionary = {category → count}
-  batch_hour: float = floor(current_hour)
+  batch_day: int = current_day
 
 When adding a NORMAL event at ULTRA speed:
-  if floor(current_hour) != batch_hour:
-    reset batch_counts, update batch_hour
+  if current_day != batch_day:
+    reset batch_counts, update batch_day
   batch_counts[category] += 1
   if batch_counts[category] > 3:
     add entry silently (no event_added signal → no toast)

@@ -30,18 +30,19 @@ func run() -> void:
 	sm._apply_save_data(JSON.parse_string(JSON.stringify(sm._build_save_data())))
 	assert(fm.service_revenue == 5)
 	assert(fm.next_guest_key() != key,"Reload cannot reuse guest identities")
-	gm.current_hour = gm.COURSE_CLOSE_HOUR
+	# A loaded save resumes the same in-flight day without re-billing costs.
+	gm._day_progress = 0.0
 	gm.daily_stats.operating_costs = 100
 	var previous_day: int = gm.current_day
 	var settled_cash: int = gm.money
 	assert(gm.start_simulation())
-	assert(gm.current_day == previous_day + 1)
-	assert(gm.daily_stats.operating_costs == 0)
+	assert(gm.current_day == previous_day)
 	assert(gm.money == settled_cash,"A settled save must not pay the day's costs twice")
 	gm.set_speed(gm.GameSpeed.PAUSED)
-	var paused_hour: float = gm.current_hour
+	var paused_day_progress: float = gm._day_progress
 	for i in range(5): await process_frame
-	assert(gm.current_hour == paused_hour)
+	assert(gm._day_progress == paused_day_progress)
+	assert(gm.current_day == previous_day)
 	gm.stop_simulation()
 	assert(Engine.time_scale == 1.0,"Building UI must remain responsive")
 	print("AMENITY_PASS: walk to service, charge on arrival, need restoration, return to play, persisted income and unique identity")

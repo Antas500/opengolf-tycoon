@@ -86,16 +86,16 @@ func _build_ui() -> void:
 	day_row.add_theme_constant_override("separation", 8)
 	vbox.add_child(day_row)
 
-	var end_day_btn := Button.new()
-	end_day_btn.text = "End Day"
-	end_day_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	end_day_btn.pressed.connect(_on_end_day)
-	day_row.add_child(end_day_btn)
+	var next_day_btn := Button.new()
+	next_day_btn.text = "Next Day"
+	next_day_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	next_day_btn.pressed.connect(_on_next_day)
+	day_row.add_child(next_day_btn)
 
 	var skip_btn := Button.new()
-	skip_btn.text = "Skip 7 Days"
+	skip_btn.text = "Skip 30 Days"
 	skip_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	skip_btn.pressed.connect(_on_skip_7_days)
+	skip_btn.pressed.connect(_on_skip_30_days)
 	day_row.add_child(skip_btn)
 
 func show_centered() -> void:
@@ -109,13 +109,11 @@ func _update_display() -> void:
 	var day = GameManager.current_day
 	var season = SeasonSystem.get_season(day)
 	var season_name = SeasonSystem.get_season_name(season)
-	var day_in_season = SeasonSystem.get_day_in_season(day)
-	var year = SeasonSystem.get_year(day)
 	var spawn_mod = SeasonSystem.get_spawn_modifier(season)
 	var maint_mod = SeasonSystem.get_maintenance_modifier(season)
 
-	_current_label.text = "%s D%d Y%d (Day %d) | Demand: %d%% | Maint: %d%%" % [
-		season_name, day_in_season, year, day,
+	_current_label.text = "%s %s (Day %d) | Demand: %d%% | Maint: %d%%" % [
+		season_name, GameCalendar.format_date_short(day), day,
 		int(spawn_mod * 100), int(maint_mod * 100)
 	]
 
@@ -128,12 +126,14 @@ func _update_display() -> void:
 
 func _on_season_button(target_season: int) -> void:
 	# Jump to day 1 of the target season by setting current_day directly
-	var current_year_start = int((GameManager.current_day - 1) / float(SeasonSystem.DAYS_PER_YEAR)) * SeasonSystem.DAYS_PER_YEAR
-	var target_day = current_year_start + (target_season * SeasonSystem.DAYS_PER_SEASON) + 1
-
-	# If target is before or equal to current day, go to next year's season
-	if target_day <= GameManager.current_day:
-		target_day += SeasonSystem.DAYS_PER_YEAR
+	var date := GameCalendar.get_date(GameManager.current_day)
+	var year := int(date.year)
+	var start_month: int = SeasonSystem.SEASON_START_MONTHS[target_season]
+	# Winter (and any season whose start month is already past) targets the
+	# next calendar year; seasons later this year stay in this year.
+	if start_month <= int(date.month):
+		year += 1
+	var target_day: int = GameCalendar._days_from_civil(year, start_month, 1) - GameCalendar._EPOCH_DAYS + 1
 
 	var old_season = SeasonSystem.get_season(GameManager.current_day)
 	GameManager.current_day = target_day
@@ -152,14 +152,15 @@ func _on_season_button(target_season: int) -> void:
 	EventBus.notify("Jumped to %s (Day %d)" % [SeasonSystem.get_season_name(new_season), target_day], "info")
 	_update_display()
 
-func _on_end_day() -> void:
-	GameManager.force_end_day()
-	hide()
+func _on_next_day() -> void:
+	# Force one daily rollover immediately (bypasses the 3.5 s timer)
+	GameManager._complete_day()
+	_update_display()
 
-func _on_skip_7_days() -> void:
-	# Advance 7 days by directly manipulating current_day
+func _on_skip_30_days() -> void:
+	# Advance 30 days by directly manipulating current_day
 	var old_season = SeasonSystem.get_season(GameManager.current_day)
-	GameManager.current_day += 7
+	GameManager.current_day += 30
 	var new_season = SeasonSystem.get_season(GameManager.current_day)
 
 	if old_season != new_season:
@@ -172,5 +173,5 @@ func _on_skip_7_days() -> void:
 		GameManager.wind_system.generate_daily_wind()
 
 	EventBus.day_changed.emit(GameManager.current_day)
-	EventBus.notify("Skipped 7 days to Day %d" % GameManager.current_day, "info")
+	EventBus.notify("Skipped 30 days to Day %d" % GameManager.current_day, "info")
 	_update_display()

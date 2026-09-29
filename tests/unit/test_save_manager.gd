@@ -96,7 +96,6 @@ func test_game_state_json_roundtrip() -> void:
 		"money": 75000,
 		"reputation": 65.5,
 		"current_day": 15,
-		"current_hour": 14.5,
 		"green_fee": 45,
 	}
 
