@@ -331,13 +331,13 @@ func _paved_commands(pos: Vector2i, c: Vector2, xd: Vector2, yd: Vector2,
 func _pt(pos: Vector2i, t: Vector2) -> Vector2:
 	return to_local(terrain_grid.grid_point_to_screen(Vector2(pos) + t))
 
-## Tile diamond scaled by `scale` around the tile center.
-func _diamond(center: Vector2, xd: Vector2, yd: Vector2, scale: float) -> PackedVector2Array:
+## Tile diamond scaled by `diamond_scale` around the tile center.
+func _diamond(center: Vector2, xd: Vector2, yd: Vector2, diamond_scale: float) -> PackedVector2Array:
 	return PackedVector2Array([
-		center + (xd + yd) * scale,
-		center + (-xd + yd) * scale,
-		center + (-xd - yd) * scale,
-		center + (xd - yd) * scale,
+		center + (xd + yd) * diamond_scale,
+		center + (-xd + yd) * diamond_scale,
+		center + (-xd - yd) * diamond_scale,
+		center + (xd - yd) * diamond_scale,
 	])
 
 func _ribbon(c: Vector2, e: Vector2, pvec: Vector2) -> PackedVector2Array:

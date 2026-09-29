@@ -66,12 +66,12 @@ func _build_decoration_art() -> void:
 ## never be selected.
 func set_locked(value: bool, requirement: String = "") -> void:
 	# An unlocked tile never mentions the requirement it has already met.
-	var text := tooltip_description(decoration_data, requirement if value else "")
-	if locked == value and disabled == value and tool_description == text:
+	var description := tooltip_description(decoration_data, requirement if value else "")
+	if locked == value and disabled == value and tool_description == description:
 		return  # The shelf re-checks every second; nothing has changed.
 	locked = value
 	disabled = value
-	tool_description = text
+	tool_description = description
 	_update_accessibility()
 	_update_visual_state()
 

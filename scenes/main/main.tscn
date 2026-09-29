@@ -8,8 +8,8 @@
 [ext_resource type="Script" uid="uid://b553if6sdqr2o" path="res://scripts/managers/ball_manager.gd" id="6_ball_manager"]
 [ext_resource type="Script" uid="uid://dtiy6dga88tfe" path="res://scripts/managers/hole_manager.gd" id="7_hole_manager"]
 [ext_resource type="Theme" uid="uid://c6xth2qvp8yxk" path="res://assets/themes/game_theme.tres" id="8_theme"]
-[ext_resource type="Script" uid="uid://bxvw45y4l7r28" path="res://scripts/ui/components/rotate_view_button.gd" id="9_rotate_view_button"]
-[ext_resource type="Script" uid="uid://cj0rmiyg4sh74" path="res://scripts/ui/components/compass_needle.gd" id="10_compass_needle"]
+[ext_resource type="Script" path="res://scripts/ui/components/rotate_view_button.gd" id="9_rotate_view_button"]
+[ext_resource type="Script" path="res://scripts/ui/components/compass_needle.gd" id="10_compass_needle"]
 
 [node name="Main" type="Node2D" unique_id=1113796788]
 script = ExtResource("1_main")

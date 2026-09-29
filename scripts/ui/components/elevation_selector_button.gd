@@ -61,8 +61,7 @@ func _ready() -> void:
 static func example_heights(kind: String, square_shape: bool = true) -> Array:
 	var n := GRID_TILES + 1
 	var heights: Array = []
-	var mid := GRID_TILES / 2
-	var sel := _selected_vertex_range()
+	var mid := int(GRID_TILES / 2.0)
 	for y in n:
 		var row: Array = []
 		for x in n:
@@ -74,7 +73,7 @@ static func example_heights(kind: String, square_shape: bool = true) -> Array:
 					h = 1 if _vertex_is_in_selected_tiles(x, y, square_shape) else 0
 				"gradual":
 					if square_shape:
-						h = maxi(0, (GRID_TILES - _centre_distance_doubled(x, y)) / 2)
+						h = maxi(0, int((GRID_TILES - _centre_distance_doubled(x, y)) / 2.0))
 					elif _vertex_is_in_selected_tiles(x, y, false):
 						# The round 3x3 footprint has a 2x2 middle and one-step
 						# shoulders on each arm of its cross.
@@ -86,7 +85,7 @@ static func example_heights(kind: String, square_shape: bool = true) -> Array:
 
 ## True when a preview vertex is a corner of at least one selected tile.
 static func _vertex_is_in_selected_tiles(x: int, y: int, square_shape: bool) -> bool:
-	var mid := GRID_TILES / 2
+	var mid := int(GRID_TILES / 2.0)
 	for offset in ElevationTool.tile_offsets(SELECTED_TILES, square_shape):
 		var tx: int = mid + offset.x
 		var ty: int = mid + offset.y
@@ -98,7 +97,7 @@ static func _vertex_is_in_selected_tiles(x: int, y: int, square_shape: bool) -> 
 ## First and last vertex (per axis) of the selected tile block: the selected
 ## 3x3 tiles span a 4x4 block of corner vertices.
 static func _selected_vertex_range() -> Vector2i:
-	var first := (GRID_TILES - SELECTED_TILES) / 2
+	var first := int((GRID_TILES - SELECTED_TILES) / 2.0)
 	return Vector2i(first, first + SELECTED_TILES)
 
 
@@ -172,7 +171,7 @@ func _add_tile(x: int, y: int, heights: Array) -> void:
 ## around their selected 3x3 tiles, and the Gradual Selector adds a dot on the
 ## middle it moves.
 func _add_markers(heights: Array) -> void:
-	var mid := GRID_TILES / 2
+	var mid := int(GRID_TILES / 2.0)
 	match tool_type:
 		"vertex":
 			_add_dot(vertex_point(mid, mid, heights[mid][mid]))
@@ -187,7 +186,7 @@ func _add_markers(heights: Array) -> void:
 ## Draw only the exposed edges of the selected tiles. For the round 3x3
 ## brush this traces a cross instead of the square selector's 3x3 perimeter.
 func _add_selected_tile_outline(heights: Array) -> void:
-	var mid := GRID_TILES / 2
+	var mid := int(GRID_TILES / 2.0)
 	var sides := [
 		[Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, -1)], # north
 		[Vector2i(1, 0), Vector2i(1, 1), Vector2i(1, 0)],  # east

@@ -402,12 +402,12 @@ func _draw_path_ghost(alpha_mod: float) -> void:
 	var c := OverlayGeometry.point_in_tile(terrain_grid, self, pos, Vector2(0.5, 0.5))
 	var xd := OverlayGeometry.point_in_tile(terrain_grid, self, pos, Vector2(1.5, 0.5)) - c
 	var yd := OverlayGeometry.point_in_tile(terrain_grid, self, pos, Vector2(0.5, 1.5)) - c
-	var scale := WalkingPathOverlay.DIRT_DOT
+	var diamond_scale := WalkingPathOverlay.DIRT_DOT
 	var dot := PackedVector2Array([
-		c + (xd + yd) * scale,
-		c + (-xd + yd) * scale,
-		c + (-xd - yd) * scale,
-		c + (xd - yd) * scale,
+		c + (xd + yd) * diamond_scale,
+		c + (-xd + yd) * diamond_scale,
+		c + (-xd - yd) * diamond_scale,
+		c + (xd - yd) * diamond_scale,
 	])
 	var fill := WalkingPathOverlay.DIRT_COLOR
 	fill.a *= alpha_mod

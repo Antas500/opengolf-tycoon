@@ -66,25 +66,25 @@ func _ready() -> void:
 ## The arrow's sweep, as (start, end) angles in radians. Screen angles grow
 ## clockwise (y points down), so the counter-clockwise arrow is the same pair
 ## of angles read backwards.
-static func arc_angles(clockwise: bool) -> Vector2:
+static func arc_angles(is_clockwise: bool) -> Vector2:
 	var start := deg_to_rad(90.0 + GAP_DEGREES * 0.5)
 	var end := start + deg_to_rad(360.0 - GAP_DEGREES)
-	return Vector2(start, end) if clockwise else Vector2(end, start)
+	return Vector2(start, end) if is_clockwise else Vector2(end, start)
 
 ## Unit vector the arrow is travelling in where it passes `angle`.
-static func travel_direction(angle: float, clockwise: bool) -> Vector2:
-	return Vector2(-sin(angle), cos(angle)) if clockwise else Vector2(sin(angle), -cos(angle))
+static func travel_direction(angle: float, is_clockwise: bool) -> Vector2:
+	return Vector2(-sin(angle), cos(angle)) if is_clockwise else Vector2(sin(angle), -cos(angle))
 
 ## Where the arrow head's tip lands, relative to the centre of the ring: the
 ## first corner of the head.
-static func head_tip(radius: float, clockwise: bool) -> Vector2:
-	return head_corners(radius, clockwise)[0]
+static func head_tip(radius: float, is_clockwise: bool) -> Vector2:
+	return head_corners(radius, is_clockwise)[0]
 
 ## The three corners of the arrow head, relative to the centre of the ring:
 ## the tip first, then the two corners of its base.
-static func head_corners(radius: float, clockwise: bool) -> PackedVector2Array:
-	var angle := arc_angles(clockwise).y
-	var direction := travel_direction(angle, clockwise)
+static func head_corners(radius: float, is_clockwise: bool) -> PackedVector2Array:
+	var angle := arc_angles(is_clockwise).y
+	var direction := travel_direction(angle, is_clockwise)
 	var on_ring := Vector2(cos(angle), sin(angle)) * radius
 	var tip := on_ring + direction * (HEAD_LENGTH * HEAD_OVERHANG)
 	var base := on_ring - direction * (HEAD_LENGTH * (1.0 - HEAD_OVERHANG))

@@ -353,7 +353,10 @@ func _default_area_center() -> Vector2i:
 			if building.building_type == "clubhouse":
 				return building.grid_position
 	if grid:
+		# Staff areas use whole tiles; truncate any fractional grid centre.
+		@warning_ignore_start("integer_division")
 		return Vector2i(grid.grid_width / 2, grid.grid_height / 2)
+		@warning_ignore_restore("integer_division")
 	return Vector2i(64, 64)
 
 static func _generate_staff_name() -> String:

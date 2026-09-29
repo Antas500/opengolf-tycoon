@@ -151,12 +151,16 @@ static func anchor_for_tool(grid_point: Vector2, terrain_grid: TerrainGrid,
 ## block, which clips the corners of the square away.
 static func tile_offsets(size: int, square_shape: bool) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var from: int = -(size / 2)
+	# Keep the anchor and round footprint snapped to whole-tile half sizes.
+	@warning_ignore_start("integer_division")
+	var half_size: int = size / 2
+	@warning_ignore_restore("integer_division")
+	var from: int = -half_size
 	var to: int = size - 1 + from
 	# Middle of the block in tile-offset space: tile centres sit half a tile
 	# along from their offset, so the block's centre is (from + to + 1) / 2.
 	var middle: float = float(from + to + 1) * 0.5
-	var limit: float = float(size / 2)
+	var limit: float = float(half_size)
 	for x in range(from, to + 1):
 		for y in range(from, to + 1):
 			if not square_shape:
