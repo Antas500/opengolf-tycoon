@@ -82,6 +82,11 @@ const TIER_DATA: Dictionary = {
 }
 
 ## Check if course qualifies for a tournament tier
+##
+## A missing course (`course_data == null`) is *not* an error state: it simply
+## means there are no holes yet, so it falls through to the ordinary "need N
+## holes" requirement. That keeps the Host Tournament button reporting something
+## the player can act on instead of a dead-end "No course data" tooltip.
 static func check_qualification(tier: TournamentTier, course_data, course_rating: Dictionary) -> Dictionary:
 	var requirements = TIER_DATA[tier]
 	var result = {
@@ -89,15 +94,12 @@ static func check_qualification(tier: TournamentTier, course_data, course_rating
 		"missing": []
 	}
 
-	if not course_data:
-		result.qualified = false
-		result.missing.append("No course data")
-		return result
-
-	# Count open holes and total yardage
+	# Count open holes and total yardage. A course that has not been created
+	# yet (main menu, fresh boot) has simply no holes — not an error.
 	var open_holes = 0
 	var total_yardage = 0
-	for hole in course_data.holes:
+	var holes: Array = course_data.holes if course_data != null else []
+	for hole in holes:
 		if hole.is_open:
 			open_holes += 1
 			total_yardage += hole.distance_yards
@@ -184,13 +186,16 @@ static func generate_tournament_results(tier: TournamentTier, course_data, cours
 		"prize_pool": tier_data.prize_pool,
 	}
 
+## Par a tournament is played to: the open holes, measured from the back tees
+## every competitor plays. Matching `TournamentSimulator._tournament_par()` keeps
+## the "Par" on the results screen against the same cards the leaderboard totals.
 static func _get_course_par(course_data) -> int:
 	if not course_data:
 		return 72
 	var total_par = 0
 	for hole in course_data.holes:
 		if hole.is_open:
-			total_par += hole.par
+			total_par += int(hole.get_par_for_tee("back"))
 	return max(total_par, 18)
 
 ## Get total tournament revenue (spectators + sponsorships)
@@ -212,6 +217,29 @@ static func get_round_count(tier: TournamentTier) -> int:
 		TournamentTier.NATIONAL: return 4
 		TournamentTier.CHAMPIONSHIP: return 4
 		_: return 1
+
+## Competitors that tee off together. Two to a group: every pairing on the
+## course is a head-to-head, and the field spreads out as two golfers per hole.
+const GROUP_SIZE: int = 2
+
+static func get_group_size() -> int:
+	return GROUP_SIZE
+
+## How many competitors play live on the course at the start.
+##
+## Exactly one pairing per open hole — two competitors, everywhere the course
+## has to offer — so an event opens with the whole field spread out in front of
+## the player rather than queued on the first tee.
+static func get_live_field_size(open_holes: int) -> int:
+	return maxi(get_group_size(), maxi(0, open_holes) * get_group_size())
+
+## The whole field: big enough to seat a pair on every open hole, and never
+## smaller than the tier's nominal size, so a Championship still feels bigger
+## than a Local even on the same nine holes. Anyone the course cannot seat is
+## settled headlessly against the same scorecard.
+static func get_field_size(tier: TournamentTier, open_holes: int) -> int:
+	var nominal: int = TIER_DATA.get(tier, {}).get("participant_count", get_group_size())
+	return maxi(nominal, get_live_field_size(open_holes))
 
 ## Get description text for a tier
 static func get_tier_description(tier: TournamentTier) -> String:

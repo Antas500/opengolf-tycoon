@@ -9,6 +9,20 @@ var _tournament_manager: TournamentManager = null
 var _content_vbox: BoxContainer = null
 var _status_label: Label = null
 var _title_label: Label = null
+## Host buttons by tier, so a refresh can find and re-enable the exact one the
+## player is hovering instead of rebuilding blind.
+var _host_buttons: Dictionary = {}
+
+## The Host button for a tier (null when that tier is not on the shelf).
+func get_host_button(tier: int) -> Button:
+	return _host_buttons.get(tier)
+
+## The "Play It Out" shortcut, for tests and for anything that needs to reach it
+## while a round is live (null between events).
+var _settle_button: Button
+
+func get_settle_button() -> Button:
+	return _settle_button
 
 func _ready() -> void:
 	super._ready()
@@ -19,6 +33,16 @@ func _ready() -> void:
 	EventBus.tournament_scheduled.connect(_on_tournament_scheduled)
 	EventBus.tournament_started.connect(_on_tournament_started)
 	EventBus.tournament_completed.connect(_on_tournament_completed)
+	# The Host buttons read the course and the treasury, so anything that changes
+	# either has to re-enable them. Without this the panel keeps showing a gate
+	# computed before the course existed (e.g. a stale "No course data").
+	EventBus.new_game_started.connect(_on_course_state_changed)
+	EventBus.load_completed.connect(_on_course_state_changed)
+	EventBus.hole_created.connect(_on_course_state_changed)
+	EventBus.hole_deleted.connect(_on_course_state_changed)
+	EventBus.hole_toggled.connect(_on_course_state_changed)
+	EventBus.money_changed.connect(_on_course_state_changed)
+	EventBus.day_changed.connect(_on_course_state_changed)
 
 func _exit_tree() -> void:
 	if EventBus.tournament_scheduled.is_connected(_on_tournament_scheduled):
@@ -27,6 +51,34 @@ func _exit_tree() -> void:
 		EventBus.tournament_started.disconnect(_on_tournament_started)
 	if EventBus.tournament_completed.is_connected(_on_tournament_completed):
 		EventBus.tournament_completed.disconnect(_on_tournament_completed)
+	for handler in [_on_course_state_changed]:
+		for signal_ref in [EventBus.new_game_started, EventBus.load_completed,
+				EventBus.hole_created, EventBus.hole_deleted, EventBus.hole_toggled,
+				EventBus.money_changed, EventBus.day_changed]:
+			if signal_ref.is_connected(handler):
+				signal_ref.disconnect(handler)
+
+## Course/economy signals fire often (money changes with every green fee), so a
+## change only marks the shelf dirty and the rebuild happens at most a couple of
+## times a second, and only while the panel is actually on screen.
+var _refresh_pending := false
+var _refresh_cooldown := 0.0
+const REFRESH_INTERVAL := 0.5
+
+## Marks the shelf stale. Deliberately does not need an exact argument list: it is
+## wired to signals carrying anywhere from nil to three values.
+func _on_course_state_changed(_a = null, _b = null, _c = null) -> void:
+	_refresh_pending = true
+
+func _process(delta: float) -> void:
+	if _refresh_cooldown > 0.0:
+		_refresh_cooldown -= delta
+		return
+	if not _refresh_pending or not is_visible_in_tree():
+		return
+	_refresh_pending = false
+	_refresh_cooldown = REFRESH_INTERVAL
+	_refresh_display()
 
 func _build_ui() -> void:
 	if embedded:
@@ -121,6 +173,8 @@ func _refresh_display() -> void:
 		return
 
 	# Clear content
+	_host_buttons.clear()
+	_settle_button = null
 	for child in _content_vbox.get_children():
 		_content_vbox.remove_child(child)
 		child.queue_free()
@@ -140,6 +194,11 @@ func _show_available_tournaments() -> void:
 	else:
 		_status_label.text = "Select a tournament to host:"
 		_status_label.remove_theme_color_override("font_color")
+
+	# While the course is resting between events there is nothing to choose, so
+	# skip the four identical "must wait" cards rather than grey the shelf out.
+	if cooldown > 0:
+		return
 
 	# Show all tournament tiers
 	for tier in TournamentSystem.TournamentTier.values():
@@ -195,9 +254,11 @@ func _show_available_tournaments() -> void:
 		host_btn.disabled = not can_schedule.can_schedule
 		if can_schedule.can_schedule:
 			host_btn.pressed.connect(_on_host_pressed.bind(tier))
+			host_btn.tooltip_text = "Starts right away — you are in the field"
 		else:
 			host_btn.tooltip_text = can_schedule.reason
 		btn_container.add_child(host_btn)
+		_host_buttons[tier] = host_btn
 
 		if not embedded:
 			card.add_child(HSeparator.new())
@@ -224,17 +285,43 @@ func _show_current_tournament(info: Dictionary) -> void:
 	info_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
 
 	if info.state == TournamentSystem.TournamentState.IN_PROGRESS:
-		info_label.text = "Professional golfers are competing on your course. Watch the tournament — use >> to speed up time."
+		info_label.text = "You are in the field: two competitors per hole."
 		card.add_child(info_label)
 
-		var hint_label = Label.new()
-		hint_label.text = "Press >> again for Ultra (8x) — the live leaderboard is on the right."
-		hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		# The owner is in the field, so the shelf carries their own scoreline.
+		var standing = _tournament_manager.get_player_standing()
+		if not standing.is_empty():
+			var diff: int = standing.score_to_par
+			var you_label = Label.new()
+			you_label.text = "You: %s · rank %d of %d · %d holes in (round %d)" % [
+				"E" if diff == 0 else ("+%d" % diff if diff > 0 else str(diff)),
+				standing.rank, standing.field_size, standing.holes_completed, standing.round
+			]
+			if standing.missed_cut:
+				you_label.text += " — missed cut"
+			you_label.add_theme_font_size_override("font_size", 12)
+			you_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
+			card.add_child(you_label)
+
+		# The round being played is the player's own game, but the rest of the event
+		# is bookkeeping nobody wants to watch at 8x, so the shelf carries the
+		# shortcut to the results.
+		var action_row := HBoxContainer.new()
+		var settle_btn := Button.new()
+		settle_btn.text = "Play It Out"
+		settle_btn.custom_minimum_size = Vector2(0, 22 if embedded else 28)
+		settle_btn.tooltip_text = "Settle the rest of the event from the cards as they stand"
+		settle_btn.pressed.connect(_on_play_it_out_pressed)
+		action_row.add_child(settle_btn)
+		_settle_button = settle_btn
+		var hint_label := Label.new()
+		hint_label.text = " · live board on the right"
 		hint_label.add_theme_font_size_override("font_size", 11)
 		hint_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
-		card.add_child(hint_label)
+		action_row.add_child(hint_label)
+		card.add_child(action_row)
 	else:
-		info_label.text = "Tournament scheduled. Professional golfers will compete on your course."
+		info_label.text = "Tournament about to start. Professional golfers will compete on your course — you with them."
 		card.add_child(info_label)
 
 	# Show last results if available
@@ -256,6 +343,13 @@ func _show_current_tournament(info: Dictionary) -> void:
 		var score_row = _create_stat_row("Score:", "%d (Par %d)" % [results.get("winning_score", 0), results.get("par", 72)], Color.WHITE)
 		card.add_child(score_row)
 
+## Jump to the results: whoever is still on the course has their card completed and
+## the remaining rounds are scored off the field's skill levels.
+func _on_play_it_out_pressed() -> void:
+	if _tournament_manager:
+		_tournament_manager.simulate_remaining_and_complete()
+		_refresh_display()
+
 func _create_stat_row(label_text: String, value_text: String, value_color: Color) -> HBoxContainer:
 	var row = HBoxContainer.new()
 
@@ -273,26 +367,30 @@ func _create_stat_row(label_text: String, value_text: String, value_color: Color
 	return row
 
 func _on_host_pressed(tier: int) -> void:
-	if _tournament_manager.schedule_tournament(tier):
+	# Hosting starts the event on the spot — no booking, no waiting for a date.
+	if _tournament_manager.host_tournament(tier):
 		_refresh_display()
 
 func _on_close_pressed() -> void:
 	close_requested.emit()
 	hide()
 
-func _on_tournament_scheduled(_tier: int, start_day: int) -> void:
-	EventBus.notify("Tournament scheduled for Day %d!" % start_day, "success")
-	if visible:
-		_refresh_display()
+func _on_tournament_scheduled(tier: int, start_day: int) -> void:
+	# A tournament hosted from this panel is already playing, so only a booking
+	# in someone's diary (e.g. a restored save) is announced as scheduled.
+	if start_day > GameManager.current_day:
+		EventBus.notify("%s scheduled for Day %d!" % [
+			TournamentSystem.get_tier_name(tier), start_day], "success")
+	_refresh_display()
 
 func _on_tournament_started(tier: int) -> void:
 	var tier_name = TournamentSystem.get_tier_name(tier)
-	EventBus.notify("%s has begun!" % tier_name, "success")
-	if visible:
-		_refresh_display()
+	EventBus.notify("%s has begun — you are in the field!" % tier_name, "success")
+	_refresh_pending = true
+	_refresh_display()
 
 func _on_tournament_completed(tier: int, results: Dictionary) -> void:
 	var tier_name = TournamentSystem.get_tier_name(tier)
 	EventBus.notify("%s completed! Winner: %s (%d)" % [tier_name, results.winner_name, results.winning_score], "success")
-	if visible:
-		_refresh_display()
+	_refresh_pending = true
+	_refresh_display()

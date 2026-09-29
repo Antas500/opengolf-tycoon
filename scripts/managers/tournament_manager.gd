@@ -1,16 +1,26 @@
 extends Node
 class_name TournamentManager
-## TournamentManager - Handles tournament scheduling, execution, and rewards.
+## TournamentManager - Runs tournaments the moment they are hosted, and pays them out.
 ##
-## Supports multi-round tournaments with cut lines. Each round plays out over
-## one 45-day "phase" on the fast calendar (a day now lasts 3.5 seconds):
-## - LOCAL: 1 round, 45 days
-## - REGIONAL: 2 rounds, 90 days
-## - NATIONAL: 4 rounds, 135 days (rounds 3-4 share the final phase)
-## - CHAMPIONSHIP: 4 rounds, 180 days
+## Clicking "Host Tournament" starts the event straight away: the entry fee is
+## taken, the field is generated and the first pair tees off on the current day.
+## There is no scheduling lead time any more.
 ##
-## Round 1 uses live golfer nodes on-course. Subsequent rounds and end-of-phase
-## fast-forward use TournamentSimulator for shot-by-shot headless simulation.
+## Round 1 is played by live golfers on the course; every competitor beyond the
+## ones that fit the fairways (and every round after the first) is settled by
+## TournamentSimulator, shot by shot, headlessly.
+##
+## The field is built so the course carries two competitors on each open hole at
+## the start of play, and the owner is always one of them: hosting an event puts
+## *you* in the field, in the first pairing, with your own golfer on the tee.
+##
+## Multi-round events play one round per tournament phase:
+## - LOCAL: 1 round
+## - REGIONAL: 2 rounds
+## - NATIONAL: 4 rounds (rounds 3-4 share the final phase)
+## - CHAMPIONSHIP: 4 rounds
+## Each phase spans TOURNAMENT_PHASE_DAYS fast-calendar days (a day lasts 3.5 s),
+## so live golfers get several real minutes of play per round.
 
 signal tournament_scheduled(tier: int, start_day: int)
 signal tournament_started(tier: int)
@@ -27,15 +37,17 @@ const TOURNAMENT_COOLDOWN: int = 45
 ## Length of one tournament phase: a round spans this many 3.5-second days so
 ## live golfers get several real minutes of play per round.
 const TOURNAMENT_PHASE_DAYS: int = 45
+
 var last_tournament_end_day: int = -100
 
 # Multi-round state
 var current_round: int = 0           # 1-based round number (0 = not started)
 var total_rounds: int = 1            # Total rounds for this tier
-var _round_day_map: Array = []       # Which rounds play on which tournament day
+var _round_start_day: int = 0        # Calendar day the current round began on
 
 # Tournament field (persistent across rounds)
 var _sim_field: Array = []           # Array of TournamentSimulator.SimGolfer
+var _live_count: int = 0             # Field entries that play round 1 on the course
 var _round_scores: Dictionary = {}   # golfer_id → Array of RoundResult
 var _cumulative_scores: Dictionary = {} # golfer_id → {total_strokes, total_par}
 var _cut_golfer_ids: Array = []      # IDs of golfers who made the cut (empty = no cut yet)
@@ -50,8 +62,17 @@ var _total_groups: int = 0
 var _spawn_timer: float = 0.0
 var _live_round_active: bool = false  # True when live golfers are playing round 1
 
-# Stagger interval: 30 game-seconds between groups
-const GROUP_SPAWN_INTERVAL: float = 30.0
+## Field id reserved for the owner, who always plays their own tournament.
+## Simulator golfers are numbered from -1 downwards, so 0 is always free.
+const PLAYER_SIM_ID: int = 0
+
+## Competitors that tee off together (and the size of a live group).
+const GROUP_SIZE: int = TournamentSystem.GROUP_SIZE
+
+# Stagger interval between pairings. Each pair goes to its own hole, so this is
+# only the beat the field walks out to its tee on — the whole course is filled a
+# few seconds after the click, not minutes.
+const GROUP_SPAWN_INTERVAL: float = 0.5
 
 # External references (set via setup())
 var _golfer_manager: GolferManager = null
@@ -84,7 +105,8 @@ func _ready() -> void:
 	EventBus.golfer_finished_round.connect(_on_golfer_finished_round)
 
 func _process(delta: float) -> void:
-	# Safety fallback: start a scheduled tournament if day_changed was missed
+	# Safety fallback: a tournament restored from a save as SCHEDULED begins as
+	# soon as its start day arrives (and the course is running).
 	if current_tournament_state == TournamentSystem.TournamentState.SCHEDULED:
 		if GameManager.current_day >= tournament_start_day and _golfer_manager != null \
 				and GameManager.current_mode == GameManager.GameMode.SIMULATING:
@@ -101,50 +123,38 @@ func _process(delta: float) -> void:
 			_spawn_timer -= GROUP_SPAWN_INTERVAL
 			_spawn_next_group()
 
-func _on_day_changed(new_day: int) -> void:
+func _on_day_changed(_new_day: int) -> void:
 	if current_tournament_state == TournamentSystem.TournamentState.SCHEDULED:
-		if new_day >= tournament_start_day:
-			_start_tournament()
+		_start_tournament()
 		return
 
 	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
 		return
 
-	# Which tournament phase is this? (each phase spans TOURNAMENT_PHASE_DAYS days)
-	var tournament_day = _phase_for_day(new_day)
-	if tournament_day < 0:
+	# A round only wraps up when its window runs out — live golfers keep
+	# playing through the daily (3.5 s) rollovers until then.
+	_tick_round_window()
+
+## Settle a live round whose window has run out. Advancing to the next round is
+## the completion path's job (`_finish_round`), so rounds run back to back.
+func _tick_round_window() -> void:
+	if not _live_round_active or not _round_window_elapsed():
 		return
+	_end_current_day_round()
 
-	# Determine which rounds play during this phase
-	var rounds_today = _get_rounds_for_day(tournament_day)
-	if rounds_today.is_empty():
-		return
+## Has the current round had its full phase window? A round the field holes out of
+## earlier closes early; this is the point at which whatever has been played is
+## scored and the rest of each card is filled in off the course.
+func _round_window_elapsed() -> bool:
+	return GameManager.current_day - _round_start_day >= TOURNAMENT_PHASE_DAYS
 
-	# Clear regular golfers for the tournament phase
-	if _golfer_manager:
-		_golfer_manager.clear_all_golfers()
-
-	# Play each round scheduled for this phase
-	for round_num in rounds_today:
-		if round_num <= current_round:
-			continue  # Already played
-		_play_round(round_num)
-
-func _on_end_of_day(day: int) -> void:
+func _on_end_of_day(_day: int) -> void:
 	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
 		return
 
-	# A round only wraps up when its 45-day phase ends — otherwise live
-	# golfers keep playing through the daily (3.5 s) rollovers.
-	if not _live_round_active:
-		return
-	if _phase_for_day(day + 1) != _phase_for_day(day):
-		_end_current_day_round()
-
-## Which 0-based tournament phase a calendar day falls into (floori so days
-## before the start correctly report -1).
-func _phase_for_day(day: int) -> int:
-	return floori(float(day - tournament_start_day) / float(TOURNAMENT_PHASE_DAYS))
+	# A round's live field keeps playing until its phase window is up, so the
+	# daily rollover only settles things once that window has run out.
+	_tick_round_window()
 
 func _on_golfer_finished_hole(golfer_id: int, hole: int, strokes: int, par: int) -> void:
 	if not _live_round_active or golfer_id not in _tournament_golfer_ids:
@@ -155,7 +165,9 @@ func _on_golfer_finished_hole(golfer_id: int, hole: int, strokes: int, par: int)
 		entry.total_strokes += strokes
 		entry.total_par += par
 		entry.holes_completed += 1
-		entry.current_hole = hole + 1
+		var hole_index := _hole_index_for_number(hole)
+		entry.current_hole = hole_index
+		entry.holes_played[hole_index] = true
 
 	if _leaderboard:
 		_leaderboard.update_score(golfer_id, hole, strokes, par)
@@ -176,7 +188,7 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 	_check_live_round_completion()
 
 # ============================================================================
-# SCHEDULING
+# HOSTING
 # ============================================================================
 
 func can_schedule_tournament(tier: int) -> Dictionary:
@@ -184,7 +196,7 @@ func can_schedule_tournament(tier: int) -> Dictionary:
 
 	if current_tournament_state != TournamentSystem.TournamentState.NONE:
 		result.can_schedule = false
-		result.reason = "Tournament already scheduled or in progress"
+		result.reason = "Tournament already running"
 		return result
 
 	var days_since_last = GameManager.current_day - last_tournament_end_day
@@ -209,11 +221,25 @@ func can_schedule_tournament(tier: int) -> Dictionary:
 		result.reason = "Need $%d to host (have $%d)" % [tier_data.entry_cost, GameManager.money]
 		return result
 
+	# Live play needs somewhere to put the field: every competitor that plays on
+	# the course needs an open hole to tee off on.
+	if GameManager.get_open_hole_count() <= 0:
+		result.can_schedule = false
+		result.reason = "Open at least one hole before hosting a tournament"
+		return result
+
 	return result
 
-func schedule_tournament(tier: int) -> bool:
+## Host a tournament: it starts straight away. The entry fee is paid, the field
+## is generated and round 1 begins on the current day with live golfers on the
+## course — the player among them. Returns false (and charges nothing) when the
+## course or the treasury does not allow it.
+func host_tournament(tier: int) -> bool:
 	var check = can_schedule_tournament(tier)
 	if not check.can_schedule:
+		# The shelf shows the same line as a tooltip, but hosting can be refused
+		# from anywhere, and a click that does nothing needs a reason attached.
+		EventBus.notify(str(check.reason), "warning")
 		return false
 
 	var tier_data = TournamentSystem.get_tier_data(tier)
@@ -222,20 +248,19 @@ func schedule_tournament(tier: int) -> bool:
 	GameManager.daily_stats.tournament_entry_fee += tier_data.entry_cost
 	EventBus.log_transaction("Tournament entry fee (%s)" % tier_data.name, -tier_data.entry_cost)
 
-	# Lead time on the fast calendar: a week for locals, a fortnight for bigger
-	# events (days tick at 3.5 seconds, so this stays a brief setup window).
-	var lead_days = 7 if tier == TournamentSystem.TournamentTier.LOCAL else 14
-
 	current_tournament_tier = tier
-	current_tournament_state = TournamentSystem.TournamentState.SCHEDULED
-	tournament_start_day = GameManager.current_day + lead_days
-	tournament_end_day = tournament_start_day + tier_data.duration_days - 1
 	total_rounds = ROUNDS_PER_TIER.get(tier, 1)
 	current_round = 0
-	_round_day_map = _build_round_day_map(tier)
+	# The event runs from today. Each round gets a phase, so the projected end
+	# day follows the rounds rather than the tier's nominal duration.
+	tournament_start_day = GameManager.current_day
+	tournament_end_day = tournament_start_day + maxi(tier_data.duration_days,
+		TOURNAMENT_PHASE_DAYS * total_rounds) - 1
 
+	# The event begins on the spot: no scheduled state, no lead-time wait.
 	tournament_scheduled.emit(tier, tournament_start_day)
 	EventBus.tournament_scheduled.emit(tier, tournament_start_day)
+	_start_tournament()
 
 	return true
 
@@ -245,6 +270,11 @@ func schedule_tournament(tier: int) -> bool:
 
 func _start_tournament() -> void:
 	current_tournament_state = TournamentSystem.TournamentState.IN_PROGRESS
+
+	# The day must be running for live golfers to play, so hosting from the
+	# design board opens the course first.
+	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
+		GameManager.set_mode(GameManager.GameMode.SIMULATING)
 
 	_pre_tournament_speed = GameManager.current_speed
 	if GameManager.current_speed < GameManager.GameSpeed.FAST:
@@ -266,25 +296,68 @@ func _start_tournament() -> void:
 	_live_round_active = false
 
 	var tier_data = TournamentSystem.get_tier_data(current_tournament_tier)
+	var open_holes: int = GameManager.get_open_hole_count()
 
-	# Generate the full tournament field using TournamentSimulator
-	_sim_field = TournamentSimulator.generate_field(current_tournament_tier, tier_data.participant_count)
+	# Field size: a pairing on every open hole, never fewer than the tier's
+	# nominal entry list. The owner is always one of them — hosting an event
+	# means playing it.
+	_sim_field = _build_field(TournamentSystem.get_field_size(current_tournament_tier, open_holes))
+
+	# How many of them get a body on the course: two per open hole.
+	_live_count = mini(TournamentSystem.get_live_field_size(open_holes), _sim_field.size())
 
 	# Initialize cumulative scores
 	for sg in _sim_field:
 		_cumulative_scores[sg.id] = {"total_strokes": 0, "total_par": 0}
 		_round_scores[sg.id] = []
 
-	# Show leaderboard
+	# Show the whole field on the live board from the first tee shot, so the
+	# owner can find themselves on it. Golfers who get a body on the course are
+	# bound to their node below.
 	if _leaderboard:
 		var round_text = "Round 1/%d" % total_rounds if total_rounds > 1 else ""
-		_leaderboard.show_for_tournament(tier_data.name, tier_data.participant_count, total_rounds, round_text)
+		_leaderboard.show_for_tournament(tier_data.name, _sim_field.size(), total_rounds, round_text)
+		for sg in _sim_field:
+			_leaderboard.register_golfer(sg.id, sg.name, sg.id, sg.id == PLAYER_SIM_ID)
 
 	tournament_started.emit(current_tournament_tier)
 	EventBus.tournament_started.emit(current_tournament_tier)
 
-	# Play round 1 — with live golfers on day 1
+	# Play round 1 — live golfers on the course right now
 	_play_round(1)
+
+## Build the field: the tier's professional entrants plus the owner, who always
+## plays a tournament they host. The owner leads the field so the pairing on
+## hole 1 is them and the first professional.
+func _build_field(participant_count: int) -> Array:
+	var field: Array = TournamentSimulator.generate_field(
+		current_tournament_tier, maxi(0, participant_count - 1)
+	)
+	field.push_front(_make_player_sim_golfer())
+	return field
+
+## The owner's entry in the field, built from the persistent player profile so
+## the skills they allocated carry into tournament play.
+func _make_player_sim_golfer() -> TournamentSimulator.SimGolfer:
+	var profile: PlayerGolferProfile = GameManager.player_profile
+	var sg := TournamentSimulator.SimGolfer.new()
+	sg.id = PLAYER_SIM_ID
+	sg.name = profile.golfer_name if profile and profile.golfer_name != "" else "You"
+	sg.tier = GolferTier.Tier.SERIOUS
+	if profile:
+		# Same skill mapping the owner's own rounds use.
+		sg.driving_skill = profile.normalized_skill(1)
+		sg.accuracy_skill = profile.normalized_skill(3)
+		sg.putting_skill = profile.normalized_skill(4)
+		sg.recovery_skill = profile.normalized_skill(8)
+	sg.miss_tendency = 0.0
+	sg.aggression = 0.5
+	sg.patience = 0.5
+	return sg
+
+## Is this field entry the owner?
+func is_player_entry(sim_id: int) -> bool:
+	return sim_id == PLAYER_SIM_ID
 
 # ============================================================================
 # ROUND EXECUTION
@@ -293,13 +366,17 @@ func _start_tournament() -> void:
 ## Play a specific round. Round 1 uses live golfers; rounds 2+ are simulated.
 func _play_round(round_number: int) -> void:
 	current_round = round_number
+	_round_start_day = GameManager.current_day
 
 	var round_label = "Round %d/%d" % [round_number, total_rounds] if total_rounds > 1 else ""
 
 	if _leaderboard:
 		_leaderboard.update_round_info(round_number, total_rounds, round_label)
 
-	EventBus.tournament_simulation_started.emit(current_tournament_tier, round_number)
+	# The "simulation started" notice is for the headless rounds: round 1 is live
+	# golfers on the course, and the effects hung off that signal belong to them.
+	if round_number > 1:
+		EventBus.tournament_simulation_started.emit(current_tournament_tier, round_number)
 
 	if round_number == 1:
 		# Round 1: spawn live golfers
@@ -308,7 +385,11 @@ func _play_round(round_number: int) -> void:
 		# Rounds 2+: simulate headlessly
 		_simulate_round_headless(round_number)
 
-## Start live round with on-course golfer nodes (round 1 only)
+## Start live round with on-course golfer nodes (round 1 only).
+##
+## Competitors play in pairs — two to a group, and no more pairs than the course
+## has open holes, so the event starts with two competitors on every hole. The
+## rest of the field plays out headlessly against the same scorecard.
 func _start_live_round() -> void:
 	_live_round_active = true
 	_groups_spawned = 0
@@ -317,11 +398,53 @@ func _start_live_round() -> void:
 	_tournament_scores.clear()
 
 	# Determine how many groups to spawn for live play
-	var active_field = _get_active_field()
-	_total_groups = ceili(float(active_field.size()) / 4.0)
+	var live_field = _get_live_field()
+	_total_groups = ceili(float(live_field.size()) / float(GROUP_SIZE))
 
 	# Spawn first group immediately
 	_spawn_next_group()
+
+## Course index of the hole whose published number is `hole_number`. Live scoring
+## reports hole numbers; the fill logic works in indices, and the two are not the
+## same thing on a course whose holes were renumbered.
+func _hole_index_for_number(hole_number: int) -> int:
+	var course = GameManager.current_course
+	if course:
+		for i in range(course.holes.size()):
+			if int(course.holes[i].hole_number) == hole_number:
+				return i
+	return clampi(hole_number - 1, 0, maxi((course.holes.size() if course else 1) - 1, 0))
+
+## The first open hole this competitor has not carded, used as the start of the
+## headless fill so their card ends up covering the circuit once each way.
+func _first_open_hole_not_played(played: Dictionary) -> int:
+	for i in _open_hole_indices():
+		if not played.has(i):
+			return i
+	return 0
+
+## Indices of the course's open holes, in play order.
+func _open_hole_indices() -> Array:
+	var indices: Array = []
+	var course = GameManager.current_course
+	if not course:
+		return indices
+	for i in range(course.holes.size()):
+		if course.holes[i].is_open:
+			indices.append(i)
+	return indices
+
+## The slice of the field that plays round 1 live on the course.
+func _get_live_field() -> Array:
+	var active_field = _get_active_field()
+	if _live_count <= 0 or _live_count >= active_field.size():
+		return active_field
+	return active_field.slice(0, _live_count)
+
+## First field index of a live group (groups are pairs, played consecutively
+## through the field).
+func _group_start_index(group_index: int) -> int:
+	return group_index * GROUP_SIZE
 
 func _spawn_next_group() -> void:
 	if not _golfer_manager:
@@ -329,9 +452,9 @@ func _spawn_next_group() -> void:
 	if _groups_spawned >= _total_groups:
 		return
 
-	var active_field = _get_active_field()
-	var start_idx = _groups_spawned * 4
-	var end_idx = mini(start_idx + 4, active_field.size())
+	var active_field = _get_live_field()
+	var start_idx = _group_start_index(_groups_spawned)
+	var end_idx = mini(start_idx + GROUP_SIZE, active_field.size())
 	var group_size = end_idx - start_idx
 	if group_size <= 0:
 		_groups_spawned = _total_groups
@@ -340,11 +463,17 @@ func _spawn_next_group() -> void:
 	var group_id = _golfer_manager.next_group_id
 	_golfer_manager.next_group_id += 1
 
+	# One pairing per open hole: the field spreads across the course as it starts
+	# instead of queueing behind the first tee.
+	var tee_holes = _open_hole_indices()
+	var tee_hole: int = tee_holes[_groups_spawned % tee_holes.size()] if not tee_holes.is_empty() else 0
+
 	for i in range(start_idx, end_idx):
 		var sg: TournamentSimulator.SimGolfer = active_field[i]
 		var tier = sg.tier
 		var golfer = _golfer_manager.spawn_tournament_golfer(tier, group_id)
 		if golfer:
+			_golfer_manager.seat_golfer_at_hole(golfer, tee_hole)
 			# Apply the simulated golfer's skills to the live golfer
 			golfer.driving_skill = sg.driving_skill
 			golfer.accuracy_skill = sg.accuracy_skill
@@ -354,6 +483,13 @@ func _spawn_next_group() -> void:
 			golfer.aggression = sg.aggression
 			golfer.patience = sg.patience
 			golfer.golfer_name = sg.name
+			# The owner plays their own tournament: give their golfer the
+			# colours from the player profile so it is recognisable on the
+			# course. `player_profile` stays null on purpose — a tournament is
+			# a management event, so the owner's shot is played by the same AI
+			# as everyone else's, not left waiting for a click.
+			if sg.id == PLAYER_SIM_ID and GameManager.player_profile:
+				golfer.apply_player_appearance(GameManager.player_profile)
 			# Update the visual name label (set once in _ready, must refresh manually)
 			if golfer.name_label:
 				golfer.name_label.text = sg.name
@@ -368,13 +504,21 @@ func _spawn_next_group() -> void:
 				"holes_completed": 0,
 				"is_finished": false,
 				"skill": avg_skill,
-				"current_hole": 0,
+				# Index of the hole they are on, plus the holes they have already
+				# carded, so a round settled by the clock knows exactly what is left.
+				"current_hole": tee_hole,
+				"holes_played": {},
 			}
 			if _leaderboard:
-				_leaderboard.register_golfer(golfer.golfer_id, sg.name, sg.id)
+				# Point the owner's/pre-pro's existing leaderboard row at the body
+				# that is now playing, so live per-hole scores land on it.
+				_leaderboard.bind_live_golfer(sg.id, golfer.golfer_id)
 
 	_groups_spawned += 1
-	print("Tournament group %d/%d spawned (%d golfers)" % [_groups_spawned, _total_groups, group_size])
+	print("Tournament group %d/%d spawned (%d golfers)%s" % [
+		_groups_spawned, _total_groups, group_size,
+		" — you are in the first pairing" if start_idx == 0 else ""
+	])
 
 ## Simulate a round headlessly for all active golfers using real shot physics
 func _simulate_round_headless(round_number: int) -> void:
@@ -384,69 +528,67 @@ func _simulate_round_headless(round_number: int) -> void:
 	print("Simulating round %d for %d golfers..." % [round_number, active_field.size()])
 
 	for sg in active_field:
-		var result: TournamentSimulator.RoundResult = TournamentSimulator.simulate_round(sg, round_number)
+		round_moments.append_array(_record_simulated_round(sg, round_number))
 
-		# Store round result
-		if not _round_scores.has(sg.id):
-			_round_scores[sg.id] = []
-		_round_scores[sg.id].append(result)
+	_finish_round(round_moments, false)
 
-		# Update cumulative scores
-		if _cumulative_scores.has(sg.id):
-			_cumulative_scores[sg.id].total_strokes += result.total_strokes
-			_cumulative_scores[sg.id].total_par += result.total_par
+## Play one round for one competitor with TournamentSimulator and file the result
+## into the scorebook, the cumulative standings and the leaderboard. Returns the
+## moments that round produced.
+func _record_simulated_round(sg: TournamentSimulator.SimGolfer, round_number: int) -> Array:
+	var result: TournamentSimulator.RoundResult = TournamentSimulator.simulate_round(sg, round_number)
 
-		# Collect moments
-		round_moments.append_array(result.moments)
+	# Store round result
+	if not _round_scores.has(sg.id):
+		_round_scores[sg.id] = []
+	_round_scores[sg.id].append(result)
 
-		# Update leaderboard
-		if _leaderboard:
-			_leaderboard.set_round_score(sg.id, round_number,
-				result.total_strokes, result.total_par,
-				_cumulative_scores[sg.id].total_strokes,
-				_cumulative_scores[sg.id].total_par)
+	# Update cumulative scores
+	if not _cumulative_scores.has(sg.id):
+		_cumulative_scores[sg.id] = {"total_strokes": 0, "total_par": 0}
+	_cumulative_scores[sg.id].total_strokes += result.total_strokes
+	_cumulative_scores[sg.id].total_par += result.total_par
+	_tournament_moments.append_array(result.moments)
 
-	# Store moments
-	_tournament_moments.append_array(round_moments)
+	# Update leaderboard
+	if _leaderboard:
+		if not _leaderboard.has_golfer(sg.id):
+			_leaderboard.register_golfer(sg.id, sg.name, sg.id, sg.id == PLAYER_SIM_ID)
+		_leaderboard.set_round_score(sg.id, round_number,
+			result.total_strokes, result.total_par,
+			_cumulative_scores[sg.id].total_strokes,
+			_cumulative_scores[sg.id].total_par)
 
-	# Emit moment notifications
-	_emit_moments(round_moments)
+	return result.moments
 
-	# Emit round completed
-	var standings = _get_standings()
-	EventBus.tournament_round_completed.emit(current_tournament_tier, round_number, standings)
-	EventBus.tournament_simulation_completed.emit(current_tournament_tier, round_number)
-
-	print("Round %d complete. Leader: %s at %s" % [
-		round_number,
-		standings[0].name if not standings.is_empty() else "N/A",
-		_format_score(standings[0]) if not standings.is_empty() else "N/A"
-	])
-
-	# Apply cut line after round 2 if applicable
-	if CUT_RULES.has(current_tournament_tier):
-		var cut_info = CUT_RULES[current_tournament_tier]
-		if round_number == cut_info.after_round and _cut_golfer_ids.is_empty():
-			_apply_cut_line(cut_info.rule)
-
-	# Check if tournament is complete after this round
-	if current_round >= total_rounds:
-		_complete_tournament()
-	elif _leaderboard:
-		_leaderboard.update_round_info(current_round, total_rounds,
-			"Round %d/%d Complete" % [current_round, total_rounds])
-
-## End the current day's live round — simulate remaining golfers and advance
+## Close the live round: settle anyone still out there, clear the course and hand
+## the round to `_finish_round`. Runs when the round's window expires or when the
+## live field has holed out.
 func _end_current_day_round() -> void:
 	if not _live_round_active:
 		return
 
-	# Spawn and simulate any unspawned groups using TournamentSimulator
-	var active_field = _get_active_field()
-	while _groups_spawned < _total_groups:
-		_spawn_remaining_group_headless(active_field)
+	var round_moments: Array = []
 
-	# Simulate remaining holes for unfinished live golfers using TournamentSimulator
+	# Competitors whose tee time never came around — plus everyone the course
+	# could not seat at two per hole — are settled headlessly against the same
+	# scorecard.
+	var live_field = _get_live_field()
+	var full_field = _get_active_field()
+	while _groups_spawned < _total_groups:
+		var start_idx = _group_start_index(_groups_spawned)
+		var end_idx = mini(start_idx + GROUP_SIZE, live_field.size())
+		for i in range(start_idx, end_idx):
+			round_moments.append_array(_record_simulated_round(live_field[i], current_round))
+		_groups_spawned += 1
+	for i in range(live_field.size(), full_field.size()):
+		round_moments.append_array(_record_simulated_round(full_field[i], current_round))
+
+	# Anyone still on the course when the round closes has their card completed
+	# headlessly, for exactly the holes they did not reach. Filling a fixed number
+	# of holes is what keeps the field comparable: everyone ends the round over the
+	# same circuit, so "to par" means the same thing on every line of the board.
+	var circuit_holes := _open_hole_indices().size()
 	var simulated_results: Array = []
 	for gid in _tournament_golfer_ids:
 		if not _tournament_scores.has(gid):
@@ -455,11 +597,11 @@ func _end_current_day_round() -> void:
 		if entry.is_finished:
 			continue
 
-		# Find the matching SimGolfer
 		var sim_id = entry.get("sim_id", gid)
 		var sg = _find_sim_golfer(sim_id)
 		if not sg:
-			# Fallback: create from existing data
+			# No entry in the simulated field (a save restored mid-round, say):
+			# model them from the scorecard that does exist.
 			sg = TournamentSimulator.SimGolfer.new()
 			sg.id = sim_id
 			sg.name = entry.name
@@ -468,12 +610,14 @@ func _end_current_day_round() -> void:
 			sg.putting_skill = entry.skill
 			sg.recovery_skill = entry.skill
 
+		var holes_left: int = maxi(circuit_holes - (entry.holes_played as Dictionary).size(), 0)
 		var result = TournamentSimulator.simulate_remaining(sg,
-			entry.current_hole, entry.total_strokes, entry.total_par)
+			_first_open_hole_not_played(entry.holes_played),
+			int(entry.total_strokes), int(entry.total_par), holes_left)
 
 		entry.total_strokes = result.total_strokes
 		entry.total_par = result.total_par
-		entry.holes_completed += result.hole_scores.size()
+		entry.holes_completed = circuit_holes
 		entry.is_finished = true
 
 		simulated_results.append({
@@ -483,6 +627,7 @@ func _end_current_day_round() -> void:
 			"holes_completed": entry.holes_completed,
 		})
 
+		round_moments.append_array(result.moments)
 		_tournament_moments.append_array(result.moments)
 
 	# Update leaderboard
@@ -493,110 +638,54 @@ func _end_current_day_round() -> void:
 	if _golfer_manager:
 		_golfer_manager.remove_tournament_golfers()
 
-	# Record round 1 results into round_scores and cumulative_scores
+	# Record this round's results into round_scores and cumulative_scores
 	_record_live_round_results()
 
 	_live_round_active = false
 
-	# Emit any moments collected during live round simulation
-	_emit_moments(_tournament_moments)
+	_finish_round(round_moments, true)
 
-	# Emit round completion
+## One round is over: announce its moments and standings, apply the cut, then
+## either tee off the next round straight away or settle the tournament.
+func _finish_round(round_moments: Array, was_live: bool) -> void:
+	_emit_moments(round_moments)
+
 	var standings = _get_standings()
 	EventBus.tournament_round_completed.emit(current_tournament_tier, current_round, standings)
+	if not was_live:
+		EventBus.tournament_simulation_completed.emit(current_tournament_tier, current_round)
 
-	# Apply cut if needed
+	print("Round %d complete. Leader: %s at %s" % [
+		current_round,
+		standings[0].name if not standings.is_empty() else "N/A",
+		_format_score(standings[0]) if not standings.is_empty() else "N/A"
+	])
+
+	# Apply the cut line once the round it follows has been played
 	if CUT_RULES.has(current_tournament_tier):
 		var cut_info = CUT_RULES[current_tournament_tier]
 		if current_round == cut_info.after_round and _cut_golfer_ids.is_empty():
 			_apply_cut_line(cut_info.rule)
 
-	# Check if this was the last round
 	if current_round >= total_rounds:
 		_complete_tournament()
-	else:
-		# Determine if more rounds play in this phase
-		var tournament_day = _phase_for_day(GameManager.current_day)
-		var rounds_today = _get_rounds_for_day(tournament_day)
-		for round_num in rounds_today:
-			if round_num > current_round:
-				_play_round(round_num)
-				return
-
-## Spawn unspawned groups headlessly using TournamentSimulator
-func _spawn_remaining_group_headless(active_field: Array) -> void:
-	var start_idx = _groups_spawned * 4
-	var end_idx = mini(start_idx + 4, active_field.size())
-	var group_size = end_idx - start_idx
-	if group_size <= 0:
-		_groups_spawned = _total_groups
 		return
 
-	for i in range(start_idx, end_idx):
-		var sg: TournamentSimulator.SimGolfer = active_field[i]
-		var result = TournamentSimulator.simulate_round(sg, current_round)
+	if _leaderboard:
+		_leaderboard.update_round_info(current_round, total_rounds,
+			"Round %d/%d Complete" % [current_round, total_rounds])
 
-		var fake_id = sg.id  # Use sim golfer's negative ID
-		_tournament_golfer_ids.append(fake_id)
-
-		_tournament_scores[fake_id] = {
-			"name": sg.name,
-			"sim_id": sg.id,
-			"total_strokes": result.total_strokes,
-			"total_par": result.total_par,
-			"holes_completed": result.hole_scores.size(),
-			"is_finished": true,
-			"skill": (sg.driving_skill + sg.accuracy_skill + sg.putting_skill + sg.recovery_skill) / 4.0,
-			"current_hole": result.hole_scores.size(),
-		}
-
-		_tournament_moments.append_array(result.moments)
-
-		if _leaderboard:
-			_leaderboard.register_golfer(fake_id, sg.name, sg.id)
-			_leaderboard.set_simulated_results([{
-				"golfer_id": fake_id,
-				"total_strokes": result.total_strokes,
-				"total_par": result.total_par,
-				"holes_completed": result.hole_scores.size(),
-			}])
-
-	_groups_spawned += 1
+	# The next round follows on straight away — a tournament plays through, it
+	# does not sit in the diary waiting for a date.
+	_play_round(current_round + 1)
 
 func _check_live_round_completion() -> void:
-	var all_done = true
+	if _groups_spawned < _total_groups:
+		return
 	for gid in _tournament_golfer_ids:
 		if _tournament_scores.has(gid) and not _tournament_scores[gid].is_finished:
-			all_done = false
-			break
-
-	if all_done and _groups_spawned >= _total_groups:
-		# Record results and check for more rounds today
-		if _golfer_manager:
-			_golfer_manager.remove_tournament_golfers()
-
-		_record_live_round_results()
-		_live_round_active = false
-
-		var standings = _get_standings()
-		EventBus.tournament_round_completed.emit(current_tournament_tier, current_round, standings)
-
-		# Apply cut if needed
-		if CUT_RULES.has(current_tournament_tier):
-			var cut_info = CUT_RULES[current_tournament_tier]
-			if current_round == cut_info.after_round and _cut_golfer_ids.is_empty():
-				_apply_cut_line(cut_info.rule)
-
-		if current_round >= total_rounds:
-			_complete_tournament()
-		else:
-			# Check if more rounds play in this phase
-			var tournament_day = _phase_for_day(GameManager.current_day)
-			var rounds_today = _get_rounds_for_day(tournament_day)
-			for round_num in rounds_today:
-				if round_num > current_round:
-					_play_round(round_num)
-					return
+			return
+	_end_current_day_round()
 
 ## Record live round results into the persistent round_scores/cumulative_scores
 func _record_live_round_results() -> void:
@@ -691,6 +780,7 @@ func _complete_tournament() -> void:
 
 	var winner_name = standings[0].name if not standings.is_empty() else "Unknown"
 	var winning_score = standings[0].total_strokes if not standings.is_empty() else 0
+	var winner_is_player: bool = not standings.is_empty() and standings[0].id == PLAYER_SIM_ID
 	var course_par = TournamentSystem._get_course_par(GameManager.current_course)
 
 	# Build all_entries array for results popup
@@ -698,6 +788,7 @@ func _complete_tournament() -> void:
 	for s in standings:
 		all_entries.append({
 			"name": s.name,
+			"is_player": s.id == PLAYER_SIM_ID,
 			"total_strokes": s.total_strokes,
 			"total_par": s.total_par,
 			"score_to_par": s.score_to_par,
@@ -710,6 +801,7 @@ func _complete_tournament() -> void:
 
 	tournament_results = {
 		"winner_name": winner_name,
+		"winner_is_player": winner_is_player,
 		"winning_score": winning_score,
 		"par": course_par,
 		"scores": standings.map(func(s): return s.total_strokes),
@@ -762,6 +854,10 @@ func _complete_tournament() -> void:
 	# Note: simulated round moments are emitted per-round in _simulate_round_headless().
 	# Live round moments are emitted in _end_current_day_round(). No re-emit needed here.
 
+	# The event is over: nobody stays on the course because of it.
+	if _golfer_manager:
+		_golfer_manager.remove_tournament_golfers()
+
 	# Reset state
 	current_tournament_tier = -1
 	current_tournament_state = TournamentSystem.TournamentState.NONE
@@ -775,6 +871,11 @@ func _complete_tournament() -> void:
 	_cut_golfer_ids.clear()
 	_eliminated_ids.clear()
 	_tournament_moments.clear()
+	_live_count = 0
+	_total_groups = 0
+	_groups_spawned = 0
+	_spawn_timer = 0.0
+	_live_round_active = false
 
 	var score_diff = standings[0].score_to_par if not standings.is_empty() else 0
 	var score_text = _format_score_diff(score_diff)
@@ -785,18 +886,24 @@ func _complete_tournament() -> void:
 
 ## Called when End Day is pressed during a tournament
 func simulate_remaining_and_complete() -> void:
+	if current_tournament_state == TournamentSystem.TournamentState.SCHEDULED:
+		_start_tournament()
+		return
 	if current_tournament_state != TournamentSystem.TournamentState.IN_PROGRESS:
 		return
 
-	# End current live round if active
+	# Ending the live round chains straight into every remaining round, so one
+	# call settles the whole event.
 	if _live_round_active:
 		_end_current_day_round()
 
-	# Simulate all remaining rounds
-	while current_round < total_rounds and current_tournament_state == TournamentSystem.TournamentState.IN_PROGRESS:
+	# Safety net: a round still pending for any other reason plays out now.
+	var guard := 0
+	while current_tournament_state == TournamentSystem.TournamentState.IN_PROGRESS \
+			and current_round < total_rounds and guard < 8:
+		guard += 1
 		_play_round(current_round + 1)
 
-	# Tournament should be complete after all rounds
 	if current_tournament_state == TournamentSystem.TournamentState.IN_PROGRESS:
 		_complete_tournament()
 
@@ -820,6 +927,7 @@ func _get_standings() -> Array:
 		standings.append({
 			"id": sg.id,
 			"name": sg.name,
+			"is_player": sg.id == PLAYER_SIM_ID,
 			"total_strokes": cum.total_strokes,
 			"total_par": cum.total_par,
 			"score_to_par": cum.total_strokes - cum.total_par,
@@ -836,32 +944,12 @@ func _get_round_score_diffs(sim_id: int) -> Array:
 			diffs.append(rr.total_strokes - rr.total_par)
 	return diffs
 
-## Find a SimGolfer by ID
+## Find the simulated competitor a live golfer is being modelled on.
 func _find_sim_golfer(sim_id: int) -> TournamentSimulator.SimGolfer:
 	for sg in _sim_field:
 		if sg.id == sim_id:
 			return sg
 	return null
-
-## Build map of which rounds play on which tournament day (0-based)
-func _build_round_day_map(tier: int) -> Array:
-	match tier:
-		TournamentSystem.TournamentTier.LOCAL:
-			return [[1]]              # Day 0: Round 1
-		TournamentSystem.TournamentTier.REGIONAL:
-			return [[1], [2]]         # Day 0: R1, Day 1: R2
-		TournamentSystem.TournamentTier.NATIONAL:
-			return [[1], [2], [3, 4]] # Day 0: R1, Day 1: R2, Day 2: R3+R4
-		TournamentSystem.TournamentTier.CHAMPIONSHIP:
-			return [[1], [2], [3], [4]] # Day 0-3: R1-R4
-		_:
-			return [[1]]
-
-## Get rounds to play for a given tournament day (0-based)
-func _get_rounds_for_day(tournament_day: int) -> Array:
-	if tournament_day < 0 or tournament_day >= _round_day_map.size():
-		return []
-	return _round_day_map[tournament_day]
 
 ## Calculate drama multiplier based on tournament moments
 func _calculate_drama_multiplier() -> float:
@@ -920,7 +1008,9 @@ func get_tournament_info() -> Dictionary:
 		"end_day": tournament_end_day,
 		"current_round": current_round,
 		"total_rounds": total_rounds,
-		"days_remaining": tournament_end_day - GameManager.current_day + 1 if current_tournament_state == TournamentSystem.TournamentState.IN_PROGRESS else tournament_start_day - GameManager.current_day,
+		# Never negative: a paused game can sit past the scheduled end day while
+		# the final round holes out, and the panel prints this as a countdown.
+		"days_remaining": maxi((tournament_end_day - GameManager.current_day + 1) if current_tournament_state == TournamentSystem.TournamentState.IN_PROGRESS else (tournament_start_day - GameManager.current_day), 0),
 	}
 
 func get_cooldown_remaining() -> int:
@@ -929,6 +1019,41 @@ func get_cooldown_remaining() -> int:
 
 func is_tournament_in_progress() -> bool:
 	return current_tournament_state == TournamentSystem.TournamentState.IN_PROGRESS
+
+## The owner's own standing in the running event — score to par, position in the
+## field and how many holes they have played. Empty when no tournament is on or
+## the owner is not in it.
+func get_player_standing() -> Dictionary:
+	if current_tournament_state == TournamentSystem.TournamentState.NONE:
+		return {}
+
+	var standings = _get_standings()
+	for i in range(standings.size()):
+		if standings[i].id != PLAYER_SIM_ID:
+			continue
+		var holes: int = 0
+		for entry in _tournament_scores.values():
+			if entry.get("sim_id", -1) == PLAYER_SIM_ID:
+				holes = int(entry.holes_completed)
+				break
+		# Ties share a position. Everyone starts a round level, and "rank 24 of
+		# 24" for a golfer on the leader's score reads like a result rather than
+		# a starting grid.
+		var ahead := 0
+		for j in range(standings.size()):
+			if int(standings[j].score_to_par) < int(standings[i].score_to_par):
+				ahead += 1
+		return {
+			"name": standings[i].name,
+			"rank": ahead + 1,
+			"field_size": standings.size(),
+			"score_to_par": standings[i].score_to_par,
+			"total_strokes": standings[i].total_strokes,
+			"holes_completed": holes,
+			"round": current_round,
+			"missed_cut": standings[i].id in _eliminated_ids,
+		}
+	return {}
 
 func get_save_data() -> Dictionary:
 	return {

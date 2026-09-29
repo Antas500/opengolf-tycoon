@@ -8,18 +8,34 @@ The TournamentSimulator (`scripts/systems/tournament_simulator.gd`) provides hea
 
 ## Multi-Round Format
 
-| Tier | Rounds | Days | Field | Cut |
-|------|--------|------|-------|-----|
-| LOCAL | 1 | 1 | 12 | None |
-| REGIONAL | 2 | 2 | 24 | None |
-| NATIONAL | 4 | 3 | 48 | Top 50% after R2 |
-| CHAMPIONSHIP | 4 | 4 | 72 | Top 40 + ties after R2 |
+| Tier | Rounds | Field (floor) | Cut |
+|------|--------|---------------|-----|
+| LOCAL | 1 | 12 | None |
+| REGIONAL | 2 | 24 | None |
+| NATIONAL | 4 | 48 | Top 50% after R2 |
+| CHAMPIONSHIP | 4 | 72 | Top 40 + ties after R2 |
 
-### Day-to-Round Mapping
-- **LOCAL:** Day 1: R1
-- **REGIONAL:** Day 1: R1, Day 2: R2
-- **NATIONAL:** Day 1: R1, Day 2: R2, Day 3: R3 + R4
-- **CHAMPIONSHIP:** Day 1: R1, Day 2: R2, Day 3: R3, Day 4: R4
+The field column is a **floor**: the simulation is asked for
+`max(tier field, 2 × open holes)` competitors, because a tournament seats one
+pairing (`GROUP_SIZE = 2`) on every open hole of the course.
+
+### Round Pacing
+A round runs for one tournament phase (`TOURNAMENT_PHASE_DAYS = 45` fast-calendar
+days) and the next round starts the moment the previous one is scored — rounds are
+not spread over the calendar. Round 1 is played live on the course; rounds 2+ are
+simulated here. Anything the clock catches mid-round has its card completed with
+`simulate_remaining()` so every entry in the field is measured over the same
+circuit of holes.
+
+## Field Generation
+
+`generate_field(tier, field_size)` builds the professional entrants and numbers them
+`-1, -2, …` so id `0` stays free: `TournamentManager` reserves it
+(`PLAYER_SIM_ID = 0`) for the owner's entry and pushes it to the front of the field,
+which is how the host ends up in the first pairing on the first hole. The owner's
+`SimGolfer` takes its name and skills from `GameManager.player_profile`
+(`normalized_skill()` for driving, accuracy, putting and recovery) rather than from
+the tier distribution, so training the golfer changes tournament results.
 
 ## Shot Simulation Pipeline
 
@@ -51,6 +67,10 @@ distance_modifier = base_variance × terrain_modifier × wind_modifier × elevat
 ```
 
 ### 4. Post-Landing
+Every hole is worth the par of the **back tee** (`_tournament_par()`), which is what
+live play scores a hole against too — `HoleData.par` can sit a stroke away from it on
+a course whose tee cards were adjusted separately, and mixing the two would make a
+round played on the course incomparable with one filled in off it.
 - Wind displacement applied
 - Rollout estimated (simplified for performance)
 - Hazard penalties (water: +1 stroke + drop; OOB: +1 stroke + replay)
@@ -135,11 +155,17 @@ Key optimizations:
 
 ## Integration
 
-### Round 1: Live + Simulated
-Round 1 spawns live golfer nodes on-course with skills matching the generated SimGolfer field. If End Day is pressed, remaining golfers are simulated via TournamentSimulator.
+### Round 1: Live, Completed Headlessly
+Round 1 spawns live golfer nodes on-course with skills matching the generated
+SimGolfer field — one pairing per open hole, each seated on its own tee. A pairing
+whose round is cut short by the clock (or by the shelf's "Play It Out") has its
+missing holes simulated here with `simulate_remaining(golfer, start_hole, strokes,
+par, holes_to_play)`; the count argument and the wrap over the open holes are what
+keep a half-played card worth the same as a fully played one.
 
 ### Rounds 2+: Fully Simulated
-Subsequent rounds call `TournamentSimulator.simulate_round()` for each active golfer, updating the leaderboard with per-round scores.
+Subsequent rounds call `TournamentSimulator.simulate_round()` for each active golfer,
+updating the leaderboard with per-round scores.
 
 ### Leaderboard
 The TournamentLeaderboard shows:
@@ -159,7 +185,9 @@ The TournamentLeaderboard shows:
 | Drama multiplier caps | `TournamentManager._calculate_drama_multiplier()` | 1.5x max | Revenue bonus |
 | Max strokes per hole | `GolfRules.get_max_strokes()` | par + 3 | Pickup threshold |
 | Rounds per tier | `TournamentManager.ROUNDS_PER_TIER` | 1/2/4/4 | Tournament length |
-| Round-day mapping | `TournamentManager._build_round_day_map()` | See spec | Schedule |
+| Phase length per round | `TournamentManager.TOURNAMENT_PHASE_DAYS` | 45 days | How long round 1 may run live |
+| Group size | `TournamentSystem.GROUP_SIZE` | 2 | Competitors per hole, and per pairing |
+| Field size | `TournamentSystem.get_field_size()` | max(tier, 2 × holes) | Entries in the field |
 
 ## Files
 

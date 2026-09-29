@@ -122,7 +122,7 @@ func open_setup() -> void:
 		EventBus.notify("Open at least one complete hole before playing.", "warning")
 		return
 	if GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress():
-		EventBus.notify("Finish the management tournament before playing a round.", "warning")
+		EventBus.notify("Tournament running - Play It Out on the Tournament shelf first.", "warning")
 		return
 	busy = true
 	previous_mode = GameManager.current_mode
@@ -258,7 +258,7 @@ func _start_embedded(kind: int) -> void:
 		EventBus.notify("Open at least one complete hole before playing.", "warning")
 		return
 	if GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress():
-		EventBus.notify("Finish the management tournament before playing a round.", "warning")
+		EventBus.notify("Tournament running - Play It Out on the Tournament shelf first.", "warning")
 		return
 	if not draft.initialized and draft.remaining() != 0:
 		EventBus.notify("Allocate all 10 points in Player Skills first.", "info")

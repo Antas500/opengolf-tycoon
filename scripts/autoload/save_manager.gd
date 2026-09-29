@@ -370,7 +370,12 @@ func _apply_save_data(data: Dictionary) -> void:
 		terrain_grid.queue_redraw()
 	if terrain_grid and data.has("view"):
 		var view: Dictionary = data["view"]
-		terrain_grid.set_view_isometric(bool(view.get("isometric", true)))
+		# The projection is isometric by definition now (GridProjection.isometric
+		# is a constant), so the saved flag has nothing to set. The removed setter
+		# used to be called here anyway, which raised "nonexistent function" and
+		# aborted the whole load: the course, wind and tournament below it never
+		# got restored, and the Host Tournament button sat greyed out reading
+		# "No course data" on a course that plainly had one.
 		terrain_grid.set_view_orientation(int(view.get("orientation", 0)))
 
 	# Entities

@@ -17,6 +17,12 @@ Formats:
 - **Practice round:** owner only.
 - **Play vs a Pro:** choose Alex, Morgan or Riley (each uses the Pro skill tier).
 
+A hosted tournament is a different thing: it starts on the click, and the owner is in
+the field as a competitor (see [Tournament System](tournament-system.md)). Because
+that pairing is already out on the course, starting an owner round is refused while
+an event is live — the warning points at the shelf's **Play It Out** button, which
+settles the event and frees the course.
+
 All participants play the open holes from the back tees. The player and any opponents
 are assigned a shared `group_id`, playing together as a single group just like visitor
 groups on the course. They observe standard golf etiquette managed by `GolferManager`:

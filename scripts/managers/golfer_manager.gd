@@ -520,6 +520,33 @@ func _is_landing_area_clear(shooting_golfer: Golfer, _group_golfers: Array) -> b
 	# Cone-based check: only blocks if golfers are ahead in the shot direction
 	return _is_cone_clear_of_golfers(ball_pos, target, lateral_radius, shooting_golfer.group_id, shooting_golfer.current_hole)
 
+## The hole a golfer plays next after `from_index`, or -1 when their round is
+## over.
+##
+## Tournament pairings tee off on their own hole, so their round wraps back to
+## the first tee and keeps going until the field has played the full circuit —
+## everyone is measured against the same par.
+func _next_hole_for(golfer: Golfer, course_data, from_index: int) -> int:
+	var next_index := _find_next_open_hole(from_index, course_data)
+	if next_index < course_data.holes.size():
+		return next_index
+	if _round_wraps_for(golfer, course_data):
+		return _find_next_open_hole(0, course_data)
+	return -1
+
+## Does this golfer wrap around the course instead of finishing early?
+func _round_wraps_for(golfer: Golfer, course_data) -> bool:
+	if not golfer.is_tournament_golfer or golfer.is_owner_round:
+		return false
+	return golfer.hole_scores.size() < _count_open_holes(course_data)
+
+static func _count_open_holes(course_data) -> int:
+	var open_holes := 0
+	for hole in course_data.holes:
+		if hole.is_open:
+			open_holes += 1
+	return open_holes
+
 func _advance_golfer(golfer: Golfer) -> void:
 	"""Advance a specific golfer to their next shot"""
 	var course_data = GameManager.course_data
@@ -530,7 +557,11 @@ func _advance_golfer(golfer: Golfer) -> void:
 
 	# Skip closed holes when starting a new hole
 	if golfer.current_strokes == 0:
-		next_hole_index = _find_next_open_hole(next_hole_index, course_data)
+		next_hole_index = _next_hole_for(golfer, course_data, next_hole_index)
+		if next_hole_index < 0:
+			# Round completed
+			golfer.finish_round()
+			return
 		golfer.current_hole = next_hole_index
 
 	if next_hole_index >= course_data.holes.size():
@@ -595,12 +626,11 @@ func _advance_golfer(golfer: Golfer) -> void:
 			golfer.current_strokes = 0
 
 			# Skip any closed holes after finishing
-			golfer.current_hole = _find_next_open_hole(golfer.current_hole, course_data)
-
-			# Check if round is complete after advancing to next hole
-			if golfer.current_hole >= course_data.holes.size():
+			var follow_up = _next_hole_for(golfer, course_data, golfer.current_hole)
+			if follow_up < 0:
 				golfer.finish_round()
 				return
+			golfer.current_hole = follow_up
 
 			# Immediately walk to the next tee to clear the green
 			# Don't wait for turn - golfers should move off the green right away
@@ -786,6 +816,21 @@ func get_tournament_golfers() -> Array[Golfer]:
 		if golfer.is_tournament_golfer and not golfer.is_owner_round:
 			result.append(golfer)
 	return result
+
+## Place a golfer on the tee of one specific hole without starting it.
+##
+## Tournament pairings are seated on their own hole, so an event opens with two
+## competitors visible on every tee instead of a queue behind the first one.
+func seat_golfer_at_hole(golfer: Golfer, hole_index: int) -> void:
+	var course_data = GameManager.course_data
+	if not course_data or hole_index < 0 or hole_index >= course_data.holes.size():
+		return
+	var hole_data = course_data.holes[hole_index]
+	golfer.current_hole = hole_index
+	golfer.ball_position = hole_data.tee_position
+	golfer.ball_position_precise = Vector2(hole_data.tee_position)
+	if GameManager.terrain_grid:
+		golfer.global_position = GameManager.terrain_grid.grid_to_screen_center(hole_data.tee_position)
 
 ## Remove all tournament golfers from the course
 func remove_tournament_golfers() -> void:

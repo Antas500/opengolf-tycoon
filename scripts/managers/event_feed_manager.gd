@@ -339,6 +339,10 @@ func _on_seasonal_event_upcoming(event_name: String, days_until: int) -> void:
 		add_event(Category.WEATHER, Priority.INFO, "%s in 2 days" % event_name)
 
 func _on_tournament_scheduled(tier: int, start_day: int) -> void:
+	# Hosting starts the event on the spot, so there is nothing to book: only a
+	# tournament that really lies in the future (an older save) earns a feed line.
+	if start_day <= GameManager.current_day:
+		return
 	var tier_names := {0: "Local", 1: "Regional", 2: "National", 3: "Championship"}
 	var tier_name = tier_names.get(tier, "Tournament")
 	add_event(Category.TOURNAMENT, Priority.NORMAL,

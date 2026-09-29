@@ -130,8 +130,10 @@ func update_round_info(round_num: int, total_rnds: int, round_text: String) -> v
 
 	_refresh_display()
 
-## Register a golfer on the leaderboard
-func register_golfer(golfer_id: int, golfer_name: String, sim_id: int = -1) -> void:
+## Register a golfer on the leaderboard. `is_player` marks the owner's own entry
+## — hosting a tournament puts you in the field, so the board calls it out.
+func register_golfer(golfer_id: int, golfer_name: String, sim_id: int = -1,
+		is_player: bool = false) -> void:
 	_entries.append({
 		"golfer_id": golfer_id,
 		"sim_id": sim_id if sim_id != -1 else golfer_id,
@@ -142,8 +144,24 @@ func register_golfer(golfer_id: int, golfer_name: String, sim_id: int = -1) -> v
 		"holes_completed": 0,
 		"is_finished": false,
 		"missed_cut": false,
+		"is_player": is_player,
 	})
 	_refresh_display()
+
+## Attach the live node id to a field entry already on the board, so per-hole
+## scores from the course update the right row.
+func bind_live_golfer(sim_id: int, golfer_id: int) -> void:
+	for entry in _entries:
+		if entry.sim_id == sim_id:
+			entry.golfer_id = golfer_id
+			return
+
+## Is this golfer (by either id) already on the board?
+func has_golfer(id: int) -> bool:
+	for entry in _entries:
+		if entry.golfer_id == id or entry.sim_id == id:
+			return true
+	return false
 
 ## Update score for a live golfer (per-hole update)
 func update_score(golfer_id: int, _hole: int, strokes: int, par: int) -> void:
@@ -250,7 +268,7 @@ func _refresh_display() -> void:
 			score_color = UIConstants.COLOR_TEXT_DIM
 
 		var row = _create_entry_row(rank_text, entry.name, entry.round_scores,
-			score_text, thru_text, score_color, entry.missed_cut)
+			score_text, thru_text, score_color, entry.missed_cut, entry.get("is_player", false))
 		_grid.add_child(row)
 
 func _create_header_row() -> HBoxContainer:
@@ -273,15 +291,18 @@ func _create_header_row() -> HBoxContainer:
 	return row
 
 func _create_entry_row(rank: String, player_name: String, round_scores: Array,
-		score: String, thru: String, color: Color, missed_cut: bool) -> HBoxContainer:
+		score: String, thru: String, color: Color, missed_cut: bool,
+		is_player: bool = false) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
 
 	var name_color = Color.WHITE if not missed_cut else UIConstants.COLOR_TEXT_DIM
+	if is_player:
+		name_color = UIConstants.COLOR_GOLD
 
 	row.add_child(_make_label(rank, 20, UIConstants.COLOR_TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT))
 
-	var name_lbl = _make_label(player_name, 0, name_color)
+	var name_lbl = _make_label(player_name + (" (you)" if is_player else ""), 0, name_color)
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.clip_text = true
 	row.add_child(name_lbl)

@@ -131,7 +131,7 @@ green_fee_changed            → ECONOMY     → INFO      → NONE
 course_rating_changed        → COURSE      → NORMAL    → NONE
 weather_changed              → WEATHER     → INFO      → NONE
 season_changed               → WEATHER     → NORMAL    → NONE
-tournament_scheduled         → TOURNAMENT  → NORMAL    → NONE
+tournament_scheduled         → TOURNAMENT  → NORMAL    → NONE   (only when start_day is in the future)
 tournament_started           → TOURNAMENT  → HIGH      → NONE
 tournament_completed         → TOURNAMENT  → HIGH      → NONE
 hole_created                 → COURSE      → NORMAL    → NONE
