@@ -8,6 +8,7 @@ var embedded := false
 var _tournament_manager: TournamentManager = null
 var _content_vbox: BoxContainer = null
 var _status_label: Label = null
+var _status_column: VBoxContainer = null
 var _title_label: Label = null
 ## Host buttons by tier, so a refresh can find and re-enable the exact one the
 ## player is hovering instead of rebuilding blind.
@@ -117,7 +118,6 @@ func _build_ui() -> void:
 
 	# Status label
 	_status_label = Label.new()
-	_status_label.text = "Select a tournament to host:"
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main_vbox.add_child(_status_label)
 
@@ -146,10 +146,8 @@ func _build_embedded_ui() -> void:
 	var shelf := HBoxContainer.new()
 	shelf.add_theme_constant_override("separation", 16)
 	margin.add_child(shelf)
-	var heading := PlayerTab.add_column(shelf, 180)
-	_title_label = Label.new()
-	_title_label.text = "Host a tournament"
-	heading.add_child(_title_label)
+	_status_column = PlayerTab.add_column(shelf, 180)
+	var heading := _status_column
 	_status_label = Label.new()
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	heading.add_child(_status_label)
@@ -185,6 +183,12 @@ func _refresh_display() -> void:
 		_show_available_tournaments()
 	else:
 		_show_current_tournament(info)
+	# An empty status line shouldn't reserve space, and on the Player shelf that
+	# includes the fixed-width column (and its gap) that holds it.
+	var has_status := _status_label.text != ""
+	_status_label.visible = has_status
+	if embedded and _status_column:
+		_status_column.visible = has_status
 
 func _show_available_tournaments() -> void:
 	var cooldown = _tournament_manager.get_cooldown_remaining()
@@ -192,7 +196,8 @@ func _show_available_tournaments() -> void:
 		_status_label.text = "Cooldown: %d days until next tournament" % cooldown
 		_status_label.add_theme_color_override("font_color", UIConstants.COLOR_WARNING_DIM)
 	else:
-		_status_label.text = "Select a tournament to host:"
+		# Nothing to report: the tier cards speak for themselves.
+		_status_label.text = ""
 		_status_label.remove_theme_color_override("font_color")
 
 	# While the course is resting between events there is nothing to choose, so
