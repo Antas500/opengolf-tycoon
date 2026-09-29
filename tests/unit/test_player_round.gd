@@ -73,6 +73,18 @@ func _start(kind: int) -> void:
 	rounds.start_round()
 	rounds._process(0.0)
 
+## Click a shot-type button the way the mouse does: the toggle flips, then the
+## press is delivered.
+func _press_shot(bar: ShotTypeBar, shape: int) -> void:
+	var button := bar.shot_button(shape)
+	button.button_pressed = true
+	button.pressed.emit()
+
+## The lie under the owner's ball.
+func _set_lie(lie: int) -> void:
+	var tile := Vector2i(rounds.player.ball_position_precise.round())
+	GameManager.terrain_grid._grid[tile] = lie
+
 func test_setup_cancel_does_not_spend_points() -> void:
 	rounds.open_setup()
 	assert_true(rounds.start_button.disabled)
@@ -84,10 +96,9 @@ func test_setup_cancel_does_not_spend_points() -> void:
 func test_practice_waits_for_input_and_restores_visitors() -> void:
 	var visitor := golfers.spawn_tournament_golfer(GolferTier.Tier.CASUAL, 99)
 	_start(0)
-	assert_eq(rounds.shapes.item_count, 5, "All five shot types share one selector")
-	assert_eq(rounds.shapes.get_item_text(4), "Low punch shot")
-	rounds.shapes.select(4)
-	rounds.shapes.item_selected.emit(4)
+	assert_eq(rounds.shot_bar.shot_count(), 5, "One button per shot type")
+	assert_eq(rounds.shot_bar.shot_button(4).text, "Punch")
+	_press_shot(rounds.shot_bar, 4)
 	assert_eq(rounds.player.player_shape, 4, "Low punch is selected as a shot shape")
 	assert_eq(rounds.participants.size(), 1)
 	assert_true(rounds.player.awaits_player_shot())
@@ -382,6 +393,69 @@ func test_embedded_round_requires_skill_allocation() -> void:
 	assert_false(rounds.busy)
 	assert_eq(tab.selected, PlayerTab.PAGE_SKILLS)
 
+## The shot-type buttons are separate buttons running along the top of the Play
+## Course page, one per shot type, above the aiming columns — no drop-down.
+func test_shot_buttons_run_along_the_top_of_the_play_course_page() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+	await wait_frames(2)
+
+	var bar := tab.shot_bar
+	var labels: Array[String] = []
+	for shape in bar.shot_count():
+		labels.append(bar.shot_button(shape).text)
+	assert_eq(labels, ["Straight", "Fade", "Draw", "Backspin", "Punch"],
+		"Every shot type gets its own button")
+	for shape in bar.shot_count():
+		assert_false(bar.shot_button(shape) is OptionButton, "No shot hides behind a menu")
+	assert_true(bar.is_ancestor_of(bar.shot_button(0)), "The buttons are the Play Course row")
+	assert_lte(bar.get_global_rect().end.y, tab.aim_scroll.get_global_rect().position.y + 1,
+		"The shot buttons run above the aiming columns")
+	assert_lte(bar.get_combined_minimum_size().y, tab.aim_view.size.y,
+		"The row fits inside the Play Course page")
+
+	# The row is live on the owner's turn and lights the shot the golfer will hit.
+	assert_true(bar.is_ready_for_shot(), "The row is live while the owner aims")
+	assert_true(bar.shot_button(0).button_pressed, "Straight leads by default")
+	_press_shot(bar, 2)
+	assert_eq(rounds.player.player_shape, 2, "Pressing Draw selects the draw shot")
+	assert_true(bar.shot_button(2).button_pressed, "The pressed shot stays lit")
+	assert_false(bar.shot_button(0).button_pressed, "Only one shot is lit at a time")
+	var fairway_range := rounds.player.player_max_distance(Golfer.Club.IRON)
+	_press_shot(bar, 4)
+	assert_true(rounds.player.is_player_punch(), "Punch is a normal press on the row")
+	assert_almost_eq(rounds.player.player_max_distance(Golfer.Club.IRON), fairway_range * 0.7, 0.001,
+		"The lit button is the shot the golfer will hit")
+	_assert_shelf_fits(tab.aim_page)
+
+	# Off the tee and fairway the bend shots grey out and an illegal choice falls
+	# back to straight, exactly as Golfer.play_shot() does.
+	_press_shot(bar, 2)
+	assert_eq(rounds.player.player_shape, 2, "Draw is selected from the fairway")
+	_set_lie(TerrainTypes.Type.ROUGH)
+	rounds._process(0.0)
+	assert_true(bar.shot_button(1).disabled, "Fade needs a tee or fairway")
+	assert_true(bar.shot_button(2).disabled, "Draw needs a tee or fairway")
+	assert_true(bar.shot_button(3).disabled, "Backspin needs a tee or fairway")
+	assert_false(bar.shot_button(0).disabled, "Straight works from the rough")
+	assert_false(bar.shot_button(4).disabled, "Low punch works from the rough")
+	assert_eq(rounds.player.player_shape, 0, "An illegal shape falls back to straight")
+	assert_true(bar.shot_button(0).button_pressed, "The row follows the fallback")
+
+	# Waiting for an opponent greys the whole row out instead of hiding it.
+	_set_lie(TerrainTypes.Type.FAIRWAY)
+	rounds.player._change_state(Golfer.State.WALKING)
+	rounds._process(0.0)
+	assert_false(bar.is_ready_for_shot(), "The row is dead between shots")
+	for shape in bar.shot_count():
+		assert_true(bar.shot_button(shape).disabled, "Every shot greys out while waiting")
+
 ## Exercise the real toolbar so header, panel margins and scrollbars count
 ## against the same height budget as the course tiles.
 func _embedded_toolbar() -> TerrainToolbar:
@@ -401,6 +475,17 @@ func _embedded_toolbar() -> TerrainToolbar:
 func _assert_shelf_fits(shelf: HBoxContainer) -> void:
 	var scroll := shelf.get_parent() as ScrollContainer
 	assert_lte(scroll.size.y, scroll.get_parent().size.y, "Scroll viewport fits the allocated tab height")
+	# The shot-type row rides above the shelf: the two together must fit the page.
+	var view := scroll.get_parent() as VBoxContainer
+	if view != null:
+		assert_lte(view.get_combined_minimum_size().y, view.size.y,
+			"The shot buttons and the control columns share the page height")
+		for child in view.get_children():
+			if child is ShotTypeBar:
+				assert_lte(child.get_combined_minimum_size().y, child.size.y, "The shot row keeps its height")
+				assert_lte(child.get_combined_minimum_size().x, child.size.x, "The shot row spans the tab")
+				assert_lte(child.get_global_rect().end.y, scroll.get_global_rect().position.y + 1,
+					"The shot buttons run above the aiming columns")
 	assert_eq(scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO)
 	assert_eq(scroll.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED)
 	assert_false(scroll.get_v_scroll_bar().visible, "No vertical scrolling in the Player tab")

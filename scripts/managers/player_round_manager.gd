@@ -20,7 +20,10 @@ var entry: Button = null  # Legacy floating button; replaced by the toolbar's Pl
 var overlay: Control
 var content: VBoxContainer
 var status: Label
-var shapes: OptionButton
+## The shot-type row on the Play Course tab (PlayerTab builds it): one button per
+## shot type, replacing the old drop-down selector. Falls back to a row built
+## into the floating panel when there is no Player tab (isolated tools, tests).
+var shot_bar: ShotTypeBar
 var draft: PlayerGolferProfile
 var name_edit: LineEdit
 var mode_picker: OptionButton
@@ -111,6 +114,25 @@ func _button(text: String, action: Callable) -> Button:
 	button.pressed.connect(action)
 	content.add_child(button)
 	return button
+
+## Point the shot-type buttons at the owner: the Play Course tab runs the row
+## along its top, so a round only has to listen for presses and mirror the
+## golfer's shot back onto it. Without the tab (isolated tools and tests) the row
+## is built into the panel instead, so shot selection works the same way.
+func _build_shot_controls() -> void:
+	if is_instance_valid(player_tab):
+		shot_bar = player_tab.shot_bar
+	else:
+		shot_bar = ShotTypeBar.new()
+		content.add_child(shot_bar)
+	if not shot_bar.shape_selected.is_connected(_on_shot_shape_selected):
+		shot_bar.shape_selected.connect(_on_shot_shape_selected)
+	shot_bar.select_shape(player.player_shape if is_instance_valid(player) else 0)
+	shot_bar.set_ready(false)
+
+func _on_shot_shape_selected(shape: int) -> void:
+	if is_instance_valid(player):
+		player.player_shape = shape
 
 func attach_player_tab(tab: PlayerTab) -> void:
 	player_tab = tab
@@ -359,12 +381,7 @@ func start_round() -> void:
 		status.add_theme_font_size_override("font_size", 12)
 		status.autowrap_mode = TextServer.AUTOWRAP_OFF
 		content = PlayerTab.add_column(player_tab.aim_page)
-	shapes = OptionButton.new()
-	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot", "Low punch shot"]:
-		shapes.add_item(title)
-	shapes.item_selected.connect(func(index: int): player.player_shape = index)
-	shapes.select(player.player_shape)
-	content.add_child(shapes)
+	_build_shot_controls()
 	if is_instance_valid(player_tab):
 		_button("End round / Return to management", leave_round)
 		content = PlayerTab.add_column(player_tab.aim_page, 420)
@@ -447,15 +464,7 @@ func _build_tournament_aim_hud() -> void:
 	status = _label("Your tournament round")
 	status.add_theme_font_size_override("font_size", 13)
 	status.autowrap_mode = TextServer.AUTOWRAP_OFF
-	shapes = OptionButton.new()
-	shapes.custom_minimum_size.y = 24
-	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot", "Low punch shot"]:
-		shapes.add_item(title)
-	shapes.item_selected.connect(func(index: int):
-		if is_instance_valid(player):
-			player.player_shape = index)
-	shapes.select(player.player_shape)
-	content.add_child(shapes)
+	_build_shot_controls()
 	var settle_button := _button("Settle tournament (skip your round)", _on_settle_tournament)
 	settle_button.custom_minimum_size.y = 24
 	var instructions := _label("Aim + click · Yellow: carry · Dots: roll")
@@ -476,6 +485,10 @@ func _process(delta: float) -> void:
 	if is_instance_valid(entry):
 		entry.visible = not busy and GameManager.current_mode == GameManager.GameMode.SIMULATING
 	if not active or GameManager.is_paused or not is_instance_valid(player):
+		# Nothing to aim at: grey the shot row out rather than leave a stale
+		# selection lit while the round is paused or over.
+		if is_instance_valid(shot_bar):
+			shot_bar.set_ready(false)
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		if is_instance_valid(aim_guide):
 			aim_guide.clear()
@@ -500,12 +513,13 @@ func _process(delta: float) -> void:
 
 	var is_ready := player.awaits_player_shot()
 	var terrain: int = GameManager.terrain_grid.get_tile(Vector2i(player.ball_position_precise.round())) if GameManager.terrain_grid else -1
-	for i in range(1, 4):
-		shapes.set_item_disabled(i, not Golfer.shape_allowed(i, terrain))
-	if not Golfer.shape_allowed(player.player_shape, terrain):
-		player.player_shape = 0
-		shapes.select(0)
-	shapes.disabled = not is_ready
+	if is_instance_valid(shot_bar):
+		shot_bar.set_ready(is_ready)
+		# Keep the row on the golfer's shot; a lie that no longer allows it
+		# falls back to straight here, exactly as the execution guard does.
+		shot_bar.select_shape(player.player_shape)
+		shot_bar.update_for_lie(terrain)
+		player.player_shape = shot_bar.selected_shape()
 	Input.set_default_cursor_shape(Input.CURSOR_CROSS if is_ready else Input.CURSOR_ARROW)
 	update_aim_guide()
 

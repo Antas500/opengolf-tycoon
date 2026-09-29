@@ -94,10 +94,19 @@ is divided by `1 + bonus`. AI golfers without a player profile are unchanged.
 
 ### Shot shapes
 
-The shot selector offers five mutually exclusive choices: straight, fade, draw,
-high backspin, and low punch. Straight and low punch are available on all
-off-green lies. Fade, draw and high backspin require tee or fairway; invalid
-selections reset to straight in both the HUD and the shot execution guard.
+`ShotTypeBar` (`scripts/ui/components/shot_type_bar.gd`) runs one button per
+shot type along the top of the Play Course page — straight, fade, draw, high
+backspin, and low punch — above the scrolling control columns, so the whole set
+is visible and the shot being lined up is the lit button. The buttons are
+mutually exclusive (`ButtonGroup`), and a press writes the shape index onto
+`Golfer.player_shape`; hovering one shows its effect. The row greys out while
+the owner waits for their turn, and a shot the current lie forbids is disabled
+in place (rather than hidden, so the option is still discoverable).
+
+Straight and low punch are available on all off-green lies. Fade, draw and high
+backspin require tee or fairway; invalid selections reset to straight in both the
+row and the shot execution guard, and the row mirrors that fallback so the lit
+button is always the shot `play_shot()` will hit.
 
 - Fade bends 8 degrees L to R relative to the shot direction.
 - Draw bends 8 degrees R to L.
