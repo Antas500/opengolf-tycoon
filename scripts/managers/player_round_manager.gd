@@ -21,7 +21,6 @@ var overlay: Control
 var content: VBoxContainer
 var status: Label
 var shapes: OptionButton
-var punch: CheckButton
 var draft: PlayerGolferProfile
 var name_edit: LineEdit
 var mode_picker: OptionButton
@@ -361,14 +360,11 @@ func start_round() -> void:
 		status.autowrap_mode = TextServer.AUTOWRAP_OFF
 		content = PlayerTab.add_column(player_tab.aim_page)
 	shapes = OptionButton.new()
-	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot"]:
+	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot", "Low punch shot"]:
 		shapes.add_item(title)
 	shapes.item_selected.connect(func(index: int): player.player_shape = index)
+	shapes.select(player.player_shape)
 	content.add_child(shapes)
-	punch = CheckButton.new()
-	punch.text = "Low punch shot"
-	punch.toggled.connect(func(value: bool): player.player_punch = value)
-	content.add_child(punch)
 	if is_instance_valid(player_tab):
 		_button("End round / Return to management", leave_round)
 		content = PlayerTab.add_column(player_tab.aim_page, 420)
@@ -453,19 +449,13 @@ func _build_tournament_aim_hud() -> void:
 	status.autowrap_mode = TextServer.AUTOWRAP_OFF
 	shapes = OptionButton.new()
 	shapes.custom_minimum_size.y = 24
-	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot"]:
+	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot", "Low punch shot"]:
 		shapes.add_item(title)
 	shapes.item_selected.connect(func(index: int):
 		if is_instance_valid(player):
 			player.player_shape = index)
+	shapes.select(player.player_shape)
 	content.add_child(shapes)
-	punch = CheckButton.new()
-	punch.custom_minimum_size.y = 24
-	punch.text = "Low punch shot"
-	punch.toggled.connect(func(value: bool):
-		if is_instance_valid(player):
-			player.player_punch = value)
-	content.add_child(punch)
 	var settle_button := _button("Settle tournament (skip your round)", _on_settle_tournament)
 	settle_button.custom_minimum_size.y = 24
 	var instructions := _label("Aim + click · Yellow: carry · Dots: roll")
@@ -516,7 +506,6 @@ func _process(delta: float) -> void:
 		player.player_shape = 0
 		shapes.select(0)
 	shapes.disabled = not is_ready
-	punch.disabled = not is_ready
 	Input.set_default_cursor_shape(Input.CURSOR_CROSS if is_ready else Input.CURSOR_ARROW)
 	update_aim_guide()
 

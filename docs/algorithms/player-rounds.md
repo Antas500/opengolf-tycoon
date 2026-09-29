@@ -94,17 +94,18 @@ is divided by `1 + bonus`. AI golfers without a player profile are unchanged.
 
 ### Shot shapes
 
-Straight and low punch are available on all off-green lies. Fade, draw and high
-backspin require tee or fairway; invalid selections reset to straight in both the
-HUD and the shot execution guard.
+The shot selector offers five mutually exclusive choices: straight, fade, draw,
+high backspin, and low punch. Straight and low punch are available on all
+off-green lies. Fade, draw and high backspin require tee or fairway; invalid
+selections reset to straight in both the HUD and the shot execution guard.
 
 - Fade bends 8 degrees L to R relative to the shot direction.
 - Draw bends 8 degrees R to L.
 - Backspin reverses rollout by `min(1.5, 0.25 * (1 + bonus))` tiles on green or
   fairway landings, and raises the visual arc by 40%.
-- Punch is an independent toggle: 70% range, 35% crosswind displacement,
-  30% visual arc height, and 150% normal rollout. When paired with backspin,
-  the lower arc and backspin rollout apply.
+- Low punch is selected like any other shot shape: 70% range, 35% crosswind
+  displacement, 30% visual arc height, and 150% normal rollout. It cannot be
+  combined with fade, draw, or backspin.
 
 The aim line interpolates bend from zero to the full angle; the ball animation
 adds a lateral mid-flight curve while preserving its computed landing position.

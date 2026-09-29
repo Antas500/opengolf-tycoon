@@ -84,6 +84,11 @@ func test_setup_cancel_does_not_spend_points() -> void:
 func test_practice_waits_for_input_and_restores_visitors() -> void:
 	var visitor := golfers.spawn_tournament_golfer(GolferTier.Tier.CASUAL, 99)
 	_start(0)
+	assert_eq(rounds.shapes.item_count, 5, "All five shot types share one selector")
+	assert_eq(rounds.shapes.get_item_text(4), "Low punch shot")
+	rounds.shapes.select(4)
+	rounds.shapes.item_selected.emit(4)
+	assert_eq(rounds.player.player_shape, 4, "Low punch is selected as a shot shape")
 	assert_eq(rounds.participants.size(), 1)
 	assert_true(rounds.player.awaits_player_shot())
 	assert_eq(rounds.player.golfer_name, "Test Owner")
