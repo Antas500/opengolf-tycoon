@@ -170,8 +170,13 @@ func _build_setup() -> void:
 		color.color_changed.connect(func(value: Color): draft.appearance[key] = value.to_html(false))
 		row.add_child(color)
 	if is_instance_valid(player_tab):
-		# Short round-choice columns share one horizontally scrolling shelf.
+		# Short round-choice sections share one horizontally scrolling shelf.
+		# Practice Round leads the first column with Play vs Pro stacked below it.
 		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_PLAY])
+		# The stacked column must stay under the shelf's ~150px height budget
+		# (the tab has no vertical scrollbar), so its rows sit tighter than the
+		# other columns' default spacing.
+		content.add_theme_constant_override("separation", 2)
 		_label("Practice Round")
 		mode_picker = OptionButton.new()
 		for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
@@ -180,7 +185,6 @@ func _build_setup() -> void:
 		content.add_child(mode_picker)
 		var practice_button := _button("Start practice round", _start_embedded.bind(0))
 		practice_button.set_meta("owner_round_start", true)
-		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_PLAY])
 		_label("Play vs Pro")
 		pro_picker = OptionButton.new()
 		for pro in PROS:
