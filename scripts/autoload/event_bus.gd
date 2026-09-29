@@ -16,7 +16,9 @@ signal theme_changed(theme_type: int)
 
 # Time Signals
 signal day_changed(new_day: int)
-signal hour_changed(new_hour: float)
+## Emitted when the calendar rolls over into a new year (after day_changed).
+## Carries the calendar year that just finished (e.g. 2000).
+signal year_ended(finished_year: int)
 
 # Economic Signals
 signal money_changed(old_amount: int, new_amount: int)
@@ -77,8 +79,10 @@ signal wind_changed(direction: float, speed: float)
 signal weather_changed(weather_type: int, intensity: float)
 
 # Day Cycle Signals
+## Emitted when a game day completes. Handles run daily bookkeeping
+## (operating costs, weeds, staff) before the next day begins. The course
+## never closes — days roll over seamlessly without pausing.
 signal end_of_day(day_number: int)
-signal course_closing()
 
 # Season Signals
 signal season_changed(old_season: int, new_season: int)

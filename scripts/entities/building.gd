@@ -88,16 +88,16 @@ func _ready() -> void:
 		if shadow_system.has_signal("sun_direction_changed"):
 			shadow_system.sun_direction_changed.connect(_on_sun_direction_changed)
 
-	# Connect to hour changes for window glow
-	EventBus.hour_changed.connect(_on_hour_changed_for_glow)
+	# Connect to weather changes for window glow (lights on when it's gloomy)
+	EventBus.weather_changed.connect(_on_weather_changed_for_glow)
 
 func _exit_tree() -> void:
 	if has_node("/root/ShadowSystem"):
 		var shadow_system = get_node("/root/ShadowSystem")
 		if shadow_system.sun_direction_changed.is_connected(_on_sun_direction_changed):
 			shadow_system.sun_direction_changed.disconnect(_on_sun_direction_changed)
-	if EventBus.hour_changed.is_connected(_on_hour_changed_for_glow):
-		EventBus.hour_changed.disconnect(_on_hour_changed_for_glow)
+	if EventBus.weather_changed.is_connected(_on_weather_changed_for_glow):
+		EventBus.weather_changed.disconnect(_on_weather_changed_for_glow)
 	# Stop the smoke-wisp loop so no tween (and its self-rescheduling
 	# callback) is still pending while the tree is being torn down.
 	_stop_smoke_animation()
@@ -1532,13 +1532,13 @@ func _setup_window_glow(visual: Node2D) -> void:
 		visual.add_child(glow)
 		_window_glow_overlays.append(glow)
 
-	# Apply current hour state immediately
-	if GameManager.current_hour >= 17.0 or GameManager.current_hour < 6.0:
+	# Apply current weather state immediately — windows glow when it's gloomy
+	if GameManager.weather_system and GameManager.weather_system.weather_type >= WeatherSystem.WeatherType.CLOUDY:
 		_set_glow_visible(true)
 
-func _on_hour_changed_for_glow(hour: float) -> void:
-	"""Toggle window glow based on time of day"""
-	if hour >= 17.0 or hour < 6.0:
+func _on_weather_changed_for_glow(weather_type: int, _intensity: float) -> void:
+	"""Toggle window glow based on weather (cloudy or worse = lights on)"""
+	if weather_type >= WeatherSystem.WeatherType.CLOUDY:
 		_set_glow_visible(true)
 	else:
 		_set_glow_visible(false)

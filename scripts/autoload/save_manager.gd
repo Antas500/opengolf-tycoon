@@ -40,7 +40,14 @@ func _ready() -> void:
 	_ensure_save_directory()
 	_load_user_settings()
 	EventBus.day_changed.connect(_on_day_changed)
+	EventBus.year_ended.connect(_on_year_ended)
 	print("SaveManager initialized")
+
+## Snapshot at every year rollover so the year that just ended is preserved.
+func _on_year_ended(_finished_year: int) -> void:
+	if _is_loading:
+		return
+	save_game("autosave")
 
 func _ensure_save_directory() -> void:
 	var dir = DirAccess.open("user://")
@@ -149,7 +156,6 @@ func _build_save_data() -> Dictionary:
 			"money": GameManager.money,
 			"reputation": GameManager.reputation,
 			"current_day": GameManager.current_day,
-			"current_hour": GameManager.current_hour,
 			"green_fee": GameManager.green_fee,
 			"tee_booking_interval": GameManager.tee_booking_interval,
 			"theme": CourseTheme.to_string_name(GameManager.current_theme),
@@ -163,6 +169,12 @@ func _build_save_data() -> Dictionary:
 
 	data["guest_experience"] = FeedbackManager.serialize_experience()
 	data["daily_stats"] = _serialize_daily_stats()
+	data["yearly_stats"] = _serialize_stats(GameManager.yearly_stats)
+	data["yearly_days"] = GameManager.yearly_days
+	data["yearly_satisfaction_sum"] = GameManager.yearly_satisfaction_sum
+	data["previous_year_stats"] = _serialize_stats(GameManager.previous_year_stats) if GameManager.previous_year_stats else {}
+	data["previous_year_satisfaction"] = GameManager.previous_year_satisfaction
+	data["prior_year_stats"] = _serialize_stats(GameManager.prior_year_stats) if GameManager.prior_year_stats else {}
 	data["feedback"] = {"daily_counts": FeedbackManager.daily_counts.duplicate(), "trigger_counts": FeedbackManager.trigger_counts.duplicate(), "needs_complaints": FeedbackManager.needs_complaints.duplicate()}
 
 	# Terrain
@@ -293,12 +305,9 @@ func _apply_save_data(data: Dictionary) -> void:
 	# processing golfers while we're still loading
 	GameManager.set_mode(GameManager.GameMode.BUILDING)
 
-	# Reset day-cycle flags so loaded games don't inherit stale state
-	GameManager._closing_announced = false
-	GameManager._end_of_day_triggered = false
-	GameManager._end_of_day_emitted = false
 	# A fresh load always starts unpaused (stale pause state from the previous session)
 	GameManager.is_paused = false
+	GameManager._day_progress = 0.0
 
 	# Active owner rounds are transient, like visitor rounds.
 	GameManager.player_profile = PlayerGolferProfile.from_data(data.get("player_golfer", {}))
@@ -314,7 +323,7 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager.reputation = clampf(float(game.get("reputation", GameManager.DEFAULT_STARTING_REPUTATION)), 0.0, 100.0)
 	EventBus.reputation_changed.emit(old_rep, GameManager.reputation)
 	GameManager.current_day = max(1, int(game.get("current_day", 1)))
-	GameManager.current_hour = clampf(float(game.get("current_hour", 6.0)), 0.0, GameManager.HOURS_PER_DAY)
+	GameManager._day_progress = 0.0
 	GameManager.green_fee = clamp(int(game.get("green_fee", 30)), GameManager.MIN_GREEN_FEE, GameManager.MAX_GREEN_FEE)
 	GameManager.loan_balance = int(game.get("loan_balance", 0))
 	GameManager._stagnation_hole_count = int(game.get("stagnation_hole_count", 0))
@@ -426,10 +435,18 @@ func _apply_save_data(data: Dictionary) -> void:
 		ball_manager.clear_all_balls()
 
 	_restore_daily_stats(data.get("daily_stats", {}))
+	# Year-to-date and archived yearly stats (defaults for saves predating years)
+	GameManager.yearly_stats = _deserialize_stats(data.get("yearly_stats", {}))
+	GameManager.yearly_days = int(data.get("yearly_days", 0))
+	GameManager.yearly_satisfaction_sum = float(data.get("yearly_satisfaction_sum", 0.0))
+	var prev_year: Dictionary = data.get("previous_year_stats", {})
+	GameManager.previous_year_stats = _deserialize_stats(prev_year) if not prev_year.is_empty() else null
+	GameManager.previous_year_satisfaction = float(data.get("previous_year_satisfaction", -1.0))
+	var prior_year: Dictionary = data.get("prior_year_stats", {})
+	GameManager.prior_year_stats = _deserialize_stats(prior_year) if not prior_year.is_empty() else null
 	_restore_feedback(data)
 	FeedbackManager.restore_experience(data.get("guest_experience", {}))
 	GameManager.update_course_rating()
-	EventBus.hour_changed.emit(GameManager.current_hour)
 	if GameManager.wind_system and GameManager.wind_system.has_method("_emit_wind_changed"):
 		GameManager.wind_system._emit_wind_changed()
 
@@ -518,12 +535,15 @@ func _read_save_metadata(path: String) -> Dictionary:
 		"day": int(game.get("current_day", 0)),
 	}
 
-## Auto-save at end of each day
-func _on_day_changed(_new_day: int) -> void:
+## Auto-save periodically — with a 3.5-second day, one save per day would
+## thrash the disk, so we save on a fixed cadence plus every year rollover.
+func _on_day_changed(new_day: int) -> void:
 	# Don't autosave while loading a game (would overwrite with partial state)
 	if _is_loading:
 		return
-	call_deferred("_save_after_day_change", _new_day)
+	if new_day % GameManager.AUTOSAVE_INTERVAL_DAYS != 0:
+		return
+	call_deferred("_save_after_day_change", new_day)
 
 func _save_after_day_change(day: int) -> void:
 	if not _is_loading and GameManager.current_day == day:
@@ -605,11 +625,26 @@ func _restore_hole_statistics(saved: Dictionary) -> void:
 
 ## Persist accounting without serializing runtime objects or active golfers.
 func _serialize_daily_stats() -> Dictionary:
+	return _serialize_stats(GameManager.daily_stats)
+
+## Generic serializer for a DailyStatistics object (used for daily and yearly).
+func _serialize_stats(stats) -> Dictionary:
 	var saved := {}
-	for property in GameManager.daily_stats.get_property_list():
+	for property in stats.get_property_list():
 		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
-			saved[property.name] = GameManager.daily_stats.get(property.name)
+			saved[property.name] = stats.get(property.name)
 	return saved
+
+func _deserialize_stats(saved: Dictionary):
+	var stats = GameManager.DailyStatistics.new()
+	for property in stats.get_property_list():
+		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE and saved.has(property.name):
+			if property.name == "tier_counts":
+				for key in saved.tier_counts:
+					stats.tier_counts[int(key)] = int(saved.tier_counts[key])
+			else:
+				stats.set(property.name, int(saved[property.name]))
+	return stats
 
 func _restore_feedback(data: Dictionary) -> void:
 	var feedback: Dictionary = data.get("feedback", {})

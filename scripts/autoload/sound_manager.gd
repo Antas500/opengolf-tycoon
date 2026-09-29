@@ -93,7 +93,7 @@ func _connect_signals() -> void:
 	EventBus.building_removed.connect(_on_building_removed)
 	EventBus.wind_changed.connect(_on_wind_changed)
 	EventBus.weather_changed.connect(_on_weather_changed)
-	EventBus.hour_changed.connect(_on_hour_changed)
+	EventBus.season_changed.connect(_on_season_changed)
 	EventBus.game_mode_changed.connect(_on_game_mode_changed)
 
 func _exit_tree() -> void:
@@ -117,8 +117,8 @@ func _exit_tree() -> void:
 		EventBus.wind_changed.disconnect(_on_wind_changed)
 	if EventBus.weather_changed.is_connected(_on_weather_changed):
 		EventBus.weather_changed.disconnect(_on_weather_changed)
-	if EventBus.hour_changed.is_connected(_on_hour_changed):
-		EventBus.hour_changed.disconnect(_on_hour_changed)
+	if EventBus.season_changed.is_connected(_on_season_changed):
+		EventBus.season_changed.disconnect(_on_season_changed)
 	if EventBus.game_mode_changed.is_connected(_on_game_mode_changed):
 		EventBus.game_mode_changed.disconnect(_on_game_mode_changed)
 	if _bird_timer:
@@ -263,8 +263,8 @@ func _on_weather_changed(weather_type: int, intensity: float) -> void:
 	_rain_buffer_dirty = true
 	_update_ambient()
 
-func _on_hour_changed(_new_hour: float) -> void:
-	# Adjust bird frequency by time of day
+func _on_season_changed(_old_season: int, _new_season: int) -> void:
+	# Adjust bird activity by season (spring is the chorus, winter the quietest)
 	_schedule_next_bird()
 
 func _on_game_mode_changed(_old_mode: int, new_mode: int) -> void:
@@ -400,21 +400,19 @@ const MAX_RECENT_SPECIES := 3
 func _schedule_next_bird() -> void:
 	if not _bird_timer:
 		return
-	# Birds are most active at dawn (6-8) and dusk (17-19), moderate midday, rare at night
-	var hour: float = GameManager.current_hour if GameManager else 12.0
+	# With no day/night cycle, bird activity tracks the season: the spring
+	# chorus is loudest, summer stays busy, fall thins out, winter is quiet.
 	var base_interval: float
-	if hour < 5.5 or hour > 20.5:
-		base_interval = 40.0  # Very rare at night
-	elif hour < 8.0:
-		# Dawn chorus — most active time
-		var dawn_factor := 1.0 - absf(hour - 6.5) / 2.5
-		base_interval = lerpf(6.0, 2.0, clampf(dawn_factor, 0.0, 1.0))
-	elif hour > 17.0 and hour <= 20.0:
-		# Dusk activity
-		var dusk_factor := 1.0 - (hour - 17.0) / 3.0
-		base_interval = lerpf(10.0, 3.0, clampf(dusk_factor, 0.0, 1.0))
-	else:
-		base_interval = 7.0  # Moderate during midday
+	var season: int = SeasonSystem.get_season(GameManager.current_day)
+	match season:
+		SeasonSystem.Season.SPRING:
+			base_interval = 2.5  # Spring chorus — most active
+		SeasonSystem.Season.SUMMER:
+			base_interval = 6.0
+		SeasonSystem.Season.FALL:
+			base_interval = 9.0
+		_:
+			base_interval = 25.0  # Winter — rare calls
 	# Add randomness
 	_bird_timer.start(randf_range(base_interval * 0.6, base_interval * 1.5))
 

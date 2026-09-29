@@ -103,7 +103,6 @@ func test_game_state_survives_json_roundtrip() -> void:
 		"money": 75000,
 		"reputation": 65.5,
 		"current_day": 15,
-		"current_hour": 14.5,
 		"green_fee": 45,
 	}
 
@@ -115,7 +114,6 @@ func test_game_state_survives_json_roundtrip() -> void:
 	assert_eq(int(restored.money), 75000)
 	assert_almost_eq(float(restored.reputation), 65.5, 0.01)
 	assert_eq(int(restored.current_day), 15)
-	assert_almost_eq(float(restored.current_hour), 14.5, 0.01)
 	assert_eq(int(restored.green_fee), 45)
 
 

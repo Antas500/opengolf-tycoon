@@ -163,42 +163,28 @@ func test_toggle_pause() -> void:
 	assert_false(GameManager.is_paused, "Should be unpaused after second toggle")
 
 
-# --- Course Open/Close ---
+# --- Calendar Date Display ---
 
-func test_is_course_open_during_hours() -> void:
-	GameManager.current_hour = 12.0
-	assert_true(GameManager.is_course_open(), "Course should be open at noon")
+func test_new_game_starts_on_january_first_2000() -> void:
+	GameManager.new_game("Test Course")
+	assert_eq(GameManager.current_day, 1, "New games start on day 1")
+	assert_eq(GameManager.get_date_string(), "Sat 1 Jan 2000", "Day 1 is Saturday 1 January 2000")
 
-func test_is_course_closed_before_open() -> void:
-	GameManager.current_hour = 5.0
-	assert_false(GameManager.is_course_open(), "Course should be closed at 5 AM")
+func test_day_rollover_advances_calendar_date() -> void:
+	GameManager.new_game("Test Course")
+	GameManager.current_day = 31  # Feb 1, 2000
+	assert_eq(GameManager.get_date_string(), "Tue 1 Feb 2000")
 
-func test_is_course_closed_at_closing_time() -> void:
-	GameManager.current_hour = 20.0
-	assert_false(GameManager.is_course_open(), "Course should be closed at 8 PM (exact)")
+func test_day_rollover_crosses_year_boundary() -> void:
+	GameManager.new_game("Test Course")
+	GameManager.current_day = 366  # Jan 1, 2001
+	assert_eq(GameManager.get_date_string(), "Mon 1 Jan 2001")
+	assert_eq(GameManager.get_current_year(), 2001)
 
-func test_is_course_open_at_opening_time() -> void:
-	GameManager.current_hour = 6.0
-	assert_true(GameManager.is_course_open(), "Course should be open exactly at 6 AM")
-
-
-# --- Time Display ---
-
-func test_get_time_string_morning() -> void:
-	GameManager.current_hour = 9.5
-	assert_eq(GameManager.get_time_string(), "9:30 AM")
-
-func test_get_time_string_afternoon() -> void:
-	GameManager.current_hour = 14.25
-	assert_eq(GameManager.get_time_string(), "2:15 PM")
-
-func test_get_time_string_noon() -> void:
-	GameManager.current_hour = 12.0
-	assert_eq(GameManager.get_time_string(), "12:00 PM")
-
-func test_get_time_string_midnight() -> void:
-	GameManager.current_hour = 0.0
-	assert_eq(GameManager.get_time_string(), "12:00 AM")
+func test_get_date_string_formats_weekday() -> void:
+	GameManager.new_game("Test Course")
+	GameManager.current_day = 7  # Friday 7 Jan 2000
+	assert_eq(GameCalendar.get_weekday(7), 5, "Jan 7 2000 was a Friday")
 
 
 # --- New Game ---
@@ -217,7 +203,7 @@ func test_new_game_resets_state() -> void:
 	assert_eq(GameManager.current_day, 1, "Day should reset to 1")
 	assert_eq(GameManager.course_name, "Test Course", "Course name should be set")
 	assert_eq(GameManager.green_fee, GameManager.MIN_GREEN_FEE, "Green fee should reset to min (no holes yet)")
-	assert_eq(GameManager.current_hour, GameManager.COURSE_OPEN_HOUR, "Hour should reset to opening")
+	assert_eq(GameManager._day_progress, 0.0, "Day timer should reset")
 
 
 # --- Staff Tier Data ---

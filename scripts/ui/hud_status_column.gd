@@ -3,7 +3,7 @@ class_name HUDStatusColumn
 ## HUDStatusColumn - Vertical status readout docked to the top-right corner.
 ##
 ## Replaces the old full-width top bar. Every stat that used to be spread
-## across the top of the screen (game mode, money, date/time, reputation,
+## across the top of the screen (game mode, money, date/season, reputation,
 ## course rating, weather, wind) is now stacked as a compact label/value
 ## column, freeing the whole top edge of the viewport for the course view.
 ##
@@ -138,12 +138,12 @@ func _build_ui() -> void:
 	_details.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
 	column.add_child(_details)
 
-	# Date / time
+	# Date / season (no intra-day clock — the course never closes)
 	_date_label = _create_value_label(UIConstants.FONT_SIZE_BASE)
 	_details.add_child(_create_row("Date", _date_label))
 
 	_time_label = _create_value_label(UIConstants.FONT_SIZE_BASE)
-	_details.add_child(_create_row("Time", _time_label))
+	_details.add_child(_create_row("Season", _time_label))
 
 	_details.add_child(_create_separator())
 
@@ -268,7 +268,6 @@ func _connect_signals() -> void:
 		var eb = get_node("/root/EventBus")
 		eb.money_changed.connect(_on_money_changed)
 		eb.day_changed.connect(_on_day_changed)
-		eb.hour_changed.connect(_on_hour_changed)
 		eb.reputation_changed.connect(_on_reputation_changed)
 		eb.weather_changed.connect(_on_weather_changed)
 		eb.wind_changed.connect(_on_wind_changed)
@@ -348,25 +347,13 @@ func _update_day_time() -> void:
 		return
 	var gm = get_node("/root/GameManager")
 	var day = gm.get("current_day")
-	var hour = gm.get("current_hour")
 	if day == null:
 		day = 1
-	if hour == null:
-		hour = 6.0
-
-	var hour_int = int(hour)
-	var minute = int((hour - hour_int) * 60)
-	var am_pm = "AM" if hour_int < 12 else "PM"
-	var display_hour = hour_int if hour_int <= 12 else hour_int - 12
-	if display_hour == 0:
-		display_hour = 12
 
 	var season = SeasonSystem.get_season(day)
 	var season_name = SeasonSystem.get_season_name(season)
-	var day_in_season = SeasonSystem.get_day_in_season(day)
-	var year = SeasonSystem.get_year(day)
-	_date_label.text = "%s D%d Y%d" % [season_name, day_in_season, year]
-	_time_label.text = "%d:%02d %s" % [display_hour, minute, am_pm]
+	_date_label.text = GameCalendar.format_date(day)
+	_time_label.text = season_name
 
 func _update_reputation() -> void:
 	if not has_node("/root/GameManager"):
@@ -491,9 +478,6 @@ func _on_money_changed(old_amount: int, new_amount: int) -> void:
 	_update_money()
 
 func _on_day_changed(_new_day: int) -> void:
-	_update_day_time()
-
-func _on_hour_changed(_new_hour: float) -> void:
 	_update_day_time()
 
 func _on_reputation_changed(_old_rep: float, _new_rep: float) -> void:

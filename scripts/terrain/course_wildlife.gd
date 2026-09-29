@@ -123,11 +123,10 @@ static func duck_offset(phase: float) -> Vector2:
 	# Complete route fits inside the center of a 64x32 water tile, including bodies.
 	return Vector2(cos(phase) * 17.0, sin(phase) * 5.5)
 
-static func butterflies_active(hour: float, season: int, raining: bool) -> bool:
-	return hour >= 7.0 and hour < 18.0 and season != SeasonSystem.Season.WINTER and not raining
-
-static func fireflies_active(hour: float, season: int, raining: bool) -> bool:
-	return hour >= 17.5 and hour <= 21.0 and season in [SeasonSystem.Season.SPRING, SeasonSystem.Season.SUMMER] and not raining
+static func butterflies_active(season: int, raining: bool) -> bool:
+	# It is always daytime on the course now, so butterflies appear in any fair
+	# season unless it's raining.
+	return season != SeasonSystem.Season.WINTER and not raining
 
 func _draw() -> void:
 	if not terrain_grid:
@@ -145,8 +144,7 @@ func _draw() -> void:
 			var center := terrain_grid.grid_to_screen_center(home)
 			if view.has_point(center):
 				_draw_family(center, _time * 0.32 + float(home.x * 3 + home.y) * 0.7)
-	var butterflies := butterflies_active(GameManager.current_hour, season, raining)
-	var fireflies := fireflies_active(GameManager.current_hour, season, raining)
+	var butterflies := butterflies_active(season, raining)
 	for home in _garden_homes:
 		var center := terrain_grid.grid_to_screen_center(home)
 		if not view.has_point(center):
@@ -154,9 +152,6 @@ func _draw() -> void:
 		var phase := float(home.x * 13 + home.y * 7)
 		if butterflies:
 			_draw_butterfly(center, phase, BUTTERFLY_COLORS[posmod(home.x + home.y, BUTTERFLY_COLORS.size())])
-		if fireflies:
-			for i in range(3):
-				_draw_firefly(center, phase + i * 2.7)
 
 func _draw_family(center: Vector2, phase: float) -> void:
 	# Two gold ducklings follow the adult around a lazy oval.
@@ -187,10 +182,3 @@ func _draw_butterfly(center: Vector2, phase: float, color: Color) -> void:
 	draw_circle(p + Vector2(wing * 0.65, -1), wing * 0.6, color)
 	draw_line(p + Vector2(0, -3), p + Vector2(0, 3), Color("58483e"), 1.0)
 
-func _draw_firefly(center: Vector2, phase: float) -> void:
-	var t := _time * 0.7 + phase
-	var p := center + Vector2(sin(t) * 27.0, cos(t * 0.8) * 10.0 - 7.0)
-	var glow := pow(maxf(0.0, sin(t * 1.6)), 3.0)
-	draw_circle(p, 5.0, Color(0.81, 0.94, 0.38, glow * 0.08))
-	draw_circle(p, 2.5, Color(0.87, 1.0, 0.49, glow * 0.25))
-	draw_circle(p, 1.0, Color(1.0, 1.0, 0.71, glow))

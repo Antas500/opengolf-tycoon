@@ -38,8 +38,8 @@ func _process(_delta: float) -> void:
 	# Surface relief is always visible; this overlay is for sculpting contours.
 	_color_rect.visible = _terrain_grid._elevation_overlay != null and _terrain_grid._elevation_overlay._elevation_active
 
-	# Sync light direction with time of day
-	_update_light_from_time()
+	# Keep the fixed daytime sun in sync with weather dimming
+	_update_light_from_ws()
 
 	# Shader LOD via zoom — disable contours when zoomed far out
 	var camera: Camera2D = get_viewport().get_camera_2d()
@@ -49,23 +49,13 @@ func _process(_delta: float) -> void:
 		else:
 			_shader_material.set_shader_parameter("contour_enabled", true)
 
-func _update_light_from_time() -> void:
-	var hour: float = GameManager.current_hour
-
-	# Sun arc: rises east (right), sets west (left)
-	# 6 AM = east (1, -0.3), noon = overhead (0, -1), 6 PM = west (-1, -0.3)
-	if hour >= 6.0 and hour <= 18.0:
-		var t: float = (hour - 6.0) / 12.0  # 0.0 at 6AM, 1.0 at 6PM
-		var angle: float = lerpf(-PI * 0.15, -PI * 0.85, t)  # East to west arc
-		var sun_dir: Vector2 = Vector2(cos(angle), sin(angle)).normalized()
-		_shader_material.set_shader_parameter("light_direction", sun_dir)
-		_shader_material.set_shader_parameter("light_intensity", 0.28)
-		_shader_material.set_shader_parameter("shadow_intensity", 0.28)
-	else:
-		# Night: dim moonlight from above-left
-		_shader_material.set_shader_parameter("light_direction", Vector2(-0.5, -0.8))
-		_shader_material.set_shader_parameter("light_intensity", 0.15)
-		_shader_material.set_shader_parameter("shadow_intensity", 0.15)
+func _update_light_from_ws() -> void:
+	# With the day/night cycle removed, the sun sits fixed at a pleasant
+	# late-morning angle; weather (not time) supplies light variation.
+	var sun_dir: Vector2 = Vector2(0.35, -0.94).normalized()
+	_shader_material.set_shader_parameter("light_direction", sun_dir)
+	_shader_material.set_shader_parameter("light_intensity", 0.28)
+	_shader_material.set_shader_parameter("shadow_intensity", 0.28)
 
 	if _terrain_grid._course_surface:
 		_terrain_grid._course_surface.material.set_shader_parameter("relief_light", _shader_material.get_shader_parameter("light_direction"))

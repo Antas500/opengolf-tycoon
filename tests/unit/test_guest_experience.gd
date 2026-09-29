@@ -118,11 +118,13 @@ func test_relaxed_bookings_limit_on_course_crowding() -> void:
 func test_pause_button_stops_clock_and_slows_tweens_without_freezing_input() -> void:
 	var mode = GameManager.current_mode
 	var speed = GameManager.current_speed
-	var hour: float = GameManager.current_hour
+	var day: int = GameManager.current_day
+	var progress: float = GameManager._day_progress
 	GameManager.current_mode = GameManager.GameMode.SIMULATING
 	GameManager.set_speed(GameManager.GameSpeed.PAUSED)
 	GameManager._process(10.0)
-	assert_eq(GameManager.current_hour,hour)
+	assert_eq(GameManager.current_day,day)
+	assert_eq(GameManager._day_progress,progress)
 	assert_lt(Engine.time_scale,.00001)
 	GameManager.set_speed(speed)
 	GameManager.current_mode = mode

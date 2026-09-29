@@ -34,10 +34,14 @@ const PER_HOLE_DAILY_COST: int = 50
 
 var money: int = DEFAULT_STARTING_MONEY
 var reputation: float = DEFAULT_STARTING_REPUTATION
+## Absolute 1-based day count. Day 1 is Saturday, 1 January 2000 — see
+## GameCalendar for date conversion. There are no in-game hours: the course
+## never closes and every day lasts SECONDS_PER_GAME_DAY at normal speed.
 var current_day: int = 1
-var current_hour: float = 6.0
 
 # Reputation decay scales with course quality (stars)
+# Legacy rates were tuned per legacy day (1680 real seconds); they are scaled
+# into the new day length by DAILY_RATE_SCALE.
 const REPUTATION_DAILY_DECAY: float = 0.5  # Baseline at 3 stars
 
 # Stagnation penalty: prevents coasting on few holes forever
@@ -50,7 +54,7 @@ var _stagnation_day_started: int = 1
 # Loan system
 var loan_balance: int = 0
 const MAX_LOAN: int = 50000
-const LOAN_INTEREST_RATE: float = 0.05  # 5% per 7-day period
+const LOAN_ANNUAL_INTEREST_RATE: float = 0.10  # 10% APR, charged at year end
 
 # Historical daily statistics (rolling 30-day window, persisted)
 var daily_history: Array = []
@@ -127,6 +131,16 @@ var marketing_manager: MarketingManager = null
 var daily_stats: DailyStatistics = DailyStatistics.new()
 var yesterday_stats: DailyStatistics = null  # Previous day's stats for comparison
 
+# Year-to-date statistics: daily_stats are accumulated here on every day
+# rollover and shown in the year-end summary. previous_year_stats keeps the
+# last completed year for trend arrows in that summary.
+var yearly_stats: DailyStatistics = DailyStatistics.new()
+var previous_year_stats: DailyStatistics = null
+var prior_year_stats: DailyStatistics = null  # The year before last (trend arrows in the summary)
+var yearly_days: int = 0  # Days accumulated into yearly_stats
+var yearly_satisfaction_sum: float = 0.0  # Daily satisfaction samples for the year average
+var previous_year_satisfaction: float = -1.0  # Avg satisfaction of the last completed year (-1 = none)
+
 # Per-hole cumulative statistics (persists across days)
 var hole_statistics: Dictionary = {}  # hole_number -> HoleStatistics
 
@@ -161,10 +175,18 @@ func get_game_speed_multiplier() -> float:
 		return 0.0
 	return float(current_speed)
 
-const HOURS_PER_DAY: float = 24.0
-const SECONDS_PER_GAME_HOUR: float = 120.0
-const COURSE_OPEN_HOUR: float = 6.0
-const COURSE_CLOSE_HOUR: float = 20.0
+## Real seconds per game day at normal speed. Engine.time_scale applies the
+## speed multiplier to delta, so FAST (3x) and ULTRA (8x) shorten days too.
+const SECONDS_PER_GAME_DAY: float = 3.5
+## Length of a legacy day (14 open hours × 120 s/hour = 1680 s). Per-day
+## rates tuned for the legacy clock are multiplied by DAILY_RATE_SCALE so the
+## real-time pace of the economy is unchanged by the faster calendar.
+const LEGACY_DAY_SECONDS: float = 1680.0
+const DAILY_RATE_SCALE: float = SECONDS_PER_GAME_DAY / LEGACY_DAY_SECONDS
+## Pins rotate monthly now that days fly by.
+const PIN_ROTATION_INTERVAL_DAYS: int = 30
+## Autosave cadence (days). Annual autosaves also fire on year_ended.
+const AUTOSAVE_INTERVAL_DAYS: int = 30
 
 func _ready() -> void:
 	print("GameManager initialized")
@@ -197,39 +219,26 @@ func _process(delta: float) -> void:
 	if current_mode == GameMode.SIMULATING and not is_paused and current_speed != GameSpeed.PAUSED:
 		_advance_time(delta)
 
-var _closing_announced: bool = false
-var _end_of_day_triggered: bool = false
+## Seconds elapsed towards the next day (scaled by Engine.time_scale).
+var _day_progress: float = 0.0
 
 func _advance_time(delta: float) -> void:
-	# Two real minutes per game hour leaves time for foursomes to play their rounds.
-	# Note: delta is already scaled by Engine.time_scale (set in set_speed)
-	var old_hour = current_hour
-	current_hour += delta / SECONDS_PER_GAME_HOUR
+	# The course never closes: days simply roll over once
+	# SECONDS_PER_GAME_DAY seconds have passed. Note: delta is already
+	# scaled by Engine.time_scale (set in set_speed).
+	_day_progress += delta
+	# The while loop keeps rollovers sequential when a frame spans multiple
+	# days (e.g. hitches at ULTRA speed). A rollover may pause the game
+	# (year-end summary, bankruptcy) — stop advancing immediately if so.
+	while _day_progress >= SECONDS_PER_GAME_DAY and not is_paused:
+		_day_progress -= SECONDS_PER_GAME_DAY
+		_complete_day()
 
-	# Emit hour_changed for smooth time-dependent effects (day/night visual, etc.)
-	EventBus.hour_changed.emit(current_hour)
-
-	# Update wind and weather drift each game hour
-	if int(current_hour) != int(old_hour):
-		if wind_system:
-			wind_system.update_wind_drift(current_hour - COURSE_OPEN_HOUR)
-		if weather_system:
-			weather_system.update_weather(1.0)  # 1 hour elapsed
-
-	# Announce course closing 1 hour before close
-	if not _closing_announced and current_hour >= COURSE_CLOSE_HOUR - 1.0:
-		_closing_announced = true
-		EventBus.course_closing.emit()
-		EventBus.notify("Course closing soon!", "info")
-
-	# Trigger end of day when past closing time (golfer cleanup handled by GolferManager)
-	if not _end_of_day_triggered and current_hour >= COURSE_CLOSE_HOUR:
-		_end_of_day_triggered = true
-
-	# Don't wrap day automatically — wait for advance_to_next_day() call
-	# This allows the end-of-day summary to display before the new day starts
-	if current_hour >= HOURS_PER_DAY:
-		current_hour = HOURS_PER_DAY  # Clamp to prevent runaway
+func _complete_day() -> void:
+	# Bookkeeping for the day that just finished (operating costs, weed
+	# growth, staff payroll, digests) runs synchronously in the handlers.
+	EventBus.end_of_day.emit(current_day)
+	advance_to_next_day()
 
 func set_mode(new_mode: GameMode) -> void:
 	var old_mode = current_mode
@@ -276,7 +285,7 @@ func _sync_time_scale() -> void:
 	"""Keep Engine.time_scale in sync with game mode, speed, and pause state.
 
 	While simulating, the scale is the speed multiplier. When the game is
-	paused (pause menu, end-of-day summary, game over, or the speed
+	paused (pause menu, year-end summary, game over, or the speed
 	controls' pause button), the scale is 0 so the entire simulation —
 	golfers, balls, shots, tweens, spawn timers — freezes.
 	"""
@@ -330,11 +339,11 @@ func repay_loan(amount: int) -> bool:
 func _process_loan_interest() -> void:
 	if loan_balance <= 0:
 		return
-	var interest = int(loan_balance * LOAN_INTEREST_RATE)
+	var interest = int(loan_balance * LOAN_ANNUAL_INTEREST_RATE)
 	if interest < 1:
 		interest = 1
 	loan_balance += interest
-	EventBus.notify("Loan interest: +$%d debt (Balance: $%d)" % [interest, loan_balance], "warning")
+	EventBus.notify("Annual loan interest: +$%d debt (Balance: $%d)" % [interest, loan_balance], "warning")
 
 func _archive_daily_stats() -> void:
 	var satisfaction = 0.5
@@ -508,8 +517,9 @@ func new_game(course_name_input: String = "New Course", theme: int = CourseTheme
 	bankruptcy_threshold = diff_mods.get("bankruptcy_threshold", -1000)
 
 	reputation = DEFAULT_STARTING_REPUTATION
+	# New games begin on the morning of Saturday, 1 January 2000.
 	current_day = 1
-	current_hour = COURSE_OPEN_HOUR
+	_day_progress = 0.0
 	# A new game always starts unpaused (stale pause state from a previous session)
 	is_paused = false
 
@@ -519,11 +529,15 @@ func new_game(course_name_input: String = "New Course", theme: int = CourseTheme
 	green_fee = modifiers.get("green_fee_baseline", 30)
 	clamp_green_fee_to_max()  # Clamp to what current hole count allows
 
-	_closing_announced = false
-	_end_of_day_triggered = false
-	_end_of_day_emitted = false
 	daily_stats.reset()
 	yesterday_stats = null  # No yesterday on day 1
+	yearly_stats.reset()
+	previous_year_stats = null
+	prior_year_stats = null
+	yearly_days = 0
+	yearly_satisfaction_sum = 0.0
+	previous_year_satisfaction = -1.0
+	_daily_charge_carries.clear()
 	hole_statistics.clear()  # Clear per-hole stats for new game
 	reset_course_records()  # Clear records for new game
 	if shot_heatmap_tracker:
@@ -548,43 +562,30 @@ func new_game(course_name_input: String = "New Course", theme: int = CourseTheme
 	set_speed(GameSpeed.NORMAL)
 	EventBus.new_game_started.emit()
 
-func is_course_open() -> bool:
-	return current_hour >= COURSE_OPEN_HOUR and current_hour < COURSE_CLOSE_HOUR
+## Per-day cost scaling: legacy daily rates (tuned for 1680-second days) are
+## scaled to the 3.5-second day via DAILY_RATE_SCALE, then collected in
+## per-category float carries so sub-dollar amounts are not rounded away.
+## Each category charges whole dollars as soon as its carry reaches $1.
+var _daily_charge_carries: Dictionary = {}
 
-func force_end_day() -> void:
-	"""Force advance to closing time - useful for testing."""
-	if _end_of_day_triggered:
-		EventBus.notify("Day already ending", "info")
-		return
+func apply_daily_charge(category: String, legacy_daily_amount: float) -> int:
+	var carry: float = float(_daily_charge_carries.get(category, 0.0))
+	var total := carry + legacy_daily_amount * DAILY_RATE_SCALE
+	var charge := int(floor(total))
+	_daily_charge_carries[category] = total - charge
+	return charge
 
-	# Jump to closing time
-	current_hour = COURSE_CLOSE_HOUR
+func get_date_string() -> String:
+	"""Current in-game date for HUD display, e.g. \"Sat 1 Jan 2000\"."""
+	return GameCalendar.format_date(current_day)
 
-	# Trigger course closing announcement if not already done
-	if not _closing_announced:
-		_closing_announced = true
-		EventBus.course_closing.emit()
-
-	# Trigger end of day
-	_end_of_day_triggered = true
-	EventBus.notify("Course closed early - golfers finishing up", "info")
-
-func is_end_of_day_pending() -> bool:
-	return _end_of_day_triggered
-
-var _end_of_day_emitted: bool = false
-
-func request_end_of_day() -> void:
-	"""Called when all golfers have left after closing. Emits end_of_day signal."""
-	if not _end_of_day_triggered:
-		return
-	if _end_of_day_emitted:
-		return  # Already emitted, waiting for advance_to_next_day()
-	_end_of_day_emitted = true
-	EventBus.end_of_day.emit(current_day)
+func get_current_year() -> int:
+	return GameCalendar.get_year(current_day)
 
 func advance_to_next_day() -> void:
-	"""Advance to the next morning. Called after end-of-day processing is complete."""
+	"""Roll over into the next calendar day after end-of-day bookkeeping.
+	Called automatically every SECONDS_PER_GAME_DAY seconds — the course never
+	closes, so there is no summary pause except at the end of the year."""
 	# Reputation decay scales with course quality and difficulty
 	# Below 3 stars: accelerated. Above 3: reduced. Always present.
 	if reputation > 0:
@@ -600,7 +601,7 @@ func advance_to_next_day() -> void:
 			decay = 0.1
 		var diff_mods := DifficultyPresets.get_modifiers(current_difficulty)
 		decay *= diff_mods.get("reputation_decay_multiplier", 1.0)
-		modify_reputation(-decay)
+		modify_reputation(-decay * DAILY_RATE_SCALE)
 
 	# Stagnation penalty: courses that don't expand slowly lose reputation
 	var current_hole_count = get_open_hole_count()
@@ -609,11 +610,7 @@ func advance_to_next_day() -> void:
 		_stagnation_day_started = current_day
 	var stagnation_days = current_day - _stagnation_day_started
 	if stagnation_days > STAGNATION_DAYS_THRESHOLD and reputation > STAGNATION_REPUTATION_FLOOR:
-		modify_reputation(-STAGNATION_DECAY_PENALTY)
-
-	# Loan interest compounds every 7 days
-	if current_day % 7 == 0:
-		_process_loan_interest()
+		modify_reputation(-STAGNATION_DECAY_PENALTY * DAILY_RATE_SCALE)
 
 	# Detect season change for next day
 	var old_season = SeasonSystem.get_season(current_day)
@@ -621,14 +618,17 @@ func advance_to_next_day() -> void:
 	if old_season != new_season:
 		EventBus.season_changed.emit(old_season, new_season)
 
-	# Check for upcoming seasonal events (2-day advance warning)
-	var upcoming = SeasonalEvents.get_upcoming_events(current_day, 3)
+	# Check for upcoming seasonal events (two-week advance warning)
+	var upcoming = SeasonalEvents.get_upcoming_events(current_day, 15)
 	for entry in upcoming:
-		if entry.days_until <= 2:
+		if entry.days_until <= 14:
 			EventBus.seasonal_event_upcoming.emit(entry.event.name, entry.days_until)
 
 	# Archive today's stats for analytics (rolling 30-day history)
 	_archive_daily_stats()
+
+	# Accumulate the finished day into the year-to-date totals
+	_accumulate_yearly_stats()
 
 	# Save yesterday's stats before resetting
 	yesterday_stats = DailyStatistics.new()
@@ -657,18 +657,19 @@ func advance_to_next_day() -> void:
 	# Reset daily statistics for the new day
 	daily_stats.reset()
 
+	var day_ending := current_day
 	current_day += 1
-	current_hour = COURSE_OPEN_HOUR
-	_closing_announced = false
-	_end_of_day_triggered = false
-	_end_of_day_emitted = false
-	EventBus.hour_changed.emit(current_hour)
 	EventBus.day_changed.emit(current_day)
-	# Wind is generated by WindSystem's day_changed signal handler
-	# Rotate pin positions for the new day
-	_rotate_pin_positions()
+	# Wind drifts daily via WindSystem's day_changed signal handler
+	# Rotate pin positions monthly so putts are not chased across the green
+	if current_day % PIN_ROTATION_INTERVAL_DAYS == 0:
+		_rotate_pin_positions()
 
-	EventBus.notify("Day %d — Course is open!" % current_day, "info")
+	# Year rollover: December 31 has just completed. Park the year's totals
+	# for the summary panel, charge annual loan interest, and let the UI show
+	# the year-end summary (which pauses the game).
+	if GameCalendar.is_first_day_of_year(current_day):
+		_roll_over_year(GameCalendar.get_year(day_ending))
 
 func _rotate_pin_positions() -> void:
 	if not current_course:
@@ -682,6 +683,30 @@ func _rotate_pin_positions() -> void:
 	if any_rotated:
 		EventBus.pins_rotated.emit()
 
+## Add the day that just finished into the year-to-date totals.
+func _accumulate_yearly_stats() -> void:
+	yearly_stats.accumulate_from(daily_stats)
+	yearly_days += 1
+	if FeedbackManager:
+		yearly_satisfaction_sum += FeedbackManager.get_satisfaction_rating()
+
+## Calendar year rollover (after December 31 completes). Runs once the day has
+## already incremented to January 1 of the new year.
+func _roll_over_year(finished_year: int) -> void:
+	# Annual loan interest
+	_process_loan_interest()
+
+	# Park the completed year for the summary panel and next year's trends
+	prior_year_stats = previous_year_stats
+	previous_year_stats = yearly_stats
+	previous_year_satisfaction = (
+		yearly_satisfaction_sum / float(yearly_days) if yearly_days > 0 else 0.5)
+	yearly_stats = DailyStatistics.new()
+	yearly_days = 0
+	yearly_satisfaction_sum = 0.0
+
+	EventBus.year_ended.emit(finished_year)
+
 func can_start_playing() -> bool:
 	"""Check if the course is ready to start playing (has at least one open hole)"""
 	if not current_course:
@@ -694,9 +719,6 @@ func start_simulation() -> bool:
 		EventBus.notify("Need at least one hole to start playing!", "error")
 		return false
 
-	# A loaded closing-time save has already paid its daily bill.
-	if current_hour >= COURSE_CLOSE_HOUR and daily_stats.operating_costs > 0:
-		advance_to_next_day()
 	set_mode(GameMode.SIMULATING)
 	set_speed(GameSpeed.NORMAL)
 	EventBus.notify("Golf course opened!", "info")
@@ -727,15 +749,6 @@ func set_colorblind_mode(mode: int) -> void:
 	var remapped := ColorblindMode.remap_colors(base_colors, colorblind_mode)
 	TilesetGenerator.set_theme_colors(remapped)
 	EventBus.theme_changed.emit(current_theme)
-
-func get_time_string() -> String:
-	var hour_int = int(current_hour)
-	var minute_int = int((current_hour - hour_int) * 60)
-	var h = hour_int % 24  # Normalize 24 → 0
-	var am_pm = "AM" if h < 12 else "PM"
-	var display_hour = h % 12
-	if display_hour == 0: display_hour = 12
-	return "%d:%02d %s" % [display_hour, minute_int, am_pm]
 
 func _exit_tree() -> void:
 	# Disconnect signals to prevent memory leaks and double-callbacks on reload
@@ -1017,7 +1030,10 @@ class DailyStatistics:
 			GolferTier.Tier.PRO: 0,
 		}
 
-	## Calculate operating costs based on terrain and course size
+	## Calculate operating costs based on terrain and course size.
+	## Rates are legacy per-day numbers scaled into the 3.5-second day via
+	## GameManager.apply_daily_charge (DAILY_RATE_SCALE + carry), so the
+	## real-time pace of the economy matches the legacy 6 AM–8 PM clock.
 	## terrain_cost: total maintenance cost from terrain grid
 	## hole_count: number of holes on the course
 	## building_costs: total operating costs from all buildings
@@ -1025,27 +1041,55 @@ class DailyStatistics:
 		# Terrain maintenance from actual tiles, scaled by theme-aware seasonal modifier
 		var season = SeasonSystem.get_season(GameManager.current_day)
 		var season_mod = SeasonSystem.get_maintenance_modifier(season, GameManager.current_theme)
-		terrain_maintenance = int(terrain_cost * season_mod)
+		terrain_maintenance = GameManager.apply_daily_charge("terrain", terrain_cost * season_mod)
 
 		# Base operating cost
-		base_operating_cost = GameManager.BASE_DAILY_OVERHEAD + (hole_count * GameManager.PER_HOLE_DAILY_COST)
+		base_operating_cost = GameManager.apply_daily_charge(
+			"base", GameManager.BASE_DAILY_OVERHEAD + (hole_count * GameManager.PER_HOLE_DAILY_COST))
 
 		# Staff wages based on tier
 		var tier_data = GameManager.STAFF_TIER_DATA.get(GameManager.current_staff_tier, {})
 		var cost_per_hole = tier_data.get("cost_per_hole", 10)
-		staff_wages = hole_count * cost_per_hole
+		staff_wages = GameManager.apply_daily_charge("staff_wages", hole_count * cost_per_hole)
 
 		# Building operating costs (daily upkeep for amenities)
-		building_operating_costs = building_costs
+		building_operating_costs = GameManager.apply_daily_charge("buildings", building_costs)
 
 		# Decoration operating costs (daily upkeep for decorations)
-		decoration_operating_costs = decoration_costs
+		decoration_operating_costs = GameManager.apply_daily_charge("decorations", decoration_costs)
 
 		# Total
 		operating_costs = terrain_maintenance + base_operating_cost + staff_wages + building_operating_costs + decoration_operating_costs
 
 	func get_profit() -> int:
 		return revenue + building_revenue + tournament_revenue - operating_costs - tournament_entry_fee
+
+	## Add every field of another period's stats into this one. Used to build
+	## the year-to-date totals from daily stats on each rollover.
+	func accumulate_from(other: DailyStatistics) -> void:
+		revenue += other.revenue
+		golfers_arrived += other.golfers_arrived
+		hired_staff_payroll += other.hired_staff_payroll
+		marketing_cost += other.marketing_cost
+		golfers_served += other.golfers_served
+		holes_in_one += other.holes_in_one
+		eagles += other.eagles
+		birdies += other.birdies
+		pars += other.pars
+		bogeys_or_worse += other.bogeys_or_worse
+		building_revenue += other.building_revenue
+		tournament_revenue += other.tournament_revenue
+		tournament_entry_fee += other.tournament_entry_fee
+		total_strokes_today += other.total_strokes_today
+		total_par_today += other.total_par_today
+		operating_costs += other.operating_costs
+		terrain_maintenance += other.terrain_maintenance
+		base_operating_cost += other.base_operating_cost
+		staff_wages += other.staff_wages
+		building_operating_costs += other.building_operating_costs
+		decoration_operating_costs += other.decoration_operating_costs
+		for tier in tier_counts:
+			tier_counts[tier] += int(other.tier_counts.get(tier, 0))
 
 	func get_total_revenue() -> int:
 		return revenue + building_revenue + tournament_revenue

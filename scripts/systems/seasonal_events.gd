@@ -10,7 +10,7 @@ class SeasonEvent:
 	var name: String
 	var description: String
 	var season: int  # SeasonSystem.Season enum
-	var day_in_season: int  # Which day of the season (1-7)
+	var day_in_season: int  # Which day of the season (1-90, seasons are calendar quarters)
 	var revenue_modifier: float = 1.0
 	var spawn_modifier: float = 1.0
 	var reputation_bonus: float = 0.0
@@ -31,37 +31,37 @@ class SeasonEvent:
 
 static func get_all_events() -> Array:
 	return [
-		# Spring events
-		SeasonEvent.new("spring_open", "Spring Opening Day",
+		# Spring events (Mar-May)
+		SeasonEvent.new("spring_open", "Spring Opening Week",
 			"Course opens for the season! Extra golfers flock in.",
-			SeasonSystem.Season.SPRING, 1, 1.5, 1.5, 2.0),
+			SeasonSystem.Season.SPRING, 1, 1.5, 1.5, 2.0, 7),
 		SeasonEvent.new("spring_charity", "Charity Scramble",
 			"Local charity event boosts reputation.",
-			SeasonSystem.Season.SPRING, 4, 1.2, 1.3, 3.0),
+			SeasonSystem.Season.SPRING, 45, 1.2, 1.3, 3.0, 4),
 
-		# Summer events
+		# Summer events (Jun-Aug)
 		SeasonEvent.new("summer_peak", "Peak Season",
 			"Highest demand of the year. Premium pricing accepted.",
-			SeasonSystem.Season.SUMMER, 1, 1.5, 1.0, 0.0, 3),
-		SeasonEvent.new("summer_junior", "Junior Golf Day",
+			SeasonSystem.Season.SUMMER, 1, 1.5, 1.0, 0.0, 10),
+		SeasonEvent.new("summer_junior", "Junior Golf Week",
 			"Young golfers visit. High volume, lower fees.",
-			SeasonSystem.Season.SUMMER, 5, 0.8, 1.8, 2.0),
+			SeasonSystem.Season.SUMMER, 60, 0.8, 1.8, 2.0, 7),
 
-		# Fall events
+		# Fall events (Sep-Nov)
 		SeasonEvent.new("fall_classic", "Fall Classic Invitational",
 			"Prestigious amateur event. Serious golfers attend.",
-			SeasonSystem.Season.FALL, 2, 1.3, 1.4, 5.0, 2),
-		SeasonEvent.new("fall_twilight", "Twilight Golf Week",
+			SeasonSystem.Season.FALL, 15, 1.3, 1.4, 5.0, 5),
+		SeasonEvent.new("fall_twilight", "Twilight Golf Special",
 			"End-of-season discounts drive high attendance.",
-			SeasonSystem.Season.FALL, 6, 0.9, 1.6, 1.0),
+			SeasonSystem.Season.FALL, 75, 0.9, 1.6, 1.0, 5),
 
-		# Winter events
+		# Winter events (Dec-Feb, spanning year start)
 		SeasonEvent.new("winter_open", "Winter Open",
 			"Hardy golfers brave the cold. Low demand but loyal visitors.",
-			SeasonSystem.Season.WINTER, 3, 1.0, 0.8, 1.0),
-		SeasonEvent.new("winter_maint", "Maintenance Week",
+			SeasonSystem.Season.WINTER, 30, 1.0, 0.8, 1.0, 6),
+		SeasonEvent.new("winter_maint", "Maintenance Fortnight",
 			"Course maintenance reduces play. Great time to build.",
-			SeasonSystem.Season.WINTER, 6, 0.5, 0.3, 0.0),
+			SeasonSystem.Season.WINTER, 60, 0.5, 0.3, 0.0, 8),
 	]
 
 ## Get the currently active event (if any) for the given game day

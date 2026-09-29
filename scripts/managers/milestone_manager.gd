@@ -122,20 +122,21 @@ func deserialize(data: Dictionary) -> void:
 # --- Signal handlers ---
 
 func _on_end_of_day(_day: int) -> void:
-	# Day survival milestones
-	_check("survive_30_days", GameManager.current_day >= 30)
-	_check("survive_100_days", GameManager.current_day >= 100)
+	# Survival milestones — measured against the real calendar now
+	_check("survive_30_days", GameManager.current_day >= 365)
+	_check("survive_100_days", GameManager.current_day >= 1825)
 
-	# Daily revenue milestone
-	var daily_revenue = GameManager.daily_stats.get_total_revenue()
-	_check("earn_10k", daily_revenue >= 10000)
-	_check("earn_50k", daily_revenue >= 50000)
+	# Yearly revenue milestones: today's day is accumulated at rollover, so
+	# count YTD + today for the true picture.
+	var yearly_revenue = GameManager.yearly_stats.get_total_revenue() + GameManager.daily_stats.get_total_revenue()
+	_check("earn_10k", yearly_revenue >= 10000)
+	_check("earn_50k", yearly_revenue >= 50000)
 
 	# Profit milestone
 	_check("first_profit", GameManager.daily_stats.get_profit() > 0)
 
-	# Daily golfer count
-	_check("serve_50", GameManager.daily_stats.golfers_served >= 50)
+	# Yearly golfer count
+	_check("serve_50", GameManager.yearly_stats.golfers_served + GameManager.daily_stats.golfers_served >= 50)
 
 	# HIO count
 	_check("five_hio", GameManager.course_records.get("total_hole_in_ones", 0) >= 5)

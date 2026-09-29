@@ -29,6 +29,6 @@ func run() -> void:
 	var start := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - start < 150000 and rounds == 0 and gm.current_mode == gm.GameMode.SIMULATING:
 		await create_timer(5, true, false, true).timeout
-		print("PACE: hour=",gm.current_hour," furthest=",furthest_hole," rounds=",rounds)
-	print("REGRESSION RESULT: rounds=",rounds," furthest=",furthest_hole," hour=",gm.current_hour)
+		print("PACE: day=",gm.current_day," furthest=",furthest_hole," rounds=",rounds)
+	print("REGRESSION RESULT: rounds=",rounds," furthest=",furthest_hole," day=",gm.current_day)
 	quit(0 if rounds > 0 else 1)

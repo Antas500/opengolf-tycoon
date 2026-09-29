@@ -2,15 +2,14 @@ extends RefCounted
 class_name SeasonSystem
 ## SeasonSystem - Static class for seasonal calendar and modifiers.
 ## Season is derived from GameManager.current_day — no stored state.
-## 28-day year: Spring (1-7), Summer (8-14), Fall (15-21), Winter (22-28).
+## Seasons follow the real calendar (see GameCalendar, day 1 = 1 Jan 2000):
+## Winter (Dec-Feb), Spring (Mar-May), Summer (Jun-Aug), Fall (Sep-Nov).
 ##
 ## Theme-aware: Modifier tables vary per CourseTheme.Type so Desert courses
 ## peak in winter while Mountain courses peak in summer.
 
 enum Season { SPRING, SUMMER, FALL, WINTER }
 
-const DAYS_PER_SEASON: int = 7
-const DAYS_PER_YEAR: int = 28
 const TRANSITION_BLEND_FACTOR: float = 0.34  ## Blend weight at season boundaries (2-day window)
 
 # Theme enum aliases for readable dictionary keys
@@ -84,19 +83,61 @@ const THEME_WEATHER_MODIFIERS: Dictionary = {
 	_MARSHLAND: {"wind": 0.9, "rain": 1.4},  # Damp, frequent rain
 }
 
-static func get_season(day: int) -> int:
-	@warning_ignore_start("integer_division")
-	var day_in_year = (day - 1) % DAYS_PER_YEAR
-	return int(day_in_year / DAYS_PER_SEASON)
-	@warning_ignore_restore("integer_division")
+## Season boundaries by calendar date: Winter opens on 1 December, Spring on
+## 1 March, Summer on 1 June, Fall on 1 September.
+const SEASON_START_MONTHS: Dictionary = {
+	Season.WINTER: 12,
+	Season.SPRING: 3,
+	Season.SUMMER: 6,
+	Season.FALL: 9,
+}
 
+static func get_season_for_month(month: int) -> int:
+	match month:
+		3, 4, 5:
+			return Season.SPRING
+		6, 7, 8:
+			return Season.SUMMER
+		9, 10, 11:
+			return Season.FALL
+		_:
+			return Season.WINTER
+
+static func get_season(day: int) -> int:
+	return get_season_for_month(GameCalendar.get_month(day))
+
+## 1-based day index within the current season (e.g. 1 on the season's first day).
 static func get_day_in_season(day: int) -> int:
-	return ((day - 1) % DAYS_PER_SEASON) + 1
+	return day - get_season_start_day(day) + 1
+
+## Absolute day on which the season containing `day` began.
+static func get_season_start_day(day: int) -> int:
+	var date := GameCalendar.get_date(day)
+	var season := get_season_for_month(int(date.month))
+	var start_month: int = SEASON_START_MONTHS[season]
+	var year := int(date.year)
+	# Winter starts in December of the previous calendar year.
+	if season == Season.WINTER and start_month > int(date.month):
+		year -= 1
+	return GameCalendar._days_from_civil(year, start_month, 1) - GameCalendar._EPOCH_DAYS + 1
+
+## Number of days in the season containing `day` (~90 days).
+static func get_season_length(day: int) -> int:
+	var start := get_season_start_day(day)
+	# Start of the next season = start day of the (current_day + length) lookup,
+	# computed by stepping to the same date three months later.
+	var date := GameCalendar._civil_from_days(start - 1 + GameCalendar._EPOCH_DAYS - 1)
+	var next_month := int(date.month) + 3
+	var next_year := int(date.year)
+	if next_month > 12:
+		next_month -= 12
+		next_year += 1
+	var next_start: int = GameCalendar._days_from_civil(next_year, next_month, 1) - GameCalendar._EPOCH_DAYS + 1
+	return next_start - start
 
 static func get_year(day: int) -> int:
-	@warning_ignore_start("integer_division")
-	return ((day - 1) / DAYS_PER_YEAR) + 1
-	@warning_ignore_restore("integer_division")
+	## Calendar year of the given day (e.g. 2000 for day 1).
+	return GameCalendar.get_year(day)
 
 static func get_season_name(season: int) -> String:
 	match season:
@@ -186,18 +227,18 @@ static func get_season_color(season: int) -> Color:
 		Season.WINTER: return Color(0.6, 0.7, 0.85)
 	return Color.WHITE
 
-## Blend a float modifier at season boundaries (2-day transition window).
+## Blend a float modifier at season boundaries (day counts vary by season
+## length, so boundary detection compares `day` against the season edges).
 ## getter takes a season int and returns the modifier float for that season.
 static func _blend_at_boundary(day: int, getter: Callable) -> float:
 	var season = get_season(day)
-	var day_in_season = get_day_in_season(day)
 	var current_val = getter.call(season)
 
-	if day_in_season == DAYS_PER_SEASON:
+	if day + 1 == get_season_start_day(day) + get_season_length(day):
 		var next_val = getter.call((season + 1) % 4)
 		return lerpf(current_val, next_val, TRANSITION_BLEND_FACTOR)
 
-	if day_in_season == 1:
+	if day == get_season_start_day(day):
 		var prev_val = getter.call((season + 3) % 4)
 		return lerpf(current_val, prev_val, TRANSITION_BLEND_FACTOR)
 
@@ -207,14 +248,13 @@ static func _blend_at_boundary(day: int, getter: Callable) -> float:
 ## getter takes a season int and returns an Array for that season.
 static func _blend_array_at_boundary(day: int, getter: Callable) -> Array:
 	var season = get_season(day)
-	var day_in_season = get_day_in_season(day)
 	var current_arr = getter.call(season)
 
-	if day_in_season == DAYS_PER_SEASON:
+	if day + 1 == get_season_start_day(day) + get_season_length(day):
 		var next_arr = getter.call((season + 1) % 4)
 		return _lerp_array(current_arr, next_arr, TRANSITION_BLEND_FACTOR)
 
-	if day_in_season == 1:
+	if day == get_season_start_day(day):
 		var prev_arr = getter.call((season + 3) % 4)
 		return _lerp_array(current_arr, prev_arr, TRANSITION_BLEND_FACTOR)
 

@@ -1,13 +1,14 @@
 extends CenteredPanel
-class_name EndOfDaySummaryPanel
-## EndOfDaySummaryPanel - Shows daily statistics at end of each day
+class_name YearSummaryPanel
+## YearSummaryPanel - Shows year-in-review statistics when a calendar year ends
+## (the pausing counterpart to the daily rollover, which stays silent).
 
 signal continue_pressed
 
-var _day_number: int = 1
+var _year: int = 2000
 
-func _init(day_number: int = 1) -> void:
-	_day_number = day_number
+func _init(year: int = 2000) -> void:
+	_year = year
 
 func _ready() -> void:
 	super._ready()
@@ -20,7 +21,7 @@ func _build_ui() -> void:
 	if get_viewport():
 		viewport_height = get_viewport().get_visible_rect().size.y
 	var panel_height = min(680, viewport_height - 100)  # Leave margin from screen edges
-	custom_minimum_size = Vector2(380, panel_height)
+	custom_minimum_size = Vector2(400, panel_height)
 
 	var margin = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 16)
@@ -35,7 +36,7 @@ func _build_ui() -> void:
 
 	# Title (fixed at top)
 	var title = Label.new()
-	title.text = "Day %d Complete" % _day_number
+	title.text = "%d Year in Review" % _year
 	title.add_theme_font_size_override("font_size", 24)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main_vbox.add_child(title)
@@ -53,9 +54,34 @@ func _build_ui() -> void:
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(vbox)
 
-	# Stats container
-	var stats = GameManager.daily_stats
+	# The year that just finished is parked in previous_year_stats (the new
+	# year's accumulator has already been reset before this panel opens).
+	var stats: GameManager.DailyStatistics = GameManager.previous_year_stats
+	var prior: GameManager.DailyStatistics = GameManager.prior_year_stats  # Year before last, for trends
 
+	if stats == null:
+		var none = Label.new()
+		none.text = "No statistics recorded."
+		none.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+		vbox.add_child(none)
+		stats = GameManager.DailyStatistics.new()
+	else:
+		_build_sections(vbox, stats, prior)
+
+	# Action buttons (fixed at bottom, outside scroll area)
+	main_vbox.add_child(HSeparator.new())
+
+	var btn_row = VBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 6)
+	main_vbox.add_child(btn_row)
+
+	var continue_btn = Button.new()
+	continue_btn.text = "Continue to %d" % (_year + 1)
+	continue_btn.custom_minimum_size = Vector2(200, 38)
+	continue_btn.pressed.connect(_on_continue_pressed)
+	btn_row.add_child(continue_btn)
+
+func _build_sections(vbox: VBoxContainer, stats: GameManager.DailyStatistics, prior: GameManager.DailyStatistics) -> void:
 	# Revenue section
 	var revenue_label = Label.new()
 	revenue_label.text = "Revenue:"
@@ -77,14 +103,9 @@ func _build_ui() -> void:
 		var tourn_rev_row = _create_stat_row("  Tournament:", "$%d" % stats.tournament_revenue, dim_green)
 		vbox.add_child(tourn_rev_row)
 
-	# Total revenue with trend
+	# Total revenue
 	var total_rev = stats.get_total_revenue()
-	var rev_text = "$%d" % total_rev
-	var yesterday = GameManager.yesterday_stats
-	if yesterday:
-		var yest_rev = yesterday.get_total_revenue()
-		rev_text += " %s" % _trend_arrow(total_rev, yest_rev)
-	var total_rev_row = _create_stat_row("Total Revenue:", rev_text, UIConstants.COLOR_SUCCESS)
+	var total_rev_row = _create_stat_row("Total Revenue:", "$%d" % total_rev, UIConstants.COLOR_SUCCESS)
 	vbox.add_child(total_rev_row)
 
 	# Operating costs breakdown
@@ -96,43 +117,43 @@ func _build_ui() -> void:
 	# Show breakdown with indentation
 	var dim_color = UIConstants.COLOR_TEXT_DIM
 	if stats.terrain_maintenance > 0:
-		var terrain_row = _create_stat_row("  Terrain:", "-$%d" % stats.terrain_maintenance, dim_color)
-		vbox.add_child(terrain_row)
+		vbox.add_child(_create_stat_row("  Terrain:", "-$%d" % stats.terrain_maintenance, dim_color))
 	if stats.base_operating_cost > 0:
-		var base_row = _create_stat_row("  Base:", "-$%d" % stats.base_operating_cost, dim_color)
-		vbox.add_child(base_row)
+		vbox.add_child(_create_stat_row("  Base:", "-$%d" % stats.base_operating_cost, dim_color))
 	if stats.staff_wages > 0:
-		var staff_row = _create_stat_row("  Staff:", "-$%d" % stats.staff_wages, dim_color)
-		vbox.add_child(staff_row)
+		vbox.add_child(_create_stat_row("  Staff:", "-$%d" % stats.staff_wages, dim_color))
 	if stats.building_operating_costs > 0:
-		var building_row = _create_stat_row("  Buildings:", "-$%d" % stats.building_operating_costs, dim_color)
-		vbox.add_child(building_row)
+		vbox.add_child(_create_stat_row("  Buildings:", "-$%d" % stats.building_operating_costs, dim_color))
+	if stats.decoration_operating_costs > 0:
+		vbox.add_child(_create_stat_row("  Decorations:", "-$%d" % stats.decoration_operating_costs, dim_color))
 	if stats.tournament_entry_fee > 0:
-		var tourn_fee_row = _create_stat_row("  Tournament Fee:", "-$%d" % stats.tournament_entry_fee, dim_color)
-		vbox.add_child(tourn_fee_row)
+		vbox.add_child(_create_stat_row("  Tournament Fee:", "-$%d" % stats.tournament_entry_fee, dim_color))
 
 	var total_costs = stats.operating_costs + stats.tournament_entry_fee
-	var total_costs_row = _create_stat_row("Total Costs:", "-$%d" % total_costs, UIConstants.COLOR_DANGER_DIM)
-	vbox.add_child(total_costs_row)
+	vbox.add_child(_create_stat_row("Total Costs:", "-$%d" % total_costs, UIConstants.COLOR_DANGER_DIM))
 
 	if stats.hired_staff_payroll > 0:
 		vbox.add_child(_create_stat_row("  Hired staff:", "-$%d" % stats.hired_staff_payroll, dim_color))
 	if stats.marketing_cost > 0:
 		vbox.add_child(_create_stat_row("  Marketing:", "-$%d" % stats.marketing_cost, dim_color))
-	# Profit/Loss with trend
+
+	# Profit/Loss
 	var profit = stats.get_profit()
 	var profit_color = UIConstants.COLOR_SUCCESS if profit >= 0 else UIConstants.COLOR_DANGER
 	var profit_text = "+$%d" % profit if profit >= 0 else "-$%d" % abs(profit)
-	if yesterday:
-		var yest_profit = yesterday.get_profit()
-		profit_text += " %s" % _trend_arrow(profit, yest_profit)
-	var profit_row = _create_stat_row("Daily Profit:", profit_text, profit_color)
-	vbox.add_child(profit_row)
+	vbox.add_child(_create_stat_row("Annual Profit:", profit_text, profit_color))
+
+	if prior:
+		var trend = _create_stat_row("  vs. previous year:", "revenue %s  /  profit %s" % [
+			_trend_arrow(total_rev, prior.get_total_revenue()),
+			_trend_arrow(profit, prior.get_profit())], dim_color)
+		vbox.add_child(trend)
+
 	var steps := CourseAdvisor.review(GameManager.terrain_grid, GameManager.current_course, GameManager.entity_layer, GameManager.course_rating, stats)
 	if not steps.is_empty():
 		var next_step := Label.new()
-		next_step.text = "Tomorrow: " + steps[0].title + ". Open Course review for details."
-		next_step.custom_minimum_size.x = 330
+		next_step.text = "This year: " + steps[0].title + ". Open Course review for details."
+		next_step.custom_minimum_size.x = 350
 		next_step.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		next_step.add_theme_font_size_override("font_size", 13)
 		next_step.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
@@ -164,55 +185,36 @@ func _build_ui() -> void:
 	elif stars <= 2:
 		star_color = UIConstants.COLOR_DANGER
 
-	var star_row = _create_stat_row("Overall:", star_text, star_color)
-	vbox.add_child(star_row)
-
-	# Show individual ratings in smaller text
-	var cond_row = _create_stat_row("  Condition:", "%.1f" % rating.get("condition", 3.0), dim_color)
-	var design_row = _create_stat_row("  Design:", "%.1f" % rating.get("design", 3.0), dim_color)
-	var value_row = _create_stat_row("  Value:", "%.1f" % rating.get("value", 3.0), dim_color)
-	var pace_row = _create_stat_row("  Pace:", "%.1f" % rating.get("pace", 3.0), dim_color)
-	vbox.add_child(cond_row)
-	vbox.add_child(design_row)
-	vbox.add_child(value_row)
-	vbox.add_child(pace_row)
+	vbox.add_child(_create_stat_row("Overall:", star_text, star_color))
+	vbox.add_child(_create_stat_row("  Condition:", "%.1f" % rating.get("condition", 3.0), dim_color))
+	vbox.add_child(_create_stat_row("  Design:", "%.1f" % rating.get("design", 3.0), dim_color))
+	vbox.add_child(_create_stat_row("  Value:", "%.1f" % rating.get("value", 3.0), dim_color))
+	vbox.add_child(_create_stat_row("  Pace:", "%.1f" % rating.get("pace", 3.0), dim_color))
 
 	# Course Difficulty section
 	var difficulty = rating.get("difficulty", 5.0)
 	var slope = rating.get("slope", 113)
 	var course_rtg = rating.get("course_rating", 72.0)
 
-	# Difficulty with color coding
 	var diff_color = UIConstants.COLOR_SUCCESS
 	if difficulty >= 7.0:
 		diff_color = UIConstants.COLOR_DANGER
 	elif difficulty >= 5.0:
 		diff_color = UIConstants.COLOR_WARNING
 
-	var diff_text = "%.1f (%s)" % [difficulty, CourseRatingSystem.get_difficulty_text(difficulty)]
-	var diff_row = _create_stat_row("Difficulty:", diff_text, diff_color)
-	vbox.add_child(diff_row)
+	vbox.add_child(_create_stat_row("Difficulty:", "%.1f (%s)" % [difficulty, CourseRatingSystem.get_difficulty_text(difficulty)], diff_color))
 
-	# Slope rating
 	var slope_color = UIConstants.COLOR_INFO_DIM
 	if slope >= 130:
 		slope_color = UIConstants.COLOR_ORANGE
-	var slope_row = _create_stat_row("Slope Rating:", "%d" % slope, slope_color)
-	vbox.add_child(slope_row)
-
-	# Course rating (expected score)
-	var cr_row = _create_stat_row("Course Rating:", "%.1f" % course_rtg, dim_color)
-	vbox.add_child(cr_row)
+	vbox.add_child(_create_stat_row("Slope Rating:", "%d" % slope, slope_color))
+	vbox.add_child(_create_stat_row("Course Rating:", "%.1f" % course_rtg, dim_color))
 
 	vbox.add_child(HSeparator.new())
 
-	# Golfers served with trend
+	# The year at a glance: playing volume
 	vbox.add_child(_create_stat_row("Arrivals:", str(stats.golfers_arrived), dim_color))
-	var golfers_text = "%d" % stats.golfers_served
-	if yesterday:
-		golfers_text += " %s" % _trend_arrow(stats.golfers_served, yesterday.golfers_served)
-	var golfers_row = _create_stat_row("Completed rounds:", golfers_text)
-	vbox.add_child(golfers_row)
+	vbox.add_child(_create_stat_row("Completed rounds:", "%d" % stats.golfers_served))
 
 	# Golfer tier breakdown
 	if stats.golfers_served > 0:
@@ -222,17 +224,13 @@ func _build_ui() -> void:
 		var pros = stats.tier_counts.get(GolferTier.Tier.PRO, 0)
 
 		if beginners > 0:
-			var row = _create_stat_row("  Beginners:", "%d" % beginners, dim_color)
-			vbox.add_child(row)
+			vbox.add_child(_create_stat_row("  Beginners:", "%d" % beginners, dim_color))
 		if casuals > 0:
-			var row = _create_stat_row("  Casual:", "%d" % casuals, dim_color)
-			vbox.add_child(row)
+			vbox.add_child(_create_stat_row("  Casual:", "%d" % casuals, dim_color))
 		if serious > 0:
-			var row = _create_stat_row("  Serious:", "%d" % serious, UIConstants.COLOR_INFO)
-			vbox.add_child(row)
+			vbox.add_child(_create_stat_row("  Serious:", "%d" % serious, UIConstants.COLOR_INFO))
 		if pros > 0:
-			var row = _create_stat_row("  Pro:", "%d" % pros, UIConstants.COLOR_GOLD)
-			vbox.add_child(row)
+			vbox.add_child(_create_stat_row("  Pro:", "%d" % pros, UIConstants.COLOR_GOLD))
 
 	# Average score (if any golfers played)
 	if stats.golfers_served > 0:
@@ -244,8 +242,7 @@ func _build_ui() -> void:
 			avg_text = "+%.1f" % avg_score
 		else:
 			avg_text = "%.1f" % avg_score
-		var avg_row = _create_stat_row("Avg Score:", avg_text)
-		vbox.add_child(avg_row)
+		vbox.add_child(_create_stat_row("Avg Score:", avg_text))
 
 	vbox.add_child(HSeparator.new())
 
@@ -263,23 +260,20 @@ func _build_ui() -> void:
 
 	# Hole in ones (gold)
 	if stats.holes_in_one > 0:
-		var hio = _create_notable_badge("Hole-in-One", stats.holes_in_one, UIConstants.COLOR_GOLD)
-		notable_container.add_child(hio)
+		notable_container.add_child(_create_notable_badge("Hole-in-One", stats.holes_in_one, UIConstants.COLOR_GOLD))
 
 	# Eagles (gold-ish)
 	if stats.eagles > 0:
-		var eagle = _create_notable_badge("Eagle", stats.eagles, UIConstants.COLOR_GOLD_DIM)
-		notable_container.add_child(eagle)
+		notable_container.add_child(_create_notable_badge("Eagle", stats.eagles, UIConstants.COLOR_GOLD_DIM))
 
 	# Birdies (blue)
 	if stats.birdies > 0:
-		var birdie = _create_notable_badge("Birdie", stats.birdies, UIConstants.COLOR_INFO)
-		notable_container.add_child(birdie)
+		notable_container.add_child(_create_notable_badge("Birdie", stats.birdies, UIConstants.COLOR_INFO))
 
 	# If no notable scores
 	if stats.holes_in_one == 0 and stats.eagles == 0 and stats.birdies == 0:
 		var none_label = Label.new()
-		none_label.text = "None today"
+		none_label.text = "None this year"
 		none_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 		notable_container.add_child(none_label)
 
@@ -292,58 +286,42 @@ func _build_ui() -> void:
 	satisfaction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(satisfaction_label)
 
-	var feedback_summary = FeedbackManager.get_daily_summary()
-	var satisfaction_pct = int(feedback_summary["satisfaction"] * 100)
-
-	# Determine satisfaction color
-	var sat_color: Color
-	if satisfaction_pct >= 70:
-		sat_color = UIConstants.COLOR_SUCCESS
-	elif satisfaction_pct >= 40:
-		sat_color = UIConstants.COLOR_WARNING
-	else:
-		sat_color = UIConstants.COLOR_DANGER
-
-	var sat_row = _create_stat_row("Positive thoughts:", "%d%%" % satisfaction_pct, sat_color)
-	vbox.add_child(sat_row)
+	var yearly_satisfaction := GameManager.previous_year_satisfaction
+	if yearly_satisfaction >= 0.0:
+		var satisfaction_pct := int(yearly_satisfaction * 100)
+		var sat_color: Color
+		if satisfaction_pct >= 70:
+			sat_color = UIConstants.COLOR_SUCCESS
+		elif satisfaction_pct >= 40:
+			sat_color = UIConstants.COLOR_WARNING
+		else:
+			sat_color = UIConstants.COLOR_DANGER
+		vbox.add_child(_create_stat_row("Average positive thoughts:", "%d%%" % satisfaction_pct, sat_color))
 
 	var experience := FeedbackManager.visit_summary()
 	if experience.reviews > 0:
-		vbox.add_child(_create_stat_row("Visit satisfaction (%d reviews):" % experience.reviews, "%d%%" % int(experience.satisfaction*100), UIConstants.COLOR_TEXT))
-		vbox.add_child(_create_stat_row("Return intent:", "%d%%" % int(experience.return_intent*100), UIConstants.COLOR_TEXT))
-	vbox.add_child(_create_stat_row("Returning guests:",str(experience.returning), UIConstants.COLOR_TEXT))
-	vbox.add_child(_create_stat_row("Amenity visits:",str(experience.service_visits), UIConstants.COLOR_TEXT))
+		vbox.add_child(_create_stat_row("Visit satisfaction (%d reviews):" % experience.reviews, "%d%%" % int(experience.satisfaction * 100), UIConstants.COLOR_TEXT))
+		vbox.add_child(_create_stat_row("Return intent:", "%d%%" % int(experience.return_intent * 100), UIConstants.COLOR_TEXT))
+	vbox.add_child(_create_stat_row("Returning guests:", str(experience.returning), UIConstants.COLOR_TEXT))
+	vbox.add_child(_create_stat_row("Amenity visits:", str(experience.service_visits), UIConstants.COLOR_TEXT))
+
 	# Show top feedback if available
+	var feedback_summary = FeedbackManager.get_daily_summary()
 	var top_compliment = feedback_summary["top_compliment"]
 	var top_complaint = feedback_summary["top_complaint"]
 
 	if top_compliment != "":
-		var compliment_row = _create_stat_row("Top praise:", "\"%s\"" % top_compliment, UIConstants.COLOR_SUCCESS_MUTED)
-		vbox.add_child(compliment_row)
+		vbox.add_child(_create_stat_row("Top praise:", "\"%s\"" % top_compliment, UIConstants.COLOR_SUCCESS_MUTED))
 
 	if top_complaint != "":
-		var complaint_row = _create_stat_row("Top concern:", "\"%s\"" % top_complaint, UIConstants.COLOR_DANGER_MUTED)
-		vbox.add_child(complaint_row)
+		vbox.add_child(_create_stat_row("Top concern:", "\"%s\"" % top_complaint, UIConstants.COLOR_DANGER_MUTED))
 
-	if top_compliment == "" and top_complaint == "" and feedback_summary["total_count"] == 0:
+	if top_compliment == "" and top_complaint == "" and yearly_satisfaction < 0.0:
 		var no_feedback = Label.new()
 		no_feedback.text = "No feedback recorded"
 		no_feedback.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 		no_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vbox.add_child(no_feedback)
-
-	# Action buttons (fixed at bottom, outside scroll area)
-	main_vbox.add_child(HSeparator.new())
-
-	var btn_row = VBoxContainer.new()
-	btn_row.add_theme_constant_override("separation", 6)
-	main_vbox.add_child(btn_row)
-
-	var continue_btn = Button.new()
-	continue_btn.text = "Continue to Day %d" % (_day_number + 1)
-	continue_btn.custom_minimum_size = Vector2(200, 38)
-	continue_btn.pressed.connect(_on_continue_pressed)
-	btn_row.add_child(continue_btn)
 
 func _create_stat_row(label_text: String, value_text: String, value_color: Color = Color.WHITE) -> HBoxContainer:
 	var row = HBoxContainer.new()

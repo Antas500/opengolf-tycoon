@@ -56,8 +56,8 @@ Fountain beads follow a quadratic fall from the original sprite's jet to its
 basin; ripples stay within the basin. A robin visits a bird bath for eight seconds
 of each sixteen-second cycle and periodically dips its head. Decorative contact
 shadows anchor at the sprite foot and inherit the same variation transform.
-The course surface receives the existing day/night canvas modulation, keeping
-water, turf, and residents in the same light.
+The course surface receives the existing weather-driven canvas modulation,
+keeping water, turf, and residents in the same light.
 
 ## Tuning levers
 

@@ -22,19 +22,22 @@ func run() -> void:
 		gm.set_green_fee(20 if day == 1 else 5)
 		main._on_mode_toggle_pressed()
 		gm.set_speed(8)
+		# Days now roll over on their own — wait for the clock to tick past
+		# the in-flight day so daily_stats holds a completed period.
+		var day_before: int = gm.current_day
 		var ticks := Time.get_ticks_msec()
-		while not gm._end_of_day_emitted and Time.get_ticks_msec()-ticks < 600000:
+		while gm.current_day == day_before and Time.get_ticks_msec()-ticks < 600000:
 			await create_timer(1, true, false, true).timeout
-		assert(gm._end_of_day_emitted, "Day must finish without intervention")
-		var stats = gm.daily_stats
-		var report := {"day":gm.current_day,"fee":gm.green_fee,"arrivals":stats.golfers_arrived,"completed":stats.golfers_served,"revenue":stats.get_total_revenue(),"costs":stats.operating_costs,"profit":stats.get_profit(),"cash":gm.money,"reputation":gm.reputation,"weather":gm.weather_system.weather_type,"satisfaction":root.get_node("FeedbackManager").get_satisfaction_rating()}
+		assert(gm.current_day != day_before, "Day must finish without intervention")
+		var stats = gm.yesterday_stats if gm.yesterday_stats else gm.daily_stats
+		var report := {"day":day_before,"fee":gm.green_fee,"arrivals":stats.golfers_arrived,"completed":stats.golfers_served,"revenue":stats.get_total_revenue(),"costs":stats.operating_costs,"profit":stats.get_profit(),"cash":gm.money,"reputation":gm.reputation,"weather":gm.weather_system.weather_type,"satisfaction":root.get_node("FeedbackManager").get_satisfaction_rating()}
 		results.append(report)
 		print("MANAGEMENT_DAY ", JSON.stringify(report))
-		var panel = main.get_node_or_null("UI/HUD/EndOfDaySummary")
+		var panel = main.get_node_or_null("UI/HUD/YearSummary")
 		if panel:
 			panel.get_parent().remove_child(panel)
 			panel.queue_free()
-		main._on_summary_build_mode()
+			gm.is_paused = false
 		await process_frame
 	var data: Dictionary = sm._build_save_data()
 	var balance: int = gm.money

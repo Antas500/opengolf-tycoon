@@ -99,18 +99,7 @@ func get_effective_spawn_cooldown() -> float:
 	# Use cached modifier to avoid expensive recalculation every frame
 	return GameManager.tee_booking_interval / maxf(_cached_spawn_modifier,.001)
 
-## Estimated game-hours per hole for last tee time calculation
-const HOURS_PER_HOLE: float = 0.6  # Allow for group play, walking and queueing
-
-func _is_before_last_tee_time() -> bool:
-	"""Check if it's early enough in the day to start a new group.
-	Prevents spawning golfers who can't finish before course closes."""
-	var hole_count = GameManager.get_open_hole_count()
-	if hole_count <= 0:
-		return false
-	var estimated_round_hours = hole_count * HOURS_PER_HOLE
-	var last_tee_time = GameManager.COURSE_CLOSE_HOUR - estimated_round_hours
-	return GameManager.current_hour < last_tee_time
+## The course never closes, so groups can tee off at any time of day.
 
 ## Landing zone constants
 const LANDING_ZONE_BASE_RADIUS: float = 2.0    # Minimum radius in tiles (~44 yards)
@@ -272,14 +261,14 @@ func _process(delta: float) -> void:
 		_spawn_modifier_cache_timer = 0.0
 		_cached_spawn_modifier = get_spawn_rate_modifier()
 
-	# Dynamic spawning: spawn when first tee is clear (with minimum cooldown)
-	# Only spawn during open hours
+	# Dynamic spawning: spawn when first tee is clear (with minimum cooldown).
+	# The course never closes, so spawning continues around the clock.
 	time_since_last_spawn += delta  # delta already scaled by Engine.time_scale
 
 	# Don't spawn regular golfers during tournaments
 	var tournament_active = GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress()
 
-	if GameManager.is_course_open() and not tournament_active and _is_before_last_tee_time():
+	if not tournament_active and GameManager.get_open_hole_count() > 0:
 		var effective_cooldown = get_effective_spawn_cooldown()
 		if time_since_last_spawn >= effective_cooldown:
 			if _is_at_golfer_cap():
@@ -287,19 +276,6 @@ func _process(delta: float) -> void:
 			elif _is_first_tee_clear():
 				spawn_initial_group()
 				time_since_last_spawn = 0.0
-
-	# Check if all golfers have left after closing
-	_check_end_of_day()
-
-	# Safety net: force-remove stuck golfers 2 hours after course close
-	if GameManager.is_end_of_day_pending() and not active_golfers.is_empty():
-		if GameManager.current_hour >= GameManager.COURSE_CLOSE_HOUR + 2.0:
-			var to_remove: Array[int] = []
-			for golfer in active_golfers:
-				if not golfer.is_owner_round:
-					to_remove.append(golfer.golfer_id)
-			for gid in to_remove:
-				remove_golfer(gid)
 
 	# Update active golfers
 	_update_golfers(delta)
@@ -544,13 +520,6 @@ func _is_landing_area_clear(shooting_golfer: Golfer, _group_golfers: Array) -> b
 	# Cone-based check: only blocks if golfers are ahead in the shot direction
 	return _is_cone_clear_of_golfers(ball_pos, target, lateral_radius, shooting_golfer.group_id, shooting_golfer.current_hole)
 
-func _check_end_of_day() -> void:
-	"""Check if all golfers have left after course closing, then trigger end of day."""
-	if not GameManager.is_end_of_day_pending():
-		return
-	if active_golfers.is_empty():
-		GameManager.request_end_of_day()
-
 func _advance_golfer(golfer: Golfer) -> void:
 	"""Advance a specific golfer to their next shot"""
 	var course_data = GameManager.course_data
@@ -568,15 +537,6 @@ func _advance_golfer(golfer: Golfer) -> void:
 		# Round completed
 		golfer.finish_round()
 		return
-
-	# Course closing: finish current hole but don't start new ones
-	# Tournament golfers and golfers past halfway are exempt — they play to completion
-	if not GameManager.is_course_open() and golfer.current_strokes == 0 and not golfer.is_tournament_golfer:
-		var holes_played = golfer.hole_scores.size()
-		var total_holes = golfer._round_total_holes if golfer._round_total_holes > 0 else course_data.holes.size()
-		if holes_played < total_holes / 2:
-			golfer.finish_round()
-			return
 
 	var hole_data = course_data.holes[next_hole_index]
 
@@ -641,15 +601,6 @@ func _advance_golfer(golfer: Golfer) -> void:
 			if golfer.current_hole >= course_data.holes.size():
 				golfer.finish_round()
 				return
-
-			# If course is closed, don't start a new hole - finish the round
-			# Tournament golfers and golfers past halfway are exempt — they play to completion
-			if not GameManager.is_course_open() and not golfer.is_tournament_golfer:
-				var holes_done = golfer.hole_scores.size()
-				var round_holes = golfer._round_total_holes if golfer._round_total_holes > 0 else course_data.holes.size()
-				if holes_done < round_holes / 2:
-					golfer.finish_round()
-					return
 
 			# Immediately walk to the next tee to clear the green
 			# Don't wait for turn - golfers should move off the green right away

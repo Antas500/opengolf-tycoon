@@ -55,8 +55,12 @@ func update_display() -> void:
 	for child in _content_vbox.get_children():
 		child.queue_free()
 
-	var stats = GameManager.daily_stats
-	var yesterday = GameManager.yesterday_stats
+	# The panel presents the calendar period view: year-to-date + today's
+	# in-flight numbers, compared with the previous completed year.
+	var stats = GameManager.DailyStatistics.new()
+	stats.accumulate_from(GameManager.yearly_stats)
+	stats.accumulate_from(GameManager.daily_stats)
+	var yesterday = GameManager.previous_year_stats
 
 	# Current Balance
 	var balance_label = Label.new()
@@ -143,7 +147,7 @@ func update_display() -> void:
 
 	# Today's Revenue
 	var revenue_label = Label.new()
-	revenue_label.text = "Today's Revenue"
+	revenue_label.text = "Revenue since Jan 1"
 	revenue_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	_content_vbox.add_child(revenue_label)
 
@@ -162,7 +166,7 @@ func update_display() -> void:
 
 	# Today's Costs
 	var costs_label = Label.new()
-	costs_label.text = "Today's Costs"
+	costs_label.text = "Costs since Jan 1"
 	costs_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	_content_vbox.add_child(costs_label)
 
@@ -192,7 +196,7 @@ func update_display() -> void:
 	var profit = stats.get_profit()
 	var profit_color = UIConstants.COLOR_SUCCESS if profit >= 0 else UIConstants.COLOR_DANGER
 	var profit_text = "+$%d" % profit if profit >= 0 else "-$%d" % abs(profit)
-	var profit_row = _create_stat_row("Today's Profit:", profit_text, profit_color)
+	var profit_row = _create_stat_row("Year-to-date Profit:", profit_text, profit_color)
 	_content_vbox.add_child(profit_row)
 
 	# Yesterday's Comparison (if available)
@@ -200,7 +204,7 @@ func update_display() -> void:
 		_content_vbox.add_child(HSeparator.new())
 
 		var compare_label = Label.new()
-		compare_label.text = "Yesterday's Results"
+		compare_label.text = "Last Year's Results"
 		compare_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 		_content_vbox.add_child(compare_label)
 
@@ -220,13 +224,13 @@ func update_display() -> void:
 		var trend_text = ""
 		var trend_color = UIConstants.COLOR_TEXT_DIM
 		if trend_diff > 0:
-			trend_text = "+$%d vs yesterday" % trend_diff
+			trend_text = "+$%d vs last year" % trend_diff
 			trend_color = UIConstants.COLOR_SUCCESS
 		elif trend_diff < 0:
-			trend_text = "-$%d vs yesterday" % abs(trend_diff)
+			trend_text = "-$%d vs last year" % abs(trend_diff)
 			trend_color = UIConstants.COLOR_DANGER
 		else:
-			trend_text = "Same as yesterday"
+			trend_text = "Same as last year"
 
 		var trend_row = _create_stat_row("Trend:", trend_text, trend_color)
 		_content_vbox.add_child(trend_row)
@@ -244,7 +248,7 @@ func update_display() -> void:
 	var rep_row = _create_stat_row("Reputation:", "%.0f%%" % reputation, rep_color)
 	_content_vbox.add_child(rep_row)
 
-	var golfers_row = _create_stat_row("Golfers Today:", "%d" % stats.golfers_served, Color.WHITE)
+	var golfers_row = _create_stat_row("Golfers this Year:", "%d" % stats.golfers_served, Color.WHITE)
 	_content_vbox.add_child(golfers_row)
 
 	# Loan Section
@@ -260,7 +264,7 @@ func update_display() -> void:
 	_content_vbox.add_child(loan_row)
 
 	if GameManager.loan_balance > 0:
-		var interest_row = _create_stat_row("Interest:", "5%% / 7 days", UIConstants.COLOR_TEXT_DIM)
+		var interest_row = _create_stat_row("Interest:", "10%% / year-end", UIConstants.COLOR_TEXT_DIM)
 		_content_vbox.add_child(interest_row)
 
 	var loan_btn_row = HBoxContainer.new()
