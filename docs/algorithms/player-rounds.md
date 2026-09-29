@@ -16,8 +16,6 @@ existing procedural golfer renderer. Opponents retain the tier sprites.
 Formats:
 - **Practice round:** owner only.
 - **Play vs a Pro:** choose Alex, Morgan or Riley (each uses the Pro skill tier).
-- **Begin Tournament:** owner plus all three pros, playing a single stroke-play
-  round. This is separate from the management tournament/prize-money system.
 
 All participants play the open holes from the back tees. The player and any opponents
 are assigned a shared `group_id`, playing together as a single group just like visitor

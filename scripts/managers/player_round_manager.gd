@@ -179,7 +179,7 @@ func _build_setup() -> void:
 		content.add_theme_constant_override("separation", 2)
 		_label("Practice Round")
 		mode_picker = OptionButton.new()
-		for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
+		for title in ["Practice round", "Play vs a Pro"]:
 			mode_picker.add_item(title)
 		mode_picker.hide()  # Each section starts its own format below.
 		content.add_child(mode_picker)
@@ -196,7 +196,7 @@ func _build_setup() -> void:
 	else:
 		_label("Round format")
 		mode_picker = OptionButton.new()
-		for title in ["Practice round", "Play vs a Pro", "Begin Tournament (4 golfers)"]:
+		for title in ["Practice round", "Play vs a Pro"]:
 			mode_picker.add_item(title)
 		content.add_child(mode_picker)
 		pro_picker = OptionButton.new()
@@ -228,12 +228,7 @@ func _build_setup() -> void:
 				_refresh_skills())
 			row.add_child(button)
 	if is_instance_valid(player_tab):
-		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_PLAY], 250)
-		_label("Tournament")
-		_label("Compete against all three pros.")
 		player_tab.restage_persistent()
-		var tournament_button := _button("Play tournament (4 golfers)", _start_embedded.bind(2))
-		tournament_button.set_meta("owner_round_start", true)
 		start_button = null
 	else:
 		start_button = _button("Tee off", start_round)
@@ -319,9 +314,6 @@ func start_round() -> void:
 
 	if round_kind == 1:
 		_spawn(PROS[opponent], GolferTier.Tier.PRO, group_id)
-	elif round_kind == 2:
-		for pro in PROS:
-			_spawn(pro, GolferTier.Tier.PRO, group_id)
 
 	# Position all participants at the tee of the first open hole
 	var course_data = GameManager.course_data
@@ -341,7 +333,7 @@ func start_round() -> void:
 		manager._update_golfers(0.0)
 
 	_make_panel(false)
-	_label("PLAY THE COURSE · " + ["Practice", "Vs Pro", "Tournament"][round_kind])
+	_label("PLAY THE COURSE · " + ["Practice", "Vs Pro"][round_kind])
 	status = _label("")
 	if is_instance_valid(player_tab):
 		status.add_theme_font_size_override("font_size", 12)

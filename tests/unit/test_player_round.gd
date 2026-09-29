@@ -98,7 +98,7 @@ func test_practice_waits_for_input_and_restores_visitors() -> void:
 	assert_eq(golfers.active_golfers.size(), 1)
 	assert_true(GameManager.player_profile.initialized)
 
-func test_pro_selection_and_tournament_results() -> void:
+func test_pro_selection_and_tie_results() -> void:
 	rounds.open_setup()
 	for i in 10:
 		rounds.draft.allocate(i, 1)
@@ -110,11 +110,9 @@ func test_pro_selection_and_tournament_results() -> void:
 	assert_eq(rounds.participants[0].group_id, rounds.participants[1].group_id, "Participants share the same group ID")
 	assert_true(rounds.hud.visible, "Management HUD is visible")
 	rounds.leave_round()
-	_start(2)
-	assert_eq(rounds.participants.size(), 4)
-	assert_eq(rounds.participants[0].group_id, rounds.participants[1].group_id)
-	assert_eq(rounds.participants[1].group_id, rounds.participants[2].group_id)
-	assert_eq(rounds.participants[2].group_id, rounds.participants[3].group_id)
+	_start(1)
+	assert_eq(rounds.participants.size(), 2)
+	assert_eq(rounds.mode_picker.item_count, 2, "Only practice and vs pro formats remain")
 	for golfer in rounds.participants:
 		golfer.current_strokes = 3
 		golfer.ball_position = Vector2i(16, 10)
@@ -337,7 +335,7 @@ func test_embedded_player_navigation_and_setup() -> void:
 	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
 			starters += 1
-	assert_eq(starters, 3, "Play Course combines the practice, vs pro and tournament starters")
+	assert_eq(starters, 2, "Play Course combines the practice and vs pro starters")
 	for index in 3:
 		tab.buttons[index].pressed.emit()
 		for page in 3:
@@ -368,7 +366,7 @@ func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
 			starters += 1
-	assert_eq(starters, 3, "Rebuilding does not duplicate round-start buttons")
+	assert_eq(starters, 2, "Rebuilding does not duplicate round-start buttons")
 
 func test_embedded_round_requires_skill_allocation() -> void:
 	var tab := PlayerTab.new()
