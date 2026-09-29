@@ -32,6 +32,11 @@ var previous_camera: Vector2
 var round_kind := 0
 var aim_guide: AimGuide
 var _was_aiming: bool = false
+## True while aiming for the owner's golfer inside a running tournament. The
+## TournamentManager owns that round; this flag only tells our _process to skip
+## the owner-round bookkeeping (driving the sim, showing round results) and to
+## leave the golfer on the course when aiming ends.
+var tournament_aim: bool = false
 
 func setup(golfers: GolferManager, view: IsometricCamera, management_hud: Control) -> void:
 	manager = golfers
@@ -366,27 +371,125 @@ func _spawn(golfer_name: String, tier: int, group_id: int) -> Golfer:
 	participants.append(golfer)
 	return golfer
 
+# ============================================================================
+# TOURNAMENT AIMING
+# ============================================================================
+## Aim for the owner's golfer inside a running tournament. The TournamentManager
+## still owns the round — it spawns the field, scores it and settles the event —
+## so this only mirrors what an owner round does for shot input: the aim guide,
+## the shape/punch controls, camera focus and click-to-shoot. Putting off the
+## player's turn stays automatic (Golfer.awaits_player_shot() is false on green).
+func begin_tournament_aim(owner: Golfer) -> void:
+	if not is_instance_valid(owner) or owner.player_profile == null:
+		return
+	player = owner
+	active = true
+	busy = true
+	tournament_aim = true
+	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
+	previous_speed = GameManager.current_speed
+	session_opened.emit()
+	_build_tournament_aim_hud()
+
+## Stop aiming for a tournament golfer. Leaves the golfer on the course — the
+## TournamentManager clears it — and does not rebuild the setup shelf, so the
+## management tournament panel stays put.
+func end_tournament_aim() -> void:
+	if not tournament_aim:
+		return
+	tournament_aim = false
+	active = false
+	busy = false
+	_was_aiming = false
+	player = null
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	if is_instance_valid(aim_guide):
+		aim_guide.clear()
+	if is_instance_valid(overlay):
+		overlay.queue_free()
+		overlay = null
+	content = null
+
+## A compact floating aiming HUD. It deliberately avoids the Player tab so the
+## management tournament panel and the live leaderboard stay on screen while the
+## owner plays their shots.
+func _build_tournament_aim_hud() -> void:
+	if is_instance_valid(overlay):
+		overlay.queue_free()
+	overlay = Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Pass course clicks through to _unhandled_input; only the panel's own
+	# controls consume input.
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(overlay)
+	var panel := PanelContainer.new()
+	overlay.add_child(panel)
+	var viewport_size := get_viewport_rect().size
+	panel.position = Vector2(24, maxf(24.0, viewport_size.y - 300.0))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(360, 250)
+	panel.add_child(scroll)
+	content = VBoxContainer.new()
+	content.add_theme_constant_override("separation", 6)
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(content)
+	_label("TOURNAMENT · YOUR ROUND")
+	status = _label("")
+	status.add_theme_font_size_override("font_size", 13)
+	status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	content.add_child(HSeparator.new())
+	shapes = OptionButton.new()
+	for title in ["Straight shot", "Fade shot (L to R)", "Draw shot (R to L)", "High backspin shot"]:
+		shapes.add_item(title)
+	shapes.item_selected.connect(func(index: int):
+		if is_instance_valid(player):
+			player.player_shape = index)
+	content.add_child(shapes)
+	punch = CheckButton.new()
+	punch.text = "Low punch shot"
+	punch.toggled.connect(func(value: bool):
+		if is_instance_valid(player):
+			player.player_punch = value)
+	content.add_child(punch)
+	_button("Settle tournament (skip your round)", _on_settle_tournament)
+	var instructions := _label("Aim with the mouse · Click to shoot\nYellow arc = intended carry · dotted trail = roll until it stops\nGuide assumes a clean strike; wind, lie and slope still apply.\nPutting on the green is automatic.")
+	instructions.add_theme_font_size_override("font_size", 12)
+	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_was_aiming = false
+
+## Skip the rest of the event from the cards as they stand (the Tournament
+## shelf's "Play It Out"). Ends aiming first so the HUD is gone before the field
+## is settled.
+func _on_settle_tournament() -> void:
+	if GameManager.tournament_manager:
+		end_tournament_aim()
+		GameManager.tournament_manager.simulate_remaining_and_complete()
+
 func _process(delta: float) -> void:
 	if is_instance_valid(entry):
 		entry.visible = not busy and GameManager.current_mode == GameManager.GameMode.SIMULATING
-	if not active or GameManager.is_paused:
+	if not active or GameManager.is_paused or not is_instance_valid(player):
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		if is_instance_valid(aim_guide):
 			aim_guide.clear()
 		return
 
-	# Drive group simulation forward via GolferManager
-	if is_instance_valid(manager):
-		manager._update_golfers(delta)
+	if not tournament_aim:
+		# Owner round: this manager drives the group simulation forward and
+		# decides when the round is over. A tournament round is owned by the
+		# TournamentManager, which already advances the golfers and settles the
+		# event, so here we only supply aiming for the owner.
+		if is_instance_valid(manager):
+			manager._update_golfers(delta)
 
-	var finished := true
-	for golfer in participants:
-		if golfer.current_state != Golfer.State.FINISHED:
-			finished = false
-			break
-	if finished:
-		_show_results()
-		return
+		var finished := true
+		for golfer in participants:
+			if golfer.current_state != Golfer.State.FINISHED:
+				finished = false
+				break
+		if finished:
+			_show_results()
+			return
 
 	var is_ready := player.awaits_player_shot()
 	var terrain: int = GameManager.terrain_grid.get_tile(Vector2i(player.ball_position_precise.round())) if GameManager.terrain_grid else -1
@@ -400,12 +503,16 @@ func _process(delta: float) -> void:
 	Input.set_default_cursor_shape(Input.CURSOR_CROSS if is_ready else Input.CURSOR_ARROW)
 	update_aim_guide()
 
-	# Track active shooter in the group
+	# Track active shooter: the owner first (a tournament pairing has no local
+	# participants list), then any owner-round opponent.
 	var active_shooter: Golfer = null
-	for golfer in participants:
-		if golfer.current_state in [Golfer.State.PREPARING_SHOT, Golfer.State.SWINGING, Golfer.State.WATCHING]:
-			active_shooter = golfer
-			break
+	if player.current_state in [Golfer.State.PREPARING_SHOT, Golfer.State.SWINGING, Golfer.State.WATCHING]:
+		active_shooter = player
+	else:
+		for golfer in participants:
+			if golfer != player and golfer.current_state in [Golfer.State.PREPARING_SHOT, Golfer.State.SWINGING, Golfer.State.WATCHING]:
+				active_shooter = golfer
+				break
 
 	# Focus camera on the player's character only when the user needs to aim their shot
 	if is_ready and not _was_aiming:
@@ -424,13 +531,16 @@ func _process(delta: float) -> void:
 		action_text = "%s is shooting..." % active_shooter.golfer_name
 	elif player.current_state == Golfer.State.WALKING:
 		action_text = "Walking to ball..."
+	elif player.current_state == Golfer.State.FINISHED:
+		action_text = "You've holed out — waiting for the field"
 	else:
 		action_text = "Waiting for turn..."
 
 	status.text = "%s · Hole %d · Stroke %d\n%s" % [player.golfer_name, hole_num, player.current_strokes + 1, action_text]
-	for golfer in participants:
-		var g_hole = mini(golfer.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
-		status.text += "\n%s: %d strokes · Hole %d" % [golfer.golfer_name, golfer.total_strokes + golfer.current_strokes, g_hole]
+	if not tournament_aim:
+		for golfer in participants:
+			var g_hole = mini(golfer.current_hole + 1, GameManager.course_data.holes.size()) if GameManager.course_data else 1
+			status.text += "\n%s: %d strokes · Hole %d" % [golfer.golfer_name, golfer.total_strokes + golfer.current_strokes, g_hole]
 
 ## Refresh the aim guide for the mouse position, or for an explicit grid target
 ## (`target_override`, used by tests). The guide clears whenever the owner is not
@@ -451,7 +561,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not active or GameManager.is_paused:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if is_instance_valid(player) and player.awaits_player_shot():
+		if is_instance_valid(player) and player.awaits_player_shot() and GameManager.terrain_grid:
 			var target: Vector2i = GameManager.terrain_grid.screen_to_grid(get_global_mouse_position())
 			if player.play_shot(target):
 				get_viewport().set_input_as_handled()
@@ -494,6 +604,7 @@ func _show_results() -> void:
 		_button("Return to management", leave_round)
 
 func leave_round(_restore_mode: bool = true) -> void:
+	var was_tournament_aim := tournament_aim
 	var had_round := busy
 	active = false
 	busy = false
@@ -501,14 +612,19 @@ func leave_round(_restore_mode: bool = true) -> void:
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	if is_instance_valid(aim_guide):
 		aim_guide.clear()
-	for golfer in participants:
-		if is_instance_valid(golfer):
-			manager.remove_golfer(golfer.golfer_id)
+	if not was_tournament_aim:
+		# Owner round: remove the participants we spawned. A tournament golfer
+		# belongs to the TournamentManager, which clears it on its own.
+		for golfer in participants:
+			if is_instance_valid(golfer):
+				manager.remove_golfer(golfer.golfer_id)
+	tournament_aim = false
 	participants.clear()
 	player = null
 	if is_instance_valid(overlay):
 		overlay.queue_free()
 		overlay = null
+	content = null
 	if had_round:
 		if is_instance_valid(camera):
 			camera.focus_on(previous_camera)

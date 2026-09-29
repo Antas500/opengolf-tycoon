@@ -170,6 +170,30 @@ func test_a_short_card_is_filled_hole_by_hole() -> void:
 	assert_eq(result.total_par, 12, "The card ends up covering all four holes")
 	assert_eq(result.total_strokes, 12, "Strokes are filled in alongside the par")
 
+## A golfer who teed off on a later hole and played only a few before wrapping
+## is topped up with exactly the holes it is missing — never replaying a hole it
+## already finished and never dropping another (a consecutive fill used to
+## double-count the played block and leave the card short).
+func test_a_wrapped_short_card_fills_exactly_the_missing_holes() -> void:
+	var pars := [3, 4, 5, 4, 3, 4, 5, 4, 3]  # sums to 35
+	var course := GameManager.CourseData.new()
+	for i in pars.size():
+		var hole := GameManager.HoleData.new()
+		hole.hole_number = i + 1
+		hole.par = pars[i]
+		hole.tee_position = Vector2i(4 + i, 4)
+		hole.hole_position = Vector2i(6 + i, 4)
+		course.add_hole(hole)
+	GameManager.current_course = course
+	# Teed off hole index 2, finished holes 2 and 3 (par 5 and 4); seven holes left.
+	var sg := TournamentSimulator.SimGolfer.new()
+	sg.name = "Wrap Wanda"
+	var played := {2: true, 3: true}
+	var pre_par: int = int(pars[2]) + int(pars[3])
+	var result = TournamentSimulator.simulate_remaining(sg, 0, pre_par, pre_par, 7, played)
+	assert_eq(result.hole_scores.size(), 7, "Exactly the seven missing holes are filled")
+	assert_eq(result.total_par, 35, "The card covers every hole exactly once")
+
 
 func test_player_is_one_of_the_competitors() -> void:
 	tournaments.host_tournament(LOCAL)

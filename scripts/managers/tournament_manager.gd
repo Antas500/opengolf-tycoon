@@ -78,6 +78,10 @@ const GROUP_SPAWN_INTERVAL: float = 0.5
 var _golfer_manager: GolferManager = null
 var _leaderboard: TournamentLeaderboard = null
 var _pre_tournament_speed: int = -1
+## Supplies the aiming HUD and shot input for the owner's live golfer, so they
+## play their own shots during a tournament (set via set_aim_controller()). The
+## manager still owns the round — spawning, scoring and results stay here.
+var _aim_controller: PlayerRoundManager = null
 
 # Rounds per tier
 const ROUNDS_PER_TIER: Dictionary = {
@@ -97,6 +101,16 @@ const CUT_RULES: Dictionary = {
 func setup(golfer_manager: GolferManager, leaderboard: TournamentLeaderboard) -> void:
 	_golfer_manager = golfer_manager
 	_leaderboard = leaderboard
+
+## Hand the owner's tournament shots to the PlayerRoundManager for aiming.
+## Called once from main after both managers exist.
+func set_aim_controller(controller: PlayerRoundManager) -> void:
+	_aim_controller = controller
+
+## Ask the aiming controller to stop, tolerating a missing/late controller.
+func _release_aim() -> void:
+	if is_instance_valid(_aim_controller):
+		_aim_controller.end_tournament_aim()
 
 func _ready() -> void:
 	EventBus.day_changed.connect(_on_day_changed)
@@ -485,11 +499,19 @@ func _spawn_next_group() -> void:
 			golfer.golfer_name = sg.name
 			# The owner plays their own tournament: give their golfer the
 			# colours from the player profile so it is recognisable on the
-			# course. `player_profile` stays null on purpose — a tournament is
-			# a management event, so the owner's shot is played by the same AI
-			# as everyone else's, not left waiting for a click.
+			# course, and attach the profile itself so the golfer waits for
+			# the player's click instead of swinging automatically (putting
+			# off the player's turn stays automatic). The round is still a
+			# management event, so the TournamentManager keeps owning
+			# spawning, scoring and results — only the shot input is handed
+			# to the PlayerRoundManager. Without an aiming controller (e.g.
+			# headless tests) the owner's shot falls back to the same AI as
+			# everyone else's.
 			if sg.id == PLAYER_SIM_ID and GameManager.player_profile:
 				golfer.apply_player_appearance(GameManager.player_profile)
+				if is_instance_valid(_aim_controller):
+					golfer.player_profile = GameManager.player_profile
+					_aim_controller.begin_tournament_aim(golfer)
 			# Update the visual name label (set once in _ready, must refresh manually)
 			if golfer.name_label:
 				golfer.name_label.text = sg.name
@@ -568,6 +590,10 @@ func _end_current_day_round() -> void:
 	if not _live_round_active:
 		return
 
+	# The owner is done taking their own shots; drop the aiming HUD before the
+	# live golfers (their golfer included) are cleared off the course.
+	_release_aim()
+
 	var round_moments: Array = []
 
 	# Competitors whose tee time never came around — plus everyone the course
@@ -613,7 +639,8 @@ func _end_current_day_round() -> void:
 		var holes_left: int = maxi(circuit_holes - (entry.holes_played as Dictionary).size(), 0)
 		var result = TournamentSimulator.simulate_remaining(sg,
 			_first_open_hole_not_played(entry.holes_played),
-			int(entry.total_strokes), int(entry.total_par), holes_left)
+			int(entry.total_strokes), int(entry.total_par), holes_left,
+			entry.holes_played as Dictionary)
 
 		entry.total_strokes = result.total_strokes
 		entry.total_par = result.total_par
@@ -774,6 +801,10 @@ func _apply_cut_line(rule: String) -> void:
 
 func _complete_tournament() -> void:
 	var tier_data = TournamentSystem.get_tier_data(current_tournament_tier)
+
+	# Belt-and-braces: no aiming HUD should outlive the event, even if the live
+	# round was settled by a path that skipped _end_current_day_round().
+	_release_aim()
 
 	# Build final standings
 	var standings = _get_standings()

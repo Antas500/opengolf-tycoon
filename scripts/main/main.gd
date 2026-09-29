@@ -276,6 +276,9 @@ func _ready() -> void:
 	add_child(player_round)
 	player_round.setup(golfer_manager, $IsometricCamera, $UI/HUD)
 	player_round.attach_player_tab(terrain_toolbar.player_tab)
+	# The owner plays their own shots during a tournament: the manager spawns the
+	# field, but aiming for their live golfer is handed to the PlayerRoundManager.
+	tournament_manager.set_aim_controller(player_round)
 	player_round.session_opened.connect(func():
 		# Clear both tiers of tool selection before mouse input becomes shot input.
 		_cancel_action()
@@ -958,6 +961,10 @@ func _start_painting() -> void:
 
 	# Check if in null selector state — try opening hole context menu
 	if not _has_active_tool():
+		# While the owner is lining up a shot (practice round or tournament),
+		# leave course clicks to aiming instead of opening the hole menu.
+		if is_instance_valid(player_round) and player_round.active:
+			return
 		var mouse_world = camera.get_mouse_world_position()
 		var grid_pos = terrain_grid.screen_to_grid(mouse_world)
 		var tile_type = terrain_grid.get_tile(grid_pos)

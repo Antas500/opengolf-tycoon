@@ -156,7 +156,8 @@ static func simulate_round(sim_golfer: SimGolfer, round_number: int = 1) -> Roun
 ## back to the first, because tournament pairings tee off on their own hole and
 ## wrap around rather than stopping at the end of the array.
 static func simulate_remaining(sim_golfer: SimGolfer, current_hole: int,
-		total_strokes: int, total_par: int, holes_to_play: int = -1) -> RoundResult:
+		total_strokes: int, total_par: int, holes_to_play: int = -1,
+		played_holes: Dictionary = {}) -> RoundResult:
 	var course_data = GameManager.course_data
 	if not course_data:
 		return _empty_result(sim_golfer, 1)
@@ -182,10 +183,18 @@ static func simulate_remaining(sim_golfer: SimGolfer, current_hole: int,
 			next_slot = s
 			break
 		next_slot = s + 1
-	var limit := open_indices.size() if holes_to_play < 0 else holes_to_play
+
+	# The holes still to card, in play order (wrapping), skipping any already
+	# finished. With no `played_holes` this is every open hole from `current_hole`.
+	var remaining: Array = []
+	for offset in open_indices.size():
+		var hole_index: int = open_indices[(next_slot + offset) % open_indices.size()]
+		if not played_holes.has(hole_index):
+			remaining.append(hole_index)
+	var limit := remaining.size() if holes_to_play < 0 else mini(holes_to_play, remaining.size())
 
 	for played in range(limit):
-		var hole_index: int = open_indices[(next_slot + played) % open_indices.size()]
+		var hole_index: int = remaining[played]
 		var hole = course_data.holes[hole_index]
 
 		var hole_par := _tournament_par(hole)
