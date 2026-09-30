@@ -245,8 +245,6 @@ func _build_setup() -> void:
 		mode_picker.item_selected.connect(func(index: int): pro_picker.disabled = index != 1)
 	points_label = _label("")
 	_label("Each point adds 10% bonus. Maximum per skill: 990%.")
-	if is_instance_valid(player_tab):
-		_button("Save skills", _save_player)
 	skill_labels.clear()
 	for i in PlayerGolferProfile.SKILLS.size():
 		if is_instance_valid(player_tab) and i % 3 == 0:
@@ -260,10 +258,7 @@ func _build_setup() -> void:
 		for change in [-1, 1]:
 			var button := Button.new()
 			button.text = "+" if change == 1 else "−"
-			button.disabled = draft.initialized
-			button.pressed.connect(func():
-				draft.allocate(i, change)
-				_refresh_skills())
+			button.pressed.connect(allocate_skill.bind(i, change))
 			row.add_child(button)
 	if is_instance_valid(player_tab):
 		player_tab.restage_persistent()
@@ -273,12 +268,45 @@ func _build_setup() -> void:
 		_button("Cancel", leave_round)
 	_refresh_skills()
 
+func allocate_skill(index: int, change: int) -> bool:
+	if draft == null:
+		draft = PlayerGolferProfile.from_data(GameManager.player_profile.serialize())
+	if not draft.allocate(index, change, true):
+		return false
+	_save_skills()
+	_refresh_skills()
+	return true
+
+func _save_skills() -> void:
+	if GameManager.player_profile == null:
+		GameManager.player_profile = PlayerGolferProfile.new()
+	GameManager.player_profile.points = draft.points.duplicate()
+	if is_instance_valid(player):
+		player.player_profile = GameManager.player_profile
+		player.driving_skill = GameManager.player_profile.normalized_skill(1)
+		player.accuracy_skill = GameManager.player_profile.normalized_skill(3)
+		player.putting_skill = GameManager.player_profile.normalized_skill(4)
+		player.recovery_skill = GameManager.player_profile.normalized_skill(8)
+		if player.awaits_player_shot():
+			update_aim_guide()
+	if GameManager.tournament_manager and is_instance_valid(player):
+		if player.golfer_id in GameManager.tournament_manager._tournament_scores:
+			var avg_skill = (player.driving_skill + player.accuracy_skill + player.putting_skill + player.recovery_skill) / 4.0
+			GameManager.tournament_manager._tournament_scores[player.golfer_id]["skill"] = avg_skill
+		for sg in GameManager.tournament_manager.active_field:
+			if sg.id == TournamentManager.PLAYER_SIM_ID:
+				sg.driving_skill = player.driving_skill
+				sg.accuracy_skill = player.accuracy_skill
+				sg.putting_skill = player.putting_skill
+				sg.recovery_skill = player.recovery_skill
+
 func _refresh_skills() -> void:
-	points_label.text = "Skills locked for this golfer" if draft.initialized else "%d of 10 points remaining" % draft.remaining()
+	points_label.text = "%d of 10 points remaining" % draft.remaining()
 	for i in skill_labels.size():
-		skill_labels[i].text = "%s: %d%%" % [PlayerGolferProfile.SKILLS[i], draft.points[i] * 10]
+		if i < PlayerGolferProfile.SKILLS.size():
+			skill_labels[i].text = "%s: %d%%" % [PlayerGolferProfile.SKILLS[i], draft.points[i] * 10]
 	if is_instance_valid(start_button):
-		start_button.disabled = not draft.initialized and draft.remaining() != 0
+		start_button.disabled = draft.remaining() != 0
 
 func _save_player() -> void:
 	if busy:
@@ -298,7 +326,7 @@ func _start_embedded(kind: int) -> void:
 	if GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress():
 		EventBus.notify("Tournament running - Play It Out on the Tournament shelf first.", "warning")
 		return
-	if not draft.initialized and draft.remaining() != 0:
+	if draft.remaining() != 0:
 		EventBus.notify("Allocate all 10 points in Player Skills first.", "info")
 		player_tab.select(PlayerTab.PAGE_SKILLS)
 		return
@@ -306,12 +334,12 @@ func _start_embedded(kind: int) -> void:
 	previous_mode = GameManager.current_mode
 	previous_speed = GameManager.current_speed
 	previous_camera = camera.global_position if is_instance_valid(camera) else Vector2.ZERO
-	mode_picker.select(kind)
+	mode_picker.select(clampi(kind, 0, maxi(0, mode_picker.item_count - 1)))
 	session_opened.emit()
 	start_round()
 
 func start_round() -> void:
-	if not draft.initialized and draft.remaining() != 0:
+	if draft.remaining() != 0:
 		return
 	if GameManager.get_open_hole_count() == 0:
 		return
@@ -324,13 +352,12 @@ func start_round() -> void:
 	var opponent := pro_picker.selected
 	active = true
 	if is_instance_valid(player_tab):
-		# Lock the Edit Player and Player Skills pages while the round runs.
-		for index in [PlayerTab.PAGE_EDIT, PlayerTab.PAGE_SKILLS]:
-			for control in player_tab.pages[index].find_children("*", "Control", true, false):
-				if control is BaseButton:
-					control.disabled = true
-				elif control is LineEdit:
-					control.editable = false
+		# Lock the Edit Player page while the round runs.
+		for control in player_tab.pages[PlayerTab.PAGE_EDIT].find_children("*", "Control", true, false):
+			if control is BaseButton:
+				control.disabled = true
+			elif control is LineEdit:
+				control.editable = false
 
 	# Ensure simulation is active so all golfers can play (day always runs)
 	if GameManager.current_mode != GameManager.GameMode.SIMULATING:
@@ -511,7 +538,7 @@ func _process(delta: float) -> void:
 			_show_results()
 			return
 
-	var is_ready := player.awaits_player_shot()
+	var is_ready := player.awaits_player_shot() and (not is_instance_valid(player_tab) or player_tab.selected == PlayerTab.PAGE_PLAY)
 	var terrain: int = GameManager.terrain_grid.get_tile(Vector2i(player.ball_position_precise.round())) if GameManager.terrain_grid else -1
 	if is_instance_valid(shot_bar):
 		shot_bar.set_ready(is_ready)
@@ -604,6 +631,9 @@ func update_aim_guide(target_override: Vector2i = Vector2i(-1, -1)) -> void:
 	if not active or GameManager.is_paused or not is_instance_valid(grid) or not is_instance_valid(player) or not player.awaits_player_shot():
 		aim_guide.clear()
 		return
+	if is_instance_valid(player_tab) and player_tab.selected != PlayerTab.PAGE_PLAY:
+		aim_guide.clear()
+		return
 	var target := target_override
 	if target == Vector2i(-1, -1):
 		target = grid.screen_to_grid(get_global_mouse_position())
@@ -611,6 +641,8 @@ func update_aim_guide(target_override: Vector2i = Vector2i(-1, -1)) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not active or GameManager.is_paused:
+		return
+	if is_instance_valid(player_tab) and player_tab.selected != PlayerTab.PAGE_PLAY:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if is_instance_valid(player) and player.awaits_player_shot() and GameManager.terrain_grid:

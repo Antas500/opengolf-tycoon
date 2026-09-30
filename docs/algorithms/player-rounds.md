@@ -55,9 +55,10 @@ takes over, with no click required.
 
 `PlayerGolferProfile` stores ten integer point counts (0–99). The first round
 requires spending exactly ten points; every point is a **10 percentage-point
-bonus** (0% starting bonus, maximum 990%). Points can be refunded during setup,
-but are locked once the first round starts. No extra progression points are
-awarded in this implementation. Name and appearance remain editable.
+bonus** (0% starting bonus, maximum 990%). Points save automatically whenever
+they are changed and take effect immediately for the player's next shot, with no
+Save Skills button required. Points can be reallocated across skills at any time
+(including during an active round). Name and appearance also remain editable.
 
 The profile is saved under `player_golfer`; older saves receive a fresh profile.
 New games reset it. Active rounds are transient, like visitor rounds, and are

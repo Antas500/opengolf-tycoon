@@ -17,8 +17,8 @@ func remaining() -> int:
 		spent += value
 	return maxi(0, 10 - spent)
 
-func allocate(index: int, change: int) -> bool:
-	if initialized or index < 0 or index >= points.size() or abs(change) != 1:
+func allocate(index: int, change: int, force: bool = false) -> bool:
+	if (initialized and not force) or index < 0 or index >= points.size() or abs(change) != 1:
 		return false
 	if points[index] + change < 0 or points[index] + change > 99:
 		return false
@@ -26,6 +26,9 @@ func allocate(index: int, change: int) -> bool:
 		return false
 	points[index] += change
 	return true
+
+func reallocate(index: int, change: int) -> bool:
+	return allocate(index, change, true)
 
 func bonus(index: int) -> float:
 	return points[index] * 0.1
