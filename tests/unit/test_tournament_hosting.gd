@@ -171,6 +171,180 @@ func test_each_open_hole_gets_its_own_pairing() -> void:
 		assert_eq(int(by_hole[hole_index]), 2,
 			"Hole %d has two competitors on it" % (hole_index + 1))
 
+# --- The turn: a pairing wraps back to the first tee together -------------
+
+## A pairing that reaches the last hole wraps back to the first tee to play the
+## circuit out. The partner who has already holed out and wrapped must not be
+## treated as the hole the group is on, or the competitor still on the last green
+## is never given their turn again: they are left standing on the last hole
+## instead of walking to the first tee with their partner.
+func test_partner_on_the_last_hole_still_gets_their_turn_after_a_wrap() -> void:
+	_open_course(4)
+	var first := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	var second := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	golfers.seat_golfer_at_hole(first, 3)
+	golfers.seat_golfer_at_hole(second, 3)
+
+	# `first` has holed out on the last hole and wrapped: one hole carded, and
+	# standing on the first tee waiting for their partner.
+	first.hole_scores = [{"hole": 4, "strokes": 3, "par": 3}]
+	first.current_strokes = 0
+	first.current_hole = 0
+	first.ball_position = GameManager.current_course.holes[0].tee_position
+	first.ball_position_precise = Vector2(first.ball_position)
+	first._change_state(Golfer.State.IDLE)
+
+	# `second` is still on the last hole with the ball in the cup.
+	var last_hole = GameManager.current_course.holes[3]
+	second.current_hole = 3
+	second.current_strokes = 3
+	second.ball_position = last_hole.hole_position
+	second.ball_position_precise = Vector2(last_hole.hole_position)
+	second._change_state(Golfer.State.IDLE)
+
+	var pair: Array[Golfer] = [first, second]
+	assert_eq(golfers._get_group_current_hole(pair), 3,
+		"The group is on the hole the trailing competitor has yet to finish")
+	assert_same(golfers._determine_next_golfer_in_group(pair), second,
+		"The competitor still on the last hole plays next; the wrapped partner waits")
+
+	# Give the turn system its frame: the partner must be sent round to the first tee.
+	golfers._update_group(pair)
+	assert_eq(second.hole_scores.size(), 1,
+		"The competitor left on the last hole finally cards it")
+	assert_eq(second.current_hole, 0,
+		"…and wraps to the first hole instead of being stranded on the last")
+
+## The wrapped partner waits for the group rather than teeing off alone on the
+## first hole while their partner is still on the last one.
+func test_wrapped_partner_waits_for_the_group() -> void:
+	_open_course(4)
+	var first := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	var second := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	golfers.seat_golfer_at_hole(first, 3)
+	golfers.seat_golfer_at_hole(second, 3)
+	first.hole_scores = [{"hole": 4, "strokes": 3, "par": 3}]
+	first.current_strokes = 0
+	first.current_hole = 0
+	first.ball_position = GameManager.current_course.holes[0].tee_position
+	first.ball_position_precise = Vector2(first.ball_position)
+	first._change_state(Golfer.State.IDLE)
+	second.current_hole = 3
+	second.current_strokes = 2
+	second.ball_position_precise = Vector2(GameManager.current_course.holes[3].hole_position) + Vector2(2, 0)
+	second.ball_position = Vector2i(second.ball_position_precise.round())
+	second._change_state(Golfer.State.IDLE)
+
+	var pair: Array[Golfer] = [first, second]
+	assert_same(golfers._determine_next_golfer_in_group(pair), second,
+		"The competitor on the last hole keeps the turn until the hole is done")
+	assert_eq(golfers._get_group_current_hole(pair), 3,
+		"The group's hole follows the competitor who is furthest back")
+
+## The walk, not just the turn: the partner left on the last hole holes out,
+## wraps, and sets off for the first tee on the course itself.
+func test_the_partner_walks_round_to_the_first_tee_after_wrapping() -> void:
+	_open_course(4)
+	var grid: TerrainGrid = autofree(TerrainGrid.new())
+	grid.grid_width = 40
+	grid.grid_height = 12
+	add_child_autofree(grid)
+	for x in range(40):
+		for y in range(12):
+			grid.set_tile(Vector2i(x, y), TerrainTypes.Type.FAIRWAY)
+	for hole in GameManager.current_course.holes:
+		grid.set_tile(hole.tee_position, TerrainTypes.Type.TEE_BOX)
+		grid.set_tile(hole.hole_position, TerrainTypes.Type.GREEN)
+	GameManager.terrain_grid = grid
+
+	var first := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	var second := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	golfers.seat_golfer_at_hole(second, 3)
+	# `first` has wrapped and is standing on the first tee.
+	golfers.seat_golfer_at_hole(first, 0)
+	first.hole_scores = [{"hole": 4, "strokes": 3, "par": 3}]
+	first.current_strokes = 0
+	first._change_state(Golfer.State.IDLE)
+	# `second` is on the last green with the ball in the cup.
+	var last_hole = GameManager.current_course.holes[3]
+	second.current_hole = 3
+	second.current_strokes = 3
+	second.ball_position = last_hole.hole_position
+	second.ball_position_precise = Vector2(last_hole.hole_position)
+	second._change_state(Golfer.State.IDLE)
+
+	golfers._update_group([first, second] as Array[Golfer])
+	assert_eq(second.current_hole, 0, "The partner wraps to the first hole")
+	assert_eq(second.current_state, Golfer.State.WALKING,
+		"The partner walks off the last green instead of standing on it")
+	assert_false(second.path.is_empty(), "…along a route to the first tee")
+	var destination: Vector2 = second.path[second.path.size() - 1]
+	var first_tee: Vector2 = grid.grid_to_screen_center(GameManager.current_course.holes[0].tee_position)
+	assert_almost_eq(destination.distance_to(first_tee), 0.0, 2.0,
+		"…which ends on the first tee")
+
+## The whole circuit from every starting hole: whichever tee a pairing is seated
+## on, both competitors card every hole of the course exactly once and finish the
+## round. Before the wrap fix the partner left on the last green never carded
+## another hole (the round stalled a shot short), and once the pairing had gone
+## round to the first tee it was sent back onto the holes it teed off on, so its
+## card covered more than the rest of the field's.
+func test_a_pairing_plays_the_circuit_once_from_any_starting_hole() -> void:
+	for start_hole in 4:
+		_open_course(4)
+		var first := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+		var second := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+		golfers.seat_golfer_at_hole(first, start_hole)
+		golfers.seat_golfer_at_hole(second, start_hole)
+		var pair: Array[Golfer] = [first, second]
+
+		# Each turn: hole the ball out and let the turn system move the pairing on.
+		for _step in 200:
+			golfers._update_group(pair)
+			for golfer in pair:
+				if golfer.current_state != Golfer.State.PREPARING_SHOT:
+					continue
+				var hole = GameManager.current_course.holes[golfer.current_hole]
+				golfer.current_strokes = 3
+				golfer.ball_position = hole.hole_position
+				golfer.ball_position_precise = Vector2(hole.hole_position)
+				golfer._change_state(Golfer.State.IDLE)
+			if first.current_state == Golfer.State.FINISHED \
+					and second.current_state == Golfer.State.FINISHED:
+				break
+
+		var carded := []
+		for golfer in pair:
+			for hs in golfer.hole_scores:
+				carded.append(int(hs.hole))
+		carded.sort()
+		assert_eq(carded, [1, 1, 2, 2, 3, 3, 4, 4],
+			"Seated on hole %d, both competitors card every hole once" % (start_hole + 1))
+		assert_eq(first.current_state, Golfer.State.FINISHED,
+			"Seated on hole %d, the first competitor finishes" % (start_hole + 1))
+		assert_eq(second.current_state, Golfer.State.FINISHED,
+			"Seated on hole %d, the second competitor finishes too" % (start_hole + 1))
+		golfers.clear_all_golfers()
+
+## Once the whole pairing has wrapped, the first tee belongs to the group again.
+func test_wrapped_pair_tees_off_on_the_first_hole() -> void:
+	_open_course(4)
+	var first := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	var second := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 0)
+	var pair: Array[Golfer] = [first, second]
+	for golfer in pair:
+		golfers.seat_golfer_at_hole(golfer, 3)
+		golfer.hole_scores = [{"hole": 4, "strokes": 3, "par": 3}]
+		golfer.current_strokes = 0
+		golfer.current_hole = 0
+		golfer.ball_position = GameManager.current_course.holes[0].tee_position
+		golfer.ball_position_precise = Vector2(golfer.ball_position)
+		golfer._change_state(Golfer.State.IDLE)
+	assert_eq(golfers._get_group_current_hole(pair), 0, "Wrapped, the group is on the first hole")
+	var next = golfers._determine_next_golfer_in_group(pair)
+	assert_not_null(next, "Someone from the pairing tees off on the first hole")
+	assert_eq(next.current_hole, 0, "…and it is the first hole they play")
+
 ## A card that is a few holes short is topped up hole by hole, wrapping back to
 ## the first tee instead of running out of course and leaving the round short.
 func test_a_short_card_is_filled_hole_by_hole() -> void:

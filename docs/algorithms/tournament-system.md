@@ -243,9 +243,21 @@ catch the group ahead on a hole wait for it to clear, which is the normal
 `GolferManager` etiquette rule — no new logic.
 
 Because a pair starts mid-circuit, a live round **wraps** back to the first tee
-(`GolferManager._next_hole_for()`): every competitor plays the same number of holes,
-so a card is comparable no matter where the pair was seated. The owner's own rounds
+(`GolferManager._next_hole_for()`): a competitor plays the open holes forward from
+their tee, then from the first tee round to the hole they started on, so every card
+covers the circuit exactly once and "to par" means the same thing on every line. A
+hole already on the card is never played twice — without that check a pairing that
+teed off mid-course went round the turn and then back onto the holes it started on,
+making its card longer than the rest of the field's. The owner's own rounds
 (`is_owner_round`) never wrap.
+
+The pairing also stays together through the turn.
+`GolferManager._get_group_current_hole()` reads the group's hole from the competitor
+who is furthest back in the round (fewest holes carded), **not** from the lowest hole
+index. Index alone gets the turn wrong once a pair has wrapped: the partner who has
+just holed out on the last green stands on hole index 0 while the other is still on
+the last hole, and treating index 0 as the group's hole strands that partner — the
+turn system stops selecting them, so they never walk round to the first tee at all.
 
 Each live competitor is bound to their node (`TournamentLeaderboard.bind_live_golfer()`)
 and scored from `EventBus.golfer_finished_hole`, which records strokes, par, the
