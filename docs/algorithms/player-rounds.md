@@ -16,8 +16,12 @@ existing procedural golfer renderer. Opponents retain the tier sprites.
 Formats:
 - **Practice round:** owner only.
 - **Play vs a Pro:** choose Alex, Morgan or Riley (each uses the Pro skill tier).
-- **Begin Tournament:** owner plus all three pros, playing a single stroke-play
-  round. This is separate from the management tournament/prize-money system.
+
+A hosted tournament is a different thing: it starts on the click, and the owner is in
+the field as a competitor (see [Tournament System](tournament-system.md)). Because
+that pairing is already out on the course, starting an owner round is refused while
+an event is live — the warning points at the shelf's **Play It Out** button, which
+settles the event and frees the course.
 
 All participants play the open holes from the back tees. The player and any opponents
 are assigned a shared `group_id`, playing together as a single group just like visitor
@@ -51,9 +55,10 @@ takes over, with no click required.
 
 `PlayerGolferProfile` stores ten integer point counts (0–99). The first round
 requires spending exactly ten points; every point is a **10 percentage-point
-bonus** (0% starting bonus, maximum 990%). Points can be refunded during setup,
-but are locked once the first round starts. No extra progression points are
-awarded in this implementation. Name and appearance remain editable.
+bonus** (0% starting bonus, maximum 990%). Points save automatically whenever
+they are changed and take effect immediately for the player's next shot, with no
+Save Skills button required. Points can be reallocated across skills at any time
+(including during an active round). Name and appearance also remain editable.
 
 The profile is saved under `player_golfer`; older saves receive a fresh profile.
 New games reset it. Active rounds are transient, like visitor rounds, and are
@@ -90,17 +95,27 @@ is divided by `1 + bonus`. AI golfers without a player profile are unchanged.
 
 ### Shot shapes
 
+`ShotTypeBar` (`scripts/ui/components/shot_type_bar.gd`) runs one button per
+shot type along the top of the Play Course page — straight, fade, draw, high
+backspin, and low punch — above the scrolling control columns, so the whole set
+is visible and the shot being lined up is the lit button. The buttons are
+mutually exclusive (`ButtonGroup`), and a press writes the shape index onto
+`Golfer.player_shape`; hovering one shows its effect. The row greys out while
+the owner waits for their turn, and a shot the current lie forbids is disabled
+in place (rather than hidden, so the option is still discoverable).
+
 Straight and low punch are available on all off-green lies. Fade, draw and high
 backspin require tee or fairway; invalid selections reset to straight in both the
-HUD and the shot execution guard.
+row and the shot execution guard, and the row mirrors that fallback so the lit
+button is always the shot `play_shot()` will hit.
 
 - Fade bends 8 degrees L to R relative to the shot direction.
 - Draw bends 8 degrees R to L.
 - Backspin reverses rollout by `min(1.5, 0.25 * (1 + bonus))` tiles on green or
   fairway landings, and raises the visual arc by 40%.
-- Punch is an independent toggle: 70% range, 35% crosswind displacement,
-  30% visual arc height, and 150% normal rollout. When paired with backspin,
-  the lower arc and backspin rollout apply.
+- Low punch is selected like any other shot shape: 70% range, 35% crosswind
+  displacement, 30% visual arc height, and 150% normal rollout. It cannot be
+  combined with fade, draw, or backspin.
 
 The aim line interpolates bend from zero to the full angle; the ball animation
 adds a lateral mid-flight curve while preserving its computed landing position.

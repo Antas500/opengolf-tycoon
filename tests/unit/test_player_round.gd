@@ -3,6 +3,7 @@ extends GutTest
 var fixture: Node2D
 var rounds: PlayerRoundManager
 var golfers: GolferManager
+var hud: Control
 var saved: Dictionary
 
 func before_each() -> void:
@@ -45,7 +46,7 @@ func before_each() -> void:
 	balls.set_terrain_grid(grid)
 	var camera := IsometricCamera.new()
 	fixture.add_child(camera)
-	var hud := Control.new()
+	hud = Control.new()
 	fixture.add_child(hud)
 	rounds = PlayerRoundManager.new()
 	fixture.add_child(rounds)
@@ -72,6 +73,18 @@ func _start(kind: int) -> void:
 	rounds.start_round()
 	rounds._process(0.0)
 
+## Click a shot-type button the way the mouse does: the toggle flips, then the
+## press is delivered.
+func _press_shot(bar: ShotTypeBar, shape: int) -> void:
+	var button := bar.shot_button(shape)
+	button.button_pressed = true
+	button.pressed.emit()
+
+## The lie under the owner's ball.
+func _set_lie(lie: int) -> void:
+	var tile := Vector2i(rounds.player.ball_position_precise.round())
+	GameManager.terrain_grid._grid[tile] = lie
+
 func test_setup_cancel_does_not_spend_points() -> void:
 	rounds.open_setup()
 	assert_true(rounds.start_button.disabled)
@@ -83,6 +96,10 @@ func test_setup_cancel_does_not_spend_points() -> void:
 func test_practice_waits_for_input_and_restores_visitors() -> void:
 	var visitor := golfers.spawn_tournament_golfer(GolferTier.Tier.CASUAL, 99)
 	_start(0)
+	assert_eq(rounds.shot_bar.shot_count(), 5, "One button per shot type")
+	assert_eq(rounds.shot_bar.shot_button(4).text, "Punch")
+	_press_shot(rounds.shot_bar, 4)
+	assert_eq(rounds.player.player_shape, 4, "Low punch is selected as a shot shape")
 	assert_eq(rounds.participants.size(), 1)
 	assert_true(rounds.player.awaits_player_shot())
 	assert_eq(rounds.player.golfer_name, "Test Owner")
@@ -98,7 +115,7 @@ func test_practice_waits_for_input_and_restores_visitors() -> void:
 	assert_eq(golfers.active_golfers.size(), 1)
 	assert_true(GameManager.player_profile.initialized)
 
-func test_pro_selection_and_tournament_results() -> void:
+func test_pro_selection_and_tie_results() -> void:
 	rounds.open_setup()
 	for i in 10:
 		rounds.draft.allocate(i, 1)
@@ -110,11 +127,9 @@ func test_pro_selection_and_tournament_results() -> void:
 	assert_eq(rounds.participants[0].group_id, rounds.participants[1].group_id, "Participants share the same group ID")
 	assert_true(rounds.hud.visible, "Management HUD is visible")
 	rounds.leave_round()
-	_start(2)
-	assert_eq(rounds.participants.size(), 4)
-	assert_eq(rounds.participants[0].group_id, rounds.participants[1].group_id)
-	assert_eq(rounds.participants[1].group_id, rounds.participants[2].group_id)
-	assert_eq(rounds.participants[2].group_id, rounds.participants[3].group_id)
+	_start(1)
+	assert_eq(rounds.participants.size(), 2)
+	assert_eq(rounds.mode_picker.item_count, 2, "Only practice and vs pro formats remain")
 	for golfer in rounds.participants:
 		golfer.current_strokes = 3
 		golfer.ball_position = Vector2i(16, 10)
@@ -337,7 +352,7 @@ func test_embedded_player_navigation_and_setup() -> void:
 	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
 			starters += 1
-	assert_eq(starters, 3, "Play Course combines the practice, vs pro and tournament starters")
+	assert_eq(starters, 2, "Play Course combines the practice and vs pro starters")
 	for index in 3:
 		tab.buttons[index].pressed.emit()
 		for page in 3:
@@ -368,7 +383,7 @@ func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
 			starters += 1
-	assert_eq(starters, 3, "Rebuilding does not duplicate round-start buttons")
+	assert_eq(starters, 2, "Rebuilding does not duplicate round-start buttons")
 
 func test_embedded_round_requires_skill_allocation() -> void:
 	var tab := PlayerTab.new()
@@ -377,6 +392,69 @@ func test_embedded_round_requires_skill_allocation() -> void:
 	rounds._start_embedded(0)
 	assert_false(rounds.busy)
 	assert_eq(tab.selected, PlayerTab.PAGE_SKILLS)
+
+## The shot-type buttons are separate buttons running along the top of the Play
+## Course page, one per shot type, above the aiming columns — no drop-down.
+func test_shot_buttons_run_along_the_top_of_the_play_course_page() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+	await wait_frames(2)
+
+	var bar := tab.shot_bar
+	var labels: Array[String] = []
+	for shape in bar.shot_count():
+		labels.append(bar.shot_button(shape).text)
+	assert_eq(labels, ["Straight", "Fade", "Draw", "Backspin", "Punch"],
+		"Every shot type gets its own button")
+	for shape in bar.shot_count():
+		assert_false(bar.shot_button(shape) is OptionButton, "No shot hides behind a menu")
+	assert_true(bar.is_ancestor_of(bar.shot_button(0)), "The buttons are the Play Course row")
+	assert_lte(bar.get_global_rect().end.y, tab.aim_scroll.get_global_rect().position.y + 1,
+		"The shot buttons run above the aiming columns")
+	assert_lte(bar.get_combined_minimum_size().y, tab.aim_view.size.y,
+		"The row fits inside the Play Course page")
+
+	# The row is live on the owner's turn and lights the shot the golfer will hit.
+	assert_true(bar.is_ready_for_shot(), "The row is live while the owner aims")
+	assert_true(bar.shot_button(0).button_pressed, "Straight leads by default")
+	_press_shot(bar, 2)
+	assert_eq(rounds.player.player_shape, 2, "Pressing Draw selects the draw shot")
+	assert_true(bar.shot_button(2).button_pressed, "The pressed shot stays lit")
+	assert_false(bar.shot_button(0).button_pressed, "Only one shot is lit at a time")
+	var fairway_range := rounds.player.player_max_distance(Golfer.Club.IRON)
+	_press_shot(bar, 4)
+	assert_true(rounds.player.is_player_punch(), "Punch is a normal press on the row")
+	assert_almost_eq(rounds.player.player_max_distance(Golfer.Club.IRON), fairway_range * 0.7, 0.001,
+		"The lit button is the shot the golfer will hit")
+	_assert_shelf_fits(tab.aim_page)
+
+	# Off the tee and fairway the bend shots grey out and an illegal choice falls
+	# back to straight, exactly as Golfer.play_shot() does.
+	_press_shot(bar, 2)
+	assert_eq(rounds.player.player_shape, 2, "Draw is selected from the fairway")
+	_set_lie(TerrainTypes.Type.ROUGH)
+	rounds._process(0.0)
+	assert_true(bar.shot_button(1).disabled, "Fade needs a tee or fairway")
+	assert_true(bar.shot_button(2).disabled, "Draw needs a tee or fairway")
+	assert_true(bar.shot_button(3).disabled, "Backspin needs a tee or fairway")
+	assert_false(bar.shot_button(0).disabled, "Straight works from the rough")
+	assert_false(bar.shot_button(4).disabled, "Low punch works from the rough")
+	assert_eq(rounds.player.player_shape, 0, "An illegal shape falls back to straight")
+	assert_true(bar.shot_button(0).button_pressed, "The row follows the fallback")
+
+	# Waiting for an opponent greys the whole row out instead of hiding it.
+	_set_lie(TerrainTypes.Type.FAIRWAY)
+	rounds.player._change_state(Golfer.State.WALKING)
+	rounds._process(0.0)
+	assert_false(bar.is_ready_for_shot(), "The row is dead between shots")
+	for shape in bar.shot_count():
+		assert_true(bar.shot_button(shape).disabled, "Every shot greys out while waiting")
 
 ## Exercise the real toolbar so header, panel margins and scrollbars count
 ## against the same height budget as the course tiles.
@@ -397,6 +475,17 @@ func _embedded_toolbar() -> TerrainToolbar:
 func _assert_shelf_fits(shelf: HBoxContainer) -> void:
 	var scroll := shelf.get_parent() as ScrollContainer
 	assert_lte(scroll.size.y, scroll.get_parent().size.y, "Scroll viewport fits the allocated tab height")
+	# The shot-type row rides above the shelf: the two together must fit the page.
+	var view := scroll.get_parent() as VBoxContainer
+	if view != null:
+		assert_lte(view.get_combined_minimum_size().y, view.size.y,
+			"The shot buttons and the control columns share the page height")
+		for child in view.get_children():
+			if child is ShotTypeBar:
+				assert_lte(child.get_combined_minimum_size().y, child.size.y, "The shot row keeps its height")
+				assert_lte(child.get_combined_minimum_size().x, child.size.x, "The shot row spans the tab")
+				assert_lte(child.get_global_rect().end.y, scroll.get_global_rect().position.y + 1,
+					"The shot buttons run above the aiming columns")
 	assert_eq(scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO)
 	assert_eq(scroll.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED)
 	assert_false(scroll.get_v_scroll_bar().visible, "No vertical scrolling in the Player tab")
@@ -453,6 +542,130 @@ func test_embedded_tournament_survives_rebuilds_and_fits_all_states() -> void:
 		assert_eq(panel.get_parent(), tab.pages[PlayerTab.PAGE_PLAY])
 		_assert_shelf_fits(tab.pages[PlayerTab.PAGE_PLAY])
 
+## The game's top-left score corner, as main.gd builds it: the round card first,
+## the tournament board docked under it.
+func _scores_dock() -> ScoresDock:
+	var dock := ScoresDock.new()
+	hud.add_child(dock)
+	rounds.attach_scores_panel(dock.round_scores)
+	return dock
+
+func test_tournament_board_and_shot_controls_share_the_corner() -> void:
+	var toolbar := _embedded_toolbar()
+	var tab := toolbar.player_tab
+	var dock := _scores_dock()
+	var leaderboard := TournamentLeaderboard.new()
+	dock.attach_leaderboard(leaderboard)
+	leaderboard.show_for_tournament("Local Tournament", 12)
+	leaderboard.register_golfer(0, "Owner", 0, true)
+
+	var owner := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 99)
+	owner.player_profile = GameManager.player_profile
+	rounds.begin_tournament_aim(owner)
+	await wait_frames(5)
+	assert_true(rounds.tournament_aim)
+	assert_eq(tab.selected, PlayerTab.PAGE_PLAY)
+	assert_true(tab.playing)
+	assert_true(tab.aim_scroll.visible)
+	assert_true(dock.is_ancestor_of(leaderboard), "Tournament scores live in the top-left corner")
+	assert_false(tab.aim_page.is_ancestor_of(leaderboard),
+		"Tournament scores no longer sit in the Play Course page")
+	assert_true(tab.aim_page.is_ancestor_of(rounds.status), "Tournament shot status stays with the controls")
+	assert_true(tab.aim_page.is_ancestor_of(rounds._tournament_hud_column))
+	_assert_shelf_fits(tab.aim_page)
+
+func test_scores_dock_hugs_the_top_left_corner() -> void:
+	var dock := _scores_dock()
+	var leaderboard := TournamentLeaderboard.new()
+	dock.attach_leaderboard(leaderboard)
+	await wait_frames(2)
+	assert_eq(dock.anchor_left, 0.0)
+	assert_eq(dock.anchor_top, 0.0)
+	assert_eq(dock.offset_left, float(UIConstants.HUD_COLUMN_MARGIN))
+	assert_eq(dock.offset_top, float(UIConstants.HUD_COLUMN_MARGIN))
+	assert_true(dock.round_scores.get_parent() == dock, "The round card leads the corner")
+	assert_true(leaderboard.get_parent() == dock, "The board docks under it")
+	leaderboard.show_for_tournament("Local Tournament", 4)
+	await wait_frames(2)
+	assert_eq(dock.size.x, float(ScoresDock.WIDTH),
+		"The corner is wide enough for the board's columns")
+	for i in 40:
+		leaderboard.register_golfer(i, "Golfer %d" % i, i)
+	await wait_frames(2)
+	assert_eq(leaderboard._scroll.custom_minimum_size.y,
+		TournamentLeaderboard.DOCK_BODY_MAX_HEIGHT,
+		"A big field is capped so the board cannot run down the screen")
+	assert_true(leaderboard._scroll.get_v_scroll_bar().visible, "The rest of the field scrolls")
+
+func test_practice_round_scores_read_out_top_left() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	var dock := _scores_dock()
+	var card := dock.round_scores
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(1)
+	await wait_frames(2)
+	assert_true(card.visible, "The round card shows while playing")
+	assert_eq(card.title_label.text, "Vs Pro · Pro Alex")
+	assert_false(tab.aim_page.is_ancestor_of(card), "The scorecard is out of the Play Course page")
+	assert_true(dock.is_ancestor_of(card), "The scorecard sits in the top-left corner")
+	var rows := card.score_rows()
+	assert_eq(rows.size(), 2, "One row per player in the group")
+	assert_eq(rows[0].name, "Test Owner (you)")
+	assert_eq(rows[0].value, "-", "No holes in yet")
+	# One hole in: the card shows the score against par and the holes completed.
+	var owner: Golfer = rounds.player
+	owner.hole_scores.append({"hole": 1, "strokes": 2, "par": 3})
+	owner.total_strokes = 2
+	owner.total_par = 3
+	rounds._process(0.0)
+	assert_eq(card.score_rows()[0].value, "-1 · thru 1")
+	await wait_frames(2)
+	assert_true(card._scroll.custom_minimum_size.y < RoundScoresPanel.MAX_BODY_HEIGHT,
+		"A short card does not reserve empty space over the course")
+	rounds.leave_round()
+	await wait_frames(2)
+	assert_false(card.visible, "Leaving the round drops the card")
+
+func test_round_complete_scores_land_on_the_card() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	var dock := _scores_dock()
+	var card := dock.round_scores
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	await wait_frames(2)
+	for golfer in rounds.participants:
+		golfer.hole_scores.clear()
+		for hole in 18:
+			golfer.hole_scores.append({"hole": hole + 1, "strokes": 4, "par": 4})
+		golfer.total_strokes = 72
+		golfer.total_par = 72
+	rounds._show_results()
+	await wait_frames(2)
+	assert_eq(card.title_label.text, "Round complete")
+	var lines: Array[String] = []
+	for child in card.body.get_children():
+		if child is Label:
+			lines.append(child.text)
+	assert_true(lines.any(func(line): return line.begins_with("Test Owner — 72 strokes")),
+		"The card carries the finished scorecard: " + str(lines))
+	assert_true("Hole 18: 4 / Par 4" in lines, "Every hole of the card is on it")
+	assert_eq(card._scroll.custom_minimum_size.y, RoundScoresPanel.MAX_BODY_HEIGHT,
+		"A long card is capped so it cannot cover the course")
+	assert_true(card._scroll.get_v_scroll_bar().visible, "The rest of the card scrolls")
+	var return_buttons := 0
+	for button in tab.aim_page.find_children("*", "Button", true, false):
+		if button.text == "Return to management":
+			return_buttons += 1
+	assert_eq(return_buttons, 1, "The round page keeps the way out of the round")
+
 func test_embedded_aim_and_full_scorecards_fit_toolbar() -> void:
 	var toolbar := _embedded_toolbar()
 	var tab := toolbar.player_tab
@@ -473,3 +686,134 @@ func test_embedded_aim_and_full_scorecards_fit_toolbar() -> void:
 	await wait_frames(5)
 	_assert_shelf_fits(tab.aim_page)
 	assert_eq(toolbar.size.y, float(UIConstants.BOTTOM_BAR_HEIGHT))
+
+func test_save_skills_button_removed_and_skills_save_automatically() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	# Verify that no button with text "Save skills" exists anywhere in the Player Skills page
+	var skill_page := tab.pages[PlayerTab.PAGE_SKILLS]
+	for button in skill_page.find_children("*", "Button", true, false):
+		assert_ne(button.text, "Save skills", "Save skills button must not exist")
+
+	# Verify skills save automatically whenever changed
+	assert_eq(GameManager.player_profile.points[0], 0)
+	assert_true(rounds.allocate_skill(0, 1), "Allocating a point succeeds")
+	assert_eq(GameManager.player_profile.points[0], 1, "Skill automatically saved to player_profile")
+	assert_eq(rounds.draft.points[0], 1)
+
+	assert_true(rounds.allocate_skill(0, -1), "Refunding a point succeeds")
+	assert_eq(GameManager.player_profile.points[0], 0, "Refund automatically saved to player_profile")
+
+func test_skills_auto_save_and_take_effect_for_next_shot_mid_round() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	# Allocate initial 10 points
+	for i in 10:
+		rounds.allocate_skill(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+
+	assert_true(rounds.active, "Round is active")
+	assert_not_null(rounds.player, "Player golfer is spawned")
+
+	# Skills page controls must remain enabled during an active round
+	var skill_page := tab.pages[PlayerTab.PAGE_SKILLS]
+	for button in skill_page.find_children("*", "Button", true, false):
+		assert_false(button.disabled, "Skill adjustment buttons must remain enabled during round")
+
+	# Record initial driving skill and driver distance
+	var initial_driving_skill := rounds.player.driving_skill
+	var initial_driver_dist := rounds.player.player_max_distance(Golfer.Club.DRIVER)
+	var initial_accuracy_skill := rounds.player.accuracy_skill
+
+	# Mid-round: change skills (e.g. shift a point from Power Hitter to Long Driver, and add to Accurate Irons)
+	# First refund 1 from skill 0 (Power Hitter)
+	assert_true(rounds.allocate_skill(0, -1))
+	# Add to skill 1 (Long Driver)
+	assert_true(rounds.allocate_skill(1, 1))
+
+	# Verify skills auto-saved to GameManager.player_profile
+	assert_eq(GameManager.player_profile.points[0], 0, "Power Hitter points updated in profile")
+	assert_eq(GameManager.player_profile.points[1], 2, "Long Driver points updated in profile")
+
+	# Verify skills are immediately in effect on the golfer for the next shot
+	assert_almost_eq(rounds.player.driving_skill, GameManager.player_profile.normalized_skill(1), 0.0001,
+		"Player driving_skill updated immediately")
+	assert_gt(rounds.player.driving_skill, initial_driving_skill,
+		"Driving skill increased after allocating more points to Long Driver")
+
+	# Verify driver distance reflects the new skills immediately
+	var new_driver_dist := rounds.player.player_max_distance(Golfer.Club.DRIVER)
+	# Long Driver adds to driver bonus, so distance factor for driver is now higher
+	assert_almost_eq(new_driver_dist, float(Golfer.CLUB_STATS[Golfer.Club.DRIVER].max_distance) * 0.7 * (1.0 + 0.2), 0.01,
+		"Driver distance reflects updated Long Driver skill immediately")
+
+	# Verify aim guide / shot preview reflects the updated skills
+	var preview := rounds.player.preview_shot(Vector2i(30, 10))
+	assert_false(preview.is_empty(), "Preview shot is available")
+	assert_almost_eq(preview.max_range, new_driver_dist, 0.01,
+		"Preview shot max range matches updated skill distance")
+
+	# Take shot and verify it succeeds with new skills in effect
+	assert_true(rounds.player.play_shot(Vector2i(30, 10)), "Shot executes with new skills in effect")
+
+	rounds.leave_round()
+
+func test_putting_skill_auto_saves_and_takes_effect_for_next_putt() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.allocate_skill(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+
+	var initial_putting_skill := rounds.player.putting_skill
+
+	# Reallocate: shift point from Luck (index 9) to Accurate Putter (index 4)
+	assert_true(rounds.allocate_skill(9, -1))
+	assert_true(rounds.allocate_skill(4, 1))
+
+	assert_eq(GameManager.player_profile.points[4], 2, "Accurate Putter updated in GameManager.player_profile")
+	assert_gt(rounds.player.putting_skill, initial_putting_skill,
+		"Golfer putting_skill immediately reflects new Accurate Putter skill for next putt")
+
+	rounds.leave_round()
+
+func test_skills_change_mid_round_with_tournament_manager_present() -> void:
+	var tm := TournamentManager.new()
+	fixture.add_child(tm)
+	GameManager.tournament_manager = tm
+
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.allocate_skill(i, 1)
+	rounds.name_edit.text = "Course Golfer"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+
+	assert_true(rounds.active, "Course round is active")
+	assert_not_null(rounds.player, "Player golfer is present")
+
+	# Change skills while playing the course with TournamentManager active in GameManager
+	assert_true(rounds.allocate_skill(0, -1), "Refunding skill mid-round succeeds with TournamentManager present")
+	assert_true(rounds.allocate_skill(3, 1), "Allocating skill mid-round succeeds with TournamentManager present")
+	assert_eq(GameManager.player_profile.points[0], 0)
+	assert_eq(GameManager.player_profile.points[3], 2)
+	assert_almost_eq(rounds.player.accuracy_skill, GameManager.player_profile.normalized_skill(3), 0.0001)
+
+	# Also verify sync_player_skills updates SimGolfer if present in field
+	var sg := tm._make_player_sim_golfer()
+	tm._sim_field = [sg]
+	assert_true(rounds.allocate_skill(3, -1))
+	assert_true(rounds.allocate_skill(1, 1))
+	assert_almost_eq(sg.driving_skill, GameManager.player_profile.normalized_skill(1), 0.0001,
+		"TournamentManager SimGolfer skills update when player skills change")
+
+	rounds.leave_round()

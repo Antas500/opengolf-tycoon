@@ -92,6 +92,14 @@ class TournamentMoment:
 
 ## Simulate a complete round for one golfer on the course.
 ## Returns a RoundResult with per-hole scores and notable moments.
+## Par of one hole for tournament purposes. Every competitor plays the back tees,
+## so a card is measured against the par those tees carry — the same number live
+## play scores a hole against. `HoleData.par` can sit a stroke away from it on a
+## course whose tee cards were adjusted separately, and then a round played on the
+## course and a round filled in off the course are not the same measurement.
+static func _tournament_par(hole_data) -> int:
+	return int(hole_data.get_par_for_tee("back"))
+
 static func simulate_round(sim_golfer: SimGolfer, round_number: int = 1) -> RoundResult:
 	var course_data = GameManager.course_data
 	var terrain_grid = GameManager.terrain_grid
@@ -111,14 +119,15 @@ static func simulate_round(sim_golfer: SimGolfer, round_number: int = 1) -> Roun
 		if not hole.is_open:
 			continue
 
+		var hole_par := _tournament_par(hole)
 		var hole_result = _simulate_hole(sim_golfer, hole, hole_index, cumulative_strokes, cumulative_par)
 		result.hole_scores.append(hole_result.strokes)
-		result.hole_pars.append(hole.par)
+		result.hole_pars.append(hole_par)
 		cumulative_strokes += hole_result.strokes
-		cumulative_par += hole.par
+		cumulative_par += hole_par
 
 		# Detect dramatic moments
-		var score_diff = hole_result.strokes - hole.par
+		var score_diff = hole_result.strokes - hole_par
 		if hole_result.strokes == 1:
 			result.moments.append(TournamentMoment.create(
 				"hole_in_one", round_number, hole.hole_number,
@@ -140,9 +149,15 @@ static func simulate_round(sim_golfer: SimGolfer, round_number: int = 1) -> Roun
 	return result
 
 ## Simulate remaining holes for a partially-completed round.
-## Used when End Day is pressed during a tournament with live golfers.
+##
+## Used when a live round is settled — a day ending during the event, or the
+## phase running out while golfers are still on the course. `holes_to_play`
+## counts how many holes the card is short; play continues past the last hole
+## back to the first, because tournament pairings tee off on their own hole and
+## wrap around rather than stopping at the end of the array.
 static func simulate_remaining(sim_golfer: SimGolfer, current_hole: int,
-		total_strokes: int, total_par: int) -> RoundResult:
+		total_strokes: int, total_par: int, holes_to_play: int = -1,
+		played_holes: Dictionary = {}) -> RoundResult:
 	var course_data = GameManager.course_data
 	if not course_data:
 		return _empty_result(sim_golfer, 1)
@@ -155,16 +170,39 @@ static func simulate_remaining(sim_golfer: SimGolfer, current_hole: int,
 	var cumulative_strokes: int = total_strokes
 	var cumulative_par: int = total_par
 
-	for hole_index in range(current_hole, course_data.holes.size()):
-		var hole = course_data.holes[hole_index]
-		if not hole.is_open:
-			continue
+	var open_indices: Array = []
+	for i in range(course_data.holes.size()):
+		if course_data.holes[i].is_open:
+			open_indices.append(i)
+	if open_indices.is_empty():
+		return result
 
+	var next_slot := 0
+	for s in open_indices.size():
+		if open_indices[s] >= current_hole:
+			next_slot = s
+			break
+		next_slot = s + 1
+
+	# The holes still to card, in play order (wrapping), skipping any already
+	# finished. With no `played_holes` this is every open hole from `current_hole`.
+	var remaining: Array = []
+	for offset in open_indices.size():
+		var hole_index: int = open_indices[(next_slot + offset) % open_indices.size()]
+		if not played_holes.has(hole_index):
+			remaining.append(hole_index)
+	var limit := remaining.size() if holes_to_play < 0 else mini(holes_to_play, remaining.size())
+
+	for played in range(limit):
+		var hole_index: int = remaining[played]
+		var hole = course_data.holes[hole_index]
+
+		var hole_par := _tournament_par(hole)
 		var hole_result = _simulate_hole(sim_golfer, hole, hole_index, cumulative_strokes, cumulative_par)
 		result.hole_scores.append(hole_result.strokes)
-		result.hole_pars.append(hole.par)
+		result.hole_pars.append(hole_par)
 		cumulative_strokes += hole_result.strokes
-		cumulative_par += hole.par
+		cumulative_par += hole_par
 
 	result.total_strokes = cumulative_strokes
 	result.total_par = cumulative_par
@@ -179,12 +217,12 @@ static func _simulate_hole(sim_golfer: SimGolfer, hole_data, hole_index: int,
 		cumulative_strokes: int, cumulative_par: int) -> Dictionary:
 	var terrain_grid = GameManager.terrain_grid
 	if not terrain_grid:
-		return {"strokes": hole_data.par, "moments": []}
+		return {"strokes": _tournament_par(hole_data), "moments": []}
 
 	var ball_pos: Vector2i = hole_data.tee_position
 	var ball_precise: Vector2 = Vector2(ball_pos)
 	var hole_pos: Vector2i = hole_data.hole_position
-	var max_strokes: int = GolfRules.get_max_strokes(hole_data.par)
+	var max_strokes: int = GolfRules.get_max_strokes(_tournament_par(hole_data))
 	var strokes: int = 0
 
 	for _shot in range(max_strokes):

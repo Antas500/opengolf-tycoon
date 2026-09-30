@@ -77,6 +77,9 @@ func _build_content() -> void:
 	var winner_score_text = _format_score_vs_par(winner_diff)
 
 	var winner_label = Label.new()
+	# Hosting an event means playing it, so say so when the owner lifts the cup.
+	if _results.get("winner_is_player", false):
+		winner_name += " (you)"
 	winner_label.text = "Winner: %s (%s)" % [winner_name, winner_score_text]
 	winner_label.add_theme_font_size_override("font_size", 16)
 	winner_label.add_theme_color_override("font_color", UIConstants.COLOR_GOLD)
@@ -146,7 +149,11 @@ func _build_content() -> void:
 			score_color = UIConstants.COLOR_TEXT_DIM
 
 		var round_scores = entry.get("round_scores", [])
-		var row = _create_leaderboard_entry(rank_text, entry.get("name", ""),
+		var is_player: bool = entry.get("is_player", false)
+		if is_player:
+			score_color = UIConstants.COLOR_GOLD
+		var row = _create_leaderboard_entry(rank_text,
+			entry.get("name", "") + (" (you)" if is_player else ""),
 			round_scores, score_text, score_color, total_rounds, is_mc)
 		vbox.add_child(row)
 

@@ -2,7 +2,9 @@ extends HBoxContainer
 class_name PlayerTab
 ## Persistent player navigation. Only the selected page participates in layout.
 ## "Play Course" combines the round sections — Practice Round, Play vs Pro and
-## Tournament — and swaps to the aiming HUD while a round is in progress.
+## Tournament — and swaps to the aiming HUD (the shot controls) while a round is
+## in progress. Scores are not part of it: they read out in the HUD's top-left
+## corner (ScoresDock), over the course view.
 const TITLES = ["Play Course", "Edit Player", "Player Skills"]
 ## Page indices inside `pages`, matching the order of TITLES.
 const PAGE_PLAY := 0
@@ -13,6 +15,11 @@ const PERSISTENT_META := "player_tab_persistent"
 
 var pages: Array[HBoxContainer] = []
 var buttons: Array[Button] = []
+## The aiming view for a round in progress: the shot-type row pinned along the
+## top, with the scrolling control columns under it.
+var aim_view: VBoxContainer
+## One button per shot type, running along the top of the Play Course page.
+var shot_bar: ShotTypeBar
 var aim_page: HBoxContainer
 var aim_scroll: ScrollContainer
 var selected := 0
@@ -42,21 +49,35 @@ func _ready() -> void:
 		buttons.append(button)
 		pages.append(_make_page(body))
 	# Alternate view for the Play Course page: the aiming HUD during a round.
-	aim_scroll = _make_scroll(body)
+	# The shot-type buttons run along its top; the control columns scroll under
+	# them, so the whole shot set stays readable no matter how far the shelf
+	# scrolls sideways.
+	aim_view = VBoxContainer.new()
+	aim_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	aim_view.add_theme_constant_override("separation", UIConstants.SEPARATION_MD)
+	body.add_child(aim_view)
+	shot_bar = ShotTypeBar.new()
+	aim_view.add_child(shot_bar)
+	aim_scroll = _make_scroll(aim_view, false)
 	aim_page = HBoxContainer.new()
 	aim_page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	aim_page.add_theme_constant_override("separation", 16)
 	aim_scroll.add_child(aim_page)
 	select(0)
 
-func _make_scroll(body: Control) -> ScrollContainer:
+## Full-rect scrolling shelf on the tab body, or a shelf that fills what the shot
+## row leaves when it is stacked inside the aiming view.
+func _make_scroll(parent: Control, fill_rect: bool = true) -> ScrollContainer:
 	var scroll := ScrollContainer.new()
-	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if fill_rect:
+		scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	else:
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = true
 	scroll.gui_input.connect(_on_scroll_gui_input.bind(scroll))
-	body.add_child(scroll)
+	parent.add_child(scroll)
 	return scroll
 
 func _make_page(body: Control) -> HBoxContainer:
@@ -80,10 +101,11 @@ func set_playing(value: bool) -> void:
 	_sync_aim_view()
 
 func _sync_aim_view() -> void:
-	if not is_instance_valid(aim_scroll):
+	if not is_instance_valid(aim_view):
 		return
 	pages[PAGE_PLAY].get_parent().visible = selected == PAGE_PLAY and not playing
 	pages[PAGE_PLAY].visible = not playing
+	aim_view.visible = selected == PAGE_PLAY and playing
 	aim_page.visible = playing
 	aim_scroll.visible = selected == PAGE_PLAY and playing
 
@@ -93,6 +115,9 @@ func clear_page(index: int) -> HBoxContainer:
 		child.queue_free()
 	return pages[index]
 
+## Empty the aiming page of round content. Scores are not part of it: they read
+## out in the HUD's top-left corner (see ScoresDock), so everything the round put
+## on this page is the shot controls and goes.
 func clear_aim_page() -> HBoxContainer:
 	for child in aim_page.get_children():
 		aim_page.remove_child(child)

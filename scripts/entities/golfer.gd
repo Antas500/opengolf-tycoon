@@ -68,9 +68,8 @@ var golfer_tier: int = GolferTier.Tier.CASUAL
 var is_tournament_golfer: bool = false
 var is_owner_round: bool = false
 var player_profile: PlayerGolferProfile = null
-# 0 straight, 1 fade, 2 draw, 3 backspin; punch is independent.
+# 0 straight, 1 fade, 2 draw, 3 backspin, 4 low punch.
 var player_shape: int = 0
-var player_punch: bool = false
 
 ## Which tee the golfer is playing from this round ("forward", "middle", or "back")
 var current_tee_key: String = "back"
@@ -553,6 +552,15 @@ func _apply_appearance() -> void:
 		hair.color = hair_color
 	if head:
 		head.color = skin_tone
+
+## Synchronize driving, accuracy, putting and recovery skills from the owner profile.
+func sync_player_profile_skills() -> void:
+	if player_profile == null:
+		return
+	driving_skill = player_profile.normalized_skill(1)
+	accuracy_skill = player_profile.normalized_skill(3)
+	putting_skill = player_profile.normalized_skill(4)
+	recovery_skill = player_profile.normalized_skill(8)
 	if arms:
 		arms.color = skin_tone
 	if hands:
@@ -1053,10 +1061,10 @@ func awaits_player_shot() -> bool:
 	return player_profile != null and current_state == State.PREPARING_SHOT and GameManager.terrain_grid != null and GameManager.terrain_grid.get_tile(Vector2i(ball_position_precise.round())) != TerrainTypes.Type.GREEN
 
 static func shape_allowed(shape: int, terrain: int) -> bool:
-	return shape == 0 or (shape in [1, 2, 3] and (terrain == TerrainTypes.Type.TEE_BOX or TerrainTypes.is_fairway(terrain)))
+	return shape in [0, 4] or (shape in [1, 2, 3] and (terrain == TerrainTypes.Type.TEE_BOX or TerrainTypes.is_fairway(terrain)))
 
 ## Bend applied to the owner's shot direction for the shape in `player_shape`:
-## 0 = straight, 1 = fade (L→R), 2 = draw (R→L), 3 = high backspin (no bend).
+## 0 = straight, 1 = fade (L→R), 2 = draw (R→L), 3 = high backspin, 4 = low punch.
 static func shape_bend_degrees(shape: int) -> float:
 	if shape == 1:
 		return PLAYER_SHAPE_BEND_DEG
@@ -1064,10 +1072,14 @@ static func shape_bend_degrees(shape: int) -> float:
 		return -PLAYER_SHAPE_BEND_DEG
 	return 0.0
 
-## Highest distance (tiles) the owner can aim with this club, after punch and skills.
+## Whether the currently selected shot is the low punch option.
+func is_player_punch() -> bool:
+	return player_profile != null and player_shape == 4
+
+## Highest distance (tiles) the owner can aim with this club, after shot choice and skills.
 func player_max_distance(club: Club) -> float:
 	var maximum := float(CLUB_STATS[club].max_distance) * _get_skill_distance_factor(club)
-	return maximum * 0.7 if player_punch else maximum
+	return maximum * 0.7 if is_player_punch() else maximum
 
 func player_aim(target: Vector2i) -> Vector2i:
 	var distance := Vector2(ball_position).distance_to(Vector2(target))
@@ -1087,6 +1099,8 @@ func player_aim(target: Vector2i) -> Vector2i:
 ## are all included, because those are intent, not error. Returns an empty
 ## dictionary when the owner is not waiting on mouse input or the aim is unusable.
 func preview_shot(target: Vector2i) -> Dictionary:
+	if player_profile:
+		sync_player_profile_skills()
 	var terrain_grid := GameManager.terrain_grid
 	if not awaits_player_shot() or terrain_grid == null or not terrain_grid.is_valid_position(target):
 		return {}
@@ -1132,11 +1146,13 @@ func preview_shot(target: Vector2i) -> Dictionary:
 		"blocked_terrain": TerrainTypes.get_type_name(rest_terrain) if blocked else "",
 		"shape": player_shape,
 		"shape_bend_deg": shape_bend_degrees(player_shape),
-		"punch": player_punch,
-		"arc_scale": 0.3 if player_punch else (1.4 if player_shape == 3 else 1.0),
+		"punch": is_player_punch(),
+		"arc_scale": 0.3 if is_player_punch() else (1.4 if player_shape == 3 else 1.0),
 	}
 
 func play_shot(target: Vector2i) -> bool:
+	if player_profile:
+		sync_player_profile_skills()
 	if not awaits_player_shot() or GameManager.is_paused or not GameManager.terrain_grid.is_valid_position(target) or target == ball_position:
 		return false
 	if not shape_allowed(player_shape, GameManager.terrain_grid.get_tile(ball_position)):
@@ -1556,6 +1572,8 @@ func get_cached_or_compute_shot_target(hole_position: Vector2i) -> Vector2i:
 ##  10 ft (~0.15 tiles):  ~45%      20 ft (~0.30 tiles):  ~22%
 ##  30 ft (~0.45 tiles):  ~11%      50 ft (~0.76 tiles):  ~3%
 func _calculate_putt(from_precise: Vector2) -> Dictionary:
+	if player_profile:
+		sync_player_profile_skills()
 	var terrain_grid = GameManager.terrain_grid
 	var course_data = GameManager.course_data
 	if not terrain_grid or not course_data or course_data.holes.is_empty() or current_hole >= course_data.holes.size():
@@ -1699,8 +1717,11 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 			skill_accuracy = putting_skill
 
 	if player_profile:
-		skill_accuracy = player_profile.normalized_skill(2 if club in [Club.DRIVER, Club.FAIRWAY_WOOD] else 3)
-		if player_shape > 0:
+		if club == Club.PUTTER:
+			skill_accuracy = player_profile.normalized_skill(4)
+		else:
+			skill_accuracy = player_profile.normalized_skill(2 if club in [Club.DRIVER, Club.FAIRWAY_WOOD] else 3)
+		if player_shape in [1, 2, 3]:
 			skill_accuracy = 1.0 - (1.0 - skill_accuracy) / (1.0 + player_profile.bonus({1: 6, 2: 5, 3: 7}[player_shape]))
 		skill_accuracy = 1.0 - (1.0 - skill_accuracy) / (1.0 + player_profile.bonus(9))
 
@@ -1854,7 +1875,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 	# Apply wind displacement
 	if GameManager.wind_system:
 		var wind_displacement = GameManager.wind_system.get_wind_displacement(direction, actual_distance, club)
-		landing_point += wind_displacement * (0.35 if player_profile and player_punch else 1.0)
+		landing_point += wind_displacement * (0.35 if is_player_punch() else 1.0)
 
 	# Keep sub-tile precision - use round for accurate grid cell
 	# This is the CARRY position (where ball first contacts the ground)
@@ -1920,7 +1941,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 		rollout.is_backspin = true
 		# Backspin sends the ball straight back along the shot line.
 		rollout.roll_path = PackedVector2Array([carry_position_precise, rollout.final_position])
-	elif player_profile and player_punch:
+	elif is_player_punch():
 		rollout.final_position = carry_position_precise + (rollout.final_position - carry_position_precise) * 1.5
 		rollout.rollout_distance *= 1.5
 		# Punch scales the whole roll so the traced path stays glued to the ball.

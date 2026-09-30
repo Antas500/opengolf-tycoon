@@ -89,6 +89,8 @@ var analytics_panel_ui: AnalyticsPanel = null
 var golfer_info_popup: GolferInfoPopup = null
 var round_summary_popup: RoundSummaryPopup = null
 var tournament_leaderboard: TournamentLeaderboard = null
+## Top-left corner of the screen: round scores and the live tournament board.
+var scores_dock: ScoresDock = null
 var tournament_results_popup: TournamentResultsPopup = null
 var pause_menu: PauseMenu = null
 var _was_paused_before_pause_menu: bool = false
@@ -199,10 +201,11 @@ func _ready() -> void:
 	# Set up tournament leaderboard
 	tournament_leaderboard = TournamentLeaderboard.new()
 	tournament_leaderboard.name = "TournamentLeaderboard"
-	$UI/HUD.add_child(tournament_leaderboard)
 	tournament_manager.setup(golfer_manager, tournament_leaderboard)
 
-	# Set up tournament results popup
+	# Final event details remain in the dedicated results dialog; live scores
+	# dock to the top-left corner of the HUD (see _setup_scores_dock) and the
+	# owner's shots are played from the Play Course page.
 	tournament_results_popup = TournamentResultsPopup.new()
 	tournament_results_popup.name = "TournamentResultsPopup"
 	$UI/HUD.add_child(tournament_results_popup)
@@ -255,6 +258,7 @@ func _ready() -> void:
 	_connect_ui_buttons()
 	_setup_bottom_bar()
 	_setup_hud_status_column()
+	_setup_scores_dock()
 	_setup_rain_overlay()
 	_setup_placement_preview()
 	_create_menu_buttons()
@@ -276,6 +280,10 @@ func _ready() -> void:
 	add_child(player_round)
 	player_round.setup(golfer_manager, $IsometricCamera, $UI/HUD)
 	player_round.attach_player_tab(terrain_toolbar.player_tab)
+	player_round.attach_scores_panel(scores_dock.round_scores)
+	# The owner plays their own shots during a tournament: the manager spawns the
+	# field, but aiming for their live golfer is handed to the PlayerRoundManager.
+	tournament_manager.set_aim_controller(player_round)
 	player_round.session_opened.connect(func():
 		# Clear both tiers of tool selection before mouse input becomes shot input.
 		_cancel_action()
@@ -790,11 +798,22 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentLeaderboard", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
+	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:
 			child.visible = visible_flag
+
+## Scores for the owner's rounds read out in the top-left corner of the screen,
+## away from the shot controls in the bottom bar: the round card (practice round,
+## vs pro) and the live tournament board share one dock, one under the other.
+func _setup_scores_dock() -> void:
+	scores_dock = ScoresDock.new()
+	$UI/HUD.add_child(scores_dock)
+	scores_dock.attach_leaderboard(tournament_leaderboard)
+	tournament_leaderboard.return_to_course.connect(func():
+		terrain_toolbar.select_player_section(PlayerTab.PAGE_PLAY)
+		terrain_toolbar.player_tab.set_playing(false))
 
 func _setup_hud_status_column() -> void:
 	"""Replace the legacy full-width TopBar with the top-right status column."""
@@ -958,6 +977,10 @@ func _start_painting() -> void:
 
 	# Check if in null selector state — try opening hole context menu
 	if not _has_active_tool():
+		# While the owner is lining up a shot (practice round or tournament),
+		# leave course clicks to aiming instead of opening the hole menu.
+		if is_instance_valid(player_round) and player_round.active:
+			return
 		var mouse_world = camera.get_mouse_world_position()
 		var grid_pos = terrain_grid.screen_to_grid(mouse_world)
 		var tile_type = terrain_grid.get_tile(grid_pos)
@@ -3382,7 +3405,7 @@ func _show_hole_stats(hole_number: int) -> void:
 # --- Tournament Panel ---
 
 func _setup_tournament_panel() -> void:
-	"""Add tournament panel to the HUD."""
+	"""Put tournament hosting on the Player tab's Play Course page."""
 	tournament_panel = TournamentPanel.new()
 	tournament_panel.embedded = true
 	tournament_panel.name = "TournamentPanel"
@@ -3402,7 +3425,7 @@ func _toggle_tournament_panel() -> void:
 	tournament_panel._refresh_display()
 
 func _on_tournament_completed(_tier: int, results: Dictionary) -> void:
-	"""Show tournament results popup when a tournament finishes."""
+	"""Show the post-event financial and highlight summary."""
 	if tournament_results_popup:
 		var entries = results.get("all_entries", [])
 		tournament_results_popup.show_results(_tier, results, entries)

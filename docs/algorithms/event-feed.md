@@ -16,7 +16,7 @@ Events are grouped into 8 categories, each with a distinctive icon and color:
 - **Weather** (cyan) — Weather and season changes
 - **Tournament** (purple) — Scheduled, started, completed tournaments
 - **Milestone** (orange) — Achievement milestones reached
-- **Course** (yellow) — Holes created/deleted, buildings placed, rating changes
+- **Course** (yellow) — Holes created/deleted, buildings placed
 - **Daily** (gray) — End-of-day summary with revenue, golfers, satisfaction
 
 ### Priority System
@@ -128,10 +128,9 @@ money_changed (milestone)    → ECONOMY     → NORMAL    → NONE
 money_changed (bankruptcy)   → ECONOMY     → CRITICAL  → NONE
 reputation_changed (25pts)   → ECONOMY     → NORMAL    → NONE
 green_fee_changed            → ECONOMY     → INFO      → NONE
-course_rating_changed        → COURSE      → NORMAL    → NONE
 weather_changed              → WEATHER     → INFO      → NONE
 season_changed               → WEATHER     → NORMAL    → NONE
-tournament_scheduled         → TOURNAMENT  → NORMAL    → NONE
+tournament_scheduled         → TOURNAMENT  → NORMAL    → NONE   (only when start_day is in the future)
 tournament_started           → TOURNAMENT  → HIGH      → NONE
 tournament_completed         → TOURNAMENT  → HIGH      → NONE
 hole_created                 → COURSE      → NORMAL    → NONE
@@ -140,6 +139,13 @@ building_placed              → COURSE      → INFO      → POSITION
 end_of_day                   → DAILY       → NORMAL    → NONE
 new_game_started             → COURSE      → NORMAL    → NONE
 ```
+
+> **Intentionally not mapped:** `course_rating_changed`. The rating is recalculated
+> every time the day closes (`main.gd` end-of-day), plus on quick start, save load
+> and tournament completion, so a "Course rating updated" line repeats almost
+> verbatim every single day and buries the events worth reading. The rating stays
+> live in the HUD star readout and the Course Rating panel, and
+> `milestone_manager.gd` still listens to the signal to unlock rating milestones.
 
 ### 5. Daily Summary Format
 

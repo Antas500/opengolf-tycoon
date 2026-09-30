@@ -36,13 +36,13 @@ static func get_date(day: int) -> Dictionary:
 	return _civil_from_days(z)
 
 static func get_year(day: int) -> int:
-	return int(get_date(day).year)
+	return int(get_date(day)["year"])
 
 static func get_month(day: int) -> int:
-	return int(get_date(day).month)
+	return int(get_date(day)["month"])
 
 static func get_day_of_month(day: int) -> int:
-	return int(get_date(day).day)
+	return int(get_date(day)["day"])
 
 ## 0 = Sunday .. 6 = Saturday. Day 1 (1 Jan 2000) was a Saturday (6).
 static func get_weekday(day: int) -> int:
@@ -70,19 +70,19 @@ static func get_days_in_year(year: int) -> int:
 ## True when `day` is December 31 — the last day of its calendar year.
 static func is_last_day_of_year(day: int) -> bool:
 	var date := get_date(day)
-	return int(date.month) == 12 and int(date.day) == 31
+	return int(date["month"]) == 12 and int(date["day"]) == 31
 
 ## True when `day` is January 1 — the first day of its calendar year.
 static func is_first_day_of_year(day: int) -> bool:
 	var date := get_date(day)
-	return int(date.month) == 1 and int(date.day) == 1
+	return int(date["month"]) == 1 and int(date["day"]) == 1
 
 ## 1-based day index within the calendar year (1 Jan -> 1).
 static func get_day_of_year(day: int) -> int:
 	var date := get_date(day)
-	var ordinal := int(date.day)
-	for m in range(1, int(date.month)):
-		ordinal += get_days_in_month(int(date.year), m)
+	var ordinal := int(date["day"])
+	for m in range(1, int(date["month"])):
+		ordinal += get_days_in_month(int(date["year"]), m)
 	return ordinal
 
 ## Absolute 1-based game day of 1 January of the given calendar year.
@@ -93,7 +93,7 @@ static func get_year_start_day(year: int) -> int:
 static func format_date(day: int) -> String:
 	var date := get_date(day)
 	var weekday := WEEKDAY_NAMES_SHORT[get_weekday(day)]
-	return "%s %d %s %d" % [weekday, int(date.day), MONTH_NAMES_SHORT[int(date.month) - 1], int(date.year)]
+	return "%s %d %s %d" % [weekday, int(date["day"]), MONTH_NAMES_SHORT[int(date["month"]) - 1], int(date["year"])]
 
 ## Long date for panels and summaries, e.g. "Saturday, 1 January 2000".
 static func format_date_long(day: int) -> String:
@@ -101,20 +101,20 @@ static func format_date_long(day: int) -> String:
 	const WEEKDAY_LONG: Array[String] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 	return "%s, %d %s %d" % [
 		WEEKDAY_LONG[get_weekday(day)],
-		int(date.day),
-		MONTH_NAMES_LONG[int(date.month) - 1],
-		int(date.year),
+		int(date["day"]),
+		MONTH_NAMES_LONG[int(date["month"]) - 1],
+		int(date["year"]),
 	]
 
 ## Compact stamp for histories, e.g. "1 Jan 2000".
 static func format_date_short(day: int) -> String:
 	var date := get_date(day)
-	return "%d %s %d" % [int(date.day), MONTH_NAMES_SHORT[int(date.month) - 1], int(date.year)]
+	return "%d %s %d" % [int(date["day"]), MONTH_NAMES_SHORT[int(date["month"]) - 1], int(date["year"])]
 
 ## Month label, e.g. "January 2000".
 static func format_month(day: int) -> String:
 	var date := get_date(day)
-	return "%s %d" % [MONTH_NAMES_LONG[int(date.month) - 1], int(date.year)]
+	return "%s %d" % [MONTH_NAMES_LONG[int(date["month"]) - 1], int(date["year"])]
 
 # --- Hinnant's calendar algorithms (days relative to 1970-01-01) ---
 

@@ -348,7 +348,7 @@ func _on_ball_shot_precise(golfer_id: int, from_screen: Vector2, to_screen: Vect
 	if golfer_manager:
 		var golfer: Golfer = golfer_manager.get_golfer(golfer_id)
 		if golfer and golfer.player_profile:
-			if golfer.player_punch:
+			if golfer.is_player_punch():
 				ball.flight_max_height *= 0.3
 			elif golfer.player_shape == 3:
 				ball.flight_max_height *= 1.4

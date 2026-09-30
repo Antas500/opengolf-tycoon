@@ -46,7 +46,7 @@ func test_special_shapes_only_on_tee_and_fairway() -> void:
 		for shape in [1, 2, 3]:
 			assert_eq(Golfer.shape_allowed(shape, terrain), terrain in [TerrainTypes.Type.TEE_BOX,
 				TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY])
-	assert_false(Golfer.shape_allowed(4, TerrainTypes.Type.FAIRWAY))
+		assert_true(Golfer.shape_allowed(4, terrain), "Low punch is available on every lie")
 
 func test_player_waits_off_green_but_putting_is_automatic() -> void:
 	var saved_grid = GameManager.terrain_grid
@@ -83,7 +83,7 @@ func test_player_range_power_and_punch() -> void:
 	golfer.player_profile.allocate(0, 1)
 	golfer.player_profile.allocate(1, 1)
 	assert_gt(golfer.player_aim(target).x, normal)
-	golfer.player_punch = true
+	golfer.player_shape = 4
 	assert_lt(golfer.player_aim(target).x, normal)
 	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
@@ -191,9 +191,9 @@ func test_preview_reflects_shapes_punch_and_backspin() -> void:
 		"Backspin rolls backwards toward the ball")
 	assert_eq(backspin.roll_path.size(), 2, "Backspin rolls straight back along the shot line")
 
-	golfer.player_shape = 0
-	golfer.player_punch = true
+	golfer.player_shape = 4
 	var punch := golfer.preview_shot(target)
+	assert_true(punch.punch, "Selecting low punch sets the punch shot")
 	assert_lt(float(punch.arc_scale), 1.0, "Punch flattens the arc")
 	assert_lt(punch.carry.distance_to(punch.origin), straight.carry.distance_to(straight.origin), "Punch is shorter")
 	var straight_ratio: float = straight.rollout_tiles / straight.carry.distance_to(straight.origin)

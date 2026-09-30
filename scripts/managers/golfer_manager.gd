@@ -320,15 +320,15 @@ func _update_group(group: Array) -> void:
 			return
 
 	var course_data = GameManager.course_data
-	var min_hole = _get_group_min_hole(group)
+	var group_hole = _get_group_current_hole(group)
 
 	# First, process any golfers who have holed out and need to clear the green
 	# They should leave BEFORE the next player putts
-	if min_hole >= 0 and min_hole < course_data.holes.size():
-		var hole_data = course_data.holes[min_hole]
+	if group_hole >= 0 and group_hole < course_data.holes.size():
+		var hole_data = course_data.holes[group_hole]
 		var hole_pos = Vector2(hole_data.hole_position)
 		for golfer in group:
-			if golfer.current_state == Golfer.State.IDLE and golfer.current_hole == min_hole:
+			if golfer.current_state == Golfer.State.IDLE and golfer.current_hole == group_hole:
 				if HoleManager.is_ball_holed(golfer.ball_position_precise, hole_pos) and golfer.current_strokes > 0:
 					# This golfer has holed out - process them to send to next tee
 					_advance_golfer(golfer)
@@ -336,10 +336,11 @@ func _update_group(group: Array) -> void:
 						return  # Only process one golfer per frame
 
 	# Check if anyone on the current hole is walking to their ball
-	# Golfers walking to the NEXT tee (current_hole > min_hole) shouldn't block putting
+	# Golfers walking to the NEXT tee (current_hole taken, ball already moved on)
+	# shouldn't block putting
 	var someone_walking_on_hole = false
 	for golfer in group:
-		if golfer.current_state == Golfer.State.WALKING and golfer.current_hole == min_hole:
+		if golfer.current_state == Golfer.State.WALKING and golfer.current_hole == group_hole:
 			someone_walking_on_hole = true
 			break
 
@@ -371,14 +372,32 @@ func _update_group(group: Array) -> void:
 ## 3. FAIRWAY/GREEN (Away Rule): Golfer furthest from the hole plays first.
 ## ============================================================================
 
-func _get_group_min_hole(group: Array) -> int:
-	"""Find the minimum hole being played by any non-finished golfer in the group."""
-	var min_hole: int = 999
+## The hole the group is playing right now.
+##
+## The lowest hole index is not the same thing: a tournament pairing that reaches
+## the end of the course wraps back to the first tee, so the partner who has just
+## holed out on the last green stands on hole index 0 while the other is still on
+## the last hole. The golfer furthest back in the round — the one who has carded
+## the fewest holes — is the one the group is waiting on, and the hole they are on
+## is the one the turn system has to keep feeding. Reading the lowest index
+## instead strands that partner on the last green: they are never picked again,
+## so they never walk round to the first tee.
+func _get_group_current_hole(group: Array) -> int:
+	var course_data = GameManager.course_data
+	var hole_count: int = course_data.holes.size() if course_data else 0
+	var current_hole: int = -1
+	var fewest_played: int = 0
 	for golfer in group:
-		if golfer.current_state != Golfer.State.FINISHED:
-			if golfer.current_hole < min_hole:
-				min_hole = golfer.current_hole
-	return min_hole if min_hole < 999 else -1
+		if golfer.current_state == Golfer.State.FINISHED:
+			continue
+		if golfer.current_hole < 0 or golfer.current_hole >= hole_count:
+			continue
+		var played: int = golfer.hole_scores.size()
+		if current_hole < 0 or played < fewest_played \
+				or (played == fewest_played and golfer.current_hole < current_hole):
+			fewest_played = played
+			current_hole = golfer.current_hole
+	return current_hole
 
 func _get_honor_golfer(golfers: Array[Golfer], current_hole: int) -> Golfer:
 	"""Get the golfer with honor (best score on previous hole) for tee shots."""
@@ -426,16 +445,17 @@ func _determine_next_golfer_in_group(group_golfers: Array) -> Golfer:
 	if not course_data or course_data.holes.is_empty():
 		return null
 
-	# 1. Find the minimum hole (group stays together)
-	var min_hole = _get_group_min_hole(group_golfers)
-	if min_hole == -1:
+	# 1. Find the hole the group is on (groups stay together; a pairing that has
+	#    wrapped waits for the partner still to finish the last hole)
+	var group_hole = _get_group_current_hole(group_golfers)
+	if group_hole == -1:
 		return null  # Everyone is finished
 
-	# 2. Get golfers who are IDLE and on the minimum hole
+	# 2. Get golfers who are IDLE and on that hole
 	var eligible: Array[Golfer] = []
 	for golfer in group_golfers:
 		if golfer.current_state == Golfer.State.IDLE:
-			if golfer.current_hole == min_hole:
+			if golfer.current_hole == group_hole:
 				if golfer.current_hole < course_data.holes.size():
 					eligible.append(golfer)
 
@@ -454,11 +474,11 @@ func _determine_next_golfer_in_group(group_golfers: Array) -> Golfer:
 
 	# 4. Tee shots: Honor system (best score on previous hole)
 	if not on_tee.is_empty():
-		return _get_honor_golfer(on_tee, min_hole)
+		return _get_honor_golfer(on_tee, group_hole)
 
 	# 5. Fairway/green: Away rule (furthest from hole)
 	if not on_fairway.is_empty():
-		return _get_away_golfer(on_fairway, min_hole)
+		return _get_away_golfer(on_fairway, group_hole)
 
 	return null
 
@@ -520,6 +540,57 @@ func _is_landing_area_clear(shooting_golfer: Golfer, _group_golfers: Array) -> b
 	# Cone-based check: only blocks if golfers are ahead in the shot direction
 	return _is_cone_clear_of_golfers(ball_pos, target, lateral_radius, shooting_golfer.group_id, shooting_golfer.current_hole)
 
+## The hole a golfer plays next after `from_index`, or -1 when their round is
+## over.
+##
+## Tournament pairings tee off on their own hole, so their round wraps back to
+## the first tee and keeps going until the golfer has played the full circuit —
+## every open hole exactly once, so everyone is measured against the same par.
+## A hole that is already on the card is never played again: without that check a
+## pairing that teed off in the middle of the course went round to the first tee
+## and then back onto the holes it had started on, making its card longer than
+## the rest of the field's.
+func _next_hole_for(golfer: Golfer, course_data, from_index: int) -> int:
+	var next_index := _find_next_uncarded_hole(golfer, course_data, from_index)
+	if next_index >= 0:
+		return next_index
+	if _round_wraps_for(golfer, course_data):
+		return _find_next_uncarded_hole(golfer, course_data, 0)
+	return -1
+
+## The next open hole at or after `from_index` that is not already on this
+## golfer's card, or -1 when every open hole from there on has been played.
+func _find_next_uncarded_hole(golfer: Golfer, course_data, from_index: int) -> int:
+	var index := _find_next_open_hole(from_index, course_data)
+	while index < course_data.holes.size():
+		if not _has_carded_hole(golfer, course_data, index):
+			return index
+		index = _find_next_open_hole(index + 1, course_data)
+	return -1
+
+## Is the hole at `hole_index` already on this golfer's card? Cards record the
+## published hole number, which is not the same thing as the index on a course
+## whose holes have been renumbered.
+func _has_carded_hole(golfer: Golfer, course_data, hole_index: int) -> bool:
+	var hole_number: int = course_data.holes[hole_index].hole_number
+	for card in golfer.hole_scores:
+		if int(card.get("hole", -1)) == hole_number:
+			return true
+	return false
+
+## Does this golfer wrap around the course instead of finishing early?
+func _round_wraps_for(golfer: Golfer, course_data) -> bool:
+	if not golfer.is_tournament_golfer or golfer.is_owner_round:
+		return false
+	return golfer.hole_scores.size() < _count_open_holes(course_data)
+
+static func _count_open_holes(course_data) -> int:
+	var open_holes := 0
+	for hole in course_data.holes:
+		if hole.is_open:
+			open_holes += 1
+	return open_holes
+
 func _advance_golfer(golfer: Golfer) -> void:
 	"""Advance a specific golfer to their next shot"""
 	var course_data = GameManager.course_data
@@ -530,7 +601,11 @@ func _advance_golfer(golfer: Golfer) -> void:
 
 	# Skip closed holes when starting a new hole
 	if golfer.current_strokes == 0:
-		next_hole_index = _find_next_open_hole(next_hole_index, course_data)
+		next_hole_index = _next_hole_for(golfer, course_data, next_hole_index)
+		if next_hole_index < 0:
+			# Round completed
+			golfer.finish_round()
+			return
 		golfer.current_hole = next_hole_index
 
 	if next_hole_index >= course_data.holes.size():
@@ -595,12 +670,11 @@ func _advance_golfer(golfer: Golfer) -> void:
 			golfer.current_strokes = 0
 
 			# Skip any closed holes after finishing
-			golfer.current_hole = _find_next_open_hole(golfer.current_hole, course_data)
-
-			# Check if round is complete after advancing to next hole
-			if golfer.current_hole >= course_data.holes.size():
+			var follow_up = _next_hole_for(golfer, course_data, golfer.current_hole)
+			if follow_up < 0:
 				golfer.finish_round()
 				return
+			golfer.current_hole = follow_up
 
 			# Immediately walk to the next tee to clear the green
 			# Don't wait for turn - golfers should move off the green right away
@@ -786,6 +860,21 @@ func get_tournament_golfers() -> Array[Golfer]:
 		if golfer.is_tournament_golfer and not golfer.is_owner_round:
 			result.append(golfer)
 	return result
+
+## Place a golfer on the tee of one specific hole without starting it.
+##
+## Tournament pairings are seated on their own hole, so an event opens with two
+## competitors visible on every tee instead of a queue behind the first one.
+func seat_golfer_at_hole(golfer: Golfer, hole_index: int) -> void:
+	var course_data = GameManager.course_data
+	if not course_data or hole_index < 0 or hole_index >= course_data.holes.size():
+		return
+	var hole_data = course_data.holes[hole_index]
+	golfer.current_hole = hole_index
+	golfer.ball_position = hole_data.tee_position
+	golfer.ball_position_precise = Vector2(hole_data.tee_position)
+	if GameManager.terrain_grid:
+		golfer.global_position = GameManager.terrain_grid.grid_to_screen_center(hole_data.tee_position)
 
 ## Remove all tournament golfers from the course
 func remove_tournament_golfers() -> void:
