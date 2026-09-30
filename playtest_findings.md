@@ -259,3 +259,32 @@ Final results: days 13–15 at $10/hole with relaxed capacity and added seating 
 - Tile art reuses the course drawings (GardenArt pieces, shared path furniture, pixel-art sprites), so the shelf and the placed ornament are the same artwork. The unused `CatalogArtwork` helper was deleted.
 
 Validation: GUT 692 tests / 5,068 assertions, all 28 previews drawn headlessly without errors, the eight short integration checks green (including a new main-scene shelf check: tab opens, locks follow the rating, a tile places at the catalogue price), the 3-day fresh-start management loop passing with save/reload equality (day profits +$520, -$187 and -$52 at $5/$20/$5 per hole), and the 12-day headless harness completing every day with save/load and no runtime errors. The real 12-day guest campaign was not re-run to the end — it needs one to two hours of wall clock on this two-core sandbox — and it buys its decorations through the normal placement click path rather than the toolbar, which the shelf check, the management loop and the harness already cover.
+
+## Pace of play pass — September 30, 2026
+
+- A group no longer stands still waiting for its own members to walk. The turn
+  passes as soon as the shot in progress has come to rest, so the next golfer
+  away plays while their partners carry on walking to their ball. Before this,
+  every fairway and green shot waited for the whole group to arrive, which is
+  where the "waiting for playing partners" dead time came from.
+- Walking is still not a licence to hit anybody: a partner on the move holds the
+  turn up while they stand in the line of the shot — inside the landing cone of a
+  full swing, or within a tile of a chip or putt's route, so nobody is struck
+  while bending over the cup. They step clear in under a second and the group
+  goes.
+- Unchanged: one shot at a time per group, honor off the tee, the away rule
+  through the green, the group ahead clearing the landing cone, and the whole
+  group teeing off in turn before anybody waits.
+
+Validation: GUT 941 tests / 15,419 assertions with the same 12 pre-existing
+failures as before the change (course rating, daily statistics, calendar
+rollover, season blending, weed sprouting — none of them touch turn order).
+`tests/unit/test_group_turn_order.gd` covers the new behaviour and fails against
+the old scheduler. `tests/harness/ready_golf_harness.tscn` plays one foursome
+three holes each on the real quick-start course at ULTRA speed: frames with a
+golfer ready, a partner walking and no shot in progress fell from 17.5% and
+18.7% of group time to 5.3%, 5.7% and 8.3% across repeat runs, and shots struck
+while a partner was still walking rose from 33/168 and 36/183 to 62/191, 70/184
+and 69/182. The harness is a simulation stepped on real frame deltas, so it is
+not bit-for-bit repeatable; read it as a range, and note the visual playtest of a
+live round was not run.

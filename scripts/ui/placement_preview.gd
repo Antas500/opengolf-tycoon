@@ -51,6 +51,9 @@ const HOLE_PATH_NOTE_FONT_SIZE := 11
 var potential_hole: Dictionary = {}
 ## Planned route for potential_hole: [tee, landing..., cup], or [] while planning.
 var potential_hole_route: Array[Vector2i] = []
+## Painted pair stays visible until Open Hole claims the cup.
+var waiting_hole: Dictionary = {}
+var waiting_hole_route: Array[Vector2i] = []
 var _hole_path_planner := HolePathPlanner.new()
 
 # Animation state
@@ -95,6 +98,14 @@ func _process(_delta: float) -> void:
 		_target_alpha = 0.0
 		current_preview_positions = []
 		_clear_potential_hole()
+
+	# This overlay belongs to the course, not the cursor or selected tool.
+	waiting_hole = HoleLayout.waiting_hole(terrain_grid, GameManager.current_course)
+	waiting_hole_route = []
+	if not waiting_hole.is_empty():
+		waiting_hole_route = _hole_path_planner.route_for(terrain_grid, waiting_hole.tee,
+				waiting_hole.cup, waiting_hole.par, waiting_hole.extra_tees.values())
+		queue_redraw()
 
 	# Smooth alpha transition
 	_current_alpha = lerp(_current_alpha, _target_alpha, delta * 10.0)
@@ -226,7 +237,8 @@ func _clear_potential_hole() -> void:
 		potential_hole = {}
 		potential_hole_route = []
 		queue_redraw()
-	_hole_path_planner.cancel_pending()
+	if HoleLayout.waiting_hole(terrain_grid, GameManager.current_course).is_empty():
+		_hole_path_planner.cancel_pending()
 	# Let a finished task hand its route to the cache even while hidden.
 	_hole_path_planner.poll()
 
@@ -249,6 +261,9 @@ func _draw() -> void:
 	if _hole_move_mode != 0:
 		_draw_hole_move_preview()
 		return
+
+	if not waiting_hole.is_empty():
+		_draw_potential_hole(1.0, waiting_hole, waiting_hole_route)
 
 	if _current_alpha < 0.01:
 		return
@@ -288,7 +303,7 @@ func _draw() -> void:
 		_draw_path_ghost(alpha_mod)
 
 	if not potential_hole.is_empty():
-		_draw_potential_hole(_current_alpha)
+		_draw_potential_hole(_current_alpha, potential_hole, potential_hole_route)
 
 	if elevation_mode_active:
 		_draw_elevation_brush(alpha_mod)
@@ -876,16 +891,15 @@ func _draw_ghost_generic(pos: Vector2, w: float, h: float, a: float) -> void:
 ## Draw the hole the hovered tile would make: the waiting tee, the expected shot
 ## route (dashed; a straight provisional line while a par 4/5 route is planned),
 ## the landing zones, the cup-to-be and a "Hole N · Par P · Y yds" plaque.
-func _draw_potential_hole(alpha: float) -> void:
-	var hole := potential_hole
+func _draw_potential_hole(alpha: float, hole: Dictionary, route: Array[Vector2i]) -> void:
 	var tee: Vector2i = hole.tee
 	var cup: Vector2i = hole.cup
 	var hole_ready: bool = hole.ready
-	var planned: bool = not potential_hole_route.is_empty()
+	var planned: bool = not route.is_empty()
 
 	var points := PackedVector2Array()
 	if planned:
-		for waypoint in potential_hole_route:
+		for waypoint in route:
 			points.append(OverlayGeometry.tile_center(terrain_grid, self, waypoint))
 	else:
 		# Par 4/5 route still being planned: a provisional straight line.
@@ -995,28 +1009,24 @@ func _draw_hole_move_preview() -> void:
 	var preview_color: Color
 	var label_text: String
 
-	# HoleMoveMode: 1=PIN, 2=TEE, 3=GREEN (matches main.gd enum)
+	# HoleMoveMode: 1=TEE, 2=GREEN, 3=FORWARD_TEE, 4=MIDDLE_TEE (matches main.gd enum)
 	match _hole_move_mode:
-		1:  # MOVING_PIN
-			is_valid = terrain_grid.get_tile(hover_pos) == TerrainTypes.Type.GREEN
-			preview_color = Color(0.3, 0.9, 0.5, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
-			label_text = "Pin"
-		2:  # MOVING_TEE
+		1:  # MOVING_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.4, 0.85, 0.45, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Tee"
-		3:  # MOVING_GREEN
+		2:  # MOVING_GREEN
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.3, 0.9, 0.5, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Green"
-		4:  # MOVING_FORWARD_TEE
+		3:  # MOVING_FORWARD_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.9, 0.3, 0.3, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Fwd Tee"
-		5:  # MOVING_MIDDLE_TEE
+		4:  # MOVING_MIDDLE_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.85, 0.85, 0.85, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)

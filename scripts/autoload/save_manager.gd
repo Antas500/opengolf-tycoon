@@ -265,8 +265,6 @@ func _serialize_holes(holes: Array) -> Array:
 			"par_override": hole.par_override,
 			"tee_positions": _serialize_tee_positions(hole.tee_positions),
 			"par_by_tee": hole.par_by_tee.duplicate(),
-			"pin_positions": _serialize_pin_positions(hole.pin_positions),
-			"current_pin_index": hole.current_pin_index,
 		})
 	return result
 
@@ -275,12 +273,6 @@ func _serialize_tee_positions(tee_positions: Dictionary) -> Dictionary:
 	for key in tee_positions:
 		var pos = tee_positions[key]
 		result[key] = {"x": pos.x, "y": pos.y}
-	return result
-
-func _serialize_pin_positions(pin_positions: Array) -> Array:
-	var result: Array = []
-	for pos in pin_positions:
-		result.append({"x": pos.x, "y": pos.y})
 	return result
 
 ## Offset every height in a serialized elevation map ("x,y" -> int) by `shift`
@@ -504,15 +496,11 @@ func _deserialize_holes(holes_data: Array) -> void:
 			for key in saved_par_by_tee:
 				hole.par_by_tee[key] = int(saved_par_by_tee[key])
 
-		# Pin positions (backward compat: use hole_position as single pin)
-		var saved_pins = h.get("pin_positions", [])
-		if saved_pins.is_empty():
-			hole.pin_positions = [hole.hole_position]
-		else:
-			hole.pin_positions = []
-			for pp in saved_pins:
-				hole.pin_positions.append(Vector2i(int(pp.get("x", 0)), int(pp.get("y", 0))))
-		hole.current_pin_index = int(h.get("current_pin_index", 0))
+		# Cup: the hole's single cup always lives on its Green With Hole tile.
+		# Older saves kept up to four rotating pin positions and could have the
+		# active pin elsewhere on the green; those collapse back onto the tile.
+		# (Legacy "pin_positions"/"current_pin_index" keys are ignored.)
+		hole.hole_position = hole.green_position
 
 		GameManager.current_course.holes.append(hole)
 

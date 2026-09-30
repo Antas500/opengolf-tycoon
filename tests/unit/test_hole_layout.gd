@@ -27,7 +27,6 @@ func _make_hole(tee: Vector2i, cup: Vector2i) -> GameManager.HoleData:
 	hole.green_position = cup
 	hole.hole_position = cup
 	hole.tee_positions = {"back": tee, "middle": tee, "forward": tee}
-	hole.pin_positions = [cup]
 	course.add_hole(hole)
 	return hole
 

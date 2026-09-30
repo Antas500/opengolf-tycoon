@@ -13,7 +13,6 @@ var waypoint_markers: Array[Node2D] = []
 var carry_annotations: Array[Node2D] = []
 static var carry_annotations_visible: bool = false  # Toggled by J hotkey with fairway width
 var tee_markers: Array[Node2D] = []
-var pin_markers: Array[Node2D] = []
 var _line_update_pending: bool = false
 
 signal hole_selected(hole_number: int)
@@ -26,7 +25,6 @@ func initialize(hole: GameManager.HoleData, grid: TerrainGrid) -> void:
 	terrain_grid = grid
 	_create_visuals()
 	EventBus.terrain_tile_changed.connect(_on_terrain_tile_changed)
-	EventBus.pins_rotated.connect(_on_pins_rotated)
 
 func _create_visuals() -> void:
 	# Create shot path line (routed through golfer AI waypoints)
@@ -41,9 +39,8 @@ func _create_visuals() -> void:
 	# Create forced carry annotations
 	_update_carry_annotations()
 
-	# Create tee box and pin position markers
+	# Create tee box markers
 	_update_tee_markers()
-	_update_pin_markers()
 
 func _create_connection_line() -> void:
 	if line:
@@ -123,8 +120,6 @@ func _create_flag() -> void:
 		# Disconnect signals before freeing to prevent leaks
 		if flag.flag_selected.is_connected(_on_flag_selected):
 			flag.flag_selected.disconnect(_on_flag_selected)
-		if flag.flag_moved.is_connected(_on_flag_moved):
-			flag.flag_moved.disconnect(_on_flag_moved)
 		remove_child(flag)
 		flag.free()
 
@@ -137,7 +132,6 @@ func _create_flag() -> void:
 
 	# Connect flag signals
 	flag.flag_selected.connect(_on_flag_selected)
-	flag.flag_moved.connect(_on_flag_moved)
 
 func _create_info_label() -> void:
 	if info_label:
@@ -202,32 +196,6 @@ func highlight(enabled: bool) -> void:
 func _on_flag_selected(_selected_flag: Flag) -> void:
 	hole_selected.emit(hole_data.hole_number)
 
-func _on_flag_moved(_old_position: Vector2i, new_position: Vector2i) -> void:
-	# Update hole data
-	hole_data.hole_position = new_position
-
-	# Sync pin_positions array: update the current pin index entry
-	if hole_data.pin_positions.size() > 0 and hole_data.current_pin_index < hole_data.pin_positions.size():
-		hole_data.pin_positions[hole_data.current_pin_index] = new_position
-
-	# Recalculate distance and par if green position changed
-	hole_data.distance_yards = terrain_grid.calculate_distance_yards(
-		hole_data.tee_position,
-		new_position
-	)
-	_recalculate_par_with_override()
-
-	# Recalculate difficulty
-	hole_data.difficulty_rating = DifficultyCalculator.calculate_hole_difficulty(hole_data, terrain_grid)
-
-	# Update visuals (shot path recalculates based on new flag position)
-	_update_line()
-	_update_info_label()
-	_update_carry_annotations()
-	_update_pin_markers()
-
-	EventBus.hole_updated.emit(hole_data.hole_number)
-
 func _on_terrain_tile_changed(_position: Vector2i, _old_type: int, _new_type: int) -> void:
 	# Debounce: only recalculate once per frame even if many tiles change
 	if not _line_update_pending:
@@ -267,15 +235,12 @@ func update_tee_position(new_tee_pos: Vector2i) -> void:
 	_update_tee_markers()
 	EventBus.hole_updated.emit(hole_data.hole_number)
 
-func update_green_position(new_green_pos: Vector2i, move_pin: bool = true) -> void:
+func update_green_position(new_green_pos: Vector2i) -> void:
 	hole_data.green_position = new_green_pos
-	if move_pin:
-		hole_data.hole_position = new_green_pos
-		flag.set_position_in_grid(new_green_pos)
-	# Regenerate pin positions for the new green
-	hole_data.auto_generate_pin_positions(terrain_grid)
+	# The cup is the hole's Green With Hole tile, so it moves with the green.
+	hole_data.hole_position = new_green_pos
 	if flag:
-		flag.set_position_in_grid(hole_data.hole_position)
+		flag.set_position_in_grid(new_green_pos)
 	# Regenerate tee positions (forward/middle depend on green location)
 	if GameManager.multi_tee_enabled:
 		hole_data.auto_generate_tee_positions(terrain_grid)
@@ -291,7 +256,6 @@ func update_green_position(new_green_pos: Vector2i, move_pin: bool = true) -> vo
 	_update_info_label()
 	_update_carry_annotations()
 	_update_tee_markers()
-	_update_pin_markers()
 	EventBus.hole_updated.emit(hole_data.hole_number)
 
 func _recalculate_par_with_override() -> void:
@@ -418,61 +382,11 @@ func _create_tee_marker(grid_pos: Vector2i, color: Color) -> Node2D:
 
 	return marker
 
-func _update_pin_markers() -> void:
-	for marker in pin_markers:
-		if is_instance_valid(marker):
-			remove_child(marker)
-			marker.free()
-	pin_markers.clear()
-
-	if not hole_data or not terrain_grid or hole_data.pin_positions.size() <= 1:
-		return
-
-	# Draw dim markers at inactive pin positions
-	for i in range(hole_data.pin_positions.size()):
-		if i == hole_data.current_pin_index:
-			continue  # Skip the active pin (it has the flag)
-		var pin_pos: Vector2i = hole_data.pin_positions[i]
-		var marker = _create_pin_marker(pin_pos)
-		add_child(marker)
-		pin_markers.append(marker)
-
-func _create_pin_marker(grid_pos: Vector2i) -> Node2D:
-	var marker := Node2D.new()
-	var screen_pos: Vector2 = terrain_grid.grid_to_screen_center(grid_pos)
-	marker.position = to_local(screen_pos)
-	marker.z_index = -1
-
-	# Small dim gold circle
-	var circle := Polygon2D.new()
-	var points := PackedVector2Array()
-	for i in range(8):
-		var angle: float = (i / 8.0) * TAU
-		points.append(Vector2(cos(angle) * 3.0, sin(angle) * 3.0))
-	circle.polygon = points
-	circle.color = Color(0.8, 0.7, 0.2, 0.4)  # Dim gold
-	marker.add_child(circle)
-
-	return marker
-
-func _on_pins_rotated() -> void:
-	if not hole_data:
-		return
-	# Update flag to new pin position
-	if flag and hole_data.pin_positions.size() > 0:
-		flag.set_position_in_grid(hole_data.hole_position)
-	# Refresh pin markers
-	_update_pin_markers()
-	# Recalculate shot path and carry for new pin
-	_update_line()
-	_update_carry_annotations()
-
 func update_visualization() -> void:
 	_update_line()
 	_update_info_label()
 	_update_carry_annotations()
 	_update_tee_markers()
-	_update_pin_markers()
 
 func refresh_positions() -> void:
 	if flag and is_instance_valid(flag) and hole_data:
@@ -485,8 +399,6 @@ func get_hole_number() -> int:
 func _exit_tree() -> void:
 	if EventBus.terrain_tile_changed.is_connected(_on_terrain_tile_changed):
 		EventBus.terrain_tile_changed.disconnect(_on_terrain_tile_changed)
-	if EventBus.pins_rotated.is_connected(_on_pins_rotated):
-		EventBus.pins_rotated.disconnect(_on_pins_rotated)
 
 func destroy() -> void:
 	if flag:

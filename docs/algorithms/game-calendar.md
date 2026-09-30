@@ -103,7 +103,6 @@ yearly_stats = new DailyStatistics;  yearly_days = 0;  yearly_satisfaction_sum =
 | `SECONDS_PER_GAME_DAY` | 3.5 s | Real seconds per game day at NORMAL |
 | `LEGACY_DAY_SECONDS` | 1680 s | Old 6 AM–8 PM day length (rate scaling reference) |
 | `DAILY_RATE_SCALE` | ≈ 1/480 | Legacy per-day → new per-day rate factor |
-| `PIN_ROTATION_INTERVAL_DAYS` | 30 | Pins rotate monthly now |
 | `AUTOSAVE_INTERVAL_DAYS` | 30 | Autosave every ~month + at year end |
 | `LOAN_ANNUAL_INTEREST_RATE` | 10% | Charged on loan balance at year end |
 

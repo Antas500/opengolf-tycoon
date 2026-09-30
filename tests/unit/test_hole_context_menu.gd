@@ -20,7 +20,6 @@ func before_each() -> void:
 	hole.tee_position = Vector2i(2, 2)
 	hole.green_position = Vector2i(10, 10)
 	hole.hole_position = Vector2i(10, 10)
-	hole.pin_positions = [Vector2i(10, 10)]
 	grid.set_tile(hole.tee_position, TerrainTypes.Type.TEE_BOX)
 	grid.set_tile(hole.green_position, TerrainTypes.Type.GREEN)
 
@@ -62,3 +61,10 @@ func test_delete_hole_only_asks() -> void:
 func test_the_menu_still_offers_the_open_close_toggle_and_statistics() -> void:
 	assert_not_null(_menu_button("Close Hole"), "An open hole can be closed from its menu")
 	assert_not_null(_menu_button("View Statistics"), "Statistics stay one click away")
+
+func test_the_cup_stays_on_its_green_with_hole_tile() -> void:
+	# The cup has one home — the hole's Green With Hole tile — so the menu
+	# offers no way to move the pin elsewhere on the green. Relocating the
+	# cup is only possible by moving the whole green.
+	assert_null(_menu_button("Move Pin Position"), "The cup is not movable on its own")
+	assert_not_null(_menu_button("Move Green"), "Moving the green moves the cup with it")

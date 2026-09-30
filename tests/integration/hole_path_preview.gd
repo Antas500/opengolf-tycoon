@@ -133,7 +133,12 @@ func run() -> void:
 	check(grid.get_cup_tiles() == [par4_cup], "The cup was cut where the path ended")
 	hover(par4_cup + Vector2i(0, 3))
 	for i in range(3): await process_frame
-	check(preview.potential_hole.is_empty(), "With a cup waiting the path is hidden")
+	check(preview.potential_hole.is_empty(), "The hover path is hidden once a cup waits")
+	check(preview.waiting_hole.get("cup") == par4_cup, "Painted cup keeps the hole path anchored")
+	check(preview.waiting_hole.get("par") == 4, "Painted pair retains its par")
+	main._cancel_action()
+	for i in range(3): await process_frame
+	check(preview.waiting_hole.get("cup") == par4_cup, "Path persists without an active tool")
 
 	# --- Open the hole: its route is the one that was previewed ---
 	main._on_open_hole_pressed()
@@ -147,7 +152,8 @@ func run() -> void:
 				"Opened hole route %s matches the preview %s" % [str(opened_route), str(previewed)])
 	hover(Vector2i(64, 64))
 	for i in range(3): await process_frame
-	check(preview.potential_hole.is_empty(), "Every tee is claimed again: no path")
+	check(preview.potential_hole.is_empty(), "Every tee is claimed again: no hover path")
+	check(preview.waiting_hole.is_empty(), "Opening the hole clears the waiting path")
 
 	# --- Hole 2, multi-tee on: a par 5 whose forward/middle tees Open Hole paints ---
 	gm.multi_tee_enabled = true
