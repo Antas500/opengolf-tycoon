@@ -229,3 +229,25 @@ static func potential_hole(tool_type: int, grid: TerrainGrid, course: GameManage
 		"ready": reason.is_empty(),
 		"reason": reason,
 	}
+
+## The painted tee/cup pair awaiting Open Hole, independent of the active brush.
+## Recomputed from the grid so repainting either end immediately removes it.
+static func waiting_hole(grid: TerrainGrid, course: GameManager.CourseData) -> Dictionary:
+	if not grid:
+		return {}
+	var tees := unused_tee_boxes(grid, course)
+	var cups := unused_cups(grid, course)
+	if tees.size() != 1 or cups.size() != 1:
+		return {}
+	var tee: Vector2i = tees[0]
+	var cup: Vector2i = cups[0]
+	var yards := grid.calculate_distance_yards(tee, cup)
+	var ready := Vector2(cup - tee).length() >= MIN_HOLE_TILES
+	return {
+		"tee": tee, "cup": cup,
+		"hole_number": (course.holes.size() if course else 0) + 1,
+		"distance_yards": yards, "par": GolfRules.calculate_par(yards),
+		"extra_tees": extra_tee_tiles(grid, tee, cup),
+		"ready": ready,
+		"reason": "" if ready else "Too short — a hole needs %d yds" % min_hole_yards(),
+	}
