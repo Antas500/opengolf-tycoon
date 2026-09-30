@@ -335,15 +335,6 @@ func _update_group(group: Array) -> void:
 					if golfer.current_state != Golfer.State.FINISHED:
 						return  # Only process one golfer per frame
 
-	# Check if anyone on the current hole is walking to their ball
-	# Golfers walking to the NEXT tee (current_hole taken, ball already moved on)
-	# shouldn't block putting
-	var someone_walking_on_hole = false
-	for golfer in group:
-		if golfer.current_state == Golfer.State.WALKING and golfer.current_hole == group_hole:
-			someone_walking_on_hole = true
-			break
-
 	# Get the next golfer to play based on golf rules
 	var next_golfer = _determine_next_golfer_in_group(group)
 	if not next_golfer:
@@ -352,13 +343,113 @@ func _update_group(group: Array) -> void:
 	var is_tee_shot = next_golfer.current_strokes == 0
 
 	# TEE SHOTS: Can proceed while others walk to their balls (all tee off first)
-	# FAIRWAY SHOTS: Wait for everyone to finish walking on THIS hole (away rule)
-	if is_tee_shot or not someone_walking_on_hole:
+	# FAIRWAY/GREEN SHOTS: Ready golf. The turn passes as soon as the previous
+	# shot has come to rest — a partner still walking to their ball only holds
+	# the group up while they are standing in the line of this shot.
+	if is_tee_shot or _is_walking_group_clear(next_golfer, group):
 		if _is_landing_area_clear(next_golfer, group):
 			_advance_golfer(next_golfer)
 		else:
 			for golfer in group:
 				golfer.traffic_blocked = true
+
+## ============================================================================
+## READY GOLF: PARTNERS WHO ARE STILL WALKING
+## ============================================================================
+## The group plays on as soon as the shot in progress has come to rest (nobody is
+## left in PREPARING_SHOT / SWINGING / WATCHING). Walking is no longer a turn in
+## itself: it only holds the group up when the ball would actually be hit at the
+## walker. Before this, every fairway and green shot waited for the whole group
+## to reach their ball, so a four-ball spent most of a hole standing still.
+
+## Clearance (tiles, ~22 yards each) kept around the route of a chip or putt, so
+## a partner is never struck while they are bending over the cup to pick their
+## ball up. Small on purpose: a walker steps clear in about a second, so the
+## hold-up is a beat rather than the wait the group used to sit through.
+const GROUP_SHORT_SHOT_CLEARANCE_TILES: float = 1.0
+## Shots shorter than this (tiles) are treated as chips and putts: the whole
+## route to the target is kept clear instead of just the landing zone.
+const GROUP_SHORT_SHOT_DISTANCE_TILES: float = 2.5
+
+## Are the partners who are still walking out of the line of this shot?
+##
+## Two shapes are checked, because a full swing and a putt leave the ball in
+## different places:
+##   * a chip or putt keeps its whole route to the target clear, and
+##   * anything with air under it keeps the landing cone clear (carry plus
+##     spread) — the same cone the group-ahead safety check uses.
+## A partner's *body* is what a ball would hit, and a walking golfer's body is
+## well short of the ball they are heading to, so the check uses where they are
+## standing rather than where their ball has landed. Partners who have stopped
+## walking are never checked: they are standing at their own ball, exactly as
+## they were back when the group waited for everyone to arrive.
+func _is_walking_group_clear(shooting_golfer: Golfer, group: Array) -> bool:
+	var course_data = GameManager.course_data
+	if not course_data or course_data.holes.is_empty():
+		return true
+	if shooting_golfer.current_hole < 0 or shooting_golfer.current_hole >= course_data.holes.size():
+		return true
+
+	var hole_position = Vector2(course_data.holes[shooting_golfer.current_hole].hole_position)
+	var origin = Vector2(shooting_golfer.ball_position)
+	var target = Vector2(shooting_golfer.get_cached_or_compute_shot_target(hole_position))
+	var shot_distance = origin.distance_to(target)
+	var is_short_shot = shot_distance < GROUP_SHORT_SHOT_DISTANCE_TILES
+	var direction = (target - origin).normalized() if shot_distance > 0.001 else Vector2.ZERO
+	var lateral_radius = _get_landing_zone_radius(shot_distance)
+	# Shots rarely land shorter than 60% of the target distance, and the landing
+	# zone extends one spread past it (mirrors _is_cone_clear_of_golfers).
+	var min_check_distance = shot_distance * 0.6
+	var max_check_distance = shot_distance + lateral_radius
+
+	for golfer in group:
+		if golfer == shooting_golfer:
+			continue
+		if golfer.current_state != Golfer.State.WALKING:
+			continue
+		if golfer.current_hole != shooting_golfer.current_hole:
+			continue
+
+		var partner_position = _group_member_grid_position(golfer)
+
+		if is_short_shot:
+			# The ball rolls along the ground the whole way, so the route matters.
+			if _distance_to_line_segment(partner_position, origin, target) < GROUP_SHORT_SHOT_CLEARANCE_TILES:
+				return false
+			continue
+
+		var to_partner = partner_position - origin
+		if direction == Vector2.ZERO:
+			continue
+		# Behind the golfer cannot be hit; short of the landing zone is flown over;
+		# past it has already been passed.
+		if to_partner.dot(direction) < 0.0:
+			continue
+		var distance_to_partner = to_partner.length()
+		if distance_to_partner < min_check_distance or distance_to_partner > max_check_distance:
+			continue
+		if distance_to_partner > 0.1:
+			if absf(direction.angle_to(to_partner.normalized())) > LANDING_CONE_HALF_ANGLE:
+				continue
+		return false
+
+	return true
+
+## Where a group member is standing, in grid coordinates.
+func _group_member_grid_position(golfer: Golfer) -> Vector2:
+	var terrain_grid = GameManager.terrain_grid
+	if terrain_grid and golfer.is_inside_tree():
+		return terrain_grid.screen_to_grid_precise(golfer.global_position)
+	return Vector2(golfer.ball_position)
+
+## Shortest distance from a point to a line segment.
+static func _distance_to_line_segment(point: Vector2, from: Vector2, to: Vector2) -> float:
+	var span = to - from
+	var span_length_sq = span.length_squared()
+	if span_length_sq <= 0.0001:
+		return point.distance_to(from)
+	var along = clampf((point - from).dot(span) / span_length_sq, 0.0, 1.0)
+	return point.distance_to(from + span * along)
 
 ## ============================================================================
 ## GOLF TURN ORDER RULES (based on USGA etiquette)
@@ -370,6 +461,9 @@ func _update_group(group: Array) -> void:
 ##    - Later holes: Golfer with best (lowest) score on previous hole has "honor"
 ##      and tees off first. Ties retain previous order.
 ## 3. FAIRWAY/GREEN (Away Rule): Golfer furthest from the hole plays first.
+## 4. READY GOLF: The turn passes once the previous shot has come to rest.
+##    Partners keep walking to their ball; only a walker standing in the line of
+##    the shot holds it up (see _is_walking_group_clear).
 ## ============================================================================
 
 ## The hole the group is playing right now.

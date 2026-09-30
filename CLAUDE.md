@@ -70,7 +70,7 @@ Detailed algorithm docs live in **`docs/algorithms/`** — see [`docs/algorithms
 
 **When modifying any algorithm or adding a new one, update the corresponding doc in `docs/algorithms/`.** If adding a new system, create a new markdown file and add it to the README index.
 
-Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/algorithms/putting-system.md) · [shot-ai](docs/algorithms/shot-ai-target-finding.md) · [ball-physics](docs/algorithms/ball-physics.md) · [wind](docs/algorithms/wind-system.md) · [weather](docs/algorithms/weather-system.md) · [course-rating](docs/algorithms/course-rating.md) · [difficulty](docs/algorithms/difficulty-calculator.md) · [stroke-index](docs/algorithms/stroke-index.md) · [economy](docs/algorithms/economy.md) · [reputation](docs/algorithms/reputation.md) · [golfer-spawning](docs/algorithms/golfer-spawning.md) · [satisfaction](docs/algorithms/satisfaction-feedback.md) · [golfer-needs](docs/algorithms/golfer-needs.md) · [tournaments](docs/algorithms/tournament-system.md) · [game-calendar](docs/algorithms/game-calendar.md) · [staff-and-weeds](docs/algorithms/staff-and-weeds.md)
+Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/algorithms/putting-system.md) · [shot-ai](docs/algorithms/shot-ai-target-finding.md) · [ball-physics](docs/algorithms/ball-physics.md) · [wind](docs/algorithms/wind-system.md) · [weather](docs/algorithms/weather-system.md) · [course-rating](docs/algorithms/course-rating.md) · [difficulty](docs/algorithms/difficulty-calculator.md) · [stroke-index](docs/algorithms/stroke-index.md) · [economy](docs/algorithms/economy.md) · [reputation](docs/algorithms/reputation.md) · [golfer-spawning](docs/algorithms/golfer-spawning.md) · [satisfaction](docs/algorithms/satisfaction-feedback.md) · [golfer-needs](docs/algorithms/golfer-needs.md) · [tournaments](docs/algorithms/tournament-system.md) · [game-calendar](docs/algorithms/game-calendar.md) · [staff-and-weeds](docs/algorithms/staff-and-weeds.md) · [group-turn-order](docs/algorithms/group-turn-order.md)
 
 ## Core Systems
 
@@ -87,6 +87,7 @@ Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/al
 - **Staff & Weeds** (`scripts/managers/staff_manager.gd`, `scripts/managers/weed_manager.gd`, `scripts/entities/staff_member.gd`): Four job types, each with a standard and premium hire. Staff walk a designated grid circle and work at what they find — groundskeepers pull weeds (which set daily course condition), greeters cheer mood, marshals restore pace, vendors quench thirst. See [staff docs](docs/algorithms/staff-and-weeds.md).
 - **ShotAI** (`scripts/systems/shot_ai.gd`): Structured decision pipeline for club selection and target finding. Multi-shot planning, wind compensation, recovery mode, Monte Carlo risk analysis. See [shot-ai docs](docs/algorithms/shot-ai-target-finding.md).
 - **GolferManager**: Spawns groups based on green fee, max 8 concurrent golfers, spawn rate modified by course rating and weather. 4 tiers: BEGINNER/CASUAL/SERIOUS/PRO. See [golfer-spawning docs](docs/algorithms/golfer-spawning.md).
+- **Group turn order** (`golfer_manager.gd:_update_group`): one shot at a time per group — honor off the tee, the away rule through the green. The group waits for the shot in progress to come to rest and for the group ahead to clear the landing cone, but **not** for its own members to finish walking: partners carry on walking to their ball while the next golfer away plays, and only hold the turn up while they stand in the line of that shot (landing cone for a full swing, the whole route for a chip or putt). See [group-turn-order docs](docs/algorithms/group-turn-order.md).
 - **Ball**: Parabolic flight animation, terrain-based rolling distances, wind visual offset. Signals: `ball_landed`, `ball_state_changed`. See [ball-physics docs](docs/algorithms/ball-physics.md).
 
 #### Shot Accuracy — Angular Dispersion Model
@@ -195,6 +196,7 @@ make test          # Using Makefile
 godot --headless --path . res://tests/harness/walking_path_harness.tscn
 godot --headless --path . res://tests/harness/bulldozer_harness.tscn   # Bulldozer remit: demolishes improvements/buildings, never course terrain
 godot --headless --path . res://tests/harness/speed_controls_harness.tscn  # Speed controls: one fast-forward button for Fast (3x) and Ultra (8x)
+godot --headless --path . res://tests/harness/ready_golf_harness.tscn  # Pace: one foursome, three holes each, reports the dead time a group spends waiting on a walking partner
 ```
 
 **Test coverage:** GameManager, SaveManager, CourseRatingSystem, CourseRecords, DailyStatistics, GolferTier.
