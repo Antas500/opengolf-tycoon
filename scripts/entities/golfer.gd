@@ -552,6 +552,15 @@ func _apply_appearance() -> void:
 		hair.color = hair_color
 	if head:
 		head.color = skin_tone
+
+## Synchronize driving, accuracy, putting and recovery skills from the owner profile.
+func sync_player_profile_skills() -> void:
+	if player_profile == null:
+		return
+	driving_skill = player_profile.normalized_skill(1)
+	accuracy_skill = player_profile.normalized_skill(3)
+	putting_skill = player_profile.normalized_skill(4)
+	recovery_skill = player_profile.normalized_skill(8)
 	if arms:
 		arms.color = skin_tone
 	if hands:
@@ -1090,6 +1099,8 @@ func player_aim(target: Vector2i) -> Vector2i:
 ## are all included, because those are intent, not error. Returns an empty
 ## dictionary when the owner is not waiting on mouse input or the aim is unusable.
 func preview_shot(target: Vector2i) -> Dictionary:
+	if player_profile:
+		sync_player_profile_skills()
 	var terrain_grid := GameManager.terrain_grid
 	if not awaits_player_shot() or terrain_grid == null or not terrain_grid.is_valid_position(target):
 		return {}
@@ -1140,6 +1151,8 @@ func preview_shot(target: Vector2i) -> Dictionary:
 	}
 
 func play_shot(target: Vector2i) -> bool:
+	if player_profile:
+		sync_player_profile_skills()
 	if not awaits_player_shot() or GameManager.is_paused or not GameManager.terrain_grid.is_valid_position(target) or target == ball_position:
 		return false
 	if not shape_allowed(player_shape, GameManager.terrain_grid.get_tile(ball_position)):
@@ -1559,6 +1572,8 @@ func get_cached_or_compute_shot_target(hole_position: Vector2i) -> Vector2i:
 ##  10 ft (~0.15 tiles):  ~45%      20 ft (~0.30 tiles):  ~22%
 ##  30 ft (~0.45 tiles):  ~11%      50 ft (~0.76 tiles):  ~3%
 func _calculate_putt(from_precise: Vector2) -> Dictionary:
+	if player_profile:
+		sync_player_profile_skills()
 	var terrain_grid = GameManager.terrain_grid
 	var course_data = GameManager.course_data
 	if not terrain_grid or not course_data or course_data.holes.is_empty() or current_hole >= course_data.holes.size():
@@ -1702,7 +1717,10 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 			skill_accuracy = putting_skill
 
 	if player_profile:
-		skill_accuracy = player_profile.normalized_skill(2 if club in [Club.DRIVER, Club.FAIRWAY_WOOD] else 3)
+		if club == Club.PUTTER:
+			skill_accuracy = player_profile.normalized_skill(4)
+		else:
+			skill_accuracy = player_profile.normalized_skill(2 if club in [Club.DRIVER, Club.FAIRWAY_WOOD] else 3)
 		if player_shape in [1, 2, 3]:
 			skill_accuracy = 1.0 - (1.0 - skill_accuracy) / (1.0 + player_profile.bonus({1: 6, 2: 5, 3: 7}[player_shape]))
 		skill_accuracy = 1.0 - (1.0 - skill_accuracy) / (1.0 + player_profile.bonus(9))

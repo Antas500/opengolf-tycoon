@@ -686,3 +686,134 @@ func test_embedded_aim_and_full_scorecards_fit_toolbar() -> void:
 	await wait_frames(5)
 	_assert_shelf_fits(tab.aim_page)
 	assert_eq(toolbar.size.y, float(UIConstants.BOTTOM_BAR_HEIGHT))
+
+func test_save_skills_button_removed_and_skills_save_automatically() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	# Verify that no button with text "Save skills" exists anywhere in the Player Skills page
+	var skill_page := tab.pages[PlayerTab.PAGE_SKILLS]
+	for button in skill_page.find_children("*", "Button", true, false):
+		assert_ne(button.text, "Save skills", "Save skills button must not exist")
+
+	# Verify skills save automatically whenever changed
+	assert_eq(GameManager.player_profile.points[0], 0)
+	assert_true(rounds.allocate_skill(0, 1), "Allocating a point succeeds")
+	assert_eq(GameManager.player_profile.points[0], 1, "Skill automatically saved to player_profile")
+	assert_eq(rounds.draft.points[0], 1)
+
+	assert_true(rounds.allocate_skill(0, -1), "Refunding a point succeeds")
+	assert_eq(GameManager.player_profile.points[0], 0, "Refund automatically saved to player_profile")
+
+func test_skills_auto_save_and_take_effect_for_next_shot_mid_round() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	# Allocate initial 10 points
+	for i in 10:
+		rounds.allocate_skill(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+
+	assert_true(rounds.active, "Round is active")
+	assert_not_null(rounds.player, "Player golfer is spawned")
+
+	# Skills page controls must remain enabled during an active round
+	var skill_page := tab.pages[PlayerTab.PAGE_SKILLS]
+	for button in skill_page.find_children("*", "Button", true, false):
+		assert_false(button.disabled, "Skill adjustment buttons must remain enabled during round")
+
+	# Record initial driving skill and driver distance
+	var initial_driving_skill := rounds.player.driving_skill
+	var initial_driver_dist := rounds.player.player_max_distance(Golfer.Club.DRIVER)
+	var initial_accuracy_skill := rounds.player.accuracy_skill
+
+	# Mid-round: change skills (e.g. shift a point from Power Hitter to Long Driver, and add to Accurate Irons)
+	# First refund 1 from skill 0 (Power Hitter)
+	assert_true(rounds.allocate_skill(0, -1))
+	# Add to skill 1 (Long Driver)
+	assert_true(rounds.allocate_skill(1, 1))
+
+	# Verify skills auto-saved to GameManager.player_profile
+	assert_eq(GameManager.player_profile.points[0], 0, "Power Hitter points updated in profile")
+	assert_eq(GameManager.player_profile.points[1], 2, "Long Driver points updated in profile")
+
+	# Verify skills are immediately in effect on the golfer for the next shot
+	assert_almost_eq(rounds.player.driving_skill, GameManager.player_profile.normalized_skill(1), 0.0001,
+		"Player driving_skill updated immediately")
+	assert_gt(rounds.player.driving_skill, initial_driving_skill,
+		"Driving skill increased after allocating more points to Long Driver")
+
+	# Verify driver distance reflects the new skills immediately
+	var new_driver_dist := rounds.player.player_max_distance(Golfer.Club.DRIVER)
+	# Long Driver adds to driver bonus, so distance factor for driver is now higher
+	assert_almost_eq(new_driver_dist, float(Golfer.CLUB_STATS[Golfer.Club.DRIVER].max_distance) * 0.7 * (1.0 + 0.2), 0.01,
+		"Driver distance reflects updated Long Driver skill immediately")
+
+	# Verify aim guide / shot preview reflects the updated skills
+	var preview := rounds.player.preview_shot(Vector2i(30, 10))
+	assert_false(preview.is_empty(), "Preview shot is available")
+	assert_almost_eq(preview.max_range, new_driver_dist, 0.01,
+		"Preview shot max range matches updated skill distance")
+
+	# Take shot and verify it succeeds with new skills in effect
+	assert_true(rounds.player.play_shot(Vector2i(30, 10)), "Shot executes with new skills in effect")
+
+	rounds.leave_round()
+
+func test_putting_skill_auto_saves_and_takes_effect_for_next_putt() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.allocate_skill(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+
+	var initial_putting_skill := rounds.player.putting_skill
+
+	# Reallocate: shift point from Luck (index 9) to Accurate Putter (index 4)
+	assert_true(rounds.allocate_skill(9, -1))
+	assert_true(rounds.allocate_skill(4, 1))
+
+	assert_eq(GameManager.player_profile.points[4], 2, "Accurate Putter updated in GameManager.player_profile")
+	assert_gt(rounds.player.putting_skill, initial_putting_skill,
+		"Golfer putting_skill immediately reflects new Accurate Putter skill for next putt")
+
+	rounds.leave_round()
+
+func test_skills_change_mid_round_with_tournament_manager_present() -> void:
+	var tm := TournamentManager.new()
+	fixture.add_child(tm)
+	GameManager.tournament_manager = tm
+
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.allocate_skill(i, 1)
+	rounds.name_edit.text = "Course Golfer"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+
+	assert_true(rounds.active, "Course round is active")
+	assert_not_null(rounds.player, "Player golfer is present")
+
+	# Change skills while playing the course with TournamentManager active in GameManager
+	assert_true(rounds.allocate_skill(0, -1), "Refunding skill mid-round succeeds with TournamentManager present")
+	assert_true(rounds.allocate_skill(3, 1), "Allocating skill mid-round succeeds with TournamentManager present")
+	assert_eq(GameManager.player_profile.points[0], 0)
+	assert_eq(GameManager.player_profile.points[3], 2)
+	assert_almost_eq(rounds.player.accuracy_skill, GameManager.player_profile.normalized_skill(3), 0.0001)
+
+	# Also verify sync_player_skills updates SimGolfer if present in field
+	var sg := tm._make_player_sim_golfer()
+	tm._sim_field = [sg]
+	assert_true(rounds.allocate_skill(3, -1))
+	assert_true(rounds.allocate_skill(1, 1))
+	assert_almost_eq(sg.driving_skill, GameManager.player_profile.normalized_skill(1), 0.0001,
+		"TournamentManager SimGolfer skills update when player skills change")
+
+	rounds.leave_round()

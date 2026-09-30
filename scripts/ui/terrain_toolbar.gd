@@ -1593,10 +1593,7 @@ func _refresh_player_skills() -> void:
 	for i in _skill_labels.size():
 		if i < PlayerGolferProfile.SKILLS.size():
 			_skill_labels[i].text = "%s %d%%" % [PlayerGolferProfile.SKILLS[i], profile.points[i] * 10]
-	if profile.initialized:
-		_player_points_label.text = "Skills locked"
-	else:
-		_player_points_label.text = "%d of 10 pts remaining" % profile.remaining()
+	_player_points_label.text = "%d of 10 pts remaining" % profile.remaining()
 
 # =============================================================================
 # Tool selection
