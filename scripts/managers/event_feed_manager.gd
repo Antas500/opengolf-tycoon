@@ -104,7 +104,10 @@ func _connect_signals() -> void:
 	EventBus.money_changed.connect(_on_money_changed)
 	EventBus.reputation_changed.connect(_on_reputation_changed)
 	EventBus.green_fee_changed.connect(_on_green_fee_changed)
-	EventBus.course_rating_changed.connect(_on_course_rating_changed)
+	# NOTE: course_rating_changed is deliberately NOT connected here. The rating is
+	# recalculated every time the day closes, so a feed line for it repeats almost
+	# verbatim each day and buries the events worth reading. The HUD stars and the
+	# Course Rating panel remain the live readout of the rating.
 
 	# Golfers
 	EventBus.golfer_finished_round.connect(_on_golfer_finished_round)
@@ -293,12 +296,6 @@ func _on_reputation_changed(old_rep: float, new_rep: float) -> void:
 func _on_green_fee_changed(old_fee: int, new_fee: int) -> void:
 	add_event(Category.ECONOMY, Priority.INFO,
 		"Green fee changed: $%d -> $%d" % [old_fee, new_fee])
-
-func _on_course_rating_changed(rating: Dictionary) -> void:
-	var stars = rating.get("stars", 0)
-	var overall = rating.get("overall", 0.0)
-	add_event(Category.COURSE, Priority.NORMAL,
-		"Course rating updated: %.1f (%d stars)" % [overall, stars])
 
 func _on_golfer_finished_round(golfer_id: int, total_score: int, total_par: int) -> void:
 	var diff = total_score - total_par
