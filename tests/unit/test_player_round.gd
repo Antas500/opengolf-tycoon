@@ -783,3 +783,37 @@ func test_putting_skill_auto_saves_and_takes_effect_for_next_putt() -> void:
 		"Golfer putting_skill immediately reflects new Accurate Putter skill for next putt")
 
 	rounds.leave_round()
+
+func test_skills_change_mid_round_with_tournament_manager_present() -> void:
+	var tm := TournamentManager.new()
+	fixture.add_child(tm)
+	GameManager.tournament_manager = tm
+
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	for i in 10:
+		rounds.allocate_skill(i, 1)
+	rounds.name_edit.text = "Course Golfer"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+
+	assert_true(rounds.active, "Course round is active")
+	assert_not_null(rounds.player, "Player golfer is present")
+
+	# Change skills while playing the course with TournamentManager active in GameManager
+	assert_true(rounds.allocate_skill(0, -1), "Refunding skill mid-round succeeds with TournamentManager present")
+	assert_true(rounds.allocate_skill(3, 1), "Allocating skill mid-round succeeds with TournamentManager present")
+	assert_eq(GameManager.player_profile.points[0], 0)
+	assert_eq(GameManager.player_profile.points[3], 2)
+	assert_almost_eq(rounds.player.accuracy_skill, GameManager.player_profile.normalized_skill(3), 0.0001)
+
+	# Also verify sync_player_skills updates SimGolfer if present in field
+	var sg := tm._make_player_sim_golfer()
+	tm._sim_field = [sg]
+	assert_true(rounds.allocate_skill(3, -1))
+	assert_true(rounds.allocate_skill(1, 1))
+	assert_almost_eq(sg.driving_skill, GameManager.player_profile.normalized_skill(1), 0.0001,
+		"TournamentManager SimGolfer skills update when player skills change")
+
+	rounds.leave_round()

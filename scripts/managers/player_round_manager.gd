@@ -289,16 +289,8 @@ func _save_skills() -> void:
 		player.recovery_skill = GameManager.player_profile.normalized_skill(8)
 		if player.awaits_player_shot():
 			update_aim_guide()
-	if GameManager.tournament_manager and is_instance_valid(player):
-		if player.golfer_id in GameManager.tournament_manager._tournament_scores:
-			var avg_skill = (player.driving_skill + player.accuracy_skill + player.putting_skill + player.recovery_skill) / 4.0
-			GameManager.tournament_manager._tournament_scores[player.golfer_id]["skill"] = avg_skill
-		for sg in GameManager.tournament_manager.active_field:
-			if sg.id == TournamentManager.PLAYER_SIM_ID:
-				sg.driving_skill = player.driving_skill
-				sg.accuracy_skill = player.accuracy_skill
-				sg.putting_skill = player.putting_skill
-				sg.recovery_skill = player.recovery_skill
+	if GameManager.tournament_manager and GameManager.tournament_manager.has_method("sync_player_skills"):
+		GameManager.tournament_manager.sync_player_skills()
 
 func _refresh_skills() -> void:
 	points_label.text = "%d of 10 points remaining" % draft.remaining()

@@ -336,6 +336,23 @@ func _make_player_sim_golfer() -> TournamentSimulator.SimGolfer:
 func is_player_entry(sim_id: int) -> bool:
 	return sim_id == PLAYER_SIM_ID
 
+## Synchronize the owner's sim golfer skills and active tournament score entry
+## with GameManager.player_profile.
+func sync_player_skills() -> void:
+	var profile: PlayerGolferProfile = GameManager.player_profile
+	if not profile:
+		return
+	var sg = _find_sim_golfer(PLAYER_SIM_ID)
+	if sg:
+		sg.driving_skill = profile.normalized_skill(1)
+		sg.accuracy_skill = profile.normalized_skill(3)
+		sg.putting_skill = profile.normalized_skill(4)
+		sg.recovery_skill = profile.normalized_skill(8)
+		var avg_skill = (sg.driving_skill + sg.accuracy_skill + sg.putting_skill + sg.recovery_skill) / 4.0
+		for golfer_id in _tournament_scores:
+			if _tournament_scores[golfer_id].get("sim_id") == PLAYER_SIM_ID:
+				_tournament_scores[golfer_id]["skill"] = avg_skill
+
 # ============================================================================
 # ROUND EXECUTION
 # ============================================================================
