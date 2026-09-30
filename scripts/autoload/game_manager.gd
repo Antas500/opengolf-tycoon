@@ -187,8 +187,6 @@ const SECONDS_PER_GAME_HOUR: float = 120.0
 ## real-time pace of the economy is unchanged by the faster calendar.
 const LEGACY_DAY_SECONDS: float = 14.0 * SECONDS_PER_GAME_HOUR
 const DAILY_RATE_SCALE: float = SECONDS_PER_GAME_DAY / LEGACY_DAY_SECONDS
-## Pins rotate monthly now that days fly by.
-const PIN_ROTATION_INTERVAL_DAYS: int = 30
 ## Autosave cadence (days). Annual autosaves also fire on year_ended.
 const AUTOSAVE_INTERVAL_DAYS: int = 30
 
@@ -665,27 +663,12 @@ func advance_to_next_day() -> void:
 	current_day += 1
 	EventBus.day_changed.emit(current_day)
 	# Wind drifts daily via WindSystem's day_changed signal handler
-	# Rotate pin positions monthly so putts are not chased across the green
-	if current_day % PIN_ROTATION_INTERVAL_DAYS == 0:
-		_rotate_pin_positions()
 
 	# Year rollover: December 31 has just completed. Park the year's totals
 	# for the summary panel, charge annual loan interest, and let the UI show
 	# the year-end summary (which pauses the game).
 	if GameCalendar.is_first_day_of_year(current_day):
 		_roll_over_year(GameCalendar.get_year(day_ending))
-
-func _rotate_pin_positions() -> void:
-	if not current_course:
-		return
-	var any_rotated := false
-	for hole in current_course.holes:
-		if hole.pin_positions.size() > 1:
-			hole.current_pin_index = (hole.current_pin_index + 1) % hole.pin_positions.size()
-			hole.hole_position = hole.pin_positions[hole.current_pin_index]
-			any_rotated = true
-	if any_rotated:
-		EventBus.pins_rotated.emit()
 
 ## Add the day that just finished into the year-to-date totals.
 func _accumulate_yearly_stats() -> void:
@@ -801,7 +784,7 @@ class HoleData:
 	var par: int = 4
 	var tee_position: Vector2i = Vector2i.ZERO
 	var green_position: Vector2i = Vector2i.ZERO
-	var hole_position: Vector2i = Vector2i.ZERO  # Actual cup position on green
+	var hole_position: Vector2i = Vector2i.ZERO  # Cup position — fixed at the hole's Green With Hole tile
 	var fairway_tiles: Array = []
 	var hazard_tiles: Array = []
 	var distance_yards: int = 0
@@ -815,19 +798,10 @@ class HoleData:
 	var tee_positions: Dictionary = {}  # {"forward": Vector2i, "middle": Vector2i, "back": Vector2i}
 	var par_by_tee: Dictionary = {}     # {"forward": int, "middle": int, "back": int}
 
-	# Pin positions: up to 4 locations on the green, rotated daily
-	var pin_positions: Array = []       # Array[Vector2i]
-	var current_pin_index: int = 0
-
 	## Keep tee_position synced with back tee (backward compat for 30+ consumers)
 	func sync_tee_positions() -> void:
 		if tee_positions.has("back"):
 			tee_position = tee_positions["back"]
-
-	## Keep hole_position synced with current pin (backward compat for 30+ consumers)
-	func sync_pin_position() -> void:
-		if pin_positions.size() > 0 and current_pin_index < pin_positions.size():
-			hole_position = pin_positions[current_pin_index]
 
 	## Return the appropriate tee position for a golfer tier
 	func get_tee_for_tier(tier: int) -> Vector2i:
@@ -878,79 +852,6 @@ class HoleData:
 		else:
 			tee_positions["middle"] = back_tee
 		tee_positions["back"] = back_tee
-
-	## Auto-generate up to 4 pin positions spread across the green
-	func auto_generate_pin_positions(grid: TerrainGrid) -> void:
-		if not grid:
-			return
-		# Find all green tiles using flood fill from green_position
-		var green_tiles: Array = []
-		var to_check: Array = [green_position]
-		var checked: Dictionary = {}
-		while to_check.size() > 0 and green_tiles.size() < 100:
-			var pos = to_check.pop_front()
-			if checked.has(pos):
-				continue
-			checked[pos] = true
-			if not grid.is_valid_position(pos):
-				continue
-			if grid.get_tile(pos) != TerrainTypes.Type.GREEN:
-				continue
-			green_tiles.append(pos)
-			for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var neighbor = pos + offset
-				if not checked.has(neighbor):
-					to_check.append(neighbor)
-
-		if green_tiles.size() == 0:
-			pin_positions = [hole_position]
-			return
-
-		if green_tiles.size() <= 2:
-			# Too small for multiple pins — use center only
-			pin_positions = [hole_position]
-			return
-
-		# Compute green center
-		var center = Vector2.ZERO
-		for tile in green_tiles:
-			center += Vector2(tile)
-		center /= float(green_tiles.size())
-
-		# Direction from tee to green for front/back orientation
-		var tee_dir = Vector2(green_position - tee_position).normalized()
-		var perp_dir = Vector2(-tee_dir.y, tee_dir.x)
-
-		# Score each green tile by quadrant (front-left, front-right, back-left, back-right)
-		var quadrants: Dictionary = {"fl": [], "fr": [], "bl": [], "br": []}
-		for tile in green_tiles:
-			var rel = Vector2(tile) - center
-			var front_back = rel.dot(tee_dir)  # positive = toward tee (front), negative = away (back)
-			var left_right = rel.dot(perp_dir)  # positive = left, negative = right
-			var key = ("f" if front_back >= 0 else "b") + ("l" if left_right >= 0 else "r")
-			quadrants[key].append(tile)
-
-		# Pick the tile furthest from center in each populated quadrant
-		var pins: Array = []
-		for qkey in ["fl", "fr", "bl", "br"]:
-			var tiles = quadrants[qkey]
-			if tiles.size() == 0:
-				continue
-			var best_tile = tiles[0]
-			var best_dist: float = 0.0
-			for tile in tiles:
-				var dist = Vector2(tile).distance_to(center)
-				if dist > best_dist:
-					best_dist = dist
-					best_tile = tile
-			pins.append(best_tile)
-
-		# Ensure current hole_position is included (or at least the first pin)
-		if pins.size() == 0:
-			pins = [hole_position]
-		pin_positions = pins
-		current_pin_index = 0
-		hole_position = pin_positions[0]
 
 	## Recalculate par for each tee position based on distance
 	func recalculate_par_by_tee(grid: TerrainGrid) -> void:

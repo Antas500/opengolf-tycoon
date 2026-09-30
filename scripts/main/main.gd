@@ -124,7 +124,7 @@ var staff_area_overlay: StaffAreaOverlay = null
 var _staff_area_mode_index: int = -1
 
 # Hole context menu and move modes
-enum HoleMoveMode { NONE, MOVING_PIN, MOVING_TEE, MOVING_GREEN, MOVING_FORWARD_TEE, MOVING_MIDDLE_TEE }
+enum HoleMoveMode { NONE, MOVING_TEE, MOVING_GREEN, MOVING_FORWARD_TEE, MOVING_MIDDLE_TEE }
 var _hole_move_mode: int = HoleMoveMode.NONE
 var _hole_move_data: GameManager.HoleData = null
 var _hole_context_menu: HoleContextMenu = null
@@ -2587,7 +2587,6 @@ func _open_hole_context_menu(hole_data: GameManager.HoleData) -> void:
 	_hole_context_menu.position_at(get_viewport().get_mouse_position())
 
 	# Connect signals
-	_hole_context_menu.move_pin_requested.connect(_on_context_move_pin)
 	_hole_context_menu.move_tee_requested.connect(_on_context_move_tee)
 	_hole_context_menu.move_forward_tee_requested.connect(_on_context_move_forward_tee)
 	_hole_context_menu.move_middle_tee_requested.connect(_on_context_move_middle_tee)
@@ -2614,11 +2613,6 @@ func _on_context_menu_closed() -> void:
 	if _hole_context_menu and _hole_context_menu.hole_data:
 		hole_manager.highlight_hole(_hole_context_menu.hole_data.hole_number, false)
 	_hole_context_menu = null
-
-func _on_context_move_pin(hole_number: int) -> void:
-	var hole = _find_hole_data(hole_number)
-	if hole:
-		_enter_hole_move_mode(HoleMoveMode.MOVING_PIN, hole)
 
 func _on_context_move_tee(hole_number: int) -> void:
 	var hole = _find_hole_data(hole_number)
@@ -2710,9 +2704,6 @@ func _handle_hole_move_click(grid_pos: Vector2i) -> void:
 	if not _hole_move_data:
 		return
 	match _hole_move_mode:
-		HoleMoveMode.MOVING_PIN:
-			if _is_valid_pin_position(grid_pos):
-				_execute_pin_move(grid_pos)
 		HoleMoveMode.MOVING_TEE:
 			if _is_valid_tee_position(grid_pos):
 				_execute_tee_move(grid_pos)
@@ -2725,18 +2716,6 @@ func _handle_hole_move_click(grid_pos: Vector2i) -> void:
 		HoleMoveMode.MOVING_MIDDLE_TEE:
 			if _is_valid_secondary_tee_position(grid_pos):
 				_execute_middle_tee_move(grid_pos)
-
-func _is_valid_pin_position(pos: Vector2i) -> bool:
-	if terrain_grid.get_tile(pos) != TerrainTypes.Type.GREEN:
-		return false
-	# Don't allow moving to current position (no-op)
-	if pos == _hole_move_data.hole_position:
-		return false
-	# Not another hole's pin
-	for hole in GameManager.current_course.holes:
-		if hole.hole_number != _hole_move_data.hole_number and hole.hole_position == pos:
-			return false
-	return true
 
 func _is_valid_tee_position(pos: Vector2i) -> bool:
 	if not terrain_grid.is_valid_position(pos):
@@ -2773,28 +2752,6 @@ func _is_valid_green_position(pos: Vector2i) -> bool:
 			if pos == hole.tee_position or pos == hole.green_position or pos == hole.hole_position:
 				return false
 	return true
-
-func _execute_pin_move(new_pos: Vector2i) -> void:
-	var hole_number = _hole_move_data.hole_number
-	var old_pos = _hole_move_data.hole_position
-	var visualizer = hole_manager.get_hole_visualizer(hole_number)
-	if not visualizer or not visualizer.flag:
-		_cancel_hole_move_mode()
-		return
-
-	visualizer.flag.move_to(new_pos)  # Triggers _on_flag_moved → recalculates everything
-	EventBus.pin_position_changed.emit(hole_number, old_pos, new_pos)
-
-	# Record undo
-	undo_manager.record_action({
-		"type": "pin_move",
-		"hole_number": hole_number,
-		"old_pos": old_pos,
-		"new_pos": new_pos
-	})
-
-	EventBus.notify("Hole %d pin moved" % hole_number, "success")
-	_cancel_hole_move_mode()
 
 func _execute_tee_move(new_pos: Vector2i) -> void:
 	var hole_number = _hole_move_data.hole_number
@@ -2847,7 +2804,6 @@ func _execute_tee_move(new_pos: Vector2i) -> void:
 func _execute_green_move(new_pos: Vector2i) -> void:
 	var hole_number = _hole_move_data.hole_number
 	var old_green_pos = _hole_move_data.green_position
-	var old_pin_pos = _hole_move_data.hole_position
 	var old_green_was_green = terrain_grid.get_tile(old_green_pos) == TerrainTypes.Type.GREEN
 	var old_terrain_at_new = terrain_grid.get_tile(new_pos)
 	var green_cost = TerrainTypes.get_placement_cost(TerrainTypes.Type.GREEN)
@@ -2873,7 +2829,7 @@ func _execute_green_move(new_pos: Vector2i) -> void:
 
 	_suppress_tile_undo = false
 
-	visualizer.update_green_position(new_pos, true)
+	visualizer.update_green_position(new_pos)
 	GameManager.modify_money(-green_cost)
 	EventBus.log_transaction("Move Green (Hole %d)" % hole_number, -green_cost)
 	EventBus.hole_green_moved.emit(hole_number, old_green_pos, new_pos)
@@ -2884,7 +2840,6 @@ func _execute_green_move(new_pos: Vector2i) -> void:
 		"hole_number": hole_number,
 		"old_green_pos": old_green_pos,
 		"new_green_pos": new_pos,
-		"old_pin_pos": old_pin_pos,
 		"old_terrain_at_new": old_terrain_at_new,
 		"old_green_was_green": old_green_was_green,
 		"cost": green_cost
@@ -3052,18 +3007,6 @@ func _execute_undo_action(action: Dictionary) -> void:
 				_restore_removed_course_entity(replaced)
 			if cost > 0:
 				GameManager.modify_money(cost)
-		"pin_move":
-			var hn = action.get("hole_number", 0)
-			var old_pos = action.get("old_pos", Vector2i.ZERO)
-			var vis = hole_manager.get_hole_visualizer(hn)
-			if vis and vis.flag:
-				# Use set_position_in_grid instead of move_to to bypass GREEN tile validation
-				# (the old position may no longer be GREEN if terrain was edited)
-				vis.flag.set_position_in_grid(old_pos)
-				vis.hole_data.hole_position = old_pos
-				vis.update_visualization()
-				EventBus.hole_updated.emit(hn)
-				EventBus.pin_position_changed.emit(hn, action.get("new_pos", Vector2i.ZERO), old_pos)
 		"tee_move":
 			var hn = action.get("hole_number", 0)
 			var old_tee = action.get("old_tee_pos", Vector2i.ZERO)
@@ -3081,7 +3024,6 @@ func _execute_undo_action(action: Dictionary) -> void:
 			var hn = action.get("hole_number", 0)
 			var old_green = action.get("old_green_pos", Vector2i.ZERO)
 			var new_green = action.get("new_green_pos", Vector2i.ZERO)
-			var old_pin = action.get("old_pin_pos", Vector2i.ZERO)
 			_suppress_tile_undo = true
 			terrain_grid.set_tile(new_green, action.get("old_terrain_at_new", TerrainTypes.Type.GRASS))
 			if action.get("old_green_was_green", false):
@@ -3089,12 +3031,8 @@ func _execute_undo_action(action: Dictionary) -> void:
 			_suppress_tile_undo = false
 			var vis = hole_manager.get_hole_visualizer(hn)
 			if vis:
-				vis.update_green_position(old_green, true)
-				# Restore pin to its original position if it was different
-				if old_pin != old_green:
-					vis.hole_data.hole_position = old_pin
-					vis.flag.set_position_in_grid(old_pin)
-					EventBus.hole_updated.emit(hn)
+				# The cup rides along with the green back to its old home.
+				vis.update_green_position(old_green)
 			GameManager.modify_money(action.get("cost", 0))
 
 func _execute_redo_action(action: Dictionary) -> void:
@@ -3156,16 +3094,6 @@ func _execute_redo_action(action: Dictionary) -> void:
 					entity_layer.place_decoration(subtype, grid_pos, decoration_registry)
 			if cost > 0:
 				GameManager.modify_money(-cost)
-		"pin_move":
-			var hn = action.get("hole_number", 0)
-			var new_pos = action.get("new_pos", Vector2i.ZERO)
-			var vis = hole_manager.get_hole_visualizer(hn)
-			if vis and vis.flag:
-				vis.flag.set_position_in_grid(new_pos)
-				vis.hole_data.hole_position = new_pos
-				vis.update_visualization()
-				EventBus.hole_updated.emit(hn)
-				EventBus.pin_position_changed.emit(hn, action.get("old_pos", Vector2i.ZERO), new_pos)
 		"tee_move":
 			var hn = action.get("hole_number", 0)
 			var old_tee = action.get("old_tee_pos", Vector2i.ZERO)
@@ -3190,7 +3118,7 @@ func _execute_redo_action(action: Dictionary) -> void:
 			_suppress_tile_undo = false
 			var vis = hole_manager.get_hole_visualizer(hn)
 			if vis:
-				vis.update_green_position(new_green, true)
+				vis.update_green_position(new_green)
 			GameManager.modify_money(-action.get("cost", 0))
 
 # --- Building Info Panel ---

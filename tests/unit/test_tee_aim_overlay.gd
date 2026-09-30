@@ -50,7 +50,6 @@ func _add_hole(tee: Vector2i, cup: Vector2i, extra_tees: Array = []) -> GameMana
 	hole.tee_positions = {"back": tee}
 	for i in range(extra_tees.size()):
 		hole.tee_positions[["forward", "middle"][i]] = extra_tees[i]
-	hole.pin_positions = [cup]
 	course.add_hole(hole)
 	return hole
 
@@ -158,18 +157,20 @@ func test_deleting_a_hole_removes_its_arrows() -> void:
 	await wait_frames(2)
 	assert_eq(overlay.aimed_tees(), [], "The tee the hole used no longer has a target")
 
-func test_the_arrow_follows_the_day_s_pin() -> void:
+func test_the_arrow_follows_the_cup_when_the_green_moves() -> void:
 	_paint_waiting_pair()
 	var moved_cup := Vector2i(30, 26)
 	var hole := _add_hole(TEE, CUP)
-	hole.pin_positions = [CUP, moved_cup]
 	overlay.rebuild()
 	assert_eq(overlay.route_for(TEE), [TEE, CUP])
 
+	# The cup is fixed to the Green With Hole tile — moving the green is the
+	# only thing that relocates it (hole_updated follows every green move).
+	hole.green_position = moved_cup
 	hole.hole_position = moved_cup
-	EventBus.pins_rotated.emit()
+	EventBus.hole_updated.emit(hole.hole_number)
 	await wait_frames(2)
-	assert_eq(overlay.route_for(TEE), [TEE, moved_cup], "A new pin moves the arrow")
+	assert_eq(overlay.route_for(TEE), [TEE, moved_cup], "The arrow tracks the hole's cup")
 
 # --- The marker stays in the grass of its own tile ---
 

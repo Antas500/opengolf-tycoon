@@ -54,7 +54,9 @@ func _build_hole(tee_position: Vector2i, cup_position: Vector2i) -> GameManager.
 	hole.hole_number = current_hole_number
 	hole.tee_position = tee_position
 	hole.green_position = cup_position
-	hole.hole_position = cup_position  # Cup is at the green-with-hole tile
+	# One cup, cut where the player put the Green With Hole tile. It never
+	# moves on its own — only relocating the green relocates the cup.
+	hole.hole_position = cup_position
 
 	# Calculate distance in yards
 	hole.distance_yards = grid.calculate_distance_yards(tee_position, cup_position)
@@ -62,7 +64,7 @@ func _build_hole(tee_position: Vector2i, cup_position: Vector2i) -> GameManager.
 	# Calculate par based on distance
 	hole.par = calculate_par(hole.distance_yards)
 
-	# Auto-generate multiple tee boxes and pin positions
+	# Auto-generate multiple tee boxes
 	hole.tee_positions = {"back": hole.tee_position, "middle": hole.tee_position, "forward": hole.tee_position}
 	if GameManager.multi_tee_enabled:
 		hole.auto_generate_tee_positions(grid)
@@ -71,18 +73,6 @@ func _build_hole(tee_position: Vector2i, cup_position: Vector2i) -> GameManager.
 			var tee_pos: Vector2i = hole.tee_positions[tee_key]
 			if tee_pos != hole.tee_position and grid.is_valid_position(tee_pos):
 				grid.set_tile(tee_pos, TerrainTypes.Type.TEE_BOX)
-	hole.pin_positions = [hole.hole_position]
-	hole.auto_generate_pin_positions(grid)
-	# auto_generate_pin_positions() replaces the cup with a quadrant extreme of the
-	# green. The player cut this cup, so it stays the active pin and leads the
-	# rotation set used by daily pin changes.
-	var pins: Array = [cup_position]
-	for pin in hole.pin_positions:
-		if pin != cup_position:
-			pins.append(pin)
-	hole.pin_positions = pins
-	hole.current_pin_index = 0
-	hole.hole_position = cup_position
 	hole.recalculate_par_by_tee(grid)
 
 	# Calculate difficulty rating based on surrounding terrain

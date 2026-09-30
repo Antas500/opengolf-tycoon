@@ -995,28 +995,24 @@ func _draw_hole_move_preview() -> void:
 	var preview_color: Color
 	var label_text: String
 
-	# HoleMoveMode: 1=PIN, 2=TEE, 3=GREEN (matches main.gd enum)
+	# HoleMoveMode: 1=TEE, 2=GREEN, 3=FORWARD_TEE, 4=MIDDLE_TEE (matches main.gd enum)
 	match _hole_move_mode:
-		1:  # MOVING_PIN
-			is_valid = terrain_grid.get_tile(hover_pos) == TerrainTypes.Type.GREEN
-			preview_color = Color(0.3, 0.9, 0.5, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
-			label_text = "Pin"
-		2:  # MOVING_TEE
+		1:  # MOVING_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.4, 0.85, 0.45, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Tee"
-		3:  # MOVING_GREEN
+		2:  # MOVING_GREEN
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.3, 0.9, 0.5, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Green"
-		4:  # MOVING_FORWARD_TEE
+		3:  # MOVING_FORWARD_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.9, 0.3, 0.3, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)
 			label_text = "Fwd Tee"
-		5:  # MOVING_MIDDLE_TEE
+		4:  # MOVING_MIDDLE_TEE
 			var tile = terrain_grid.get_tile(hover_pos)
 			is_valid = not TerrainTypes.is_water(tile) and tile != TerrainTypes.Type.OUT_OF_BOUNDS
 			preview_color = Color(0.85, 0.85, 0.85, 0.5) if is_valid else Color(0.9, 0.3, 0.3, 0.3)

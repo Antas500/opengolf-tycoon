@@ -17,8 +17,10 @@ the ordinary terrain brushes and then opens the hole:
    box and the green on the Course Terrain tab — those are the two tiles it
    pairs — enabled only when a pair is ready)
    pairs the single unused tee box with the single unused Green With Hole and
-   creates the hole: yardage, par, forward/middle tees, pin rotation set and
-   difficulty rating all follow from those two tiles.
+   creates the hole: yardage, par, forward/middle tees and difficulty rating all
+   follow from those two tiles. The cup is cut on the Green With Hole tile and
+   stays there for the life of the hole — one fixed cup position, only moved
+   along when the whole green is relocated.
 
 While a tee box is waiting and the Green tool is about to cut a cup, the placement
 preview shows the **potential hole** under the cursor, before anything is painted.
@@ -66,7 +68,7 @@ toolbar, the placement preview and the paint path all read the same functions.
 
 ```
 used_tee_tiles(course)   = { hole.tee_position } ∪ { hole.tee_positions[*] }   for every hole
-used_cup_tiles(course)   = { hole.hole_position } ∪ { hole.pin_positions[*] } for every hole
+used_cup_tiles(course)   = { hole.hole_position }                               for every hole
 unused_tee_boxes(grid)   = grid.get_tee_box_tiles() − used_tee_tiles
 unused_cups(grid)        = grid.get_cup_tiles()   − used_cup_tiles
 
@@ -99,11 +101,10 @@ being `GREEN`).
 `TEE_BOX`, cup tile is `GREEN`, distance ≥ `MIN_HOLE_TILES`) and then builds the
 `HoleData`: distance from `calculate_distance_yards()` (22 yd/tile), par from
 `GolfRules.calculate_par()`, forward/middle tees from `auto_generate_tee_positions()`
-when multi-tee is on, and the pin set from `auto_generate_pin_positions()`. Because
-that helper replaces the cup with a quadrant extreme of the green, the builder puts
-the player's cup back at the front of `pin_positions` and resets
-`current_pin_index = 0`, so the cup the player cut is the cup that opens — daily pin
-rotation still cycles the rest.
+when multi-tee is on. `hole_position` is the Green With Hole tile itself: the hole
+keeps exactly one cup there and it never rotates — golfers always putt to the cup
+the player cut. Only moving the green (context menu → Move Green) relocates the
+cup, and it rides along with the green's tile.
 
 Generated courses (Quick Start and the four prebuilt packages) share the same
 builder through `create_generated_hole(tee, green)`, which skips the

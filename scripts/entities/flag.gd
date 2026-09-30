@@ -9,7 +9,6 @@ var hole_number: int = 1
 var terrain_grid: TerrainGrid
 
 signal flag_selected(flag: Flag)
-signal flag_moved(old_position: Vector2i, new_position: Vector2i)
 
 func _ready() -> void:
 	z_index = 50
@@ -43,19 +42,6 @@ func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> voi
 	if event is InputEventMouseButton:
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			flag_selected.emit(self)
-
-func move_to(new_grid_position: Vector2i) -> void:
-	if not terrain_grid:
-		return
-
-	var terrain_type = terrain_grid.get_tile(new_grid_position)
-	if terrain_type != TerrainTypes.Type.GREEN:
-		print("Flag can only be placed on green tiles")
-		return
-
-	var old_position = grid_position
-	set_position_in_grid(new_grid_position)
-	flag_moved.emit(old_position, new_grid_position)
 
 func get_flag_info() -> Dictionary:
 	return {

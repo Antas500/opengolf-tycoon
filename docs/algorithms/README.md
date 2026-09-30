@@ -31,7 +31,6 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 - [Forced Carry Distance](forced-carry.md) — Hazard carry detection, visualization, difficulty contribution
 - [Routing Overlay & Walk Penalty](routing-overlay.md) — Inter-hole walking routes, color-coded distance, pace rating penalty
 - [Multiple Tee Boxes](multiple-tee-boxes.md) — 3-tier tee system (forward/middle/back), tier-based selection, per-tee par
-- [Pin Position Rotation](pin-rotation.md) — Auto-generated pin positions, daily rotation, green quadrant algorithm
 - [Stroke Index](stroke-index.md) — Hole handicap allocation (1=hardest) derived from difficulty ratings, front/back nine interleaving
 - [Course Rating (Stars)](course-rating.md) — 5-category weighted rating: condition, design, value, pace, aesthetics. Slope and course rating
 - [Aesthetics Rating](aesthetics-rating.md) — Decoration scoring near holes: diminishing returns, variety bonus, theme matching

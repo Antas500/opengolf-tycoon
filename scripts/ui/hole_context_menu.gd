@@ -7,7 +7,6 @@ var hole_data: GameManager.HoleData
 var terrain_grid: TerrainGrid
 var _just_opened: bool = true
 
-signal move_pin_requested(hole_number: int)
 signal move_tee_requested(hole_number: int)
 signal move_forward_tee_requested(hole_number: int)
 signal move_middle_tee_requested(hole_number: int)
@@ -79,11 +78,6 @@ func _build_ui() -> void:
 		vbox.add_child(warn_label)
 
 	vbox.add_child(_create_separator())
-
-	# Move Pin button
-	var pin_btn = _create_menu_button("Move Pin Position")
-	pin_btn.pressed.connect(func(): move_pin_requested.emit(hole_data.hole_number); _close())
-	vbox.add_child(pin_btn)
 
 	# Move Tee button
 	var tee_label = "Place Tee" if tee_orphaned else "Move Tee"
