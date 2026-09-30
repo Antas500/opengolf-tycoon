@@ -165,6 +165,12 @@ func test_toggle_pause() -> void:
 
 # --- Calendar Date Display ---
 
+func test_legacy_hour_scale_is_available_for_round_duration_ui() -> void:
+	assert_eq(GameManager.SECONDS_PER_GAME_HOUR, 120.0,
+		"Round UI should be able to convert simulation seconds to game minutes")
+	assert_eq(GameManager.LEGACY_DAY_SECONDS, 14.0 * GameManager.SECONDS_PER_GAME_HOUR,
+		"The legacy day scale should stay consistent with its hourly scale")
+
 func test_new_game_starts_on_january_first_2000() -> void:
 	GameManager.new_game("Test Course")
 	assert_eq(GameManager.current_day, 1, "New games start on day 1")

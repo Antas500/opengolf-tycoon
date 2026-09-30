@@ -178,10 +178,14 @@ func get_game_speed_multiplier() -> float:
 ## Real seconds per game day at normal speed. Engine.time_scale applies the
 ## speed multiplier to delta, so FAST (3x) and ULTRA (8x) shorten days too.
 const SECONDS_PER_GAME_DAY: float = 3.5
+## Duration of one hour on the legacy clock. The current calendar has no
+## hours, but round-related UI still uses this scale to present simulation
+## durations (such as traffic waits) as familiar game minutes.
+const SECONDS_PER_GAME_HOUR: float = 120.0
 ## Length of a legacy day (14 open hours × 120 s/hour = 1680 s). Per-day
 ## rates tuned for the legacy clock are multiplied by DAILY_RATE_SCALE so the
 ## real-time pace of the economy is unchanged by the faster calendar.
-const LEGACY_DAY_SECONDS: float = 1680.0
+const LEGACY_DAY_SECONDS: float = 14.0 * SECONDS_PER_GAME_HOUR
 const DAILY_RATE_SCALE: float = SECONDS_PER_GAME_DAY / LEGACY_DAY_SECONDS
 ## Pins rotate monthly now that days fly by.
 const PIN_ROTATION_INTERVAL_DAYS: int = 30
