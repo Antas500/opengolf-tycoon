@@ -87,7 +87,6 @@ func initialize(grid: TerrainGrid) -> void:
 	EventBus.hole_created.connect(_on_holes_changed)
 	EventBus.hole_deleted.connect(_on_holes_changed)
 	EventBus.hole_updated.connect(_on_hole_updated)
-	EventBus.pins_rotated.connect(_on_holes_changed)
 	EventBus.load_completed.connect(_on_load_completed)
 	rebuild()
 
@@ -107,8 +106,6 @@ func _exit_tree() -> void:
 		EventBus.hole_deleted.disconnect(_on_holes_changed)
 	if EventBus.hole_updated.is_connected(_on_hole_updated):
 		EventBus.hole_updated.disconnect(_on_hole_updated)
-	if EventBus.pins_rotated.is_connected(_on_holes_changed):
-		EventBus.pins_rotated.disconnect(_on_holes_changed)
 	if EventBus.load_completed.is_connected(_on_load_completed):
 		EventBus.load_completed.disconnect(_on_load_completed)
 

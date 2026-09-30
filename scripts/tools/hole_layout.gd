@@ -38,15 +38,13 @@ static func used_tee_tiles(course: GameManager.CourseData) -> Dictionary:
 			used[hole.tee_positions[tee_key]] = true
 	return used
 
-## Tiles claimed by existing holes as the cup (current pin plus the pin rotation set).
+## Tiles claimed by existing holes as the cup (one fixed cup per hole).
 static func used_cup_tiles(course: GameManager.CourseData) -> Dictionary:
 	var used: Dictionary = {}
 	if not course:
 		return used
 	for hole in course.holes:
 		used[hole.hole_position] = true
-		for pin in hole.pin_positions:
-			used[pin] = true
 	return used
 
 ## Tee box tiles that no hole has claimed yet.
