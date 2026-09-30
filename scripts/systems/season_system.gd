@@ -111,13 +111,14 @@ static func get_day_in_season(day: int) -> int:
 	return day - get_season_start_day(day) + 1
 
 ## Absolute day on which the season containing `day` began.
+## Absolute day on which the season containing `day` began.
 static func get_season_start_day(day: int) -> int:
 	var date := GameCalendar.get_date(day)
-	var season := get_season_for_month(int(date.month))
+	var season := get_season_for_month(int(date["month"]))
 	var start_month: int = SEASON_START_MONTHS[season]
-	var year := int(date.year)
+	var year := int(date["year"])
 	# Winter starts in December of the previous calendar year.
-	if season == Season.WINTER and start_month > int(date.month):
+	if season == Season.WINTER and start_month > int(date["month"]):
 		year -= 1
 	return GameCalendar._days_from_civil(year, start_month, 1) - GameCalendar._EPOCH_DAYS + 1
 
@@ -127,8 +128,8 @@ static func get_season_length(day: int) -> int:
 	# Start of the next season = start day of the (current_day + length) lookup,
 	# computed by stepping to the same date three months later.
 	var date := GameCalendar._civil_from_days(start - 1 + GameCalendar._EPOCH_DAYS - 1)
-	var next_month := int(date.month) + 3
-	var next_year := int(date.year)
+	var next_month := int(date["month"]) + 3
+	var next_year := int(date["year"])
 	if next_month > 12:
 		next_month -= 12
 		next_year += 1

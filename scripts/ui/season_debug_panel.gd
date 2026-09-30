@@ -127,11 +127,11 @@ func _update_display() -> void:
 func _on_season_button(target_season: int) -> void:
 	# Jump to day 1 of the target season by setting current_day directly
 	var date := GameCalendar.get_date(GameManager.current_day)
-	var year := int(date.year)
+	var year := int(date["year"])
 	var start_month: int = SeasonSystem.SEASON_START_MONTHS[target_season]
 	# Winter (and any season whose start month is already past) targets the
 	# next calendar year; seasons later this year stay in this year.
-	if start_month <= int(date.month):
+	if start_month <= int(date["month"]):
 		year += 1
 	var target_day: int = GameCalendar._days_from_civil(year, start_month, 1) - GameCalendar._EPOCH_DAYS + 1
 

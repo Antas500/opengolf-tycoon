@@ -214,7 +214,8 @@ func _add_event_entry(entry: EventFeedManager.EventEntry) -> void:
 	# Timestamp — a weekday+day-of-month marker (there is no intra-day clock)
 	var time_label = Label.new()
 	var date := GameCalendar.get_date(entry.timestamp_day)
-	time_label.text = "%s %d" % [GameCalendar.WEEKDAY_NAMES_SHORT[int(date.weekday)], int(date.day)]
+	var weekday := GameCalendar.get_weekday(entry.timestamp_day)
+	time_label.text = "%s %d" % [GameCalendar.WEEKDAY_NAMES_SHORT[int(weekday)], int(date["day"])]
 	time_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	time_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	time_label.custom_minimum_size = Vector2(52, 0)
