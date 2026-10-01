@@ -427,10 +427,10 @@ func _spawn(golfer_name: String, tier: int, group_id: int) -> Golfer:
 ## so this only mirrors what an owner round does for shot input: the aim guide,
 ## the shape/punch controls, camera focus and click-to-shoot. Putting off the
 ## player's turn stays automatic (Golfer.awaits_player_shot() is false on green).
-func begin_tournament_aim(owner: Golfer) -> void:
-	if not is_instance_valid(owner) or owner.player_profile == null:
+func begin_tournament_aim(owner_golfer: Golfer) -> void:
+	if not is_instance_valid(owner_golfer) or owner_golfer.player_profile == null:
 		return
-	player = owner
+	player = owner_golfer
 	active = true
 	busy = true
 	tournament_aim = true

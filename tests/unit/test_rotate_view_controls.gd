@@ -130,9 +130,9 @@ func _child_names(state: SceneState, parent: String) -> Array[String]:
 			names.append(state.get_node_name(i))
 	return names
 
-func _property(state: SceneState, node_index: int, name: String) -> Variant:
+func _property(state: SceneState, node_index: int, property_name: String) -> Variant:
 	for p in state.get_node_property_count(node_index):
-		if state.get_node_property_name(node_index, p) == name:
+		if state.get_node_property_name(node_index, p) == property_name:
 			return state.get_node_property_value(node_index, p)
 	return null
 

@@ -559,9 +559,9 @@ func test_tournament_board_and_shot_controls_share_the_corner() -> void:
 	leaderboard.show_for_tournament("Local Tournament", 12)
 	leaderboard.register_golfer(0, "Owner", 0, true)
 
-	var owner := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 99)
-	owner.player_profile = GameManager.player_profile
-	rounds.begin_tournament_aim(owner)
+	var owner_golfer := golfers.spawn_tournament_golfer(GolferTier.Tier.SERIOUS, 99)
+	owner_golfer.player_profile = GameManager.player_profile
+	rounds.begin_tournament_aim(owner_golfer)
 	await wait_frames(5)
 	assert_true(rounds.tournament_aim)
 	assert_eq(tab.selected, PlayerTab.PAGE_PLAY)
@@ -617,10 +617,10 @@ func test_practice_round_scores_read_out_top_left() -> void:
 	assert_eq(rows[0].name, "Test Owner (you)")
 	assert_eq(rows[0].value, "-", "No holes in yet")
 	# One hole in: the card shows the score against par and the holes completed.
-	var owner: Golfer = rounds.player
-	owner.hole_scores.append({"hole": 1, "strokes": 2, "par": 3})
-	owner.total_strokes = 2
-	owner.total_par = 3
+	var owner_golfer: Golfer = rounds.player
+	owner_golfer.hole_scores.append({"hole": 1, "strokes": 2, "par": 3})
+	owner_golfer.total_strokes = 2
+	owner_golfer.total_par = 3
 	rounds._process(0.0)
 	assert_eq(card.score_rows()[0].value, "-1 · thru 1")
 	await wait_frames(2)

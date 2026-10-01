@@ -54,7 +54,7 @@ func _process(delta: float) -> void:
 
 	var walking := 0
 	var mid_shot := 0
-	var ready := 0
+	var ready_count := 0
 	for golfer in group:
 		if not is_instance_valid(golfer):
 			continue
@@ -65,9 +65,9 @@ func _process(delta: float) -> void:
 				mid_shot += 1
 			Golfer.State.IDLE:
 				if golfer._amenity_phase == 0:
-					ready += 1
+					ready_count += 1
 
-	if walking > 0 and mid_shot == 0 and ready > 0:
+	if walking > 0 and mid_shot == 0 and ready_count > 0:
 		walker_stall_frames += 1
 		stall_seconds += delta
 

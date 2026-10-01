@@ -29,7 +29,7 @@ func _check(condition: bool, label: String) -> void:
 		failures += 1
 		printerr("HARNESS: FAIL: %s" % label)
 
-func _mouse_button(pressed: bool, button_index: int) -> InputEventMouseButton:
+func _mouse_button(pressed: bool, button_index: MouseButton) -> InputEventMouseButton:
 	var event := InputEventMouseButton.new()
 	event.button_index = button_index
 	event.pressed = pressed
