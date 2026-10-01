@@ -40,8 +40,10 @@ func show_centered() -> void:
 	anchor_top = 0.0
 	anchor_right = 0.0
 	anchor_bottom = 0.0
-	grow_horizontal = 0
-	grow_vertical = 0
+	# Grow from the panel's own top-left corner (GROW_DIRECTION_BEGIN), not from
+	# the opposite anchor: the position below is measured in that direction.
+	grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	grow_vertical = Control.GROW_DIRECTION_BEGIN
 	show()
 	# Wait for layout engine to process children sizes
 	await get_tree().process_frame

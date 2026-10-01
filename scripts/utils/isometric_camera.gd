@@ -270,8 +270,8 @@ func zoom_by_factor(factor: float, center: Vector2) -> void:
 		return
 	# Screen pixels convert to world units through the *rendered* zoom
 	# (design zoom x world scale), so the anchor math must use both.
-	var offset := center - get_viewport_rect().size / 2.0
-	_target_position += offset / (z_old * _world_scale) - offset / (z_new * _world_scale)
+	var anchor_offset := center - get_viewport_rect().size / 2.0
+	_target_position += anchor_offset / (z_old * _world_scale) - anchor_offset / (z_new * _world_scale)
 	_target_zoom = z_new
 
 # =============================================================================

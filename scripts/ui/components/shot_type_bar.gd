@@ -204,10 +204,10 @@ func select_shape(shape: int) -> void:
 
 ## The whole row is live only while the owner is lining up a shot; otherwise it
 ## greys out like the rest of the aiming HUD.
-func set_ready(ready: bool) -> void:
-	if _ready_for_shot == ready:
+func set_ready(ready_for_shot: bool) -> void:
+	if _ready_for_shot == ready_for_shot:
 		return
-	_ready_for_shot = ready
+	_ready_for_shot = ready_for_shot
 	_sync_buttons()
 
 func is_ready_for_shot() -> bool:

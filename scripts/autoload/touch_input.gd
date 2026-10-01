@@ -238,12 +238,12 @@ func _camera_panning_allowed() -> bool:
 
 ## Push a full press+release click at `pos` through the normal input
 ## pipeline (a preceding motion event sets hover state for the GUI).
-func _synthesize_click(pos: Vector2, button: int) -> void:
+func _synthesize_click(pos: Vector2, button: MouseButton) -> void:
 	_synthesize_mouse_motion(pos)
 	_synthesize_mouse_button(button, true, pos)
 	_synthesize_mouse_button(button, false, pos)
 
-func _synthesize_mouse_button(button: int, pressed: bool, pos: Vector2) -> void:
+func _synthesize_mouse_button(button: MouseButton, pressed: bool, pos: Vector2) -> void:
 	var vp: Viewport = get_viewport()
 	var ev := InputEventMouseButton.new()
 	ev.button_index = button
