@@ -2,7 +2,12 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<!-- Responsive full-viewport layout: the game renders at native pixel
+		     size on any screen (phone, tablet, desktop). user-scalable=no and
+		     maximum-scale=1.0 keep the browser from pinch-zooming the page
+		     (pinch gestures zoom the in-game camera instead). -->
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+		<meta name="mobile-web-app-capable" content="yes">
 		<title>$GODOT_PROJECT_NAME</title>
 		<style>
 html, body, #canvas {

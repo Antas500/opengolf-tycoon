@@ -4,6 +4,11 @@ var grid: TerrainGrid
 var mini_map: MiniMap
 
 func before_each() -> void:
+	# The responsive HUD adapts to window size; pin a standard desktop window
+	# so the standard-size map (MiniMap.MAP_SIZE) applies.
+	get_window().size = Vector2i(1600, 1000)
+	await get_tree().process_frame
+	await get_tree().process_frame
 	grid = TerrainGrid.new()
 	grid.grid_width = 16
 	grid.grid_height = 16

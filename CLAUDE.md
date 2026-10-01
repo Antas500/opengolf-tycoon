@@ -3,7 +3,7 @@
 A SimGolf (2002) spiritual successor built in **Godot 4.6+** with GDScript. Players design golf courses, manage operations, attract golfers, and host tournaments.
 
 **Main scene:** `res://scenes/main/main.tscn` (Node2D root)
-**Engine:** Godot 4.6, Forward+ renderer, 1600x1000 viewport
+**Engine:** Godot 4.6, Forward+ renderer, native window-pixel rendering (responsive; 1600x1000 design reference)
 **License:** MIT | **Version:** 0.1.0 (Alpha)
 
 ## Project Structure
@@ -35,10 +35,12 @@ assets/tilesets/        # Terrain tileset (PNG + .tres)
 
 ### Autoloads (Singletons, registered in project.godot)
 
-1. **GameManager** (`scripts/autoload/game_manager.gd`) — Central game state: money ($25k Normal start), reputation (0-100), day/hour cycle, game mode (MAIN_MENU/BUILDING/SIMULATING/PLAYING/PAUSED), game speed (PAUSED/NORMAL/FAST/ULTRA), current_theme (CourseTheme.Type). Holds `CourseData`, `DailyStatistics`, `HoleStatistics` inner classes. References terrain_grid, wind_system, weather_system, entity_layer, tournament_manager.
-2. **EventBus** (`scripts/autoload/event_bus.gd`) — ~60 signals for decoupled cross-system communication. Categories: game state, economy, terrain/building, course design, golfers, shots, UI, wind/weather, camera, selection, day cycle, tournaments, save/load. Has `notify()` and `log_transaction()` convenience methods.
-3. **SaveManager** (`scripts/autoload/save_manager.gd`) — JSON-based persistence (v2 format). Auto-saves on day change. Serializes game state, terrain, entities, holes, wind, weather, tournaments, course records, and course theme. Golfers are NOT persisted (they respawn naturally on load). Emits `theme_changed` on load to refresh overlays.
-4. **FeedbackManager** (`scripts/autoload/feedback_manager.gd`) — Aggregates golfer thought bubbles into daily satisfaction metrics (positive/negative/neutral counts, satisfaction rating 0.0-1.0).
+1. **Screen** (`scripts/autoload/screen_manager.gd`) — Responsive layout adapter (see "Responsive Layout & Touch" below). Exposes `window_size`, `world_scale`, `is_compact()`, `available_panel_rect()`, `bottom_bar_height()` and a `changed` signal; pure `compute_scale()`/`compute_world_scale()` statics are unit-tested.
+2. **TouchInput** (`scripts/autoload/touch_input.gd`) — Translates raw touch gestures into game input (tap → synthetic LMB click, one-finger drag → camera pan or terrain paint, two-finger → pan + pinch zoom, two-finger tap → synthetic RMB/cancel). The engine's `emulate_mouse_from_touch` is **off**; this autoload is the only touch path. `camera` and `paint_mode_provider` are wired by main.gd.
+3. **GameManager** (`scripts/autoload/game_manager.gd`) — Central game state: money ($25k Normal start), reputation (0-100), day/hour cycle, game mode (MAIN_MENU/BUILDING/SIMULATING/PLAYING/PAUSED), game speed (PAUSED/NORMAL/FAST/ULTRA), current_theme (CourseTheme.Type). Holds `CourseData`, `DailyStatistics`, `HoleStatistics` inner classes. References terrain_grid, wind_system, weather_system, entity_layer, tournament_manager.
+4. **EventBus** (`scripts/autoload/event_bus.gd`) — ~60 signals for decoupled cross-system communication. Categories: game state, economy, terrain/building, course design, golfers, shots, UI, wind/weather, camera, selection, day cycle, tournaments, save/load. Has `notify()` and `log_transaction()` convenience methods.
+5. **SaveManager** (`scripts/autoload/save_manager.gd`) — JSON-based persistence (v2 format). Auto-saves on day change. Serializes game state, terrain, entities, holes, wind, weather, tournaments, course records, and course theme. Golfers are NOT persisted (they respawn naturally on load). Emits `theme_changed` on load to refresh overlays.
+6. **FeedbackManager** (`scripts/autoload/feedback_manager.gd`) — Aggregates golfer thought bubbles into daily satisfaction metrics (positive/negative/neutral counts, satisfaction rating 0.0-1.0).
 
 ### Key Design Patterns
 
@@ -141,7 +143,7 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 ### Tools
 - **ElevationTool**: Three selector tools replace the old Rolling Hill / Hollow / Raise / Lower buttons — **Vertex** (one vertex ±1), **Flat Square** (raise only the brush's lowest vertices one level, or lower only its highest ones — once even, the whole brush steps together) and **Gradual Square** (move the middle vertex / middle 2×2, clamp nearby vertices to a 1-per-vertex slope). Right click raises, left click lowers. The Square tools share one Elevation Brush Size/Shape, separate from the terrain brush, and both controls ride in the notch between the Flat Square and Gradual Square tiles on the Elevation tab (the size stepper in the V above the point where those tiles meet, the shape toggle in the V below it) as half-size selector diamonds, the same way Open Hole is drawn on the Course Terrain tab; they stay usable even when neither Square tool is selected; sizes count **tiles**, so an S×S brush covers S² tiles and moves their (S+1)² corner vertices (1×1 = 1 tile = 4 vertices, 3×3 = 9 tiles = 16 vertices; the round shape clips corner tiles: 3×3 = 5 tiles = 12 vertices). See [elevation-tools docs](docs/algorithms/elevation-tools.md).
 - **UndoManager**: 50-action stack with cost refunds.
-- **IsometricCamera**: WASD pan, mouse wheel zoom. View rotation lives on TerrainGrid, not the camera: **Q** / **Shift+Q** rotate the course counter-clockwise / clockwise, **I** toggles isometric ↔ top-down. Rotating re-projects terrain, overlays, entities and picking together, and preserves the grid point under the camera.
+- **IsometricCamera**: WASD pan, mouse wheel zoom, plus touch-gesture entry points `pan_screen_offset()` and `zoom_by_factor()` used by TouchInput. All zoom APIs (`set/get_zoom_level`, min/max clamps 0.5–2.0) work in **design units**; the rendered `zoom` additionally carries the responsive `_world_scale` factor set by `apply_world_scale()` (driven by the Screen adapter). Code that converts screen pixels to world units divides by the raw rendered `zoom`. View rotation lives on TerrainGrid, not the camera: **Q** / **Shift+Q** rotate the course counter-clockwise / clockwise, **I** toggles isometric ↔ top-down. Rotating re-projects terrain, overlays, entities and picking together, and preserves the grid point under the camera.
 
 ## Conventions
 
@@ -152,9 +154,19 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 - **Export vars**: `@export` for tunable gameplay constants (max_concurrent_golfers, spawn cooldowns, grid dimensions).
 - **Performance**: Transaction history capped at 1000 entries. Object pooling for balls. Weather transitions smooth over time.
 
+### Responsive Layout & Touch
+
+The game is playable on desktop, tablet, phone and the web build. Rendering is **native window-pixel** (`window/stretch/mode="disabled"`): UI lays out in real pixels on every platform and the 1600x1000 design resolution is only a reference for scaling math.
+
+- **Screen** (`scripts/autoload/screen_manager.gd`, autoload): turns the live window size into layout decisions. `world_scale = max(min(w/1600, h/1000), min(1, 900/w))` — large windows see the reference course area per inch; narrow windows (phones/tablets) keep 1:1 pixel scale so tiles stay tappable. `is_compact()` (w<900 or h<640) drives compact HUD variants; `available_panel_rect()` keeps popups clear of the bottom bar. Emits `changed` on resize/rotation; main.gd re-runs `_apply_responsive_layout()` from it.
+- **Compact HUD** (applied via each component's `apply_screen()`): status column 210→150px and auto-collapsed, minimap 180→120px (its corner dock offsets are recomputed from its live size), main menu becomes a scrollable 2-column layout with taller tap targets, pause menu uses tighter margins.
+- **CenteredPanel** (`scripts/ui/centered_panel.gd`): `show_centered()` clamps the panel to `Screen.available_panel_rect()` (never covers the bottom bar, never spills off a phone) and lazily wraps overflowing single-child content in a ScrollContainer so nothing is unreachable.
+- **TouchInput** (`scripts/autoload/touch_input.gd`, autoload): the only touch path (`emulate_mouse_from_touch` is off). Tap → synthetic LMB click; one-finger drag → camera pan, or terrain painting while a tool is active (synthetic held LMB); two-finger → midpoint pan + pinch zoom anchored under the fingers; two-finger tap → synthetic RMB (cancel). Main menu backdrop drags don't pan the camera.
+- **Web** (`web/custom_shell.html`): full-viewport shell; `maximum-scale=1.0, user-scalable=no` keep pinch for the in-game camera instead of page zoom.
+
 ### UI Patterns
 
-- **CenteredPanel base class** (`scripts/ui/centered_panel.gd`): Extend this for panels that need to be centered on screen. Provides `show_centered()` (shows offscreen, waits for layout, then centers) and `toggle()` methods. Handles Godot's layout timing issues where `get_combined_minimum_size()` returns wrong values before first frame.
+- **CenteredPanel base class** (`scripts/ui/centered_panel.gd`): Extend this for panels that need to be centered on screen. Provides `show_centered()` (shows offscreen, waits for layout, then clamps to the responsive available area and centers — see "Responsive Layout & Touch" above) and `toggle()` methods. Handles Godot's layout timing issues where `get_combined_minimum_size()` returns wrong values before first frame.
 
 - **AcceptDialog with hotkey toggle**: For popup selection menus (trees, rocks, buildings) that open via hotkey, implement toggle behavior so pressing the same key closes the dialog:
   1. Store dialog reference as instance variable (e.g., `var _tree_dialog: AcceptDialog = null`)
@@ -197,9 +209,10 @@ godot --headless --path . res://tests/harness/walking_path_harness.tscn
 godot --headless --path . res://tests/harness/bulldozer_harness.tscn   # Bulldozer remit: demolishes improvements/buildings, never course terrain
 godot --headless --path . res://tests/harness/speed_controls_harness.tscn  # Speed controls: one fast-forward button for Fast (3x) and Ultra (8x)
 godot --headless --path . res://tests/harness/ready_golf_harness.tscn  # Pace: one foursome, three holes each, reports the dead time a group spends waiting on a walking partner
+godot --headless --path . res://tests/harness/responsive_layout_harness.tscn  # Responsive: phone/tablet/desktop window sizes drive the real main scene through the Screen/HUD/panel/touch adapters
 ```
 
-**Test coverage:** GameManager, SaveManager, CourseRatingSystem, CourseRecords, DailyStatistics, GolferTier.
+**Test coverage:** GameManager, SaveManager, CourseRatingSystem, CourseRecords, DailyStatistics, GolferTier, plus the responsive adapters (Screen math, IsometricCamera world scale/pan/zoom, TouchInput gestures, CenteredPanel clamping, compact HUD pieces).
 
 **Override Godot path:** `make test GODOT=/path/to/godot` or `GODOT=/path/to/godot ./test.sh`
 

@@ -16,6 +16,10 @@ var _course_name_input: LineEdit = null
 var _difficulty_buttons: Array = []
 var _money_label: Label = null
 
+## True on phones / small browser windows: narrower layout, scrollable.
+func _is_compact_layout() -> bool:
+	return has_node("/root/Screen") and Screen.is_compact()
+
 func _ready() -> void:
 	# Full-screen dark background
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -25,20 +29,36 @@ func _ready() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	# Center everything in a VBoxContainer
+	# Center everything in a VBoxContainer. The scroll wrapper keeps the whole
+	# menu reachable on short screens (small phones, narrow browser windows)
+	# while the center container keeps desktop layouts exactly as before.
+	var scroll = ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	add_child(scroll)
+
 	var center = CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(center)
+
+	var compact := _is_compact_layout()
+	var window_size := get_viewport().get_visible_rect().size
 
 	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 16)
-	main_vbox.custom_minimum_size = Vector2(900, 720)
+	main_vbox.add_theme_constant_override("separation", 12 if compact else 16)
+	if compact:
+		main_vbox.custom_minimum_size = Vector2(window_size.x - 48.0, 0)
+	else:
+		main_vbox.custom_minimum_size = Vector2(900, 720)
 	center.add_child(main_vbox)
 
 	# Title
 	var title = Label.new()
 	title.text = "OpenGolf Tycoon"
-	title.add_theme_font_size_override("font_size", 42)
+	# Scale the title to the window width so it never overflows a phone.
+	title.add_theme_font_size_override("font_size", int(clampf(window_size.x / 16.0, 26.0, 42.0)))
 	title.add_theme_color_override("font_color", Color(0.85, 0.95, 0.75))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main_vbox.add_child(title)
@@ -70,35 +90,65 @@ func _ready() -> void:
 
 	_course_name_input = LineEdit.new()
 	_course_name_input.text = "My Golf Course"
-	_course_name_input.custom_minimum_size = Vector2(300, 35)
+	if compact:
+		# Narrow window: the field takes whatever width is left.
+		_course_name_input.custom_minimum_size = Vector2(0, 35)
+		_course_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		_course_name_input.custom_minimum_size = Vector2(300, 35)
 	_course_name_input.add_theme_font_size_override("font_size", 16)
 	name_row.add_child(_course_name_input)
 	main_vbox.add_child(name_row)
 
-	# Difficulty selector row
-	var diff_row = HBoxContainer.new()
-	diff_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	diff_row.add_theme_constant_override("separation", 12)
+	# Difficulty selector row (wraps to a 2x2 grid on narrow windows)
+	if compact:
+		var diff_label = Label.new()
+		diff_label.text = "Difficulty"
+		diff_label.add_theme_font_size_override("font_size", 16)
+		diff_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.7))
+		main_vbox.add_child(diff_label)
 
-	var diff_label = Label.new()
-	diff_label.text = "Difficulty: "
-	diff_label.add_theme_font_size_override("font_size", 16)
-	diff_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.7))
-	diff_row.add_child(diff_label)
+		var diff_grid = GridContainer.new()
+		diff_grid.columns = 2
+		diff_grid.add_theme_constant_override("h_separation", 8)
+		diff_grid.add_theme_constant_override("v_separation", 8)
+		for preset in DifficultyPresets.get_all_presets():
+			var mods = DifficultyPresets.get_modifiers(preset)
+			var btn = Button.new()
+			btn.text = mods["name"]
+			btn.tooltip_text = mods["description"]
+			btn.custom_minimum_size = Vector2(0, 32)
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.add_theme_font_size_override("font_size", 14)
+			btn.set_meta("preset", preset)
+			btn.pressed.connect(_on_difficulty_selected.bind(preset))
+			diff_grid.add_child(btn)
+			_difficulty_buttons.append(btn)
+		main_vbox.add_child(diff_grid)
+	else:
+		var diff_row = HBoxContainer.new()
+		diff_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		diff_row.add_theme_constant_override("separation", 12)
 
-	for preset in DifficultyPresets.get_all_presets():
-		var mods = DifficultyPresets.get_modifiers(preset)
-		var btn = Button.new()
-		btn.text = mods["name"]
-		btn.tooltip_text = mods["description"]
-		btn.custom_minimum_size = Vector2(100, 32)
-		btn.add_theme_font_size_override("font_size", 14)
-		btn.set_meta("preset", preset)
-		btn.pressed.connect(_on_difficulty_selected.bind(preset))
-		diff_row.add_child(btn)
-		_difficulty_buttons.append(btn)
+		var diff_label = Label.new()
+		diff_label.text = "Difficulty: "
+		diff_label.add_theme_font_size_override("font_size", 16)
+		diff_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.7))
+		diff_row.add_child(diff_label)
 
-	main_vbox.add_child(diff_row)
+		for preset in DifficultyPresets.get_all_presets():
+			var mods = DifficultyPresets.get_modifiers(preset)
+			var btn = Button.new()
+			btn.text = mods["name"]
+			btn.tooltip_text = mods["description"]
+			btn.custom_minimum_size = Vector2(100, 32)
+			btn.add_theme_font_size_override("font_size", 14)
+			btn.set_meta("preset", preset)
+			btn.pressed.connect(_on_difficulty_selected.bind(preset))
+			diff_row.add_child(btn)
+			_difficulty_buttons.append(btn)
+
+		main_vbox.add_child(diff_row)
 	_update_difficulty_selection()
 
 	# Theme selection label
@@ -109,106 +159,84 @@ func _ready() -> void:
 	theme_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main_vbox.add_child(theme_label)
 
-	# Theme cards grid
+	# Theme cards grid (2 columns on narrow windows so cards stay readable)
 	var grid = GridContainer.new()
-	grid.columns = 3
+	grid.columns = 2 if compact else 3
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 8)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main_vbox.add_child(grid)
 
 	for theme_type in CourseTheme.get_all_types():
-		var card = _create_theme_card(theme_type)
+		var card = _create_theme_card(theme_type, compact)
 		grid.add_child(card)
 		_theme_cards.append(card)
 
 	# Update initial selection visual
 	_update_card_selection()
 
-	# Buttons row 1: Main actions
-	var btn_row = HBoxContainer.new()
-	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	btn_row.add_theme_constant_override("separation", 16)
-	main_vbox.add_child(btn_row)
-
-	# Continue button - only visible if saves exist
+	# Buttons: single centered rows on desktop, a two-column full-width grid
+	# on narrow windows (taller targets are easier to tap on touch screens).
 	var saves = SaveManager.get_save_list()
+	# [text, min_size, font, tooltip, callable]
+	var actions: Array = []
 	if not saves.is_empty():
-		var continue_btn = Button.new()
 		var latest = saves[0]
-		continue_btn.text = "Continue"
-		continue_btn.tooltip_text = "%s - Day %d" % [latest.get("course_name", ""), latest.get("day", 0)]
-		continue_btn.custom_minimum_size = Vector2(140, 45)
-		continue_btn.add_theme_font_size_override("font_size", 18)
-		continue_btn.pressed.connect(_on_continue_pressed.bind(latest.get("name", "")))
-		btn_row.add_child(continue_btn)
+		actions.append(["Continue", Vector2(140, 45), 18,
+			"%s - Day %d" % [latest.get("course_name", ""), latest.get("day", 0)],
+			_on_continue_pressed.bind(latest.get("name", ""))])
+	actions.append(["New Game", Vector2(140, 45), 18, "", _on_start_pressed])
+	actions.append(["Quick Start", Vector2(140, 45), 18,
+		"Start with a pre-built 9-hole course — jump straight in!", _on_quick_start_pressed])
+	actions.append(["Prebuilt Course", Vector2(160, 45), 16,
+		"Start with a professionally designed course layout", _on_prebuilt_pressed])
+	actions.append(["Load Game", Vector2(140, 45), 16, "", _on_load_pressed])
+	actions.append(["Settings", Vector2(120, 38), 15, "", _on_settings_pressed])
+	actions.append(["Credits", Vector2(120, 38), 15, "", _on_credits_pressed])
+	if OS.get_name() == "Web":  # Download button - only shown in web builds
+		actions.append(["Download", Vector2(120, 38), 15,
+			"Download the desktop version for better performance", _on_download_pressed])
+	actions.append(["Quit", Vector2(100, 38), 15, "", _on_quit_pressed])
 
-	var start_btn = Button.new()
-	start_btn.text = "New Game"
-	start_btn.custom_minimum_size = Vector2(140, 45)
-	start_btn.add_theme_font_size_override("font_size", 18)
-	start_btn.pressed.connect(_on_start_pressed)
-	btn_row.add_child(start_btn)
-
-	var quick_start_btn = Button.new()
-	quick_start_btn.text = "Quick Start"
-	quick_start_btn.tooltip_text = "Start with a pre-built 9-hole course — jump straight in!"
-	quick_start_btn.custom_minimum_size = Vector2(140, 45)
-	quick_start_btn.add_theme_font_size_override("font_size", 18)
-	quick_start_btn.pressed.connect(_on_quick_start_pressed)
-	btn_row.add_child(quick_start_btn)
-
-	var prebuilt_btn = Button.new()
-	prebuilt_btn.text = "Prebuilt Course"
-	prebuilt_btn.tooltip_text = "Start with a professionally designed course layout"
-	prebuilt_btn.custom_minimum_size = Vector2(160, 45)
-	prebuilt_btn.add_theme_font_size_override("font_size", 16)
-	prebuilt_btn.pressed.connect(_on_prebuilt_pressed)
-	btn_row.add_child(prebuilt_btn)
-
-	var load_btn = Button.new()
-	load_btn.text = "Load Game"
-	load_btn.custom_minimum_size = Vector2(140, 45)
-	load_btn.add_theme_font_size_override("font_size", 16)
-	load_btn.pressed.connect(_on_load_pressed)
-	btn_row.add_child(load_btn)
-
-	# Buttons row 2: Settings, Credits, Quit
-	var btn_row2 = HBoxContainer.new()
-	btn_row2.alignment = BoxContainer.ALIGNMENT_CENTER
-	btn_row2.add_theme_constant_override("separation", 16)
-	main_vbox.add_child(btn_row2)
-
-	var settings_btn = Button.new()
-	settings_btn.text = "Settings"
-	settings_btn.custom_minimum_size = Vector2(120, 38)
-	settings_btn.add_theme_font_size_override("font_size", 15)
-	settings_btn.pressed.connect(_on_settings_pressed)
-	btn_row2.add_child(settings_btn)
-
-	var credits_btn = Button.new()
-	credits_btn.text = "Credits"
-	credits_btn.custom_minimum_size = Vector2(120, 38)
-	credits_btn.add_theme_font_size_override("font_size", 15)
-	credits_btn.pressed.connect(_on_credits_pressed)
-	btn_row2.add_child(credits_btn)
-
-	# Download button - only shown in web builds
-	if OS.get_name() == "Web":
-		var download_btn = Button.new()
-		download_btn.text = "Download"
-		download_btn.tooltip_text = "Download the desktop version for better performance"
-		download_btn.custom_minimum_size = Vector2(120, 38)
-		download_btn.add_theme_font_size_override("font_size", 15)
-		download_btn.pressed.connect(_on_download_pressed)
-		btn_row2.add_child(download_btn)
-
-	var quit_btn = Button.new()
-	quit_btn.text = "Quit"
-	quit_btn.custom_minimum_size = Vector2(100, 38)
-	quit_btn.add_theme_font_size_override("font_size", 15)
-	quit_btn.pressed.connect(_on_quit_pressed)
-	btn_row2.add_child(quit_btn)
+	if compact:
+		var action_grid = GridContainer.new()
+		action_grid.columns = 2
+		action_grid.add_theme_constant_override("h_separation", 8)
+		action_grid.add_theme_constant_override("v_separation", 8)
+		for action in actions:
+			var btn = Button.new()
+			btn.text = str(action[0])
+			if str(action[3]) != "":
+				btn.tooltip_text = str(action[3])
+			btn.custom_minimum_size = Vector2(0, 44)
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.add_theme_font_size_override("font_size", 15)
+			btn.pressed.connect(action[4])
+			action_grid.add_child(btn)
+		main_vbox.add_child(action_grid)
+	else:
+		# Row 1: main actions (Continue appears when saves exist)
+		var btn_row = HBoxContainer.new()
+		btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		btn_row.add_theme_constant_override("separation", 16)
+		# Row 2: Settings, Credits, [Download], Quit
+		var btn_row2 = HBoxContainer.new()
+		btn_row2.alignment = BoxContainer.ALIGNMENT_CENTER
+		btn_row2.add_theme_constant_override("separation", 16)
+		for i in actions.size():
+			var btn = Button.new()
+			btn.text = str(actions[i][0])
+			if str(actions[i][3]) != "":
+				btn.tooltip_text = str(actions[i][3])
+			btn.custom_minimum_size = actions[i][1]
+			btn.add_theme_font_size_override("font_size", actions[i][2])
+			btn.pressed.connect(actions[i][4])
+			if i < 5:
+				btn_row.add_child(btn)
+			else:
+				btn_row2.add_child(btn)
+		main_vbox.add_child(btn_row)
+		main_vbox.add_child(btn_row2)
 
 	# Version label
 	var version = Label.new()
@@ -218,9 +246,11 @@ func _ready() -> void:
 	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main_vbox.add_child(version)
 
-func _create_theme_card(theme_type: int) -> PanelContainer:
+func _create_theme_card(theme_type: int, compact: bool = false) -> PanelContainer:
 	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(280, 82)
+	card.custom_minimum_size = Vector2(0, 76) if compact else Vector2(280, 82)
+	if compact:
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.set_meta("theme_type", theme_type)
 
 	# Make clickable
@@ -252,7 +282,7 @@ func _create_theme_card(theme_type: int) -> PanelContainer:
 	desc.add_theme_font_size_override("font_size", 11)
 	desc.add_theme_color_override("font_color", Color(0.7, 0.7, 0.65))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD
-	desc.custom_minimum_size = Vector2(250, 0)
+	desc.custom_minimum_size = Vector2(0, 0) if compact else Vector2(250, 0)
 	vbox.add_child(desc)
 
 	# Modifier hints

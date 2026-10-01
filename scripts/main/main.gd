@@ -301,6 +301,7 @@ func _ready() -> void:
 	_setup_floating_text()
 	_setup_shot_trails()
 	_setup_shot_heatmap()
+	_setup_responsive_ui()
 	_initialize_game()
 	print("Main scene ready")
 
@@ -879,7 +880,7 @@ func _setup_bottom_bar() -> void:
 	bg.add_theme_stylebox_override("panel", style)
 	# Position it exactly behind the BottomBar (view/speed controls + tabbed toolbar)
 	bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bg.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
+	bg.offset_top = -Screen.bottom_bar_height()
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Insert as sibling just before the bottom bar
 	var hud = $UI/HUD
@@ -919,7 +920,7 @@ func _setup_bottom_bar() -> void:
 	bottom_bar.move_child(sep, sep_index)
 
 	# Ensure BottomBar anchors match the configured height
-	bottom_bar.offset_top = -UIConstants.BOTTOM_BAR_HEIGHT
+	bottom_bar.offset_top = -Screen.bottom_bar_height()
 
 func _toggle_panel(panel: CenteredPanel) -> void:
 	"""Toggle a panel with mutual exclusion — opening one closes the previous."""
@@ -2377,9 +2378,19 @@ func _on_year_ended(finished_year: int) -> void:
 
 	hud.add_child(summary)
 
-	# Center the panel on screen (use custom_minimum_size since layout happens next frame)
+	# Center the panel on screen (use custom_minimum_size since layout happens
+	# next frame), clamped so it stays fully visible on small windows.
 	var viewport_size = get_viewport().get_visible_rect().size
-	summary.position = (viewport_size - summary.custom_minimum_size) / 2
+	var summary_size = summary.custom_minimum_size.min(Screen.available_panel_size()).max(Vector2(120, 120))
+	summary.custom_minimum_size = summary_size
+	summary.position = _center_position_clamped(viewport_size, summary_size)
+
+## Screen center for a `panel_size`, clamped to keep the panel fully on screen.
+func _center_position_clamped(viewport_size: Vector2, panel_size: Vector2) -> Vector2:
+	var pos: Vector2 = (viewport_size - panel_size) / 2.0
+	pos.x = clampf(pos.x, 8.0, maxf(8.0, viewport_size.x - panel_size.x - 8.0))
+	pos.y = clampf(pos.y, 8.0, maxf(8.0, viewport_size.y - panel_size.y - 8.0))
+	return pos
 
 func _on_summary_continue() -> void:
 	"""Called when player clicks Continue on the year summary."""
@@ -3142,9 +3153,11 @@ func _on_building_clicked(building: Building) -> void:
 	if building.building_data.get("upgradeable", false) or building.get_income_per_golfer() > 0:
 		building_info_panel.show_for_building(building)
 
-		# Center the panel on screen
+		# Center the panel on screen, clamped so it stays fully visible on
+		# small (phone) windows.
 		var viewport_size = get_viewport().get_visible_rect().size
-		building_info_panel.position = (viewport_size - building_info_panel.custom_minimum_size) / 2
+		var panel_size = building_info_panel.custom_minimum_size
+		building_info_panel.position = _center_position_clamped(viewport_size, panel_size)
 
 func _on_building_panel_closed() -> void:
 	"""Hide the building info panel."""
@@ -3187,23 +3200,33 @@ func _setup_mini_map() -> void:
 	mini_map.setup(terrain_grid, entity_layer, golfer_manager)
 	mini_map.camera_move_requested.connect(_on_mini_map_camera_move)
 
-	# Position in bottom-left corner, above the bottom bar
-	mini_map.anchor_left = 0
-	mini_map.anchor_top = 1
-	mini_map.anchor_right = 0
-	mini_map.anchor_bottom = 1
-	mini_map.offset_left = 0
-	mini_map.offset_top = -(UIConstants.BOTTOM_BAR_HEIGHT + MiniMap.MAP_SIZE / 2.0 + MiniMap.BORDER_WIDTH * 2)
-	mini_map.offset_right = 184
-	mini_map.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT)
-
 	# Mirror visibility into the Map button, whatever changed it (button, Tab hotkey,
 	# or the HUD being hidden/shown around the main menu).
 	mini_map.visibility_changed.connect(_sync_map_button)
 
 	hud.add_child(mini_map)
+	# Pick the responsive map size now that the node is in the tree, then dock
+	# it in the corner (its size feeds the corner offsets).
+	mini_map.apply_screen()
+	_position_mini_map()
 	_create_map_button(hud)
 	_sync_map_button()
+
+## Dock the minimap in the bottom-left corner, above the bottom bar. Re-run
+## on responsive resizes: the map itself changes size (compact windows get
+## a smaller map), so the offsets are computed from its live size.
+func _position_mini_map() -> void:
+	if not mini_map:
+		return
+	var map_size := mini_map.get_map_total_size()
+	mini_map.anchor_left = 0
+	mini_map.anchor_top = 1
+	mini_map.anchor_right = 0
+	mini_map.anchor_bottom = 1
+	mini_map.offset_left = 0
+	mini_map.offset_top = -(Screen.bottom_bar_height() + map_size.y + MiniMap.BORDER_WIDTH)
+	mini_map.offset_right = map_size.x + MiniMap.BORDER_WIDTH
+	mini_map.offset_bottom = -Screen.bottom_bar_height()
 
 func _create_map_button(hud: Control) -> void:
 	"""Map toggle: a map-icon button tucked into the minimap's bottom-left corner.
@@ -3224,16 +3247,12 @@ func _create_map_button(hud: Control) -> void:
 	map_btn.toggled.connect(_on_map_toggled)
 
 	# Anchor to the same bottom-left corner as the minimap (just above the bottom bar).
-	var inset := MiniMap.BORDER_WIDTH
 	map_btn.anchor_left = 0
 	map_btn.anchor_top = 1
 	map_btn.anchor_right = 0
 	map_btn.anchor_bottom = 1
-	map_btn.offset_left = inset
-	map_btn.offset_right = inset + MAP_BUTTON_SIZE
-	map_btn.offset_bottom = -(UIConstants.BOTTOM_BAR_HEIGHT + inset)
-	map_btn.offset_top = map_btn.offset_bottom - MAP_BUTTON_SIZE
 	map_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN  # Never spill into the bottom bar
+	_position_map_button()
 
 	hud.add_child(map_btn)  # Added after the minimap so it draws on top.
 
@@ -3246,6 +3265,17 @@ func _create_map_button(hud: Control) -> void:
 			box = box.duplicate()
 			box.set_content_margin_all(3)
 			map_btn.add_theme_stylebox_override(state, box)
+
+## Corner offsets for the map button; re-run when the bottom bar height
+## changes on a responsive resize.
+func _position_map_button() -> void:
+	if not map_btn:
+		return
+	var inset := MiniMap.BORDER_WIDTH
+	map_btn.offset_left = inset
+	map_btn.offset_right = inset + MAP_BUTTON_SIZE
+	map_btn.offset_bottom = -(Screen.bottom_bar_height() + inset)
+	map_btn.offset_top = map_btn.offset_bottom - MAP_BUTTON_SIZE
 
 static func _make_map_icon() -> Texture2D:
 	"""A folded paper map with a location pin, rendered from inline SVG so no imported
@@ -3959,6 +3989,40 @@ func _setup_shot_heatmap() -> void:
 	shot_heatmap_tracker.initialize()
 	GameManager.shot_heatmap_tracker = shot_heatmap_tracker
 	terrain_grid.setup_shot_heatmap_overlay(shot_heatmap_tracker)
+
+# --- Responsive Layout (desktop / tablet / mobile) ---
+
+## Wire the responsive camera scale and the touch gesture translator, and
+## reflow the anchored HUD pieces whenever the window resizes or rotates.
+func _setup_responsive_ui() -> void:
+	camera.apply_world_scale(Screen.world_scale)
+	TouchInput.camera = camera
+	TouchInput.paint_mode_provider = _touch_is_paint_mode
+	if not Screen.changed.is_connected(_on_screen_changed):
+		Screen.changed.connect(_on_screen_changed)
+	_apply_responsive_layout()
+
+func _touch_is_paint_mode() -> bool:
+	return is_painting or _has_active_tool()
+
+func _on_screen_changed(_size: Vector2, _world_scale: float) -> void:
+	camera.apply_world_scale(Screen.world_scale)
+	_apply_responsive_layout()
+
+## Re-derive the size-sensitive HUD layout from the current window size.
+func _apply_responsive_layout() -> void:
+	var bar_h := Screen.bottom_bar_height()
+	if bottom_bar:
+		bottom_bar.offset_top = -bar_h
+	var bg := $UI/HUD.get_node_or_null("BottomBarBG")
+	if bg:
+		bg.offset_top = -bar_h
+	if hud_status_column:
+		hud_status_column.apply_screen()
+	if mini_map:
+		mini_map.apply_screen()
+		_position_mini_map()
+	_position_map_button()
 
 # --- Shot Trails ---
 
