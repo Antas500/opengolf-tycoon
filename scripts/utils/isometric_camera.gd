@@ -26,6 +26,12 @@ class_name IsometricCamera
 var _target_position: Vector2
 var _smoothed_position: Vector2
 var _target_zoom: float
+## Multiplies the player's design zoom to get the actual zoom. The Screen
+## adapter drives it so the visible course area tracks the 1600x1000
+## reference view on large windows while staying tappable on small ones.
+## All public zoom APIs (set/get_zoom_level, focus_on, ...) work in design
+## units; only the rendered `zoom` carries this factor.
+var _world_scale: float = 1.0
 var _is_dragging: bool = false
 var _drag_start_mouse: Vector2
 var _drag_start_camera: Vector2
@@ -43,6 +49,10 @@ func _ready() -> void:
 	_smoothed_position = global_position
 	_target_zoom = zoom.x
 	_last_wall_ms = Time.get_ticks_msec()
+	# Pick up the responsive world scale before the first frame renders.
+	# (Main re-applies it and tracks Screen.changed afterwards.)
+	if has_node("/root/Screen"):
+		apply_world_scale(Screen.world_scale)
 	# Disable Godot's built-in smoothing — we handle it manually in _apply_movement
 	# to avoid the one-frame lag that causes bouncing on rapid direction changes.
 	position_smoothing_enabled = false
@@ -171,10 +181,12 @@ func _apply_movement(delta: float) -> void:
 		_target_position.x = clamp(_target_position.x, bounds_min.x, bounds_max.x)
 		_target_position.y = clamp(_target_position.y, bounds_min.y, bounds_max.y)
 
-	# Smooth zoom with easing (clamped to prevent overshoot on frame spikes)
-	var zoom_diff = _target_zoom - zoom.x
-	var new_zoom = zoom.x + zoom_diff * min(zoom_smoothing_speed * delta, 1.0)
-	zoom = Vector2(new_zoom, new_zoom)
+	# Smooth zoom with easing (clamped to prevent overshoot on frame spikes).
+	# The design zoom is resolved to a real zoom through _world_scale so the
+	# course keeps its reference physical size at any window size.
+	var zoom_diff = _target_zoom - _design_zoom()
+	var new_zoom = _design_zoom() + zoom_diff * min(zoom_smoothing_speed * delta, 1.0)
+	zoom = Vector2(new_zoom * _world_scale, new_zoom * _world_scale)
 
 	# Manual position smoothing (exponential decay, same frame as input)
 	var weight = 1.0 - exp(-smoothing_speed * delta)
@@ -211,12 +223,56 @@ func set_zoom_level(level: float, instant: bool = false) -> void:
 	var clamped = clamp(level, min_zoom, max_zoom)
 	if instant:
 		_target_zoom = clamped
-		zoom = Vector2(clamped, clamped)
+		zoom = Vector2(clamped * _world_scale, clamped * _world_scale)
 	else:
 		_zoom_camera_smooth(clamped - _target_zoom)
 
 func get_zoom_level() -> float:
-	return zoom.x
+	return _design_zoom()
+
+## The player's chosen zoom, in design units (min_zoom..max_zoom). The
+## rendered `zoom` property additionally carries the responsive
+## `_world_scale` factor, so internal code that converts screen pixels to
+## world units must keep dividing by the raw `zoom`.
+func _design_zoom() -> float:
+	if _world_scale <= 0.0:
+		return zoom.x
+	return zoom.x / _world_scale
+
+## Scale the rendered zoom so the world keeps the same physical size as the
+## reference view for the current window. Called on startup and on every
+## window resize/rotation (see the Screen adapter).
+func apply_world_scale(world_scale: float) -> void:
+	if world_scale <= 0.0:
+		return
+	# Re-render the current design zoom under the new world scale so a
+	# world-scale change never causes a zoom wobble or a smoothing glitch.
+	var design_zoom: float = _target_zoom if _world_scale <= 0.0 else zoom.x / _world_scale
+	_world_scale = world_scale
+	zoom = Vector2(design_zoom * world_scale, design_zoom * world_scale)
+
+## Pan the camera by a screen-space delta (window pixels). Used by touch
+## gestures; the middle-mouse pan uses the same conversion inline.
+func pan_screen_offset(delta: Vector2) -> void:
+	if zoom.x <= 0.0:
+		return
+	_target_position -= delta / zoom.x
+
+## Zoom by `factor` (1.0 = no change) anchored at screen position `center`
+## (window pixels): the world point under `center` stays under it. Used by
+## the two-finger pinch gesture.
+func zoom_by_factor(factor: float, center: Vector2) -> void:
+	if factor <= 0.0 or factor == 1.0:
+		return
+	var z_old: float = _target_zoom
+	var z_new: float = clampf(z_old * factor, min_zoom, max_zoom)
+	if z_new == z_old:
+		return
+	# Screen pixels convert to world units through the *rendered* zoom
+	# (design zoom x world scale), so the anchor math must use both.
+	var offset := center - get_viewport_rect().size / 2.0
+	_target_position += offset / (z_old * _world_scale) - offset / (z_new * _world_scale)
+	_target_zoom = z_new
 
 # =============================================================================
 # CAMERA SHAKE

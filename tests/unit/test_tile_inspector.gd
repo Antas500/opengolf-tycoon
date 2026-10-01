@@ -5,6 +5,11 @@ var entities: EntityLayer
 const TILE := Vector2i(2, 2)
 
 func before_each() -> void:
+	# The panel test below clamps against the real viewport, which is a
+	# desktop-sized window (the game renders at native window size).
+	get_window().size = Vector2i(1600, 1000)
+	await get_tree().process_frame
+	await get_tree().process_frame
 	grid = TerrainGrid.new()
 	grid.grid_width = 8
 	grid.grid_height = 8

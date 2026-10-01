@@ -45,17 +45,20 @@ func _build_ui() -> void:
 
 	# Menu panel
 	var panel = PanelContainer.new()
+	var compact := has_node("/root/Screen") and Screen.is_compact()
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.1, 0.12, 0.1, 0.95)
 	style.border_color = UIConstants.COLOR_PRIMARY
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(8)
-	style.content_margin_left = 30
-	style.content_margin_right = 30
-	style.content_margin_top = 24
-	style.content_margin_bottom = 24
+	var margin_h := 16 if compact else 30
+	var margin_v := 16 if compact else 24
+	style.content_margin_left = margin_h
+	style.content_margin_right = margin_h
+	style.content_margin_top = margin_v
+	style.content_margin_bottom = margin_v
 	panel.add_theme_stylebox_override("panel", style)
-	panel.custom_minimum_size = Vector2(320, 0)
+	panel.custom_minimum_size = Vector2(280 if compact else 320, 0)
 	_panel = panel
 	center.add_child(panel)
 
@@ -99,9 +102,12 @@ func _build_ui() -> void:
 	_add_menu_button(vbox, "Quit to Menu", _on_quit_to_menu_pressed, UIConstants.COLOR_WARNING)
 	_add_menu_button(vbox, "Quit to Desktop", _on_quit_to_desktop_pressed, UIConstants.COLOR_DANGER)
 
-	# Hint at bottom
+	# Hint at bottom (touch-specific gesture help on touch screens)
 	var hint = Label.new()
-	hint.text = "Look around while paused: middle-mouse drag or WASD to pan, scroll to zoom\nPress Escape to resume"
+	if DisplayServer.is_touchscreen_available():
+		hint.text = "Look around while paused: drag to pan, pinch to zoom\nTap Resume to continue"
+	else:
+		hint.text = "Look around while paused: middle-mouse drag or WASD to pan, scroll to zoom\nPress Escape to resume"
 	hint.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	hint.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -110,7 +116,13 @@ func _build_ui() -> void:
 func _add_menu_button(parent: VBoxContainer, text: String, callback: Callable, text_color: Color = Color.WHITE) -> void:
 	var btn = Button.new()
 	btn.text = text
-	btn.custom_minimum_size = Vector2(260, 40)
+	var compact := has_node("/root/Screen") and Screen.is_compact()
+	if compact:
+		# Full-width, tall targets: easy to tap on touch screens.
+		btn.custom_minimum_size = Vector2(0, 44)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		btn.custom_minimum_size = Vector2(260, 40)
 	btn.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_MD)
 	if text_color != Color.WHITE:
 		btn.add_theme_color_override("font_color", text_color)

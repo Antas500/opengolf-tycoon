@@ -4,8 +4,13 @@ class_name MiniMap
 
 signal camera_move_requested(world_position: Vector2)
 
-const MAP_SIZE: int = 180  # Size of mini-map in pixels
+const MAP_SIZE: int = 180  # Size of mini-map in pixels (standard windows)
+const COMPACT_MAP_SIZE: int = 120  # Narrow windows (phones, small browser windows)
 const BORDER_WIDTH: int = 2
+
+## Live map size; apply_screen() switches between MAP_SIZE and
+## COMPACT_MAP_SIZE as the window resizes.
+var _map_size: int = MAP_SIZE
 
 var _terrain_grid: TerrainGrid = null
 var _entity_layer = null  # EntityLayer reference
@@ -79,12 +84,34 @@ const BOUNDARY_COLOR = Color(0.9, 0.6, 0.2, 1.0)  # Orange/gold property line
 const UNOWNED_TINT = Color(0.3, 0.2, 0.2, 0.4)    # Subtle dark tint on unowned
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(MAP_SIZE + BORDER_WIDTH * 2, MAP_SIZE / 2.0 + BORDER_WIDTH * 2)
+	custom_minimum_size = get_map_total_size()
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	apply_screen()
 	_build_terrain_colors()
 	# Listen for theme changes to update colors
 	if EventBus.has_signal("theme_changed"):
 		EventBus.theme_changed.connect(_on_theme_changed)
+
+## Total drawn size of the map (isometric diamond bounding box + border).
+func get_map_total_size() -> Vector2:
+	return Vector2(_map_size + BORDER_WIDTH * 2, _map_size / 2.0 + BORDER_WIDTH * 2)
+
+## Pick the map size for the current window and reflow. Called from Main on
+## every responsive window change.
+func apply_screen() -> void:
+	var new_size: int = COMPACT_MAP_SIZE if (has_node("/root/Screen") and Screen.is_compact()) else MAP_SIZE
+	set_map_size(new_size)
+
+## Set an explicit map size (independent of the window). Used by tests and
+## anywhere a deterministic size is wanted; apply_screen() drives it from
+## the window otherwise.
+func set_map_size(new_size: int) -> void:
+	if new_size <= 0 or new_size == _map_size:
+		return
+	_map_size = new_size
+	custom_minimum_size = get_map_total_size()
+	_needs_redraw = true
+	queue_redraw()
 
 func _on_theme_changed(_theme_type) -> void:
 	_build_terrain_colors()
@@ -143,14 +170,14 @@ func _regenerate_map_texture() -> void:
 	var grid_height = _terrain_grid.grid_height
 
 	# Create image at appropriate resolution
-	var img = Image.create(MAP_SIZE, MAP_SIZE, false, Image.FORMAT_RGBA8)
+	var img = Image.create(_map_size, _map_size, false, Image.FORMAT_RGBA8)
 
 	# Sample terrain at reduced resolution
-	for px in range(MAP_SIZE):
-		for py in range(MAP_SIZE):
+	for px in range(_map_size):
+		for py in range(_map_size):
 			# Map pixel to grid position
-			var gx = int(float(px) / MAP_SIZE * grid_width)
-			var gy = int(float(py) / MAP_SIZE * grid_height)
+			var gx = int(float(px) / _map_size * grid_width)
+			var gy = int(float(py) / _map_size * grid_height)
 			var terrain_type = _terrain_grid.get_tile(Vector2i(gx, gy))
 
 			var color = _terrain_colors.get(terrain_type, Color(0.3, 0.3, 0.3))
@@ -318,7 +345,7 @@ func _draw_land_boundary() -> void:
 				draw_line(start, end, BOUNDARY_COLOR, 1.5)
 
 func _map_scale() -> float:
-	return float(MAP_SIZE) / _terrain_grid.projection.world_bounds().size.x
+	return float(_map_size) / _terrain_grid.projection.world_bounds().size.x
 
 func _world_to_map_pos(world_pos: Vector2) -> Vector2:
 	return Vector2(BORDER_WIDTH, BORDER_WIDTH) + (world_pos - _terrain_grid.projection.world_bounds().position) * _map_scale()

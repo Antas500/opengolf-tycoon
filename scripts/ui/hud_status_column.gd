@@ -63,9 +63,21 @@ func _process(_delta: float) -> void:
 		_last_effectively_paused = effectively_paused
 		_update_game_mode()
 
+## Column width for the current window: narrow windows (phones, small
+## browser windows) get a compact column so the course keeps most of the
+## screen.
+func _column_width() -> float:
+	if has_node("/root/Screen") and Screen.is_compact():
+		return 150.0
+	return UIConstants.HUD_COLUMN_WIDTH
+
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(UIConstants.HUD_COLUMN_WIDTH, 0)
+	custom_minimum_size = Vector2(_column_width(), 0)
 	size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	# On compact windows the details are collapsed by default: the single
+	# summary row keeps the course view clear (users can still expand it).
+	if _column_width() < UIConstants.HUD_COLUMN_WIDTH:
+		_collapsed = true
 
 	# Column panel style — rounded card instead of an edge-to-edge bar
 	var style = StyleBoxFlat.new()
@@ -107,6 +119,8 @@ func _build_ui() -> void:
 	_collapse_button.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	_collapse_button.tooltip_text = "Collapse / expand the status column"
 	_collapse_button.pressed.connect(func(): set_collapsed(not _collapsed))
+	if _collapsed:
+		_collapse_button.text = "+"
 	header.add_child(_collapse_button)
 
 	column.add_child(_create_separator())
@@ -136,6 +150,7 @@ func _build_ui() -> void:
 	_details = VBoxContainer.new()
 	_details.name = "Details"
 	_details.add_theme_constant_override("separation", UIConstants.SEPARATION_SM)
+	_details.visible = not _collapsed  # auto-collapsed on compact windows
 	column.add_child(_details)
 
 	# Date / season (no intra-day clock — the course never closes)
@@ -227,16 +242,28 @@ func _create_separator() -> HSeparator:
 
 ## Pin the column to the top-right corner of its parent.
 func _apply_anchors() -> void:
+	var width := _column_width()
 	anchor_left = 1.0
 	anchor_right = 1.0
 	anchor_top = 0.0
 	anchor_bottom = 0.0
 	grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	grow_vertical = Control.GROW_DIRECTION_END
-	offset_left = -(UIConstants.HUD_COLUMN_WIDTH + UIConstants.HUD_COLUMN_MARGIN)
+	offset_left = -(width + UIConstants.HUD_COLUMN_MARGIN)
 	offset_right = -UIConstants.HUD_COLUMN_MARGIN
 	offset_top = UIConstants.HUD_COLUMN_MARGIN
 	_refresh_height()
+
+## Re-derive size-sensitive layout after a responsive window change
+## (rotation, resize across the compact threshold). Crossing into compact
+## collapses the details once (players can still expand them manually).
+func apply_screen() -> void:
+	if not is_inside_tree():
+		return
+	custom_minimum_size.x = _column_width()
+	if _column_width() < UIConstants.HUD_COLUMN_WIDTH:
+		set_collapsed(true)
+	_apply_anchors()
 
 ## Keep the panel exactly as tall as its content (anchored controls need an
 ## explicit bottom offset).

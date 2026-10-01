@@ -114,10 +114,17 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Hotkey reference** — F1 opens keyboard shortcut panel
 - **Save/load panel** — Named save slots with save/load UI
 - **Colorblind mode** — Alternative color palette for accessibility
+- **Touch controls** — On phones/tablets (and the web build): tap to click, one-finger drag to pan the course (or paint terrain while a tool is active), two-finger drag to pan + pinch to zoom, two-finger tap to cancel/close menus
 
 ### Save / Load
 
 Saved state includes: terrain tiles, elevation, entity positions, hole configurations, economy state (money, reputation, green fee), day/hour, wind, weather, seasons, course theme, and course records. Auto-saves at day end (with indicator); manual save with named slots. Quit to Menu option available from pause menu.
+
+### Platforms
+
+Playable on **desktop (Windows/macOS/Linux), tablets, phones, and in the browser** (Web build, including the Cloudflare Pages deployment).
+
+The game renders at the window's native resolution and adapts to the screen: the course view keeps the reference physical size on large desktops while staying 1:1 (tiles never shrink) on phones and tablets; the HUD switches to a compact layout on narrow windows (narrower stats column, smaller minimap, scrollable main menu with larger tap targets); popup panels clamp to the available space and scroll instead of spilling off small screens. Desktop behavior at 1600x1000 is unchanged from the original fixed-viewport layout.
 
 ---
 
