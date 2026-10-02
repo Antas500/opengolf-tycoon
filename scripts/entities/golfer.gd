@@ -1150,6 +1150,173 @@ func preview_shot(target: Vector2i) -> Dictionary:
 		"arc_scale": 0.3 if is_player_punch() else (1.4 if player_shape == 3 else 1.0),
 	}
 
+## Predict a shot whose *resting point* is the selected tile centre or vertex.
+## The mouse target is the intended end of the combined flight-and-roll path, so
+## solve backwards for the launch point instead of treating the mouse as a carry
+## point. This uses the same deterministic shot model as execution; the real swing
+## still has its normal skill-based variance.
+func preview_shot_to_rest(target: Vector2, anchor_type: String = "") -> Dictionary:
+	if player_profile:
+		sync_player_profile_skills()
+	var terrain_grid := GameManager.terrain_grid
+	if not awaits_player_shot() or terrain_grid == null or not _is_valid_precise_shot_target(terrain_grid, target):
+		return {}
+	if not shape_allowed(player_shape, terrain_grid.get_tile(Vector2i(ball_position_precise.round()))):
+		player_shape = 0
+
+	var plan := _solve_aim_for_rest(target)
+	if plan.is_empty():
+		return {}
+	var shot: Dictionary = plan.shot
+	var predicted_rest: Vector2 = plan.predicted_rest
+	var endpoint := target
+	var endpoint_kind := anchor_type if not anchor_type.is_empty() else _anchor_type_for_precise_point(target)
+	var clamped: bool = plan.clamped
+
+	# If the requested point is unreachable (club range, a map edge, or a ball-
+	# stopping hazard), keep the guide's endpoint on a nearby tile anchor instead
+	# of leaving it at an arbitrary sub-tile coordinate.
+	if clamped:
+		var nearest_anchor := terrain_grid.snap_world_to_tile_anchor(
+			terrain_grid.grid_to_screen_precise(predicted_rest))
+		if not nearest_anchor.is_empty():
+			endpoint = nearest_anchor.point
+			endpoint_kind = nearest_anchor.anchor_type
+
+	var carry: Vector2 = shot.get("carry_position_precise", Vector2(ball_position))
+	var rest := endpoint
+	var roll_path := PackedVector2Array(shot.get("roll_path", PackedVector2Array()))
+	if roll_path.is_empty():
+		roll_path.append(carry)
+	if roll_path.size() == 1:
+		if carry.distance_to(rest) > 0.001:
+			roll_path.append(rest)
+	else:
+		roll_path[roll_path.size() - 1] = rest
+
+	var rest_tile := Vector2i(rest.round())
+	var rest_terrain: int = terrain_grid.get_tile(rest_tile)
+	var blocked: bool = GolfRules.get_relief_type(rest_terrain) != GolfRules.ReliefType.NONE
+	var club: Club = shot.get("club", _chosen_club)
+	var max_range := player_max_distance(club)
+	var origin := Vector2(ball_position)
+	return {
+		"club": club,
+		"club_name": CLUB_STATS[club]["name"],
+		"origin": origin,
+		"aim": plan.aim,
+		"raw_target": target,
+		"target": endpoint,
+		"anchor_type": endpoint_kind,
+		"clamped": clamped,
+		"range_limited": plan.range_limited,
+		"max_range": max_range,
+		"carry": carry,
+		"rest": rest,
+		"roll_path": roll_path,
+		"carry_yards": terrain_grid.calculate_distance_yards_precise(origin, carry),
+		"roll_yards": terrain_grid.calculate_distance_yards_precise(carry, rest),
+		"rollout_tiles": float(shot.get("rollout_tiles", 0.0)),
+		"is_backspin": bool(shot.get("is_backspin", false)),
+		"blocked": blocked,
+		"blocked_terrain": TerrainTypes.get_type_name(rest_terrain) if blocked else "",
+		"shape": player_shape,
+		"shape_bend_deg": shape_bend_degrees(player_shape),
+		"punch": is_player_punch(),
+		"arc_scale": 0.3 if is_player_punch() else (1.4 if player_shape == 3 else 1.0),
+	}
+
+## Take the shot selected by preview_shot_to_rest(). Kept separate from play_shot()
+## so AI/tools using the existing tile-aim API retain their current behaviour.
+func play_shot_to_rest(target: Vector2) -> bool:
+	if player_profile:
+		sync_player_profile_skills()
+	var terrain_grid := GameManager.terrain_grid
+	if not awaits_player_shot() or GameManager.is_paused or terrain_grid == null \
+			or not _is_valid_precise_shot_target(terrain_grid, target):
+		return false
+	if not shape_allowed(player_shape, terrain_grid.get_tile(Vector2i(ball_position_precise.round()))):
+		player_shape = 0
+	var plan := _solve_aim_for_rest(target)
+	if plan.is_empty():
+		return false
+	take_shot_precise(plan.aim, plan.predicted_rest)
+	return true
+
+## Iteratively invert the deterministic flight + rollout model. Aim is constrained
+## by the selected club's range, and the final discrepancy tells the preview when
+## it needs to show a range-limited endpoint.
+func _solve_aim_for_rest(target: Vector2) -> Dictionary:
+	var terrain_grid := GameManager.terrain_grid
+	if terrain_grid == null:
+		return {}
+	var origin := Vector2(ball_position)
+	var target_delta := target - origin
+	var target_distance := target_delta.length()
+	if target_distance < 0.5:
+		return {}
+
+	var current_terrain: int = terrain_grid.get_tile(ball_position)
+	_chosen_club = select_club(target_distance, current_terrain)
+	if _chosen_club == Club.PUTTER:
+		_chosen_club = Club.WEDGE
+	var max_range := player_max_distance(_chosen_club)
+	if max_range <= 0.0:
+		return {}
+
+	var aim := origin + target_delta.normalized() * minf(target_distance, max_range)
+	var shot: Dictionary = {}
+	for _iteration in range(12):
+		shot = _calculate_shot_precise(ball_position, aim, true)
+		var predicted_rest: Vector2 = shot.get("landing_position_precise", aim)
+		var error := target - predicted_rest
+		if error.length() <= 0.02:
+			break
+		var corrected_aim := aim + error
+		var corrected_delta := corrected_aim - origin
+		if corrected_delta.length() > max_range:
+			corrected_aim = origin + corrected_delta.normalized() * max_range
+		if corrected_aim.distance_squared_to(aim) <= 0.0001:
+			break
+		aim = corrected_aim
+
+	# Recalculate at the final point (the last iteration may have moved aim).
+	shot = _calculate_shot_precise(ball_position, aim, true)
+	var final_rest: Vector2 = shot.get("landing_position_precise", aim)
+	var target_error := final_rest.distance_to(target)
+	var range_limited := target_error > 0.12 and aim.distance_to(origin) >= max_range - 0.01
+	return {
+		"aim": aim,
+		"shot": shot,
+		"predicted_rest": final_rest,
+		"max_range": max_range,
+		"clamped": target_error > 0.12,
+		"range_limited": range_limited,
+	}
+
+## A precise shot target is expressed in centre-relative coordinates. Its
+## corresponding terrain-space point must remain within the map's outer edges.
+func _is_valid_precise_shot_target(grid: TerrainGrid, target: Vector2) -> bool:
+	var grid_point := target + Vector2(0.5, 0.5)
+	if grid_point.x < 0.0 or grid_point.y < 0.0 \
+			or grid_point.x > float(grid.grid_width) or grid_point.y > float(grid.grid_height):
+		return false
+	var frac_x := grid_point.x - floorf(grid_point.x)
+	var frac_y := grid_point.y - floorf(grid_point.y)
+	var is_vertex := is_zero_approx(frac_x) and is_zero_approx(frac_y)
+	var is_centre := is_equal_approx(frac_x, 0.5) and is_equal_approx(frac_y, 0.5)
+	if not is_vertex and not is_centre:
+		return false
+	var tile_x := clampi(floori(grid_point.x), 0, grid.grid_width - 1)
+	var tile_y := clampi(floori(grid_point.y), 0, grid.grid_height - 1)
+	return grid.is_valid_position(Vector2i(tile_x, tile_y))
+
+func _anchor_type_for_precise_point(point: Vector2) -> String:
+	var grid_point := point + Vector2(0.5, 0.5)
+	var is_vertex := is_equal_approx(grid_point.x, roundf(grid_point.x)) \
+		and is_equal_approx(grid_point.y, roundf(grid_point.y))
+	return "vertex" if is_vertex else "center"
+
 func play_shot(target: Vector2i) -> bool:
 	if player_profile:
 		sync_player_profile_skills()
@@ -1184,8 +1351,13 @@ func _take_ai_shot() -> void:
 	# Take the shot
 	take_shot(target)
 
-## Take a shot
+## Take a shot using the legacy tile-centre aim API.
 func take_shot(target: Vector2i) -> void:
+	take_shot_precise(Vector2(target))
+
+## Take a shot from a continuous aim point. `expected_rest` is used only for
+## the post-shot accuracy readout; normal shot dispersion remains unchanged.
+func take_shot_precise(target: Vector2, expected_rest: Vector2 = Vector2(-1, -1)) -> void:
 	current_strokes += 1
 	_cached_shot_target_valid = false
 	_change_state(State.SWINGING)
@@ -1220,7 +1392,9 @@ func take_shot(target: Vector2i) -> void:
 	else:
 		# Standard shot calculation
 		var from_precise = ball_position_precise
-		shot_result = _calculate_shot(ball_position, target)
+		shot_result = _calculate_shot_precise(ball_position, target)
+		if expected_rest != Vector2(-1, -1):
+			shot_result["target"] = expected_rest
 		ball_position = shot_result.landing_position
 		ball_position_precise = shot_result.landing_position_precise
 
@@ -1287,9 +1461,9 @@ func take_shot(target: Vector2i) -> void:
 			var spin_label = " backspin" if shot_result.get("is_backspin", false) else ""
 			extras.append("%.0fyd roll%s" % [roll_yards, spin_label])
 		# Yards off target
-		var target_pos = shot_result.get("target", Vector2i.ZERO)
-		if target_pos != Vector2i.ZERO:
-			var off_target_tiles = ball_position_precise.distance_to(Vector2(target_pos))
+		var target_pos: Vector2 = shot_result.get("target", Vector2.ZERO)
+		if target_pos != Vector2.ZERO:
+			var off_target_tiles = ball_position_precise.distance_to(target_pos)
 			var off_target_yards = int(off_target_tiles * 22.0)
 			if off_target_yards > 0:
 				extras.append("%dyd off target" % off_target_yards)
@@ -1675,13 +1849,18 @@ func _calculate_putt(from_precise: Vector2) -> Dictionary:
 		"club": Club.PUTTER
 	}
 
-## Calculate shot outcome.
-## `deterministic` replaces every random error term with its expected value so the
-## shot can be previewed (aim guide) without rolling the dice. Used by preview_shot().
+## Integer-target compatibility wrapper used by the AI and existing tools.
 func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = false) -> Dictionary:
+	return _calculate_shot_precise(from, Vector2(target), deterministic)
+
+## Calculate shot outcome for a continuous aim point. `deterministic` replaces
+## every random error term with its expected value so the aim guide can solve the
+## combined flight-and-roll path without rolling the dice.
+func _calculate_shot_precise(from: Vector2i, target: Vector2, deterministic: bool = false) -> Dictionary:
 	var terrain_grid = GameManager.terrain_grid
 	if not terrain_grid:
-		return {"landing_position": target, "distance": 0, "accuracy": 1.0, "club": Club.DRIVER}
+		return {"landing_position": Vector2i(target.round()), "landing_position_precise": target,
+			"carry_position_precise": target, "distance": 0, "accuracy": 1.0, "club": Club.DRIVER}
 
 	# Use the club chosen during targeting (decide_shot_target) to avoid mismatch.
 	# Previously select_club() re-derived the club from distance alone, which could
@@ -1772,20 +1951,19 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 
 	# Apply wind headwind/tailwind effect on distance
 	if GameManager.wind_system:
-		var shot_direction = Vector2(target - from).normalized()
+		var shot_direction = (target - Vector2(from)).normalized()
 		var wind_distance_mod = GameManager.wind_system.get_distance_modifier(shot_direction, club)
 		distance_modifier *= wind_distance_mod
 
-	# Apply elevation effect on distance
-	# Uphill = shorter effective distance, downhill = longer
-	# ~3% change per elevation unit (~10 feet)
+	# Apply elevation effect on distance. Precise aim points may be at a tile
+	# vertex, so sample their interpolated height instead of rounding to a tile.
 	if terrain_grid:
-		var elevation_diff = terrain_grid.get_elevation_difference(from, target)
+		var elevation_diff = terrain_grid.get_elevation_at_precise(target) - terrain_grid.get_tile_height(from)
 		var elevation_factor = 1.0 - (elevation_diff * 0.03)
 		distance_modifier *= clampf(elevation_factor, 0.75, 1.25)
 
 	# Calculate actual distance
-	var intended_distance = Vector2(from).distance_to(Vector2(target))
+	var intended_distance = Vector2(from).distance_to(target)
 
 	# Guard against degenerate zero-distance shots (e.g. target rounded to ball position)
 	# Use the hole as a fallback direction with a minimum 1-tile chip
@@ -1795,7 +1973,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 			var hole_pos = course_data.holes[current_hole].hole_position
 			var dist_to_hole = Vector2(from).distance_to(Vector2(hole_pos))
 			if dist_to_hole > 0.1:
-				target = hole_pos
+				target = Vector2(hole_pos)
 				intended_distance = dist_to_hole
 
 	var actual_distance = intended_distance * distance_modifier
@@ -1807,7 +1985,7 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 	#   - Occasional big hooks/slices (tail of the distribution)
 	#   - Misses scale naturally with distance (same angle = more yards off at range)
 	#   - Each golfer has a consistent miss tendency (slice or hook bias)
-	var direction = Vector2(target - from).normalized()
+	var direction = (target - Vector2(from)).normalized()
 	if player_profile and player_shape in [1, 2]:
 		direction = direction.rotated(deg_to_rad(shape_bend_degrees(player_shape)))
 
@@ -1884,8 +2062,8 @@ func _calculate_shot(from: Vector2i, target: Vector2i, deterministic: bool = fal
 
 	# Ensure carry position is valid
 	if not terrain_grid.is_valid_position(carry_position):
-		carry_position = target
-		carry_position_precise = Vector2(target)
+		carry_position = Vector2i(target.round())
+		carry_position_precise = target
 
 	# For putts, ensure ball stays on green or goes in hole (no rollout on putts)
 	if club == Club.PUTTER:

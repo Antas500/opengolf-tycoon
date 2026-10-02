@@ -613,9 +613,9 @@ func _format_diff(diff: int) -> String:
 		return "E"
 	return "%+d" % diff
 
-## Refresh the aim guide for the mouse position, or for an explicit grid target
-## (`target_override`, used by tests). The guide clears whenever the owner is not
-## lining up a shot: walking, opponents' turns, automatic putting, results screen.
+## Refresh the guide for the mouse position, snapping the intended resting point
+## to the nearest tile centre or vertex. Explicit tile-centre overrides are used
+## by tests. The guide clears when the owner is not lining up a shot.
 func update_aim_guide(target_override: Vector2i = Vector2i(-1, -1)) -> void:
 	if not is_instance_valid(aim_guide):
 		return
@@ -626,10 +626,20 @@ func update_aim_guide(target_override: Vector2i = Vector2i(-1, -1)) -> void:
 	if is_instance_valid(player_tab) and player_tab.selected != PlayerTab.PAGE_PLAY:
 		aim_guide.clear()
 		return
-	var target := target_override
-	if target == Vector2i(-1, -1):
-		target = grid.screen_to_grid(get_global_mouse_position())
-	aim_guide.show_preview(player.preview_shot(target))
+	var target: Vector2
+	var anchor_type := ""
+	if target_override == Vector2i(-1, -1):
+		var anchor := grid.snap_world_to_tile_anchor(get_global_mouse_position())
+		if anchor.is_empty():
+			aim_guide.clear()
+			return
+		target = anchor.point
+		anchor_type = anchor.anchor_type
+	else:
+		# Explicit tile overrides are useful to tests and resolve to that tile's
+		# centre in the precise shot-aim coordinate system.
+		target = Vector2(target_override)
+	aim_guide.show_preview(player.preview_shot_to_rest(target, anchor_type))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not active or GameManager.is_paused:
@@ -638,8 +648,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if is_instance_valid(player) and player.awaits_player_shot() and GameManager.terrain_grid:
-			var target: Vector2i = GameManager.terrain_grid.screen_to_grid(get_global_mouse_position())
-			if player.play_shot(target):
+			var grid: TerrainGrid = GameManager.terrain_grid
+			var anchor := grid.snap_world_to_tile_anchor(get_global_mouse_position())
+			if not anchor.is_empty() and player.play_shot_to_rest(anchor.point):
 				get_viewport().set_input_as_handled()
 
 func _show_results() -> void:

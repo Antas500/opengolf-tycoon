@@ -202,6 +202,51 @@ func test_preview_reflects_shapes_punch_and_backspin() -> void:
 	GameManager.wind_system = saved_wind
 	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
+func test_rest_aim_predicts_flight_and_roll_to_centre_or_vertex() -> void:
+	var saved_grid = GameManager.terrain_grid
+	var saved_wind = GameManager.wind_system
+	GameManager.wind_system = null
+	var grid: TerrainGrid = autofree(TerrainGrid.new())
+	_fill_fairway(grid)
+	GameManager.terrain_grid = grid
+	var golfer := _ready_preview_golfer(grid, TerrainTypes.Type.FAIRWAY)
+
+	var centre_target := Vector2(10, 16)
+	var centre_preview := golfer.preview_shot_to_rest(centre_target, "center")
+	assert_false(centre_preview.is_empty(), "A tile-centre target gets a deterministic guide")
+	assert_eq(centre_preview.rest, centre_target, "The guide's roll ends exactly at the selected centre")
+	assert_eq(centre_preview.roll_path[centre_preview.roll_path.size() - 1], centre_target,
+		"The rollout polyline ends at the selected centre")
+	assert_gt(centre_preview.carry.distance_to(centre_preview.rest), 0.0,
+		"The preview models carry followed by ground roll")
+	var centre_shot := golfer._calculate_shot_precise(golfer.ball_position, centre_preview.aim, true)
+	if not centre_preview.clamped:
+		assert_almost_eq(centre_shot.landing_position_precise.distance_to(centre_target), 0.0, 0.13,
+			"The solved launch point predicts the selected final resting point")
+
+	var vertex_target := Vector2(13.5, 9.5) # terrain vertex at grid point (14, 10)
+	var vertex_preview := golfer.preview_shot_to_rest(vertex_target, "vertex")
+	assert_false(vertex_preview.is_empty(), "A terrain vertex is a valid aim target")
+	assert_eq(vertex_preview.anchor_type, "vertex")
+	assert_eq(vertex_preview.rest, vertex_target, "The guide's rollout stays on the chosen vertex")
+	assert_eq(vertex_preview.roll_path[vertex_preview.roll_path.size() - 1], vertex_target)
+
+	var unreachable := golfer.preview_shot_to_rest(Vector2(10, 50), "center")
+	assert_true(unreachable.clamped, "A target beyond club range is marked as limited")
+	assert_true(unreachable.range_limited, "A target beyond club range is identified as range-limited")
+	assert_eq(unreachable.rest, unreachable.roll_path[unreachable.roll_path.size() - 1],
+		"The range-limited guide still terminates on its snapped endpoint")
+	var endpoint_grid_point: Vector2 = unreachable.rest + Vector2(0.5, 0.5)
+	var endpoint_is_vertex := is_equal_approx(endpoint_grid_point.x, roundf(endpoint_grid_point.x)) \
+		and is_equal_approx(endpoint_grid_point.y, roundf(endpoint_grid_point.y))
+	var endpoint_is_centre := is_equal_approx(endpoint_grid_point.x - 0.5, roundf(endpoint_grid_point.x - 0.5)) \
+		and is_equal_approx(endpoint_grid_point.y - 0.5, roundf(endpoint_grid_point.y - 0.5))
+	assert_true(endpoint_is_vertex or endpoint_is_centre,
+		"The limited guide endpoint is a centre or vertex anchor")
+
+	GameManager.wind_system = saved_wind
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
+
 func test_preview_unavailable_outside_the_owner_turn() -> void:
 	var saved_grid = GameManager.terrain_grid
 	var grid: TerrainGrid = autofree(TerrainGrid.new())

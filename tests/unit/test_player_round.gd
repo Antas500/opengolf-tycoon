@@ -160,8 +160,9 @@ func test_real_shot_rejects_double_click_and_round_can_finish() -> void:
 	_start(0)
 	var player_golfer := rounds.player
 	player_golfer.walk_speed = 120
-	assert_true(player_golfer.play_shot(Vector2i(16, 10)))
-	assert_false(player_golfer.play_shot(Vector2i(16, 10)))
+	var resting_target := Vector2(16, 10)
+	assert_true(player_golfer.play_shot_to_rest(resting_target))
+	assert_false(player_golfer.play_shot_to_rest(resting_target))
 	assert_eq(player_golfer.current_strokes, 1)
 	# Exercise real swing, ball flight, rollout, walking, putting and pickup.
 	Engine.time_scale = 3.0
@@ -275,10 +276,14 @@ func test_aim_guide_shows_intended_arc_and_roll() -> void:
 	assert_gt(int(preview.carry_yards), 0, "Guide reports the intended carry")
 	assert_gt(int(preview.roll_yards), 0, "Guide reports the roll after landing")
 	assert_gt(int(preview.get("roll_path", PackedVector2Array()).size()), 1, "Guide traces the roll path")
+	assert_eq(preview.anchor_type, "center", "Explicit tile aiming selects the tile centre")
+	assert_eq(preview.rest, Vector2(16, 10), "The expected roll ends on the selected anchor")
 	var geometry := AimGuide.build_geometry(GameManager.terrain_grid, preview)
 	assert_false(geometry.is_empty(), "Guide geometry projects the preview")
 	assert_almost_eq(Vector2(geometry.arc[geometry.arc.size() - 1]).distance_to(geometry.carry), 0.0, 0.5,
 		"Arc ends on the guide's carry point")
+	assert_almost_eq(Vector2(geometry.trajectory[geometry.trajectory.size() - 1]).distance_to(geometry.rest), 0.0,
+		0.01, "The combined trajectory reaches its snapped rest point")
 
 	# The guide disappears whenever it is not the owner's shot to hit.
 	rounds.player.current_state = Golfer.State.WALKING
