@@ -553,10 +553,10 @@ func new_game(course_name_input: String = "New Course", theme: int = CourseTheme
 	_stagnation_day_started = 1
 	heightmap_noise_seed = randi()
 
-	# Apply theme colors to tileset generator (with colorblind remapping if active)
+	# Apply theme colors to the terrain palette (with colorblind remapping if active)
 	var base_colors := CourseTheme.get_terrain_colors(theme)
 	var remapped := ColorblindMode.remap_colors(base_colors, colorblind_mode)
-	TilesetGenerator.set_theme_colors(remapped)
+	TerrainPalette.set_theme_colors(remapped)
 	EventBus.theme_changed.emit(theme)
 
 	SaveManager.current_save_name = ""
@@ -734,7 +734,7 @@ func set_colorblind_mode(mode: int) -> void:
 	# Re-apply theme colors through the colorblind filter
 	var base_colors := CourseTheme.get_terrain_colors(current_theme)
 	var remapped := ColorblindMode.remap_colors(base_colors, colorblind_mode)
-	TilesetGenerator.set_theme_colors(remapped)
+	TerrainPalette.set_theme_colors(remapped)
 	EventBus.theme_changed.emit(current_theme)
 
 func _exit_tree() -> void:

@@ -84,7 +84,7 @@ WASTE_BUNKER 18, BRUSH 19
 
 `CourseSurface.PALETTE_KEYS` holds one theme color key per id. The shader
 reads the palette width, so a new type needs a palette key and a color in every
-theme (`CourseTheme.get_terrain_colors()` and `TilesetGenerator.TERRAIN_COLORS`).
+theme (`CourseTheme.get_terrain_colors()` and `TerrainPalette.TERRAIN_COLORS`).
 
 ### 2. Families
 

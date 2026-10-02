@@ -4,7 +4,7 @@ class_name ColorblindMode
 ##
 ## Three modes: OFF (default), DEUTERANOPIA (red-green), TRITANOPIA (blue-yellow).
 ## When active, remaps terrain colors via modified palettes that CourseTheme
-## and TilesetGenerator can query.
+## and TerrainPalette can query.
 
 enum Mode { OFF, DEUTERANOPIA, TRITANOPIA }
 

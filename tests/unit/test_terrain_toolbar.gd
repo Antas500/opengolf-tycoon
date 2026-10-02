@@ -423,11 +423,11 @@ func test_terrain_tile_highlight_and_click_still_select_the_tool() -> void:
 
 func test_tile_previews_follow_course_theme_colors() -> void:
 	var button: TerrainTileButton = toolbar._tool_buttons[TerrainTypes.Type.WATER]
-	var original_colors := TilesetGenerator._active_colors.duplicate()
+	var original_colors := TerrainPalette._active_colors.duplicate()
 	var recolored := original_colors.duplicate()
 	recolored["water"] = Color("d0478c")
 	recolored["fringe"] = Color("808044")
-	TilesetGenerator.set_theme_colors(recolored)
+	TerrainPalette.set_theme_colors(recolored)
 	EventBus.theme_changed.emit(0)
 
 	var palette: Image = button._surface_material.get_shader_parameter("palette").get_image()
@@ -435,7 +435,7 @@ func test_tile_previews_follow_course_theme_colors() -> void:
 		Color("d0478c").to_html(false))
 	assert_eq(button._surface_material.get_shader_parameter("fringe_color"), Color("808044"))
 
-	TilesetGenerator.set_theme_colors(original_colors)
+	TerrainPalette.set_theme_colors(original_colors)
 	EventBus.theme_changed.emit(0)
 
 func test_brush_size_controls() -> void:

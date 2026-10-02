@@ -69,19 +69,19 @@ func _regenerate_grass() -> void:
 				_generate_grass_for_tile(pos)
 
 func _get_blade_color_for_terrain(terrain_type: int) -> Color:
-	# Get base color from theme via TilesetGenerator
+	# Get base color from theme via TerrainPalette
 	var base_color: Color
 	match terrain_type:
 		TerrainTypes.Type.FAIRWAY:
-			base_color = TilesetGenerator.get_color("fairway_light")
+			base_color = TerrainPalette.get_color("fairway_light")
 		TerrainTypes.Type.GREEN:
-			base_color = TilesetGenerator.get_color("green_light")
+			base_color = TerrainPalette.get_color("green_light")
 		TerrainTypes.Type.ROUGH:
-			base_color = TilesetGenerator.get_color("rough")
+			base_color = TerrainPalette.get_color("rough")
 		TerrainTypes.Type.HEAVY_ROUGH:
-			base_color = TilesetGenerator.get_color("heavy_rough")
+			base_color = TerrainPalette.get_color("heavy_rough")
 		_:  # GRASS
-			base_color = TilesetGenerator.get_color("grass")
+			base_color = TerrainPalette.get_color("grass")
 	# Add transparency for blade rendering
 	return Color(base_color.r, base_color.g, base_color.b, 0.4)
 

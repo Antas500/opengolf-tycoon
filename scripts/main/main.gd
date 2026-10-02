@@ -1884,10 +1884,6 @@ func _on_new_game_started() -> void:
 		terrain_grid.reset_for_new_course()
 	undo_manager.clear()
 
-	# Regenerate tileset with the selected theme colors
-	if terrain_grid:
-		terrain_grid.regenerate_tileset()
-
 	# Clear shot heatmap data for new game
 	if shot_heatmap_tracker:
 		shot_heatmap_tracker.clear()
@@ -2572,9 +2568,6 @@ func _on_load_completed(success: bool) -> void:
 			hole_tool.current_hole_number = GameManager.current_course.holes.size() + 1
 		# Recalculate derived stroke indices from loaded difficulty ratings
 		StrokeIndexCalculator.recalculate_for_course()
-		# Regenerate tileset with loaded theme colors
-		if terrain_grid:
-			terrain_grid.regenerate_tileset()
 		# Center camera on grid (same as new game) so player starts on their course
 		_center_camera_on_course()
 

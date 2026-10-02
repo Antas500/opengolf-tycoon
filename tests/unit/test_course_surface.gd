@@ -10,7 +10,7 @@ func before_each() -> void:
 	add_child_autofree(grid)
 
 func after_each() -> void:
-	TilesetGenerator.set_theme_colors(CourseTheme.get_terrain_colors(GameManager.current_theme))
+	TerrainPalette.set_theme_colors(CourseTheme.get_terrain_colors(GameManager.current_theme))
 
 func test_paint_and_bunker_depth_reach_surface_without_changing_save_schema() -> void:
 	var pos := Vector2i(3, 3)
@@ -40,8 +40,15 @@ func test_theme_refresh_preserves_terrain_and_player_placement() -> void:
 	var saved := grid.serialize()
 	var placed := grid.serialize_player_placed()
 	for theme in CourseTheme.Type.values():
-		TilesetGenerator.set_theme_colors(CourseTheme.get_terrain_colors(theme))
-		grid.regenerate_tileset()
+		var colors := CourseTheme.get_terrain_colors(theme)
+		TerrainPalette.set_theme_colors(colors)
+		EventBus.theme_changed.emit(theme)
+		var grass_index := CourseSurface.PALETTE_KEYS.find("grass")
+		var rendered_grass := grid._course_surface._palette.get_image().get_pixel(grass_index, 0)
+		var expected_grass: Color = colors["grass"]
+		assert_almost_eq(rendered_grass.r, expected_grass.r, 1.0 / 255.0)
+		assert_almost_eq(rendered_grass.g, expected_grass.g, 1.0 / 255.0)
+		assert_almost_eq(rendered_grass.b, expected_grass.b, 1.0 / 255.0)
 		assert_eq(grid.serialize(), saved)
 		assert_eq(grid.serialize_player_placed(), placed)
 

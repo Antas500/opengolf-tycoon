@@ -153,7 +153,7 @@ static func get_gameplay_modifiers(theme_type: int) -> Dictionary:
 			}
 	return {}
 
-## Color palettes for tileset generation per theme
+## Theme color palettes used by the shader-driven course surface.
 static func get_terrain_colors(theme_type: int) -> Dictionary:
 	match theme_type:
 		Type.PARKLAND:

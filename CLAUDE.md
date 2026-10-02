@@ -16,8 +16,8 @@ scripts/
 ├── entities/       # Golfer, Ball, Building, Tree, Rock, Flag
 ├── managers/       # GolferManager, BallManager, HoleManager, PlacementManager, BuildingRegistry, TournamentManager
 ├── systems/        # WindSystem, WeatherSystem, CourseRatingSystem, CourseTheme, FeedbackTriggers, GolferTier, TournamentSystem, DayNightSystem, CourseRecords, ShotAI, GolferNeeds, SeasonSystem, MilestoneSystem, TutorialSystem, DifficultyPresets, ColorblindMode
-├── terrain/        # TerrainGrid, TerrainTypes, TilesetGenerator, + overlay classes (cup, tee aim arrows, OB stakes, shot heatmap, …)
-├── tools/          # HoleCreationTool, ElevationTool, UndoManager, GenerateTileset
+├── terrain/        # TerrainGrid, TerrainTypes, TerrainPalette, + overlay classes (cup, tee aim arrows, OB stakes, shot heatmap, …)
+├── tools/          # HoleCreationTool, ElevationTool, UndoManager
 ├── ui/             # 40 UI components (MainMenu, PauseMenu, SettingsMenu, MiniMap, FinancialPanel, MilestonesPanel, HoleStatsPanel, CourseScorecardPanel, SaveLoadPanel, HotkeyPanel, etc.)
 ├── main/           # main.gd (scene controller)
 └── utils/          # IsometricCamera
@@ -28,7 +28,9 @@ data/
 ├── buildings.json      # 8 building types with upgrade tiers
 ├── terrain_types.json  # 20 terrain type definitions
 └── golfer_traits.json  # 5 golfer archetypes with spawn weights
-assets/tilesets/        # Terrain tileset (PNG + .tres)
+assets/
+├── sprites/             # Course objects, golfers, buildings, and decorations
+└── themes/              # Shared UI theme resources
 ```
 
 ## Architecture
@@ -55,8 +57,7 @@ assets/tilesets/        # Terrain tileset (PNG + .tres)
 
 ```
 Main (Node2D) ← main.gd
-├── TerrainGrid (Node2D) ← terrain_grid.gd
-│   └── TileMapLayer
+├── TerrainGrid (Node2D) ← terrain_grid.gd (builds the shader-driven CourseSurface)
 ├── Entities (Node2D)
 │   ├── Golfers, Balls, Buildings (Node2D containers)
 ├── GolferManager, BallManager, HoleManager (Node)
@@ -81,7 +82,7 @@ Key docs: [shot-accuracy](docs/algorithms/shot-accuracy.md) · [putting](docs/al
 - **GridProjection** (`terrain/grid_projection.gd`): the single grid ↔ world map. Renders the grid top-down or as 2:1 isometric diamonds and spins it through four 90° view orientations (SimGolf-style rotate). Purely affine, so `unproject()` is exact for mouse picking and both terrain shaders can invert it per fragment. The projected course always fills the same world rectangle, so camera bounds, the minimap and land boundaries are rotation-independent.
 - **Overlays** draw per-tile shapes through `OverlayGeometry` (`terrain/overlay_geometry.gd`), which projects tile outlines/centres into the overlay's local space so they render as diamonds when isometric. Each tee tile's painted aim arrow (`terrain/tee_aim_overlay.gd`) is one of them: it points at the hole's cup, curving round the corner of a dogleg ([tee-aim-arrow](docs/algorithms/tee-aim-arrow.md)).
 - **20 terrain types**: EMPTY, GRASS, FAIRWAY, ROUGH, HEAVY_ROUGH, GREEN, TEE_BOX, BUNKER, WATER, PATH, OUT_OF_BOUNDS, TREES, FLOWER_BED, ROCKS, FIRM_FAIRWAY, POT_BUNKER, STREAM, DEEP_ROUGH, WASTE_BUNKER, BRUSH. New ids are only ever appended (saves store raw ints). Gameplay code checks families — `TerrainTypes.is_water()`, `is_out_of_play()`, `is_bunker()`, `is_sand()`, `is_fairway()`, `is_rough()` — so variants behave like their parents; see `docs/algorithms/terrain-types.md`.
-- **TilesetGenerator**: Runtime procedural tileset (no external image assets required). Perlin noise, mowing stripes, sand stipple, water shimmer. Theme-aware via `set_theme_colors()` and `get_color()` methods.
+- **CourseSurface / TerrainPalette**: The course is rendered as a continuous shader-driven surface; TerrainPalette supplies theme-aware colors through `set_theme_colors()` and `get_color()`.
 
 ### Golfer Simulation
 - **Golfer** (`scripts/entities/golfer.gd`, ~61KB — most complex file): Skills (driving/accuracy/putting/recovery 0.0-1.0), personality (aggression/patience), 5 clubs (DRIVER/FAIRWAY_WOOD/IRON/WEDGE/PUTTER) with range/accuracy data. Shot calculation, target evaluation, tree collision, hazard avoidance. Group play (1-4 per group, "away" rule, double-par pickup). Explicit needs system (energy/comfort/hunger/thirst/pace) via `GolferNeeds` class.
@@ -122,12 +123,11 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
   - `get_accent_color()`, `get_description()` → UI display helpers
 - **Theme selection**: Happens on main menu via `MainMenu` class. User selects theme card, enters course name, starts game.
 - **Theme application flow**:
-  1. `GameManager.new_game()` sets `current_theme` and calls `TilesetGenerator.set_theme_colors()`
-  2. `EventBus.theme_changed` signal emitted
-  3. `TerrainGrid.regenerate_tileset()` rebuilds tileset with new colors
-  4. Overlays (WaterOverlay, GrassOverlay) listen to `theme_changed` and update their colors
+  1. `GameManager.new_game()` sets `current_theme` and updates `TerrainPalette` colors
+  2. `EventBus.theme_changed` is emitted
+  3. `CourseSurface` and theme-aware UI listeners refresh their palettes from the signal
 - **Save/load**: Theme stored as string in save data, restored via `CourseTheme.from_string()`. On load, theme colors re-applied and `theme_changed` emitted.
-- **Theme-aware components**: TilesetGenerator, WaterOverlay, GrassOverlay, terrain shader parameters.
+- **Theme-aware components**: TerrainPalette, WaterOverlay, GrassOverlay, terrain shader parameters.
 
 ### Holes
 - **HoleCreationTool**: opens a hole from the two tiles the player painted — one unused Tee Box and one unused **Green With Hole** — via **H** or the Open Hole tile on the Course Terrain tab, which is nestled into the notch between those two tiles (`scripts/ui/components/open_hole_notch_button.gd`, placed with `TileHoneycomb.set_notch_child`). See [hole-creation docs](docs/algorithms/hole-creation.md).

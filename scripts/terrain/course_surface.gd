@@ -75,13 +75,13 @@ func apply_projection(proj: GridProjection) -> void:
 static func make_palette_texture() -> ImageTexture:
 	var colors := Image.create(PALETTE_KEYS.size(), 1, false, Image.FORMAT_RGBA8)
 	for i in range(PALETTE_KEYS.size()):
-		colors.set_pixel(i, 0, TilesetGenerator.get_color(PALETTE_KEYS[i]))
+		colors.set_pixel(i, 0, TerrainPalette.get_color(PALETTE_KEYS[i]))
 	return ImageTexture.create_from_image(colors)
 
 func refresh_palette() -> void:
 	_palette = make_palette_texture()
 	material.set_shader_parameter("palette", _palette)
-	material.set_shader_parameter("fringe_color", TilesetGenerator.get_color("fringe"))
+	material.set_shader_parameter("fringe_color", TerrainPalette.get_color("fringe"))
 
 func rebuild() -> void:
 	for x in range(_grid.grid_width):

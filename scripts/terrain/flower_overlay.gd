@@ -133,7 +133,7 @@ func _draw() -> void:
 func _draw_foliage(center: Vector2, leaf: Dictionary) -> void:
 	var size = leaf.size
 
-	var leaf_color := TilesetGenerator.get_color("rough").darkened(0.12)
+	var leaf_color := TerrainPalette.get_color("rough").darkened(0.12)
 	draw_set_transform(center, 0.0, Vector2(1.0, 0.55))
 	draw_circle(Vector2.ZERO, size, leaf_color)
 	draw_circle(Vector2(-size * 0.35, -size * 0.25), size * 0.65, leaf_color.lightened(0.10))
