@@ -114,57 +114,96 @@ func test_daily_stats_average_score_to_par_over() -> void:
 
 # --- Operating Costs ---
 
+func _scale_days() -> int:
+	return int(round(1.0 / GameManager.DAILY_RATE_SCALE))
+
+func _sum_operating_costs(terrain_cost: int, hole_count: int, building_costs: int) -> Dictionary:
+	## Run one legacy-day equivalent of 3.5s game days and total the charges.
+	## Whole dollars posted plus leftover carry equal the legacy daily amount
+	## (float rounding may leave < $1 in the carry).
+	GameManager._daily_charge_carries.clear()
+	var stats = GameManager.DailyStatistics.new()
+	var totals := {
+		"terrain": 0.0,
+		"base": 0.0,
+		"staff": 0.0,
+		"buildings": 0.0,
+		"operating": 0.0,
+	}
+	for _i in _scale_days():
+		stats.calculate_operating_costs(terrain_cost, hole_count, building_costs)
+		totals["terrain"] += stats.terrain_maintenance
+		totals["base"] += stats.base_operating_cost
+		totals["staff"] += stats.staff_wages
+		totals["buildings"] += stats.building_operating_costs
+		totals["operating"] += stats.operating_costs
+	totals["terrain"] += float(GameManager._daily_charge_carries.get("terrain", 0.0))
+	totals["base"] += float(GameManager._daily_charge_carries.get("base", 0.0))
+	totals["staff"] += float(GameManager._daily_charge_carries.get("staff_wages", 0.0))
+	totals["buildings"] += float(GameManager._daily_charge_carries.get("buildings", 0.0))
+	totals["operating"] = (
+		totals["terrain"] + totals["base"] + totals["staff"] + totals["buildings"]
+		+ float(GameManager._daily_charge_carries.get("decorations", 0.0))
+	)
+	return totals
+
 func test_daily_stats_calculate_operating_costs() -> void:
-	# Save and restore staff tier and day
+	# Save and restore staff tier, day, theme, and charge carries
 	var original_tier = GameManager.current_staff_tier
 	var original_day = GameManager.current_day
+	var original_theme = GameManager.current_theme
+	var original_carries: Dictionary = GameManager._daily_charge_carries.duplicate()
 	GameManager.current_staff_tier = GameManager.StaffTier.FULL_TIME  # $10/hole
-	# Set to Fall (day 15) which has 0.7x maintenance modifier for a clean multiplier
-	GameManager.current_day = 15
+	GameManager.current_theme = CourseTheme.Type.PARKLAND
+	# Mid-Fall 2000 (16 Oct = day 290) has a clean 0.7x Parkland maintenance modifier
+	GameManager.current_day = 290
 
-	var stats = GameManager.DailyStatistics.new()
-	stats.calculate_operating_costs(100, 9, 50)  # terrain=100, 9 holes, buildings=50
+	var totals := _sum_operating_costs(100, 9, 50)
 
-	# terrain = int(100 * 0.7) = 70 (Fall modifier)
-	assert_eq(stats.terrain_maintenance, 70)
+	# terrain = 100 * 0.7 = 70 (Fall modifier) across one legacy day
+	assert_almost_eq(totals["terrain"], 70.0, 0.01)
 	# base = 100 + 9*50 = 550
-	assert_eq(stats.base_operating_cost, 550)
+	assert_almost_eq(totals["base"], 550.0, 0.01)
 	# staff = 9 * 10 = 90
-	assert_eq(stats.staff_wages, 90)
-	assert_eq(stats.building_operating_costs, 50)
+	assert_almost_eq(totals["staff"], 90.0, 0.01)
+	assert_almost_eq(totals["buildings"], 50.0, 0.01)
 	# total = 70 + 550 + 90 + 50 = 760
-	assert_eq(stats.operating_costs, 760)
+	assert_almost_eq(totals["operating"], 760.0, 0.01)
 
 	GameManager.current_staff_tier = original_tier
 	GameManager.current_day = original_day
+	GameManager.current_theme = original_theme
+	GameManager._daily_charge_carries = original_carries
 
 func test_daily_stats_calculate_operating_costs_part_time() -> void:
 	var original_tier = GameManager.current_staff_tier
+	var original_carries: Dictionary = GameManager._daily_charge_carries.duplicate()
 	GameManager.current_staff_tier = GameManager.StaffTier.PART_TIME  # $5/hole
 
-	var stats = GameManager.DailyStatistics.new()
-	stats.calculate_operating_costs(0, 4, 0)  # terrain=0, 4 holes, no buildings
+	var totals := _sum_operating_costs(0, 4, 0)
 
 	# base = 100 + 4*50 = 300
-	assert_eq(stats.base_operating_cost, 300)
+	assert_almost_eq(totals["base"], 300.0, 0.01)
 	# staff = 4 * 5 = 20
-	assert_eq(stats.staff_wages, 20)
+	assert_almost_eq(totals["staff"], 20.0, 0.01)
 	# total = 0 + 300 + 20 + 0 = 320
-	assert_eq(stats.operating_costs, 320)
+	assert_almost_eq(totals["operating"], 320.0, 0.01)
 
 	GameManager.current_staff_tier = original_tier
+	GameManager._daily_charge_carries = original_carries
 
 func test_daily_stats_calculate_operating_costs_premium() -> void:
 	var original_tier = GameManager.current_staff_tier
+	var original_carries: Dictionary = GameManager._daily_charge_carries.duplicate()
 	GameManager.current_staff_tier = GameManager.StaffTier.PREMIUM  # $20/hole
 
-	var stats = GameManager.DailyStatistics.new()
-	stats.calculate_operating_costs(50, 2, 0)
+	var totals := _sum_operating_costs(50, 2, 0)
 
 	# staff = 2 * 20 = 40
-	assert_eq(stats.staff_wages, 40)
+	assert_almost_eq(totals["staff"], 40.0, 0.01)
 
 	GameManager.current_staff_tier = original_tier
+	GameManager._daily_charge_carries = original_carries
 
 
 # --- Reset ---

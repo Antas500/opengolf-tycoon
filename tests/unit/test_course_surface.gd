@@ -62,3 +62,16 @@ func test_quick_start_clearing_keeps_painted_surfaces_and_removes_water_trees() 
 	assert_eq(grid.get_tile(Vector2i(2, 2)), TerrainTypes.Type.FAIRWAY)
 	assert_eq(grid.get_tile(Vector2i(3, 3)), TerrainTypes.Type.WATER)
 	assert_eq(grid.get_tile(Vector2i(4, 4)), TerrainTypes.Type.BUNKER)
+
+func test_quick_start_paint_hole_replaces_generated_water_with_fairway() -> void:
+	for x in range(grid.grid_width):
+		for y in range(grid.grid_height):
+			grid.set_tile_natural(Vector2i(x, y), TerrainTypes.Type.WATER)
+	var tee := Vector2i(1, 4)
+	var green := Vector2i(6, 4)
+	QuickStartCourse._paint_hole(grid, tee, green, 3)
+	assert_eq(grid.get_tile(tee), TerrainTypes.Type.TEE_BOX)
+	assert_eq(grid.get_tile(green), TerrainTypes.Type.GREEN)
+	for x in range(2, 5):
+		assert_eq(grid.get_tile(Vector2i(x, 4)), TerrainTypes.Type.FAIRWAY,
+			"Fairway must replace generated water at (%d, 4)" % x)

@@ -15,9 +15,9 @@ func before_each() -> void:
 	_saved_theme = GameManager.current_theme
 	_saved_difficulty = GameManager.current_difficulty
 	_saved_course = GameManager.current_course
-	# Deterministic baseline: mid-Spring (day 4, no boundary blending)
+	# Deterministic baseline: mid-Spring (15 Apr 2000 = day 106, no boundary blending)
 	# Parkland spawn=0.9 → fee_tolerance ≈0.995 ≈1.0, Normal difficulty sensitivity=1.0
-	GameManager.current_day = 4
+	GameManager.current_day = 106
 	GameManager.current_theme = CourseTheme.Type.PARKLAND
 	GameManager.current_difficulty = DifficultyPresets.Preset.NORMAL
 

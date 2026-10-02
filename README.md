@@ -223,6 +223,8 @@ make test          # Using Makefile
 ./test.sh          # Using shell script
 ```
 
+`./test.sh` (and `make test`) resolve Godot automatically: they use `$GODOT` if set, a `godot` on `PATH`, or the bundled `Godot_v4.6-stable_linux.x86_64.zip` in the project root (extracted on first run, then imported). Subsequent runs skip that setup. Override with `GODOT=/path/to/godot ./test.sh`.
+
 ---
 
 ## Contributing
