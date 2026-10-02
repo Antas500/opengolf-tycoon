@@ -156,7 +156,8 @@ Godot will automatically import all assets on first load.
 ```
 simgolf-godot/
 ├── assets/
-│   └── tilesets/           # Terrain tileset image and .tres resource
+│   ├── sprites/            # Buildings, golfers, trees, rocks, and decorations
+│   └── themes/             # Shared UI theme resources
 ├── data/
 │   ├── buildings.json      # Building types, costs, revenue, upgrade tiers
 │   ├── terrain_types.json  # Terrain type definitions and properties
@@ -177,7 +178,7 @@ simgolf-godot/
 │   ├── systems/            # WindSystem, WeatherSystem, DayNightSystem, CourseRatingSystem,
 │   │                       #   CourseTheme, ShotAI, GolferNeeds, SeasonSystem,
 │   │                       #   MilestoneSystem, TutorialSystem, and more
-│   ├── terrain/            # TerrainGrid, TerrainTypes, TilesetGenerator, overlays
+│   ├── terrain/            # TerrainGrid, TerrainTypes, TerrainPalette, overlays
 │   ├── tools/              # HoleCreationTool, ElevationTool, UndoManager
 │   ├── ui/                 # 39 UI components: MainMenu, PauseMenu, SettingsMenu,
 │   │                       #   MiniMap, FinancialPanel, MilestonesPanel, and more

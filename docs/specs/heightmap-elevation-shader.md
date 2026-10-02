@@ -833,7 +833,7 @@ main.gd: no changes (TerrainGrid self-configures)
 
 ```
 TerrainGrid (Node2D)
-├── TileMapLayer                      # Base terrain tiles
+├── CourseSurface (ColorRect)          # Continuous shader-rendered terrain
 ├── [Overlays]                        # Existing overlays (water, bunker, grass, etc.)
 ├── ElevationShaderRect (ColorRect)   # NEW — full-viewport, z_index=3
 │   └── ShaderMaterial                #   elevation_lighting.gdshader

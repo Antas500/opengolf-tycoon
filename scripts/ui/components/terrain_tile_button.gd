@@ -268,7 +268,7 @@ func _make_surface_material() -> ShaderMaterial:
 	var elevation := Image.create(4, 4, false, Image.FORMAT_R8)
 	elevation.fill(Color(0.5, 0, 0))
 
-	var tile_size := Vector2(TilesetGenerator.TILE_WIDTH, TilesetGenerator.TILE_HEIGHT)
+	var tile_size := Vector2(TerrainGrid.DEFAULT_TILE_WIDTH, TerrainGrid.DEFAULT_TILE_HEIGHT)
 	var half_tile := tile_size * 0.5
 	var mat := ShaderMaterial.new()
 	mat.shader = preload("res://shaders/course_surface.gdshader")
@@ -288,7 +288,7 @@ func _make_surface_material() -> ShaderMaterial:
 
 func _refresh_palette() -> void:
 	_surface_material.set_shader_parameter("palette", CourseSurface.make_palette_texture())
-	_surface_material.set_shader_parameter("fringe_color", TilesetGenerator.get_color("fringe"))
+	_surface_material.set_shader_parameter("fringe_color", TerrainPalette.get_color("fringe"))
 
 func _on_theme_changed(_theme: int) -> void:
 	_refresh_palette()

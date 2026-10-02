@@ -448,18 +448,12 @@ func test_course_terrain_tiles_replace_each_other() -> void:
 func test_every_theme_colors_every_palette_key() -> void:
 	assert_eq(CourseSurface.PALETTE_KEYS.size(), T.values().size(), "One palette entry per terrain id")
 	for key in CourseSurface.PALETTE_KEYS:
-		assert_true(TilesetGenerator.TERRAIN_COLORS.has(key), "Default palette has %s" % key)
+		assert_true(TerrainPalette.TERRAIN_COLORS.has(key), "Default palette has %s" % key)
 		for theme in CourseTheme.Type.values():
 			assert_true(CourseTheme.get_terrain_colors(theme).has(key),
 				"%s theme colors %s" % [CourseTheme.to_string_name(theme), key])
 	var palette := CourseSurface.make_palette_texture().get_image()
 	assert_eq(palette.get_width(), T.values().size(), "The shader reads the palette width as the id count")
-
-func test_legacy_tileset_maps_variants_to_their_family_rows() -> void:
-	assert_eq(TilesetGenerator.get_autotile_coords(T.FIRM_FAIRWAY, 0).y, TilesetGenerator.TerrainRow.FAIRWAY)
-	assert_eq(TilesetGenerator.get_autotile_coords(T.POT_BUNKER, 0).y, TilesetGenerator.TerrainRow.BUNKER)
-	assert_eq(TilesetGenerator.get_autotile_coords(T.STREAM, 0).y, TilesetGenerator.TerrainRow.WATER)
-	assert_eq(TilesetGenerator.get_autotile_coords(T.DEEP_ROUGH, 0).y, TilesetGenerator.TerrainRow.HEAVY_ROUGH)
 
 # --- Painting ---------------------------------------------------------------------
 

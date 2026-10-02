@@ -23,6 +23,9 @@ addons/godot_mcp/
 *.x86_64
 *.pck
 
+# Cloudflare emulator state
+.wrangler/
+
 # OS/IDE specific
 .DS_Store
 Thumbs.db

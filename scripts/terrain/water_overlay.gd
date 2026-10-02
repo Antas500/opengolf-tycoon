@@ -26,7 +26,7 @@ func _on_theme_changed(_theme_type: int) -> void:
 	queue_redraw()
 
 func _update_water_color() -> void:
-	_water_color = TilesetGenerator.get_color("water")
+	_water_color = TerrainPalette.get_color("water")
 
 func _exit_tree() -> void:
 	if EventBus.terrain_tile_changed.is_connected(_on_terrain_tile_changed):

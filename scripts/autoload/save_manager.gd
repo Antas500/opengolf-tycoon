@@ -333,7 +333,7 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager.current_theme = CourseTheme.from_string(theme_name)
 	var base_colors := CourseTheme.get_terrain_colors(GameManager.current_theme)
 	var remapped := ColorblindMode.remap_colors(base_colors, GameManager.colorblind_mode)
-	TilesetGenerator.set_theme_colors(remapped)
+	TerrainPalette.set_theme_colors(remapped)
 	EventBus.theme_changed.emit(GameManager.current_theme)
 
 	# Terrain
