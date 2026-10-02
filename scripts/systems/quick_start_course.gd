@@ -117,7 +117,7 @@ static func _paint_hole(terrain_grid: TerrainGrid, tee: Vector2i, green: Vector2
 				var point := Vector2i(center.round()) + Vector2i(dx,dy)
 				if delta.length() > radius or not terrain_grid.is_valid_position(point) or not _is_owned(point): continue
 				var current := terrain_grid.get_tile(point)
-				if current not in [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN, TerrainTypes.Type.WATER, TerrainTypes.Type.BUNKER]:
+				if current not in [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN, TerrainTypes.Type.BUNKER]:
 					terrain_grid.set_tile(point, TerrainTypes.Type.FAIRWAY)
 
 	# Place a small bunker near the green

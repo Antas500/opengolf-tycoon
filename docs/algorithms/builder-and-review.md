@@ -12,7 +12,7 @@ Course Review translates observable conditions into actions: repair a tee/cup su
 
 `CourseAdvisor.review` returns up to four suggestions. It checks tee/cup terrain, samples a three-tile corridor (flags short turf below 65%), flags value below 2.8/5, checks food service reach at tees from hole four onward, then operating loss and aesthetics below 2.5/5. Direct-corridor advice is a heuristic, not a routing solver; intentional doglegs and hazards require judgment.
 
-Quick Start builds nine holes with gently curved, variable-width fairways and a central clubhouse garden. It includes four service buildings and an assortment of catalog decorations, with seating beside playing areas. Seating placement protects tee and green surfaces, including the cup's tile.
+Quick Start builds nine holes with gently curved, variable-width fairways and a central clubhouse garden. Fairway corridors replace generated water tiles so holes are never cut off by pre-existing ponds or lagoons. It includes four service buildings and an assortment of catalog decorations, with seating beside playing areas. Seating placement protects tee and green surfaces, including the cup's tile.
 
 ## Tuning levers
 
