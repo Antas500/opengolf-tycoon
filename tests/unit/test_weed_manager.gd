@@ -3,6 +3,8 @@ extends GutTest
 
 var grid: TerrainGrid
 var weed_manager: WeedManager
+var _saved_entity_layer
+var _saved_land_manager
 
 func before_each() -> void:
 	grid = TerrainGrid.new()
@@ -15,10 +17,28 @@ func before_each() -> void:
 	weed_manager = WeedManager.new()
 	add_child_autofree(weed_manager)
 	weed_manager.setup(grid, null)
+	_saved_entity_layer = GameManager.entity_layer
+	_saved_land_manager = GameManager.land_manager
+	GameManager.entity_layer = null
+	GameManager.land_manager = null
+
+func after_each() -> void:
+	GameManager.entity_layer = _saved_entity_layer
+	GameManager.land_manager = _saved_land_manager
+
+## Daily sprout rates are scaled by DAILY_RATE_SCALE (~1/480), so one game day
+## rarely produces a whole clump. Advance enough days to cover one legacy day.
+func _grow_legacy_day(open_holes: int) -> int:
+	var sprouted := 0
+	var days := int(ceil(1.0 / GameManager.DAILY_RATE_SCALE))
+	for _i in days:
+		sprouted += weed_manager.grow_daily(open_holes)
+	return sprouted
 
 func test_grow_daily_sprouts_weeds_on_turf() -> void:
-	var sprouted := weed_manager.grow_daily(6)
-	assert_gt(sprouted, 0, "A day should sprout at least one clump")
+	seed(1)
+	var sprouted := _grow_legacy_day(6)
+	assert_gt(sprouted, 0, "A legacy day's growth should sprout at least one clump")
 	assert_eq(weed_manager.get_weed_count(), sprouted)
 	for pos in weed_manager.get_weed_positions():
 		assert_true(WeedManager.HOST_TURF.has(grid.get_tile(pos)),
@@ -31,11 +51,13 @@ func test_grow_daily_grows_existing_weeds() -> void:
 	assert_gt(weed_manager.get_growth(Vector2i(2, 2)), before)
 
 func test_weeds_never_sprout_on_greens_or_tees() -> void:
+	seed(1)
 	for x in range(16):
 		grid.set_tile(Vector2i(x, 0), TerrainTypes.Type.GREEN)
 		grid.set_tile(Vector2i(x, 1), TerrainTypes.Type.TEE_BOX)
 		grid.set_tile(Vector2i(x, 2), TerrainTypes.Type.WATER)
-	weed_manager.grow_daily(40)
+	var sprouted := _grow_legacy_day(40)
+	assert_gt(sprouted, 0, "Should still sprout on remaining grass")
 	for pos in weed_manager.get_weed_positions():
 		var tile := int(grid.get_tile(pos))
 		assert_false(tile == TerrainTypes.Type.GREEN or tile == TerrainTypes.Type.TEE_BOX

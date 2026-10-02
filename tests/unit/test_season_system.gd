@@ -25,7 +25,8 @@ func test_get_season_winter_from_december() -> void:
 	assert_eq(SeasonSystem.get_season(336), SeasonSystem.Season.WINTER, "1 Dec 2000 = Winter again")
 
 func test_get_season_wraps_year() -> void:
-	assert_eq(SeasonSystem.get_season(366), SeasonSystem.Season.WINTER, "1 Jan 2001 = Winter")
+	assert_eq(SeasonSystem.get_season(366), SeasonSystem.Season.WINTER, "31 Dec 2000 = Winter")
+	assert_eq(SeasonSystem.get_season(367), SeasonSystem.Season.WINTER, "1 Jan 2001 = Winter")
 	assert_eq(SeasonSystem.get_season(427), SeasonSystem.Season.SPRING, "1 Mar 2001 = Spring")
 
 func test_get_day_in_season() -> void:
@@ -41,8 +42,8 @@ func test_get_season_length() -> void:
 
 func test_get_year() -> void:
 	assert_eq(SeasonSystem.get_year(1), 2000)
-	assert_eq(SeasonSystem.get_year(365), 2000, "Dec 31, 2000 still year 2000")
-	assert_eq(SeasonSystem.get_year(366), 2001)
+	assert_eq(SeasonSystem.get_year(366), 2000, "Dec 31, 2000 still year 2000")
+	assert_eq(SeasonSystem.get_year(367), 2001)
 
 # --- Theme-Aware Modifiers (enum keys) ---
 

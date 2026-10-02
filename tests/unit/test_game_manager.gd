@@ -178,12 +178,14 @@ func test_new_game_starts_on_january_first_2000() -> void:
 
 func test_day_rollover_advances_calendar_date() -> void:
 	GameManager.new_game("Test Course")
-	GameManager.current_day = 31  # Feb 1, 2000
+	# Day 1 = 1 Jan 2000, so day 32 = 1 Feb 2000 (2000 is a leap year).
+	GameManager.current_day = 32
 	assert_eq(GameManager.get_date_string(), "Tue 1 Feb 2000")
 
 func test_day_rollover_crosses_year_boundary() -> void:
 	GameManager.new_game("Test Course")
-	GameManager.current_day = 366  # Jan 1, 2001
+	# 2000 has 366 days, so day 367 = 1 Jan 2001.
+	GameManager.current_day = 367
 	assert_eq(GameManager.get_date_string(), "Mon 1 Jan 2001")
 	assert_eq(GameManager.get_current_year(), 2001)
 

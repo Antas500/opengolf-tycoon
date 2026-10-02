@@ -29,11 +29,16 @@ const WEEKDAY_NAMES_SHORT: Array[String] = ["Sun", "Mon", "Tue", "Wed", "Thu", "
 ## Days from 1970-01-01 to 2000-01-01 (the in-game epoch).
 const _EPOCH_DAYS: int = 10957
 
-## Returns {year, month, day, weekday} for an absolute 1-based game day.
-## month is 1-12, weekday is 0 (Sunday) .. 6 (Saturday).
+## Returns {year, month, day} for an absolute 1-based game day.
+## month is 1-12. Days before the epoch (day < 1) are clamped to day 1 so HUD
+## code never prints a pre-game date. Use get_date_raw() for unclamped math.
 static func get_date(day: int) -> Dictionary:
-	var z: int = _EPOCH_DAYS + maxi(1, day) - 1
-	return _civil_from_days(z)
+	return get_date_raw(maxi(1, day))
+
+## Like get_date() but does not clamp pre-epoch days. Day 1 = 1 Jan 2000,
+## day 0 = 31 Dec 1999, day -30 = 1 Dec 1999 (the winter that contains day 1).
+static func get_date_raw(day: int) -> Dictionary:
+	return _civil_from_days(_EPOCH_DAYS + day - 1)
 
 static func get_year(day: int) -> int:
 	return int(get_date(day)["year"])

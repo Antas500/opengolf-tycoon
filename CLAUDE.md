@@ -203,6 +203,8 @@ make test          # Using Makefile
 ./test.sh          # Using shell script
 ```
 
+`./test.sh` resolves Godot automatically (bundled `Godot_v4.6-stable_linux.x86_64.zip`, `$GODOT`, or PATH) and imports the project on first run.
+
 **Headless integration harnesses** (real main scene, quick-start course):
 ```bash
 godot --headless --path . res://tests/harness/walking_path_harness.tscn

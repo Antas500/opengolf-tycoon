@@ -34,11 +34,23 @@ Follow the [GDScript style guide](https://docs.godotengine.org/en/stable/tutoria
 - SCREAMING_SNAKE_CASE for constants
 - Always use type hints
 
+### Testing
+
+Unit tests use GUT. From the project root:
+
+```bash
+make test
+# or
+./test.sh
+```
+
+On a clean checkout this extracts the bundled Godot 4.6 Linux build (or uses `$GODOT` / a `godot` on `PATH`) and imports the project once, then runs `tests/unit/`. Re-runs skip that setup.
+
 ### Pull Request Process
 
 1. Create a feature branch
 2. Make your changes
-3. Test thoroughly
+3. Run `make test` and confirm the suite passes
 4. Submit a PR with clear description
 
 ## License
