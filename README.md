@@ -101,7 +101,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 ### UI & Controls
 
 - **Isometric view** — 2:1 diamond terrain with SimGolf-style rotation: **Q** / **Shift+Q** rotate the course, **I** toggles isometric / top-down, plus W/A/S/D pan and mouse-wheel zoom
-- **Main menu** — six entries only: **Start New Game**, **Quick Start**, **Continue**, **Load Game**, **Settings**, **Quit**
+- **Main menu** — six entries only: **Start New Game**, **Quick Start**, **Continue**, **Load Game**, **Settings**, **Quit**. The screen is laid out by weight rather than listed: Start New Game and Quick Start are hero cards, Continue is a card showing the newest save's course, day and slot, and the three utilities sit together at the quiet end. Behind it, a golf hole is drawn in code (sky, hills, fairway, green, flag and drifting clouds) — no texture assets
 - **Start New Game** — company name, difficulty (Easy/Normal/Hard), starting money ($100K / $150K / $200K / Unlimited), generated holes for the first course (0/3/6/9/18) and the Weather / Wind / Seasons game features; **Next** opens the World Map
 - **Quick Start** — jumps straight to the World Map with defaults (random company name, Normal, $100,000, no generated holes, all features on)
 - **World Map** — a globe with a marker per destination, a list giving every location's name, theme, size and cost, Buy/Play actions, and **Reset World** to re-roll each location's unlocked land (and therefore its price); return from the pause menu at any time to buy more locations or swap the one you are playing
@@ -131,7 +131,9 @@ Saved state includes: the company world map (settings, owned locations, unlocked
 
 Playable on **desktop (Windows/macOS/Linux), tablets, phones, and in the browser** (Web build, including the Cloudflare Pages deployment).
 
-The game renders at the window's native resolution and adapts to the screen: the course view keeps the reference physical size on large desktops while staying 1:1 (tiles never shrink) on phones and tablets; the HUD switches to a compact layout on narrow windows (narrower stats column, smaller minimap, scrollable main menu with larger tap targets); popup panels clamp to the available space and scroll instead of spilling off small screens. Desktop behavior at 1600x1000 is unchanged from the original fixed-viewport layout.
+The title screen has four arrangements, picked from the window size: a **wide** split (title and hero cards left, a Continue rail right) on desktop, a **centred column** on tablets, a **side-by-side compact** layout for wide-but-short windows (rotated phone, squat browser window) so nothing has to be scrolled, and a **single scrollable column** on phones with every target at least 46 px tall.
+
+The game renders at the window's native resolution and adapts to the screen: the course view keeps the reference physical size on large desktops while staying 1:1 (tiles never shrink) on phones and tablets; the HUD switches to a compact layout on narrow windows (narrower stats column, smaller minimap); popup panels clamp to the available space and scroll instead of spilling off small screens. Desktop behavior at 1600x1000 is unchanged from the original fixed-viewport layout.
 
 ---
 

@@ -19,6 +19,7 @@ scripts/
 ├── terrain/        # TerrainGrid, TerrainTypes, TerrainPalette, + overlay classes (cup, tee aim arrows, OB stakes, shot heatmap, …)
 ├── tools/          # HoleCreationTool, ElevationTool, UndoManager
 ├── ui/             # UI components (MainMenu, StartNewGameScreen, WorldMapScreen, GlobeMap, PauseMenu, SettingsMenu, MiniMap, FinancialPanel, MilestonesPanel, HoleStatsPanel, CourseScorecardPanel, SaveLoadPanel, HotkeyPanel, etc.)
+│   └── components/  # Reusable widgets (tile honeycomb/buttons, compass needle, rotate arrows, MenuBackdrop, MenuFlagMark)
 ├── main/           # main.gd (scene controller)
 └── utils/          # IsometricCamera
 scenes/
@@ -170,7 +171,8 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 The game is playable on desktop, tablet, phone and the web build. Rendering is **native window-pixel** (`window/stretch/mode="disabled"`): UI lays out in real pixels on every platform and the 1600x1000 design resolution is only a reference for scaling math.
 
 - **Screen** (`scripts/autoload/screen_manager.gd`, autoload): turns the live window size into layout decisions. `world_scale = max(min(w/1600, h/1000), min(1, 900/w))` — large windows see the reference course area per inch; narrow windows (phones/tablets) keep 1:1 pixel scale so tiles stay tappable. `is_compact()` (w<900 or h<640) drives compact HUD variants; `available_panel_rect()` keeps popups clear of the bottom bar. Emits `changed` on resize/rotation; main.gd re-runs `_apply_responsive_layout()` from it.
-- **Compact HUD** (applied via each component's `apply_screen()`): status column 210→150px and auto-collapsed, minimap 180→120px (its corner dock offsets are recomputed from its live size), main menu becomes a scrollable 2-column layout with taller tap targets, pause menu uses tighter margins.
+- **Compact HUD** (applied via each component's `apply_screen()`): status column 210→150px and auto-collapsed, minimap 180→120px (its corner dock offsets are recomputed from its live size), pause menu uses tighter margins.
+- **Title screen** (`scripts/ui/main_menu.gd`): four arrangements chosen by the window (`layout_mode_for()` - WIDE ≥1120x620, TABLET ≥700x620, LANDSCAPE for wide-but-short windows, PHONE). Every arrangement is built from the same cards (`_make_card`/`_make_tile`): actions are hero cards with a caption line, Continue carries the newest save, and the utilities (Load Game / Settings / Quit) stay together. Layout is container-driven inside a mode, so a live resize only rebuilds when the arrangement changes (or by >12%, `REPROPORTION_STEP`). The scenery is `MenuBackdrop` (sky, hills, fairway, green, flag, clouds - drawn in code, `green_anchor` moves the hole per arrangement) with the `MenuFlagMark` wordmark glyph beside the title. `tests/unit/test_main_menu_layout.gd` checks the breakpoints; `tests/harness/main_menu_layout_harness.tscn` drives the real screen through eight window sizes.
 - **CenteredPanel** (`scripts/ui/centered_panel.gd`): `show_centered()` clamps the panel to `Screen.available_panel_rect()` (never covers the bottom bar, never spills off a phone) and lazily wraps overflowing single-child content in a ScrollContainer so nothing is unreachable.
 - **TouchInput** (`scripts/autoload/touch_input.gd`, autoload): the only touch path (`emulate_mouse_from_touch` is off). Tap → synthetic LMB click; one-finger drag → camera pan, or terrain painting while a tool is active (synthetic held LMB); two-finger → midpoint pan + pinch zoom anchored under the fingers; two-finger tap → synthetic RMB (cancel). Main menu backdrop drags don't pan the camera.
 - **Web** (`web/custom_shell.html`): full-viewport shell; `maximum-scale=1.0, user-scalable=no` keep pinch for the in-game camera instead of page zoom.
@@ -223,6 +225,7 @@ godot --headless --path . res://tests/harness/bulldozer_harness.tscn   # Bulldoz
 godot --headless --path . res://tests/harness/speed_controls_harness.tscn  # Speed controls: one fast-forward button for Fast (3x) and Ultra (8x)
 godot --headless --path . res://tests/harness/ready_golf_harness.tscn  # Pace: one foursome, three holes each, reports the dead time a group spends waiting on a walking partner
 godot --headless --path . res://tests/harness/responsive_layout_harness.tscn  # Responsive: phone/tablet/desktop window sizes drive the real main scene through the Screen/HUD/panel/touch adapters (includes the World Map screen)
+godot --headless --path . res://tests/harness/main_menu_layout_harness.tscn  # Title screen: the four arrangements, six actions on screen and tappable at phone/tablet/rotated/desktop sizes, no tagline, drawn backdrop
 godot --headless --path . -s tests/integration/world_map_flow.gd  # World map: menu → setup → globe/list → buy → play → switch → quick start
 godot --headless --path . -s tests/harness/globe_preview.gd  # Writes tmp_preview/equirect.png + ortho.png so the globe's land mask can be eyeballed
 ```
