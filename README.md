@@ -13,6 +13,10 @@ OpenGolf Tycoon is a spiritual successor to the classic SimGolf (2002). Design a
 
 ## Current Features
 
+### Locations & the World Map
+
+A company grows by buying golf course locations around the world — **27 destinations** from Monterey and San Diego to Scotland, Spain, Jamaica, Dubai, Japan and Australia — each with its own theme, land size, globe position and price. A location's land comes partly unlocked; the amount is rolled per world and raises the price, so **Reset World** gives a fresh set of deals. Every location is a separate site with its own terrain, buildings, staff and holes, while money, reputation, the calendar and milestones belong to the company, so players can switch between the courses they own without starting over.
+
 ### Course Themes
 
 Choose from 10 distinct course environments, each with unique terrain colors, gameplay modifiers, and visual style:
@@ -97,7 +101,10 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 ### UI & Controls
 
 - **Isometric view** — 2:1 diamond terrain with SimGolf-style rotation: **Q** / **Shift+Q** rotate the course, **I** toggles isometric / top-down, plus W/A/S/D pan and mouse-wheel zoom
-- **Main menu** — New Game (with theme selection and course naming), Load Game, Settings, Quit
+- **Main menu** — six entries only: **Start New Game**, **Quick Start**, **Continue**, **Load Game**, **Settings**, **Quit**
+- **Start New Game** — company name, difficulty (Easy/Normal/Hard), starting money ($100K / $150K / $200K / Unlimited), generated holes for the first course (0/3/6/9/18) and the Weather / Wind / Seasons game features; **Next** opens the World Map
+- **Quick Start** — jumps straight to the World Map with defaults (random company name, Normal, $100,000, no generated holes, all features on)
+- **World Map** — a globe with a marker per destination, a list giving every location's name, theme, size and cost, Buy/Play actions, and **Reset World** to re-roll each location's unlocked land (and therefore its price); return from the pause menu at any time to buy more locations or swap the one you are playing
 - **Pause menu** — Escape key opens pause overlay with Resume, Settings, Save, and Quit options
 - **Camera while paused** — the game freezes but the camera stays controllable: pan with W/A/S/D or middle-mouse drag, zoom with the scroll wheel (also works from behind the pause and settings overlays)
 - **Settings menu** — Display, audio, and gameplay options
@@ -118,7 +125,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 
 ### Save / Load
 
-Saved state includes: terrain tiles, elevation, entity positions, hole configurations, economy state (money, reputation, green fee), day/hour, wind, weather, seasons, course theme, and course records. Auto-saves at day end (with indicator); manual save with named slots. Quit to Menu option available from pause menu.
+Saved state includes: the company world map (settings, owned locations, unlocked land, the active location and a snapshot per owned site), terrain tiles, elevation, entity positions, hole configurations, economy state (money, reputation, green fee), day/hour, wind, weather, seasons, course theme, and course records. Company-level state (money, reputation, calendar, milestones) is shared across every location; course-level state is kept per site. Auto-saves at day end (with indicator); manual save with named slots. Quit to Menu option available from pause menu.
 
 ### Platforms
 
@@ -168,7 +175,7 @@ simgolf-godot/
 │   ├── main/main.tscn      # Primary game scene
 │   └── entities/golfer.tscn
 ├── scripts/
-│   ├── autoload/           # Singletons: GameManager, EventBus, SaveManager,
+│   ├── autoload/           # Singletons: GameManager, EventBus, WorldMap, SaveManager,
 │   │                       #   FeedbackManager, SoundManager, ShadowSystem
 │   ├── course/             # HoleVisualizer, DifficultyCalculator, EntityLayer
 │   ├── effects/            # RainOverlay, HoleInOneCelebration, SandSprayEffect
@@ -176,12 +183,13 @@ simgolf-godot/
 │   ├── managers/           # GolferManager, BallManager, HoleManager, PlacementManager,
 │   │                       #   BuildingRegistry, TournamentManager
 │   ├── systems/            # WindSystem, WeatherSystem, DayNightSystem, CourseRatingSystem,
-│   │                       #   CourseTheme, ShotAI, GolferNeeds, SeasonSystem,
-│   │                       #   MilestoneSystem, TutorialSystem, and more
+│   │                       #   CourseTheme, WorldLocations, GeneratedCourse, ShotAI, GolferNeeds,
+│   │                       #   SeasonSystem, MilestoneSystem, TutorialSystem, and more
 │   ├── terrain/            # TerrainGrid, TerrainTypes, TerrainPalette, overlays
 │   ├── tools/              # HoleCreationTool, ElevationTool, UndoManager
-│   ├── ui/                 # 39 UI components: MainMenu, PauseMenu, SettingsMenu,
-│   │                       #   MiniMap, FinancialPanel, MilestonesPanel, and more
+│   ├── ui/                 # UI components: MainMenu, StartNewGameScreen, WorldMapScreen,
+│   │                       #   GlobeMap, PauseMenu, SettingsMenu, MiniMap, FinancialPanel,
+│   │                       #   MilestonesPanel, and more
 │   └── utils/              # IsometricCamera
 ├── tests/
 │   └── unit/               # GUT framework unit tests
@@ -210,6 +218,7 @@ simgolf-godot/
 - **Player-controlled golfer mode** — Play your own course as a golfer
 - **Performance optimization** — Object pooling, occlusion for large courses
 - **Career mode** — Progression, unlockables, achievements
+- **More locations & prebuilt sites** — Additional destinations and turnkey courses
 - **Course sharing** — Export/import course layouts
 - **Seasonal visuals** — Spring/summer/fall/winter terrain appearance changes
 

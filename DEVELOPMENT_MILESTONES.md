@@ -40,6 +40,10 @@ The game currently supports:
 35. **Weather system** - Dynamic weather (sunny to heavy rain) with rain overlay, affects golfer spawn rates, sky tinting, HUD indicator
 36. **Angular dispersion shot model** - Realistic shot accuracy using bell-curve angular deviation instead of uniform random. Each golfer has persistent miss tendency (slice/hook bias) based on tier. Includes rare shank mechanic for dramatic misses.
 37. **CenteredPanel UI system** - Base class for centered panels with proper layout timing. All popup dialogs (trees/rocks/buildings) support toggle behavior via hotkeys.
+38. **World map & company sites** - 27 named golf destinations (Monterey, San Diego, Rocky Mountains, Las Vegas, Phoenix, Hawaii, Oahu, Nova Scotia, Northeast, Carolina, Florida, Ireland, Scotland, Wales, Spain, Jamaica, and more), each a buyable site with its own theme, land size, globe marker and price
+39. **Six-entry main menu + Start New Game flow** - Start New Game, Quick Start, Continue, Load Game, Settings, Quit; the setup screen collects company name, difficulty, starting money ($100K/$150K/$200K/Unlimited), generated holes (0/3/6/9/18) and the Weather/Wind/Seasons features
+40. **Interactive globe & Reset World** - Orthographic globe with a marker per location, a location list showing name/theme/size/cost, and a Reset World button that re-rolls each site's pre-cleared land and price
+41. **Company vs site saves** - Money, reputation, calendar and milestones are company-wide; terrain, buildings, staff, holes and land belong to a site, and switching between owned sites restores each one's snapshot (SAVE_VERSION 5)
 
 ---
 
@@ -994,6 +998,22 @@ Phase 5: Major Gameplay & Art
 - ROI tracking: panel shows cost vs. estimated additional revenue from each campaign
 - Campaigns require minimum reputation/rating thresholds
 - Diminishing returns: running multiple campaigns of the same type gives reduced bonus
+
+---
+
+## PRIORITY 10.5: World Map & New Game Flow ✅ COMPLETE
+
+### [X] Main Menu & Start New Game Screen
+**STATUS: COMPLETE** - The menu offers exactly Start New Game, Quick Start, Continue, Load Game, Settings and Quit. Start New Game collects the company name, difficulty (Easy/Normal/Hard), starting money ($100,000 / $150,000 / $200,000 / Unlimited), the number of generated holes for the first course (0/3/6/9/18) and the Weather/Wind/Seasons features, then hands them to the World Map. Quick Start uses the defaults (random company name, Normal, $100,000, 0 holes, all features) and goes straight there.
+
+### [X] World Map Screen
+**STATUS: COMPLETE** - A procedurally drawn orthographic globe carries one marker per destination; the list beside it gives each location's name, theme, size and cost, with Buy (greyed out when unaffordable) or Play per row, and a Reset World button that re-randomises how much land each site starts with — which changes its price. Buy a site to unlock its parcel block, play it, and come back from the pause menu at any time to buy more or switch between owned courses.
+
+### [X] Locations & Land Blocks
+**STATUS: COMPLETE** - `WorldLocations` catalogues 27 destinations (Small 9 / Medium 12 / Large 16 / Championship 20 parcels) with themes, globe coordinates and prestige pricing. Every location's land block always contains the central 2×2 cluster, and `layout_order(size, rng, required)` guarantees the 3×3 block an 18-hole first course needs can never be rolled away by Reset World.
+
+### [X] Generated First Course
+**STATUS: COMPLETE** - The requested hole count is generated on the site when the player starts playing it: 3, 6 and 9 holes from the existing layouts, 18 holes from `LAYOUT_9` + the new counter-clockwise `LAYOUT_18_BACK` (par 72), plus the starter amenity cluster (clubhouse, coffee house, snack bar, restroom) in the clear pocket beside the first fairway. Company money, reputation, calendar and milestones persist across site switches; each site keeps its own terrain, buildings, staff, holes and land.
 
 ---
 

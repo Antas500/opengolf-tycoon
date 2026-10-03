@@ -380,7 +380,9 @@ func _update_day_time() -> void:
 	var season = SeasonSystem.get_season(day)
 	var season_name = SeasonSystem.get_season_name(season)
 	_date_label.text = GameCalendar.format_date(day)
-	_time_label.text = season_name
+	# With the Seasons feature off the calendar still ticks, but the course
+	# plays as one year-round season.
+	_time_label.text = season_name if gm.get("seasons_enabled") else "Year-round"
 
 func _update_reputation() -> void:
 	if not has_node("/root/GameManager"):
@@ -407,6 +409,14 @@ func _update_weather() -> void:
 		return
 
 	var gm = get_node("/root/GameManager")
+	# The Weather feature can be turned off at setup: say so instead of
+	# pretending the course is watching conditions it no longer models.
+	if not gm.get("weather_enabled"):
+		_weather_icon.text = "* *"
+		_weather_icon.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+		_weather_label.text = "Off"
+		_weather_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+		return
 	var weather_system = gm.get("weather_system")
 	if weather_system == null:
 		_weather_icon.text = "* *"
@@ -435,6 +445,11 @@ func _update_wind() -> void:
 		return
 
 	var gm = get_node("/root/GameManager")
+	# The Wind feature can be turned off at setup: the air is dead calm.
+	if not gm.get("wind_enabled"):
+		_wind_label.text = "Off"
+		_wind_label.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+		return
 	var wind_system = gm.get("wind_system")
 	if wind_system == null:
 		_wind_label.text = "0 mph"

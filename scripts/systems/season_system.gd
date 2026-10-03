@@ -12,6 +12,16 @@ enum Season { SPRING, SUMMER, FALL, WINTER }
 
 const TRANSITION_BLEND_FACTOR: float = 0.34  ## Blend weight at season boundaries (2-day window)
 
+## Seasons are an optional game feature (Start New Game → Enabled Game
+## Features). GameManager keeps this in sync; while it is true the calendar
+## still advances but every seasonal modifier is neutral and the course plays
+## as a single year-round season (Summer visuals).
+static var disabled: bool = false
+
+## Weather probability thresholds used while seasons are disabled: a level,
+## year-round profile (the fallback row of get_weather_weights()).
+const NEUTRAL_WEATHER_WEIGHTS: Array = [0.40, 0.70, 0.85, 0.93, 0.98, 1.0]
+
 # Theme enum aliases for readable dictionary keys
 const _PARKLAND  = CourseTheme.Type.PARKLAND
 const _DESERT    = CourseTheme.Type.DESERT
@@ -104,6 +114,8 @@ static func get_season_for_month(month: int) -> int:
 			return Season.WINTER
 
 static func get_season(day: int) -> int:
+	if disabled:
+		return Season.SUMMER
 	return get_season_for_month(GameCalendar.get_month(day))
 
 ## 1-based day index within the current season (e.g. 1 on the season's first day).
@@ -167,21 +179,29 @@ static func get_maintenance_modifier(season: int, theme: int = -1) -> float:
 
 ## Blended spawn modifier with 2-day gradual transition at season boundaries.
 static func get_blended_spawn_modifier(day: int, theme: int = -1) -> float:
+	if disabled:
+		return 1.0
 	return _blend_at_boundary(day, func(s): return get_spawn_modifier(s, theme))
 
 ## Blended maintenance modifier with 2-day gradual transition.
 static func get_blended_maintenance_modifier(day: int, theme: int = -1) -> float:
+	if disabled:
+		return 1.0
 	return _blend_at_boundary(day, func(s): return get_maintenance_modifier(s, theme))
 
 ## Green fee tolerance — how willing golfers are to pay premium pricing.
 ## Peak-season golfers accept 30% higher fees; off-season golfers expect discounts.
 ## Maps spawn modifier (demand proxy) to a 0.7–1.3 tolerance range.
 static func get_fee_tolerance(day: int, theme: int = -1) -> float:
+	if disabled:
+		return 1.0
 	var spawn_mod = get_blended_spawn_modifier(day, theme)
 	return clampf(0.5 + spawn_mod * 0.55, 0.7, 1.3)
 
 ## Tournament prestige modifier — reputation reward scales by season.
 static func get_tournament_prestige(day: int, theme: int = -1) -> float:
+	if disabled:
+		return 1.0
 	var season = get_season(day)
 	var t = theme if theme >= 0 else 0
 	if THEME_TOURNAMENT_PRESTIGE.has(t):
@@ -197,7 +217,8 @@ static func get_theme_weather_modifiers(theme: int = -1) -> Dictionary:
 
 ## Blended weather weights with 2-day transition and theme rain modifier.
 static func get_blended_weather_weights(day: int, theme: int = -1) -> Array:
-	var base = _blend_array_at_boundary(day, get_weather_weights)
+	var base := NEUTRAL_WEATHER_WEIGHTS.duplicate() if disabled \
+		else _blend_array_at_boundary(day, get_weather_weights)
 
 	# Apply theme rain modifier — shifts probability toward/away from rain
 	var weather_mods = get_theme_weather_modifiers(theme)

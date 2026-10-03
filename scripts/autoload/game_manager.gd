@@ -17,6 +17,8 @@ var is_paused: bool = false:
 
 var current_course: CourseData = null
 var course_name: String = "New Course"
+## The golf company that owns every location the player buys.
+var company_name: String = "My Golf Company"
 var current_theme: int = CourseTheme.Type.PARKLAND
 var current_difficulty: int = DifficultyPresets.Preset.NORMAL
 var heightmap_noise_seed: int = 0
@@ -27,6 +29,22 @@ var multi_tee_enabled: bool = false  # Feature toggle: auto-generate forward/mid
 # Default starting values (overridden by difficulty preset in new_game)
 const DEFAULT_STARTING_MONEY: int = 25000
 const DEFAULT_STARTING_REPUTATION: float = 50.0
+## Starting-money option on the Start New Game screen that never runs out.
+const UNLIMITED_MONEY: int = -1
+## Opening balance shown while the company has unlimited funds (the HUD reads
+## "Unlimited"; nothing is ever deducted, so the balance only ever grows).
+const UNLIMITED_STARTING_BALANCE: int = 999999999
+
+## Enabled game features, chosen on the Start New Game screen. Weather, wind
+## and seasons all keep running when disabled — they simply stop producing any
+## effect (see the feature guards in WeatherSystem, WindSystem and SeasonSystem).
+var weather_enabled: bool = true
+var wind_enabled: bool = true
+var seasons_enabled: bool = true
+## True while the company plays with unlimited funds: nothing can be spent.
+var unlimited_money: bool = false
+## Holes the player asked the world map to lay out on their first course.
+var generated_holes: int = 0
 
 # Operating cost constants
 const BASE_DAILY_OVERHEAD: int = 100
@@ -300,6 +318,9 @@ func _sync_time_scale() -> void:
 		Engine.time_scale = float(current_speed)
 
 func modify_money(amount: int) -> void:
+	# A company with unlimited funds never pays for anything.
+	if unlimited_money and amount < 0:
+		return
 	var old_money = money
 	money += amount
 	EventBus.money_changed.emit(old_money, money)
@@ -308,10 +329,52 @@ func can_afford(cost: int) -> bool:
 	"""Check if a purchase is allowed (not blocked by bankruptcy threshold)."""
 	if cost <= 0:
 		return true  # Not a purchase
+	if unlimited_money:
+		return true
 	return money - cost >= bankruptcy_threshold
 
 func is_bankrupt() -> bool:
-	return money < bankruptcy_threshold
+	return not unlimited_money and money < bankruptcy_threshold
+
+## The company starts with endless funds (Start New Game: Unlimited money).
+func set_unlimited_money(enabled: bool) -> void:
+	if unlimited_money == enabled:
+		return
+	unlimited_money = enabled
+	# Refresh the HUD money display even though the balance did not move.
+	EventBus.money_changed.emit(money, money)
+
+func set_weather_enabled(enabled: bool) -> void:
+	weather_enabled = enabled
+	if not enabled and weather_system and weather_system.has_method("force_clear_weather"):
+		weather_system.force_clear_weather()
+
+func set_wind_enabled(enabled: bool) -> void:
+	wind_enabled = enabled
+	if not enabled and wind_system and wind_system.has_method("force_calm"):
+		wind_system.force_calm()
+
+func set_seasons_enabled(enabled: bool) -> void:
+	seasons_enabled = enabled
+	# SeasonSystem reads this static flag from its static getters.
+	SeasonSystem.disabled = not enabled
+
+func set_feature_enabled(feature: String, enabled: bool) -> void:
+	match feature:
+		"weather": set_weather_enabled(enabled)
+		"wind": set_wind_enabled(enabled)
+		"seasons": set_seasons_enabled(enabled)
+
+func is_feature_enabled(feature: String) -> bool:
+	match feature:
+		"weather": return weather_enabled
+		"wind": return wind_enabled
+		"seasons": return seasons_enabled
+	return true
+
+## Company name changes are rare enough to notify the HUD directly.
+func apply_company_name(new_name: String) -> void:
+	company_name = new_name if not new_name.strip_edges().is_empty() else "My Golf Company"
 
 func take_loan(amount: int) -> bool:
 	amount = clampi(amount, 10000, MAX_LOAN)
@@ -507,16 +570,27 @@ func check_round_record(golfer_name: String, total_strokes: int, holes_played: i
 func reset_course_records() -> void:
 	course_records = CourseRecords.create_empty_records()
 
-func new_game(course_name_input: String = "New Course", theme: int = CourseTheme.Type.PARKLAND, difficulty: int = DifficultyPresets.Preset.NORMAL) -> void:
+func new_game(course_name_input: String = "New Course", theme: int = CourseTheme.Type.PARKLAND, difficulty: int = DifficultyPresets.Preset.NORMAL, options: Dictionary = {}) -> void:
 	player_profile = PlayerGolferProfile.new()
 	course_name = course_name_input
 	current_theme = theme
 	current_difficulty = difficulty
+	company_name = str(options.get("company_name", company_name))
+	generated_holes = int(options.get("generated_holes", 0))
 
 	# Apply difficulty preset modifiers
 	var diff_mods := DifficultyPresets.get_modifiers(difficulty)
-	money = diff_mods.get("starting_money", DEFAULT_STARTING_MONEY)
+	# The Start New Game screen picks the starting budget independently of the
+	# difficulty preset (100k / 150k / 200k / Unlimited). A company playing with
+	# unlimited funds passes `unlimited` so the flag survives the new game.
+	var money_option := int(options.get("starting_money", diff_mods.get("starting_money", DEFAULT_STARTING_MONEY)))
+	unlimited_money = money_option == UNLIMITED_MONEY or bool(options.get("unlimited", false))
+	money = UNLIMITED_STARTING_BALANCE if unlimited_money else money_option
 	bankruptcy_threshold = diff_mods.get("bankruptcy_threshold", -1000)
+	var saved_features: Dictionary = options.get("features", {})
+	set_weather_enabled(bool(saved_features.get("weather", weather_enabled)))
+	set_wind_enabled(bool(saved_features.get("wind", wind_enabled)))
+	set_seasons_enabled(bool(saved_features.get("seasons", seasons_enabled)))
 
 	reputation = DEFAULT_STARTING_REPUTATION
 	# New games begin on the morning of Saturday, 1 January 2000.
