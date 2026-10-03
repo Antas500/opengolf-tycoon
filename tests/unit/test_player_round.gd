@@ -160,8 +160,9 @@ func test_real_shot_rejects_double_click_and_round_can_finish() -> void:
 	_start(0)
 	var player_golfer := rounds.player
 	player_golfer.walk_speed = 120
-	assert_true(player_golfer.play_shot(Vector2i(16, 10)))
-	assert_false(player_golfer.play_shot(Vector2i(16, 10)))
+	var resting_target := Vector2(16, 10)
+	assert_true(player_golfer.play_shot_to_rest(resting_target))
+	assert_false(player_golfer.play_shot_to_rest(resting_target))
 	assert_eq(player_golfer.current_strokes, 1)
 	# Exercise real swing, ball flight, rollout, walking, putting and pickup.
 	Engine.time_scale = 3.0
@@ -275,10 +276,14 @@ func test_aim_guide_shows_intended_arc_and_roll() -> void:
 	assert_gt(int(preview.carry_yards), 0, "Guide reports the intended carry")
 	assert_gt(int(preview.roll_yards), 0, "Guide reports the roll after landing")
 	assert_gt(int(preview.get("roll_path", PackedVector2Array()).size()), 1, "Guide traces the roll path")
+	assert_eq(preview.anchor_type, "center", "Explicit tile aiming selects the tile centre")
+	assert_eq(preview.rest, Vector2(16, 10), "The expected roll ends on the selected anchor")
 	var geometry := AimGuide.build_geometry(GameManager.terrain_grid, preview)
 	assert_false(geometry.is_empty(), "Guide geometry projects the preview")
 	assert_almost_eq(Vector2(geometry.arc[geometry.arc.size() - 1]).distance_to(geometry.carry), 0.0, 0.5,
 		"Arc ends on the guide's carry point")
+	assert_almost_eq(Vector2(geometry.trajectory[geometry.trajectory.size() - 1]).distance_to(geometry.rest), 0.0,
+		0.01, "The combined trajectory reaches its snapped rest point")
 
 	# The guide disappears whenever it is not the owner's shot to hit.
 	rounds.player.current_state = Golfer.State.WALKING
@@ -290,6 +295,38 @@ func test_aim_guide_shows_intended_arc_and_roll() -> void:
 
 	rounds.leave_round()
 	assert_true(guide.preview.is_empty(), "Guide clears when the round ends")
+
+func test_aim_guide_reaches_tiles_between_the_clubs_ranges() -> void:
+	var saved_wind = GameManager.wind_system
+	GameManager.wind_system = null
+	_start(0)
+	var guide: AimGuide = rounds.aim_guide
+	var golfer := rounds.player
+	# With a point in every skill the wedge stops at 3.85 tiles while the iron's band
+	# only starts at 5, and the iron stops short of the fairway wood's band at 8.
+	# The tiles in those gaps used to be "out of range" although a longer club
+	# reaches them; the guide now points at exactly the tile under the mouse.
+	for target in [Vector2i(14, 12), Vector2i(12, 14), Vector2i(15, 16), Vector2i(16, 15)]:
+		var distance := Vector2(golfer.ball_position).distance_to(Vector2(target))
+		assert_lt(golfer.player_max_distance(golfer.select_club(distance, TerrainTypes.Type.TEE_BOX)), distance,
+			"The club automatic selection proposes for %s cannot reach it" % target)
+		rounds.update_aim_guide(target)
+		assert_false(guide.preview.is_empty(), "The guide follows the mouse onto %s" % target)
+		assert_eq(guide.preview.rest, Vector2(target), "The guide ends on %s" % target)
+		assert_false(guide.preview.clamped, "%s is not limited" % target)
+		assert_false(guide.preview.range_limited, "%s is not out of range" % target)
+		var geometry := AimGuide.build_geometry(GameManager.terrain_grid, guide.preview)
+		assert_false(geometry.is_empty(), "Guide geometry exists for %s" % target)
+		assert_almost_eq(Vector2(geometry.trajectory[geometry.trajectory.size() - 1]).distance_to(geometry.rest), 0.0,
+			0.01, "The drawn line reaches %s" % target)
+	# Clicking takes the shot the guide shows.
+	rounds.update_aim_guide(Vector2i(14, 12))
+	var shown_club: int = guide.preview.club
+	assert_true(golfer.play_shot_to_rest(Vector2(14, 12)), "The shot is taken at the highlighted tile")
+	assert_eq(golfer._chosen_club, shown_club, "The swing uses the club the guide showed")
+	assert_eq(golfer.current_strokes, 1)
+	rounds.leave_round()
+	GameManager.wind_system = saved_wind
 
 func test_camera_focuses_only_when_aiming_shot() -> void:
 	rounds.open_setup()

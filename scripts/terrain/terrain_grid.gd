@@ -24,6 +24,10 @@ const MAX_ELEVATION: int = 10
 const BASE_ELEVATION: int = 5
 const SLOPE_SAMPLE_STEP: float = 0.5
 const ELEVATION_STEP_Y: float = 10.0
+## How far (in tiles) past the map's rim a pointer still snaps to the rim's
+## centres and vertices. A rim anchor's catchment extends half a tile outward,
+## so without this the far-edge vertices could only be picked from their inner half.
+const ANCHOR_RIM_MARGIN: float = 0.5
 
 var _grid: Dictionary = {}
 var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) * (grid_height+1)
@@ -200,6 +204,71 @@ func screen_to_grid(screen_pos: Vector2) -> Vector2i:
 
 func screen_to_grid_precise(screen_pos: Vector2) -> Vector2:
 	return screen_to_grid_point(screen_pos) - Vector2(0.5, 0.5)
+
+## Snap a world-space pointer position to the closest useful shot target on the
+## nearby terrain: either a tile centre or one of its vertices. The returned
+## `point` uses the game's precise grid convention (integer = tile centre).
+## Distances are compared after projection, so the result remains correct after
+## view rotation and on sculpted terrain. A pointer up to `ANCHOR_RIM_MARGIN`
+## past the map's edge still snaps to the rim anchor it is nearest to (the far-edge
+## vertices sit exactly on that edge); further out there is nothing to aim at.
+func snap_world_to_tile_anchor(world_pos: Vector2) -> Dictionary:
+	var grid_point := screen_to_grid_point(world_pos)
+	if grid_point.x < -ANCHOR_RIM_MARGIN or grid_point.y < -ANCHOR_RIM_MARGIN \
+			or grid_point.x > float(grid_width) + ANCHOR_RIM_MARGIN \
+			or grid_point.y > float(grid_height) + ANCHOR_RIM_MARGIN:
+		return {}
+	# Search around the nearest in-map cell; the nearest anchor is still chosen by
+	# its distance to the actual pointer below.
+	grid_point = grid_point.clamp(Vector2.ZERO, Vector2(grid_width, grid_height))
+
+	var base_x := floori(grid_point.x)
+	var base_y := floori(grid_point.y)
+	var best_distance_squared := INF
+	var best_point := Vector2.ZERO
+	var best_grid_point := Vector2.ZERO
+	var best_type := ""
+	var best_tile := Vector2i.ZERO
+
+	# The hovered cell and its neighbours cover every centre/vertex that can be
+	# nearest to a point inside the cell (including points on its edges).
+	for x in range(base_x - 1, base_x + 2):
+		for y in range(base_y - 1, base_y + 2):
+			# Tile centre.
+			if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
+				var centre_grid := Vector2(x, y) + Vector2(0.5, 0.5)
+				var centre_screen := grid_point_to_screen(centre_grid)
+				var centre_distance_squared := world_pos.distance_squared_to(centre_screen)
+				if centre_distance_squared < best_distance_squared:
+					best_distance_squared = centre_distance_squared
+					best_grid_point = centre_grid
+					best_point = centre_grid - Vector2(0.5, 0.5)
+					best_type = "center"
+					best_tile = Vector2i(x, y)
+
+			# Four shared vertices. Include map-edge vertices, but never coordinates
+			# beyond the edge of the terrain mesh.
+			if x >= 0 and x <= grid_width and y >= 0 and y <= grid_height:
+				var vertex_grid := Vector2(x, y)
+				var vertex_screen := grid_point_to_screen(vertex_grid)
+				var vertex_distance_squared := world_pos.distance_squared_to(vertex_screen)
+				if vertex_distance_squared < best_distance_squared:
+					best_distance_squared = vertex_distance_squared
+					best_grid_point = vertex_grid
+					best_point = vertex_grid - Vector2(0.5, 0.5)
+					best_type = "vertex"
+					best_tile = Vector2i(clampi(x, 0, grid_width - 1), clampi(y, 0, grid_height - 1))
+
+	if best_type.is_empty():
+		return {}
+	return {
+		"point": best_point,
+		"grid_point": best_grid_point,
+		"screen_position": grid_point_to_screen(best_grid_point),
+		"anchor_type": best_type,
+		"tile": best_tile,
+		"distance": sqrt(best_distance_squared),
+	}
 
 func screen_to_grid_point(screen_pos: Vector2) -> Vector2:
 	if not view_isometric or ELEVATION_STEP_Y == 0.0:

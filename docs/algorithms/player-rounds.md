@@ -40,7 +40,10 @@ a result.
 When it is the owner's turn off the green, the owner waits for mouse input while preparing
 a shot. The cursor becomes a crosshair and an **aim guide** shows the shot that is being
 lined up: the flight arc through the air, the carry point where the ball first lands, and
-the roll that follows it. Club selection is automatic by aim distance.
+the roll that follows it. The mouse picks a tile centre or a tile vertex and the guide shows
+the ball coming to rest exactly there. Club selection is automatic by aim distance; when
+the club that distance calls for cannot reach the chosen spot, a longer one is used
+(see *Aiming at a centre or vertex*).
 
 The guide is the *intent*, not a promise: it is computed by the real execution math with
 the random error terms removed, so lie, wind, elevation, slope, shape and punch all show
@@ -87,7 +90,9 @@ This keeps existing normalized AI formulas below 1 even for a 990% bonus.
 
 Player maximum carry is `club.max_distance * 0.7 * (1 + power_bonus +
 long_driver_bonus)`, with long-driver bonus included only for the driver.
-Punch multiplies this range by 0.7. Aim is clamped to range and rounded to a tile.
+Punch multiplies this range by 0.7. The tile-based aim (`player_aim()`, used by
+`play_shot()` / `preview_shot()`) clamps to range and rounds to a tile; the mouse-driven
+guide instead solves for a centre or vertex (see *Aiming at a centre or vertex*).
 Existing terrain penalties still reduce actual distance.
 
 For shape skill, luck and recovery, the relevant residual inaccuracy/lie penalty
@@ -124,8 +129,10 @@ adds a lateral mid-flight curve while preserving its computed landing position.
 
 `AimGuide` (`scripts/ui/aim_guide.gd`) is a `Node2D` child of `PlayerRoundManager`
 sitting just above the terrain and below the management UI. Every frame that the owner
-is lining up a shot, `PlayerRoundManager.update_aim_guide()` feeds it
-`Golfer.preview_shot(mouse_target)`, which:
+is lining up a shot, `PlayerRoundManager.update_aim_guide()` snaps the mouse to a tile
+centre or vertex and feeds it to `Golfer.preview_shot_to_rest()` (next section), the
+resting-point version of `Golfer.preview_shot(tile)`. Both run the execution math the
+same way; `preview_shot()`:
 
 1. clamps the mouse aim the same way `play_shot()` does (club by distance, punch and
    skill range, illegal shapes reset to straight),
@@ -173,6 +180,65 @@ Because the guide is deterministic, the drawn arc and roll do not flicker while 
 mouse moves. It re-runs the math each frame, so it also updates live when the player
 changes shape, toggles punch or a new day brings different wind.
 
+### Aiming at a centre or vertex
+
+The mouse does not aim at a free point. It picks one of the terrain's *anchors* — a tile
+centre or a tile vertex — and the guide shows the ball coming to **rest** on it. Every
+centre and every vertex of the map has to be pickable, and has to be reachable by some
+club, so that the player can point the line wherever they can hit the ball.
+
+**Snapping.** `TerrainGrid.snap_world_to_tile_anchor(world_pos)` finds the surface point
+under the pointer (an elevation ray march, so sculpted ground is hit where it is drawn)
+and compares the screen distance to the centre and four vertices of that tile and of its
+eight neighbours, after elevation displacement and view rotation. The nearest anchor
+wins, so hovering exactly over an anchor picks it in every camera orientation. The
+far-edge vertices lie on the map's boundary, half of their catchment off the map, so a
+pointer up to `ANCHOR_RIM_MARGIN` (0.5 tile) beyond the edge still picks the rim anchor
+nearest to it; further out there is nothing to aim at and the guide clears.
+
+**Solving for the launch point.** `preview_shot_to_rest(anchor, type)` and
+`play_shot_to_rest(anchor)` invert the deterministic flight-and-roll model with
+`_solve_aim_for_rest()`. For one club:
+
+1. Aim at the anchor (limited to the club's `player_max_distance()`), run the shot and
+   move the aim by the miss, `aim += anchor - predicted_rest`. Up to
+   `REST_SOLVE_ITERATIONS` (12) passes; it stops once the ball rests within
+   `REST_SOLVE_EXACT_ERROR` (0.02 tile) of the anchor. The closest shot seen is kept,
+   not the last one.
+2. The resting point is not a smooth function of the aim: landing in a bunker or water
+   stops the ball dead, the green rolls faster than the fairway, and a roll shorter than
+   0.15 tile is dropped. At such an edge the resting point jumps, and the fixed-point
+   pass bounces from one side to the other without settling. The solver remembers the
+   latest shot that rests short of the anchor and the latest that rests long of it and
+   bisects between them (up to `REST_SOLVE_BISECTIONS`, 14), which closes on the real
+   solution where the resting point is continuous and otherwise on the edge of the jump.
+3. The shot lands *on* the anchor when the best resting point is within
+   `REST_SOLVE_TOLERANCE` (0.12 tile) of it.
+
+**Choosing the club.** `select_club()` proposes a club from the distance (driver from 9
+tiles, fairway wood from 8, iron from 5, wedge below), but the proposal only counts if
+that club can actually bring the ball to rest on the anchor. The distance bands were
+drawn for the AI's ranges, but the owner's are 0.7 times the table (before skills), so
+each club's reach can end before the next band begins. With no skill points the wedge
+stops at 3.5 tiles (a full-swing wedge rolls almost nothing) while the iron's band only
+starts at 5, and the iron (aim range 6.3 plus about 0.6 of roll) stops near 6.9 while the
+fairway wood's band starts at 8. The anchors in such a gap used to be reported as "out of
+range" while a longer club reached them easily, and the guide jumped to a different
+anchor, which is what made some centres and vertices impossible to point at. The solver
+therefore tries the proposed club, then each longer club (nearest first), then the
+shorter ones, and plays the first that lands within the tolerance. When no club does, the
+proposal is kept unless another club ends at least `CLUB_SWITCH_MARGIN` (0.05 tile)
+closer. Every anchor inside the bag's reach (the driver's range plus its roll) therefore
+has a club that lands on it, bar the places the terrain itself leaves a gap (below); the
+club named on the guide is the club the swing uses.
+
+**When the anchor cannot be reached.** The guide still ends on an anchor: the one nearest
+to where the ball would actually rest. Two reasons are told apart. *Out of range* means
+the aim is already at the club's maximum (the red X marks the anchor that was asked for).
+*Terrain limited* means the aim had range to spare but the ball cannot stop there: a ball
+that carries a bunker rolls on past its far edge, so the tiles just behind it are not
+places the ball can come to rest.
+
 ### State and cleanup
 
 The player round integrates directly with `GolferManager`'s group turn scheduler
@@ -201,6 +267,12 @@ while leaving normal visitors unperturbed.
 | Guide bend factor | `AimGuide.BEND_FACTOR` (matches `BallManager`) | 0.06 |
 | Guide roll dot spacing / radius | `AimGuide._draw_dotted_trail()` | 9px / 2.4px |
 | Shortest captioned roll | `AimGuide._draw_labels()` | 5 yd |
+| Anchor lands on target within | `Golfer.REST_SOLVE_TOLERANCE` | 0.12 tile |
+| Solve stops refining within | `Golfer.REST_SOLVE_EXACT_ERROR` | 0.02 tile |
+| Fixed-point passes / bisections | `Golfer.REST_SOLVE_ITERATIONS` / `REST_SOLVE_BISECTIONS` | 12 / 14 |
+| Club change needs to end this much closer | `Golfer.CLUB_SWITCH_MARGIN` | 0.05 tile |
+| Clubs tried, shortest reach first | `Golfer.OWNER_CLUB_LADDER` | wedge, iron, fairway wood, driver |
+| Pointer tolerance past the map edge | `TerrainGrid.ANCHOR_RIM_MARGIN` | 0.5 tile |
 
 ## Validation
 
@@ -208,12 +280,17 @@ while leaving normal visitors unperturbed.
 saves, bounds, terrain eligibility, input waiting, automatic-green eligibility,
 range modifiers, and the deterministic shot preview (same math as execution, no
 shank/tendency, shape mirroring, punch roll-out, backspin reversal, and the states
-in which no guide is offered). `test_aim_guide.gd` covers the drawn geometry: the
-arc starts at the ball, rises above its ground track and ends on the carry point,
-the roll trail runs from that carry point to the resting point, fade and draw bend
-to opposite sides, punch flattens and backspin lifts the arc, the ground track
-follows terrain elevation, and invalid input draws nothing. `test_player_round.gd`
-exercises the real setup UI, opponent selection, results/ties, concurrent visitor
-activity, shared group ID and etiquette, cancellation, mode changes, the guide
-appearing/clearing with the owner's turn, and a real round through swings, flight,
-walking and automatic putts.
+in which no guide is offered). It also scans every centre and vertex inside the
+driver's range and requires each to be aimable, covers the club hand-over between the
+clubs' ranges, the out-of-range and terrain-limited reports, and the solver's handling of
+jumps in the resting point (the smallest visible roll, a bunker strip).
+`test_aim_guide.gd` covers the drawn geometry: the arc starts at the ball, rises above
+its ground track and ends on the carry point, the roll trail runs from that carry point
+to the resting point, fade and draw bend to opposite sides, punch flattens and backspin
+lifts the arc, the ground track follows terrain elevation, and invalid input draws
+nothing; and the snapping: every centre and vertex, rim included, picks itself on flat
+and sculpted terrain in all four orientations. `test_player_round.gd` exercises the real
+setup UI, opponent selection, results/ties, concurrent visitor activity, shared group ID
+and etiquette, cancellation, mode changes, the guide appearing/clearing with the owner's
+turn, the guide pointing at tiles that sit between two clubs' ranges, and a real round
+through swings, flight, walking and automatic putts.
