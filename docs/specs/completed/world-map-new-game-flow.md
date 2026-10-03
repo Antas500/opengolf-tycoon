@@ -73,6 +73,9 @@ so a reload stays unlimited.
   or a Play button for owned sites. Buying spends money and unlocks the site's parcels.
 - **Reset World** — re-rolls the per-location unlocked land and therefore every price,
   giving a fresh map without restarting.
+- **Layout** — globe left / list right on wide windows; on a *tall* narrow window
+  (portrait phone, tablet) the globe stacks above the list. A squat window stays side by
+  side, since a stacked pair needs ~660px of height to show both.
 - **Back** — returns to the menu when opened from the menu, or to the course when opened
   from the pause menu.
 

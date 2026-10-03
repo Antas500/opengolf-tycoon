@@ -15,7 +15,13 @@ signal play_location_requested(location_id: String)
 signal back_requested()
 
 const ROW_HEIGHT := 56
+## Shorter rows on narrow windows, where vertical space is scarce.
+const COMPACT_ROW_HEIGHT := 48
 const ROW_SELECTED_BG := Color(0.22, 0.36, 0.28, 1.0)
+## Below this window height the globe and the list do not stack: a stacked
+## globe (min 240px) plus a list (min 260px) needs the room, and a squat window
+## would push the list off the bottom of the screen entirely.
+const STACKED_MIN_HEIGHT := 660.0
 
 var globe: GlobeMap = null
 var _list_box: VBoxContainer = null
@@ -25,14 +31,17 @@ var _summary_label: Label = null
 var _hint_label: Label = null
 var _selected_id: String = ""
 var _first_show: bool = true
-## True on phones / small browser windows (globe above list, shorter rows).
+## True on phones / small browser windows (tighter padding, shorter row text).
 var _compact: bool = false
+## True while the built layout stacks the globe above the list.
+var _stacked_built: bool = false
 
 func _ready() -> void:
 	name = "WorldMapScreen"
 	_build()
-	# Phones and narrow browser windows stack the globe above the list; a live
-	# window resize that crosses the compact threshold rebuilds the screen.
+	# Narrow windows stack the globe above the list when they are tall enough to
+	# hold both; a live resize or rotation that changes the arrangement (or the
+	# compact flag) rebuilds the screen.
 	if has_node("/root/Screen"):
 		Screen.changed.connect(_on_screen_changed)
 	if WorldMap.locations.is_empty():
@@ -40,11 +49,16 @@ func _ready() -> void:
 	refresh()
 
 func _on_screen_changed(_size: Vector2, _scale: float) -> void:
-	var compact := Screen.is_compact()
-	if compact == _compact:
+	if Screen.is_compact() == _compact and _stacked() == _stacked_built:
 		return
 	_build()
 	refresh()
+
+## True when the globe goes above the list rather than beside it.
+func _stacked() -> bool:
+	if not has_node("/root/Screen") or not Screen.is_compact():
+		return false
+	return Screen.window_size.y >= STACKED_MIN_HEIGHT
 
 ## Build (or rebuild) the whole screen for the current window size.
 func _build() -> void:
@@ -63,6 +77,7 @@ func _build() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var compact := has_node("/root/Screen") and Screen.is_compact()
 	_compact = compact
+	_stacked_built = _stacked()
 	var pad := 10 if compact else 18
 	margin.add_theme_constant_override("margin_left", pad)
 	margin.add_theme_constant_override("margin_right", pad)
@@ -75,7 +90,7 @@ func _build() -> void:
 	margin.add_child(root_vbox)
 
 	root_vbox.add_child(_build_header())
-	root_vbox.add_child(_build_body(compact))
+	root_vbox.add_child(_build_body(compact, _stacked_built))
 
 ## ── Layout ───────────────────────────────────────────────────────────────
 
@@ -122,10 +137,10 @@ func _build_header() -> Control:
 
 	return header
 
-func _build_body(compact: bool) -> Control:
-	# Wide windows read globe-left / list-right; narrow ones (phones, small
-	# browser windows) stack the globe above the list so neither overflows.
-	var body: BoxContainer = VBoxContainer.new() if compact else HBoxContainer.new()
+func _build_body(compact: bool, stacked: bool) -> Control:
+	# Wide windows (and squat ones) read globe-left / list-right; a tall narrow
+	# window (portrait phone, portrait tablet) stacks the globe above the list.
+	var body: BoxContainer = VBoxContainer.new() if stacked else HBoxContainer.new()
 	body.add_theme_constant_override("separation", 10 if compact else 14)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
@@ -133,8 +148,8 @@ func _build_body(compact: bool) -> Control:
 	var globe_panel = PanelContainer.new()
 	globe_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	globe_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	if compact:
-		globe_panel.custom_minimum_size = Vector2(0, 300)
+	if stacked:
+		globe_panel.custom_minimum_size = Vector2(0, 240)
 	var globe_style = StyleBoxFlat.new()
 	globe_style.bg_color = UIConstants.COLOR_BG_PANEL
 	globe_style.border_color = UIConstants.COLOR_BORDER
@@ -162,11 +177,13 @@ func _build_body(compact: bool) -> Control:
 
 	body.add_child(globe_panel)
 
-	# Location list (right / bottom)
+	# Location list (right / bottom). It always fills the height it is given:
+	# with a shrink flag the panel collapses to its bare minimum and the rows
+	# (and their Buy / Play buttons) get clipped away entirely.
 	var list_panel = PanelContainer.new()
-	list_panel.custom_minimum_size = Vector2(0, 260) if compact else Vector2(430, 0)
-	list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if compact else Control.SIZE_FILL
-	list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL if compact else Control.SIZE_SHRINK_BEGIN
+	list_panel.custom_minimum_size = Vector2(0, 260) if stacked else Vector2(430, 260)
+	list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if stacked else Control.SIZE_FILL
+	list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	list_panel.add_theme_stylebox_override("panel", globe_style)
 
 	var list_box = VBoxContainer.new()
@@ -183,6 +200,8 @@ func _build_body(compact: bool) -> Control:
 
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Room for four rows even if an outer container squeezes the panel.
+	scroll.custom_minimum_size = Vector2(0, 4 * ROW_HEIGHT + 8)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	list_box.add_child(scroll)
 
@@ -287,7 +306,9 @@ func _row_state(def: Dictionary) -> Dictionary:
 
 func _build_row(state: Dictionary, compact: bool = false) -> PanelContainer:
 	var row = PanelContainer.new()
-	row.custom_minimum_size = Vector2(0, ROW_HEIGHT)
+	# Compact rows are shorter so a squat window still shows a useful slice of
+	# the list instead of one clipped row.
+	row.custom_minimum_size = Vector2(0, COMPACT_ROW_HEIGHT if compact else ROW_HEIGHT)
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
 	row.set_meta("location_id", state["id"])
 	row.tooltip_text = "%s — %s\n%s (%d holes) · %d of %d plots ready to build on\n%s" % [
@@ -299,8 +320,8 @@ func _build_row(state: Dictionary, compact: bool = false) -> PanelContainer:
 	var margin = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 8 if compact else 10)
 	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_top", 6)
-	margin.add_theme_constant_override("margin_bottom", 6)
+	margin.add_theme_constant_override("margin_top", 3 if compact else 6)
+	margin.add_theme_constant_override("margin_bottom", 3 if compact else 6)
 	row.add_child(margin)
 
 	var hbox = HBoxContainer.new()
@@ -340,7 +361,7 @@ func _build_row(state: Dictionary, compact: bool = false) -> PanelContainer:
 	hbox.add_child(cost)
 
 	var action = Button.new()
-	action.custom_minimum_size = Vector2(64 if compact else 76, 34)
+	action.custom_minimum_size = Vector2(64 if compact else 76, 30 if compact else 34)
 	action.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_BASE)
 	if state["owned"]:
 		if state["active"]:

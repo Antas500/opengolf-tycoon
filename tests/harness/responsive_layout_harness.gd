@@ -164,6 +164,7 @@ func _run() -> void:
 	# ------------------------------------------------------------------
 	var world: Node = get_node("/root/WorldMap")
 	world.new_world(world.default_options())
+	await _set_window(1600, 1000)
 	main._show_world_map_screen(false)
 	await _frames(3)
 	var world_screen: Node = main.get_node("UI/HUD/WorldMapScreen")
@@ -175,7 +176,11 @@ func _run() -> void:
 	var list_rect: Rect2 = world_screen._list_box.get_global_rect()
 	_check(list_rect.position.x > globe_rect.position.x,
 		"desktop list sits beside the globe")
+	# The list must actually show rows: a panel that collapses clips every row
+	# (and its Buy / Play button) out of sight while still being "on screen".
+	_check_rows_visible(world_screen, world_view, "desktop")
 
+	# Rotated phone: globe above list, both still showing their content.
 	await _set_window(844, 390)
 	await _frames(4)
 	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
@@ -183,10 +188,46 @@ func _run() -> void:
 	_check(world_view.encloses(globe_rect), "rotated-phone globe is fully on screen (%s)" % globe_rect)
 	_check(globe_rect.size.x <= world_view.size.x and globe_rect.position.y > 0.0,
 		"compact layout puts the globe above the list")
+	_check_rows_visible(world_screen, world_view, "rotated phone")
+
+	# Phone portrait, the layout the list is most likely to be squeezed out of.
+	await _set_window(390, 844)
+	await _frames(4)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check_rows_visible(world_screen, world_view, "phone")
 	main._close_world_map()
 
 	print("RESPONSIVE: %d failures" % failures)
 	get_tree().quit(0 if failures == 0 else 1)
+
+## The location list has to be readable and clickable: several rows, and the
+## first row's Buy / Play button, must sit inside the list's clip rect and the
+## window. A list panel that collapses to its minimum height still passes a
+## "panel is on screen" check while hiding every row.
+func _check_rows_visible(world_screen: Node, view: Rect2, tag: String) -> void:
+	var scroll: ScrollContainer = world_screen._list_box.get_parent()
+	var clip: Rect2 = scroll.get_global_rect()
+	var fully_shown := 0
+	for row in world_screen._list_box.get_children():
+		if _within(row.get_global_rect(), clip) and _within(row.get_global_rect(), view):
+			fully_shown += 1
+	_check(fully_shown >= 4, "%s list shows at least four location rows (got %d, clip %s)" % [tag, fully_shown, clip])
+	var first_row: Control = world_screen._list_box.get_child(0)
+	_check(_within(first_row.get_global_rect(), view),
+		"%s first location row is on screen (%s)" % [tag, first_row.get_global_rect()])
+	var buttons: Array = _find_buttons(first_row)
+	_check(buttons.size() == 1, "%s row has one action button (got %d)" % [tag, buttons.size()])
+	if buttons.size() == 1:
+		var button: Control = buttons[0]
+		_check(_within(button.get_global_rect(), clip) and _within(button.get_global_rect(), view),
+			"%s row's %s button is clickable (%s)" % [tag, button.text, button.get_global_rect()])
+
+## inner sits inside outer, allowing a pixel of float slack.
+func _within(inner: Rect2, outer: Rect2, slack: float = 1.0) -> bool:
+	return inner.position.x >= outer.position.x - slack \
+		and inner.position.y >= outer.position.y - slack \
+		and inner.end.x <= outer.end.x + slack \
+		and inner.end.y <= outer.end.y + slack
 
 func _push_touch(pressed: bool, index: int, pos: Vector2) -> void:
 	var ev := InputEventScreenTouch.new()

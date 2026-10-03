@@ -9,7 +9,8 @@ extends SceneTree
 ##  * Start New Game options (company name, difficulty, money, generated holes,
 ##    features) landing on the new game,
 ##  * the world map listing every location with name/theme/size/cost,
-##  * buying a location and building the generated first course on it,
+##  * buying a location from its row button and building the generated first
+##    course on it (also by pressing the row's Play button),
 ##  * buying a second location, switching to it, and coming back to find the
 ##    first course exactly as it was left.
 
@@ -128,15 +129,31 @@ func run() -> void:
 	check(changed > 0, "Reset World changes location costs")
 
 	# ------------------------------------------------------- buy & start playing
+	# Drive the real row button, not WorldMap directly: what the player clicks
+	# has to be the thing that buys and plays.
 	var target := "monterey"
 	check(not world.is_owned(target), "Monterey starts unowned")
-	check(world.buy_location(target), "Monterey can be bought")
+	var target_price: int = world.get_price(target)
+	var buy_button: Button = _row_action_button(screen, target)
+	check(buy_button != null, "the Monterey row has an action button")
+	check(buy_button != null and buy_button.text == "Buy", "the unowned row offers Buy")
+	check(buy_button != null and buy_button.pressed.get_connections().size() > 0,
+		"the Buy button is wired up")
+	if buy_button != null:
+		buy_button.pressed.emit()
+	await frames(2)
 	var money_after_buy: int = gm.money
-	check(world.is_owned(target), "Monterey is owned after buying")
-	check(money_after_buy == 200000 - world.get_price(target), "buying deducts the price")
+	check(world.is_owned(target), "pressing Buy buys Monterey")
+	check(money_after_buy == 200000 - target_price, "buying deducts the price")
+	check(screen._rows.has(target), "the row is still listed after buying")
 
-	main._on_world_map_play_location(target)
+	var play_button: Button = _row_action_button(screen, target)
+	check(play_button != null and play_button.text == "Play", "the owned row offers Play")
+	if play_button != null:
+		play_button.pressed.emit()
 	await frames(12)
+	check(main.get_node_or_null("UI/HUD/WorldMapScreen") == null,
+		"pressing Play closes the world map")
 	check(gm.company_name == "Summit Golf Group", "the company name reaches the game")
 	check(gm.current_difficulty == DifficultyPresets.Preset.HARD, "difficulty reaches the game")
 	check(gm.wind_enabled == false, "the wind feature is off in the new game")
@@ -184,7 +201,12 @@ func run() -> void:
 
 	# The switch is synchronous, so the company's balance can be compared
 	# exactly: money belongs to the company, not to the course site.
-	main._on_world_map_play_location(second)
+	screen.refresh()
+	var second_play: Button = _row_action_button(screen, second)
+	check(second_play != null and second_play.text == "Play",
+		"the second location's row offers Play once it is owned")
+	if second_play != null:
+		second_play.pressed.emit()
 	var cash_after_switch: int = gm.money
 	check(world.active_location_id == second, "the world map switched to the second location")
 	check(gm.current_theme == int(WorldLocations.get_definition(second)["theme"]),
@@ -268,6 +290,15 @@ func run() -> void:
 	if failures == 0:
 		print("WORLD_MAP_FLOW_PASS: menu, setup, globe list, buying, switching and quick start all work")
 	quit(0 if failures == 0 else 1)
+
+## The Buy / Play button inside a location's list row.
+func _row_action_button(screen, location_id: String) -> Button:
+	var row = screen._rows.get(location_id)
+	if row == null:
+		return null
+	for node in _all_buttons(row):
+		return node
+	return null
 
 func _all_buttons(node: Node) -> Array:
 	var found: Array = []
