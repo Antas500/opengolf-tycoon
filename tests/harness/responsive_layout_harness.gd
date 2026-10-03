@@ -53,9 +53,15 @@ func _run() -> void:
 	_check(main.bottom_bar.offset_top <= -190.0, "bottom bar stays at its full height on phones")
 	_check(absf(main.hud_status_column.offset_right + 8.0) < 1.0, "status column stays in the corner")
 
-	# The main menu must fit (scrollable) and its theme grid must be 2-up.
-	var grid: GridContainer = _find_grid(main.main_menu)
-	_check(grid != null and grid.columns == 2, "main menu theme grid is 2 columns on phones")
+	# The main menu must fit (scrollable) with its six actions reachable.
+	var menu_buttons: Array = _find_buttons(main.main_menu)
+	_check(menu_buttons.size() == 6, "main menu shows six actions on phones (got %d)" % menu_buttons.size())
+	var menu_fits := true
+	for button in menu_buttons:
+		var rect: Rect2 = button.get_global_rect()
+		if rect.size.x > 390.0 or rect.size.y < 30.0:
+			menu_fits = false
+	_check(menu_fits, "main menu buttons fit the phone width and stay tappable")
 
 	# Touch gestures are wired to the live camera.
 	_check(touch.camera == main.camera, "TouchInput is wired to the main camera")
@@ -152,6 +158,33 @@ func _run() -> void:
 	var dy: float = main.camera._target_position.y - cam_y_before
 	_check(absf(dx) > 20.0 and absf(dy) > 10.0, "one-finger drag pans the camera (moved %s, %s)" % [dx, dy])
 
+	# ------------------------------------------------------------------
+	# World map: the globe and the location list stay on screen at both the
+	# desktop reference size and a phone, where they stack vertically.
+	# ------------------------------------------------------------------
+	var world: Node = get_node("/root/WorldMap")
+	world.new_world(world.default_options())
+	main._show_world_map_screen(false)
+	await _frames(3)
+	var world_screen: Node = main.get_node("UI/HUD/WorldMapScreen")
+	var world_view: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var globe_rect: Rect2 = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "desktop globe is fully on screen (%s)" % globe_rect)
+	_check(world_screen._rows.size() == WorldLocations.get_all().size(),
+		"every location has a list row")
+	var list_rect: Rect2 = world_screen._list_box.get_global_rect()
+	_check(list_rect.position.x > globe_rect.position.x,
+		"desktop list sits beside the globe")
+
+	await _set_window(844, 390)
+	await _frames(4)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	globe_rect = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "rotated-phone globe is fully on screen (%s)" % globe_rect)
+	_check(globe_rect.size.x <= world_view.size.x and globe_rect.position.y > 0.0,
+		"compact layout puts the globe above the list")
+	main._close_world_map()
+
 	print("RESPONSIVE: %d failures" % failures)
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -168,13 +201,13 @@ func _push_drag(index: int, pos: Vector2) -> void:
 	ev.position = pos
 	get_viewport().push_input(ev, true)
 
-func _find_grid(node: Node) -> GridContainer:
+## Every Button under a node, for menu layout checks.
+func _find_buttons(node: Node) -> Array:
+	var found: Array = []
 	if node == null:
-		return null
-	if node is GridContainer:
-		return node
+		return found
+	if node is Button:
+		found.append(node)
 	for child in node.get_children():
-		var found: GridContainer = _find_grid(child)
-		if found != null:
-			return found
-	return null
+		found.append_array(_find_buttons(child))
+	return found

@@ -10,15 +10,15 @@ A SimGolf (2002) spiritual successor built in **Godot 4.6+** with GDScript. Play
 
 ```
 scripts/
-├── autoload/       # Singletons: GameManager, EventBus, SaveManager, FeedbackManager, SoundManager, ShadowSystem
+├── autoload/       # Singletons: GameManager, EventBus, WorldMap, SaveManager, FeedbackManager, SoundManager, ShadowSystem
 ├── course/         # HoleVisualizer, DifficultyCalculator, EntityLayer
 ├── effects/        # RainOverlay, HoleInOneCelebration, SandSprayEffect
 ├── entities/       # Golfer, Ball, Building, Tree, Rock, Flag
 ├── managers/       # GolferManager, BallManager, HoleManager, PlacementManager, BuildingRegistry, TournamentManager
-├── systems/        # WindSystem, WeatherSystem, CourseRatingSystem, CourseTheme, FeedbackTriggers, GolferTier, TournamentSystem, DayNightSystem, CourseRecords, ShotAI, GolferNeeds, SeasonSystem, MilestoneSystem, TutorialSystem, DifficultyPresets, ColorblindMode
+├── systems/        # WorldLocations, GeneratedCourse, WindSystem, WeatherSystem, CourseRatingSystem, CourseTheme, FeedbackTriggers, GolferTier, TournamentSystem, DayNightSystem, CourseRecords, ShotAI, GolferNeeds, SeasonSystem, MilestoneSystem, TutorialSystem, DifficultyPresets, ColorblindMode
 ├── terrain/        # TerrainGrid, TerrainTypes, TerrainPalette, + overlay classes (cup, tee aim arrows, OB stakes, shot heatmap, …)
 ├── tools/          # HoleCreationTool, ElevationTool, UndoManager
-├── ui/             # 40 UI components (MainMenu, PauseMenu, SettingsMenu, MiniMap, FinancialPanel, MilestonesPanel, HoleStatsPanel, CourseScorecardPanel, SaveLoadPanel, HotkeyPanel, etc.)
+├── ui/             # UI components (MainMenu, StartNewGameScreen, WorldMapScreen, GlobeMap, PauseMenu, SettingsMenu, MiniMap, FinancialPanel, MilestonesPanel, HoleStatsPanel, CourseScorecardPanel, SaveLoadPanel, HotkeyPanel, etc.)
 ├── main/           # main.gd (scene controller)
 └── utils/          # IsometricCamera
 scenes/
@@ -39,10 +39,11 @@ assets/
 
 1. **Screen** (`scripts/autoload/screen_manager.gd`) — Responsive layout adapter (see "Responsive Layout & Touch" below). Exposes `window_size`, `world_scale`, `is_compact()`, `available_panel_rect()`, `bottom_bar_height()` and a `changed` signal; pure `compute_scale()`/`compute_world_scale()` statics are unit-tested.
 2. **TouchInput** (`scripts/autoload/touch_input.gd`) — Translates raw touch gestures into game input (tap → synthetic LMB click, one-finger drag → camera pan or terrain paint, two-finger → pan + pinch zoom, two-finger tap → synthetic RMB/cancel). The engine's `emulate_mouse_from_touch` is **off**; this autoload is the only touch path. `camera` and `paint_mode_provider` are wired by main.gd.
-3. **GameManager** (`scripts/autoload/game_manager.gd`) — Central game state: money ($25k Normal start), reputation (0-100), day/hour cycle, game mode (MAIN_MENU/BUILDING/SIMULATING/PLAYING/PAUSED), game speed (PAUSED/NORMAL/FAST/ULTRA), current_theme (CourseTheme.Type). Holds `CourseData`, `DailyStatistics`, `HoleStatistics` inner classes. References terrain_grid, wind_system, weather_system, entity_layer, tournament_manager.
+3. **GameManager** (`scripts/autoload/game_manager.gd`) — Central game state: money (settled by the Start New Game screen — Easy/Normal/Hard presets, or Unlimited via `WorldMap.UNLIMITED_MONEY = -1`), reputation (0-100), day/hour cycle, game mode (MAIN_MENU/BUILDING/SIMULATING/PLAYING/PAUSED), game speed (PAUSED/NORMAL/FAST/ULTRA), current_theme (CourseTheme.Type). Holds `CourseData`, `DailyStatistics`, `HoleStatistics` inner classes. References terrain_grid, wind_system, weather_system, entity_layer, tournament_manager.
 4. **EventBus** (`scripts/autoload/event_bus.gd`) — ~60 signals for decoupled cross-system communication. Categories: game state, economy, terrain/building, course design, golfers, shots, UI, wind/weather, camera, selection, day cycle, tournaments, save/load. Has `notify()` and `log_transaction()` convenience methods.
-5. **SaveManager** (`scripts/autoload/save_manager.gd`) — JSON-based persistence (v2 format). Auto-saves on day change. Serializes game state, terrain, entities, holes, wind, weather, tournaments, course records, and course theme. Golfers are NOT persisted (they respawn naturally on load). Emits `theme_changed` on load to refresh overlays.
+5. **SaveManager** (`scripts/autoload/save_manager.gd`) — JSON-based persistence (v5 format). Auto-saves on day change. Serializes game state, terrain, entities, holes, wind, weather, tournaments, course records, course theme, and the company world map (`world_map`: settings, per-location owned/unlocked land, active location and a snapshot per owned site). Company-level state (money, reputation, calendar, milestones, analytics) is shared; `build_location_snapshot()` strips `SNAPSHOT_COMPANY_KEYS` so each site snapshot holds only `SITE_STATE_KEYS`, and `switch_to_location()` re-injects the company state. Golfers are NOT persisted (they respawn naturally on load). Emits `theme_changed` on load to refresh overlays.
 6. **FeedbackManager** (`scripts/autoload/feedback_manager.gd`) — Aggregates golfer thought bubbles into daily satisfaction metrics (positive/negative/neutral counts, satisfaction rating 0.0-1.0).
+7. **WorldMap** (`scripts/autoload/world_map_state.gd`) — The company's world: company name, difficulty, starting-money option, requested generated holes and the Weather/Wind/Seasons feature flags, plus one entry per location (`size`, `theme`, unlocked parcels, owned, price). Owns `active_location_id` and a snapshot per owned site (see "World Map & Locations").
 
 ### Key Design Patterns
 
@@ -121,13 +122,23 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
   - `get_terrain_colors()` → per-theme color palette for all terrain types
   - `get_gameplay_modifiers()` → wind_base_strength, distance_modifier, maintenance_cost_multiplier, green_fee_baseline
   - `get_accent_color()`, `get_description()` → UI display helpers
-- **Theme selection**: Happens on main menu via `MainMenu` class. User selects theme card, enters course name, starts game.
+- **Theme selection**: A theme belongs to the **location** the player buys on the World Map; `StartNewGameScreen` collects company name, difficulty, starting money, generated holes and the Weather/Wind/Seasons features, and the World Map's first course inherits that location's theme. `MainMenu` no longer offers theme cards — it links straight to the World Map for Quick Start, and to the setup screen for Start New Game.
 - **Theme application flow**:
   1. `GameManager.new_game()` sets `current_theme` and updates `TerrainPalette` colors
   2. `EventBus.theme_changed` is emitted
   3. `CourseSurface` and theme-aware UI listeners refresh their palettes from the signal
 - **Save/load**: Theme stored as string in save data, restored via `CourseTheme.from_string()`. On load, theme colors re-applied and `theme_changed` emitted.
 - **Theme-aware components**: TerrainPalette, WaterOverlay, GrassOverlay, terrain shader parameters.
+
+### World Map & Locations
+- **WorldLocations** (`scripts/systems/world_locations.gd`): static catalog of **27 destinations** (Monterey, San Diego, Rocky Mountains, Las Vegas, Phoenix, Hawaii, Oahu, Nova Scotia, Northeast, Carolina, Florida, Chicago, New York, Ireland, Scotland, Wales, South England, Spain, Portugal, Jamaica, Bahamas, Japan, Dubai, South Africa, Australia, New Zealand, Pacific Northwest). Each carries a `CourseTheme` theme, a globe position (`lat`/`lon`), a size and a prestige factor. Sizes are SMALL 9 / MEDIUM 12 / LARGE 16 / CHAMPIONSHIP 20 parcels with base prices $15K/$24K/$36K/$52K; `compute_price(id, unlocked)` = (base + unlocked × `LAND_VALUE_PER_PARCEL` $2,200) × theme multiplier × prestige, rounded to $100.
+- **Land blocks**: a location's land is a parcel block on the existing 6×6 `LandManager` grid that always contains the central 2×2 cluster and, for an 18-hole first course, the 3×3 block covering parcels (1,1)..(3,3). `layout_order(size, rng, required)` orders the block so `_pick_unlocked()`'s roll (how much land comes pre-cleared, and therefore the price) can never drop a parcel the biggest generated course needs. `WorldMap.get_location_parcels()` uses the same helper, so switching to a site always lays down a buildable block.
+- **WorldMap** (`scripts/autoload/world_map_state.gd`): `new_world(options, seed)`, `reset_world()` (re-rolls every location's unlocked land and price), `buy_location(id)`, `is_owned`, `can_afford`, `get_price`, `apply_location_land`, `set_active_location`, `take_snapshot`/`get_snapshot`, `serialize`/`deserialize`. Feature flags live here too (`FEATURE_WEATHER` / `FEATURE_WIND` / `FEATURE_SEASONS`); off means sunny weather, calm wind and a neutral year-round season, and the HUD reads "Off" / "Year-round".
+- **GlobeMap** (`scripts/ui/globe_map.gd`): procedural orthographic globe. Hand-tuned land polygons of `[lon, lat]` constants (never `PackedVector2Array()` straight from the raw arrays — build `Vector2(float(lon), float(lat))` per point), a cached land mask, graticule, and one marker per location. Public API: `set_locations`, `set_selected`, `look_at_location`, `location_clicked(id)`, static `project_point(lon, lat, center_lon, center_lat)`, `is_land(lon, lat)`, `build_land_points()`.
+- **WorldMapScreen** (`scripts/ui/world_map_screen.gd`): globe above/beside the location list, one row per location showing **Name / Theme / Size / Cost** with Buy or Play, a **Reset World** button, and `play_location_requested(id)` / `back_requested` signals. `refresh()` rebuilds the rows from `WorldMap`; `_compact` stacks the globe over the list on phone-sized windows (globe min 280×240).
+- **StartNewGameScreen** (`scripts/ui/start_new_game_screen.gd`): company name, difficulty, starting money (`MONEY_OPTIONS` = 100000/150000/200000/-1 Unlimited), generated holes (`HOLE_OPTIONS` = 0/3/6/9/18) and the three feature toggles; emits `next_requested(options)`.
+- **First course / site entry**: `main._on_world_map_play_location(id)` restores that location's snapshot if one exists, otherwise `_start_new_course_at_location()` calls `GameManager.new_game("<Location> Golf Club", location theme, WorldMap.difficulty, {company_name, starting_money, unlimited, generated_holes, features})` and `GeneratedCourse.generate(n, …)` builds the requested holes (18 holes = par 72, front nine `LAYOUT_9`, back nine `LAYOUT_18_BACK`, starter amenity cluster from `AMENITY_SPOTS`). `Switch` keeps company money/reputation/calendar and swaps the site snapshot.
+- **Legacy entry points**: `_on_main_menu_new_game(name, theme, difficulty, options)` and `_on_main_menu_quick_start(name, theme)` still start a playable course directly through `WorldMap.ensure_legacy_world(theme)` for older scripts and tests.
 
 ### Holes
 - **HoleCreationTool**: opens a hole from the two tiles the player painted — one unused Tee Box and one unused **Green With Hole** — via **H** or the Open Hole tile on the Course Terrain tab, which is nestled into the notch between those two tiles (`scripts/ui/components/open_hole_notch_button.gd`, placed with `TileHoneycomb.set_notch_child`). See [hole-creation docs](docs/algorithms/hole-creation.md).
@@ -211,10 +222,12 @@ godot --headless --path . res://tests/harness/walking_path_harness.tscn
 godot --headless --path . res://tests/harness/bulldozer_harness.tscn   # Bulldozer remit: demolishes improvements/buildings, never course terrain
 godot --headless --path . res://tests/harness/speed_controls_harness.tscn  # Speed controls: one fast-forward button for Fast (3x) and Ultra (8x)
 godot --headless --path . res://tests/harness/ready_golf_harness.tscn  # Pace: one foursome, three holes each, reports the dead time a group spends waiting on a walking partner
-godot --headless --path . res://tests/harness/responsive_layout_harness.tscn  # Responsive: phone/tablet/desktop window sizes drive the real main scene through the Screen/HUD/panel/touch adapters
+godot --headless --path . res://tests/harness/responsive_layout_harness.tscn  # Responsive: phone/tablet/desktop window sizes drive the real main scene through the Screen/HUD/panel/touch adapters (includes the World Map screen)
+godot --headless --path . -s tests/integration/world_map_flow.gd  # World map: menu → setup → globe/list → buy → play → switch → quick start
+godot --headless --path . -s tests/harness/globe_preview.gd  # Writes tmp_preview/equirect.png + ortho.png so the globe's land mask can be eyeballed
 ```
 
-**Test coverage:** GameManager, SaveManager, CourseRatingSystem, CourseRecords, DailyStatistics, GolferTier, plus the responsive adapters (Screen math, IsometricCamera world scale/pan/zoom, TouchInput gestures, CenteredPanel clamping, compact HUD pieces).
+**Test coverage:** GameManager, SaveManager, CourseRatingSystem, CourseRecords, DailyStatistics, GolferTier, WorldMap/WorldLocations (pricing, parcel layout, land coverage for a full generated course), plus the responsive adapters (Screen math, IsometricCamera world scale/pan/zoom, TouchInput gestures, CenteredPanel clamping, compact HUD pieces).
 
 **Override Godot path:** `make test GODOT=/path/to/godot` or `GODOT=/path/to/godot ./test.sh`
 
@@ -223,7 +236,7 @@ godot --headless --path . res://tests/harness/responsive_layout_harness.tscn  # 
 ## Playtesting
 
 When running the game for playtesting via the Godot MCP tools:
-1. Use **Quick Start** to generate a 9-hole course instantly
+1. Use **Quick Start** (main menu → World Map → buy a location → Play) to start a company with the default settings; the setup screen's Generated Holes option controls whether the first course is bare or comes with 3/6/9/18 generated holes
 2. Click **Start Day** then click **>>** twice to reach **>>> (ULTRA, 8x speed)** — a full game day completes in ~90 seconds of real time
 3. Speed tiers: `>` = Normal (1x), `>>` = Fast (3x), `>>>` = Ultra (8x). Fast and Ultra share one button: pressing it swaps between the two tiers (`GameManager.next_fast_forward_speed`). Speed uses `Engine.time_scale` so all systems (golfer movement, ball flight, tweens) scale uniformly.
 4. Playtest findings should be logged in `playtest_findings.md` at the project root
@@ -234,5 +247,5 @@ When running the game for playtesting via the Godot MCP tools:
 
 - **SoundManager** (`scripts/autoload/sound_manager.gd`): Procedural audio system using `AudioStreamGenerator`. Synthesized swing, impact, ambient (wind, birds, rain), and UI sounds. Event-driven via EventBus signals. Master/SFX/ambient volume controls with mute toggle.
 - Golfers are NOT saved/loaded (respawn naturally to avoid complex mid-action state serialization).
-- Save format is versioned (SAVE_VERSION = 2) for forward compatibility.
-- **Additional systems**: TutorialSystem (interactive onboarding), MilestoneSystem (trackable objectives), SeasonSystem (seasonal calendar), DifficultyPresets (Easy/Normal/Hard), ColorblindMode (accessibility), PauseMenu (Escape key), SettingsMenu, QuickStartCourse (pre-built demo course).
+- Save format is versioned (SAVE_VERSION = 5) for forward compatibility; version 5 adds the company `world_map` block and per-site snapshots.
+- **Additional systems**: TutorialSystem (interactive onboarding), MilestoneSystem (trackable objectives), SeasonSystem (seasonal calendar), DifficultyPresets (Easy/Normal/Hard), ColorblindMode (accessibility), PauseMenu (Escape key), SettingsMenu, GeneratedCourse (the layouts the World Map first course uses), QuickStartCourse (pre-built demo course, still used by PrebuiltCourseGenerator and the legacy direct-start path).

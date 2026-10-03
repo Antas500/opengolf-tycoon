@@ -53,3 +53,6 @@ package-lock.json
 # Local development
 .env
 .env.local
+
+# Throwaway preview output
+/tmp_preview/

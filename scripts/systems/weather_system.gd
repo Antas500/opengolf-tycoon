@@ -40,6 +40,11 @@ func generate_daily_weather() -> void:
 	_generate_daily_weather()
 
 func _generate_daily_weather() -> void:
+	# Weather can be turned off as a game feature: the course then stays sunny
+	# and none of the weather modifiers apply.
+	if not GameManager.weather_enabled:
+		force_clear_weather()
+		return
 	# Theme-aware seasonal weather (Links = windier/rainier, Desert = drier, etc.)
 	var thresholds = SeasonSystem.get_blended_weather_weights(GameManager.current_day, GameManager.current_theme)
 	var roll = randf()
@@ -73,6 +78,10 @@ func _generate_daily_weather() -> void:
 ## Advance the weather by one game day. Called on the day_changed signal:
 ## weather now evolves daily since there is no intra-day clock.
 func update_weather_daily() -> void:
+	# The Weather feature is off: never leave fair weather.
+	if not GameManager.weather_enabled:
+		force_clear_weather()
+		return
 	_days_in_current_weather += 1
 
 	# Once the current spell has run its course, weather may move on
@@ -172,9 +181,22 @@ func _get_base_intensity(wtype: WeatherType) -> float:
 			return 0.85
 	return 0.0
 
+## Pin the course to clear, neutral weather (the Weather feature is off).
+func force_clear_weather() -> void:
+	var changed := weather_type != WeatherType.SUNNY or intensity != 0.0
+	weather_type = WeatherType.SUNNY
+	_target_weather = WeatherType.SUNNY
+	intensity = 0.0
+	_transition_progress = 1.0
+	_days_in_current_weather = 0
+	if changed:
+		_emit_weather_changed()
+
 ## Get spawn rate modifier based on weather (0.5 - 1.0)
 ## Bad weather reduces golfer spawning
 func get_spawn_rate_modifier() -> float:
+	if not GameManager.weather_enabled:
+		return 1.0
 	match weather_type:
 		WeatherType.SUNNY:
 			return 1.0

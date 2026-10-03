@@ -111,7 +111,13 @@ var _bulldoze_drag_count: int = 0
 var _bulldoze_drag_cost: int = 0
 var placement_preview: PlacementPreview = null
 var main_menu: MainMenu = null
+var world_map_screen: WorldMapScreen = null
 var event_feed_panel: EventFeedPanel = null
+## True while the world map screen was opened from the title screen (as opposed
+## to the pause menu) — decides where Back and Play return to.
+var _world_map_from_menu: bool = false
+## Holes the world map asked the first course to start with (0 = build them all).
+var _generated_holes_pending: int = 0
 
 # Staff on the course: a container for the wandering staff members, the weeds
 # they work on, and the overlay that draws their designated areas.
@@ -665,30 +671,179 @@ func _on_play_course_pressed() -> void:
 	terrain_toolbar.select_player_section(PlayerTab.PAGE_PLAY)
 
 func _initialize_game() -> void:
-	# Show main menu instead of auto-starting
+	# Show the title screen instead of auto-starting
 	_show_main_menu()
 
+## ── Main menu ────────────────────────────────────────────────────────────
+## Start New Game and Quick Start both lead to the world map, where the
+## company buys the location for its first course.
+
 func _show_main_menu() -> void:
+	_close_world_map()
 	main_menu = MainMenu.new()
 	main_menu.name = "MainMenu"
-	main_menu.new_game_requested.connect(_on_main_menu_new_game)
-	main_menu.quick_start_requested.connect(_on_main_menu_quick_start)
-	main_menu.prebuilt_course_requested.connect(_on_main_menu_prebuilt_course)
+	main_menu.start_new_game_requested.connect(_on_menu_start_new_game)
+	main_menu.quick_start_requested.connect(_on_menu_quick_start)
+	main_menu.continue_requested.connect(_on_menu_continue)
 	main_menu.load_game_requested.connect(_on_main_menu_load)
 	main_menu.settings_requested.connect(_on_main_menu_settings)
-	main_menu.credits_requested.connect(_on_main_menu_credits)
+	main_menu.quit_requested.connect(_on_quit_pressed)
 	$UI/HUD.add_child(main_menu)
 	# Hide gameplay UI while in menu
 	_set_gameplay_ui_visible(false)
 
-func _on_main_menu_new_game(course_name: String, theme_type: int) -> void:
-	var difficulty := main_menu.get_selected_difficulty() if main_menu else DifficultyPresets.Preset.NORMAL
+func _hide_main_menu() -> void:
 	if main_menu:
 		main_menu.queue_free()
 		main_menu = null
+	_disconnect_main_menu_load_signal()
+
+## Start New Game: company setup first, then the world map.
+func _on_menu_start_new_game() -> void:
+	_hide_main_menu()
+	var screen := StartNewGameScreen.new()
+	screen.name = "StartNewGameScreen"
+	screen.back_requested.connect(func():
+		screen.queue_free()
+		_show_main_menu())
+	screen.next_requested.connect(func(options: Dictionary):
+		screen.queue_free()
+		WorldMap.new_world(options)
+		_show_world_map_screen(true))
+	$UI/HUD.add_child(screen)
+	_set_gameplay_ui_visible(false)
+
+## Quick Start: the agreed defaults (random company name, Normal, $100,000,
+## 0 generated holes, every feature on) and straight to the world map.
+func _on_menu_quick_start() -> void:
+	_hide_main_menu()
+	WorldMap.new_world(WorldMap.default_options())
+	_show_world_map_screen(true)
+
+func _on_menu_continue(save_name: String) -> void:
+	if save_name.is_empty():
+		return
+	SaveManager.load_game(save_name)
+
+func _on_quit_pressed() -> void:
+	get_tree().quit()
+
+## ── World map ────────────────────────────────────────────────────────────
+
+## Show the globe. `from_menu` remembers where to return to: the title screen
+## (Start New Game / Quick Start) or the pause menu (World Map button).
+func _show_world_map_screen(from_menu: bool) -> void:
+	_world_map_from_menu = from_menu
+	if from_menu:
+		_hide_main_menu()
+		_set_gameplay_ui_visible(false)
+		GameManager.set_mode(GameManager.GameMode.MAIN_MENU)
+
+	var hud := $UI/HUD
+	world_map_screen = hud.get_node_or_null("WorldMapScreen") as WorldMapScreen
+	if world_map_screen == null:
+		world_map_screen = WorldMapScreen.new()
+		world_map_screen.name = "WorldMapScreen"
+		world_map_screen.play_location_requested.connect(_on_world_map_play_location)
+		world_map_screen.back_requested.connect(_on_world_map_back)
+		hud.add_child(world_map_screen)
+	world_map_screen.show()
+	world_map_screen.refresh()
+
+func _close_world_map() -> void:
+	if world_map_screen:
+		world_map_screen.queue_free()
+		world_map_screen = null
+
+func _on_world_map_back() -> void:
+	var from_menu := _world_map_from_menu
+	_close_world_map()
+	if from_menu:
+		_show_main_menu()
+	else:
+		# Back to the paused game it was opened from.
+		_show_pause_menu()
+
+## The player pressed Play on an owned location: start the company's game
+## there, restoring the course they left when there is one.
+func _on_world_map_play_location(location_id: String) -> void:
+	if not WorldMap.is_owned(location_id):
+		return
+	# Remember the course being left exactly as it is now.
+	var leaving := WorldMap.active_location_id
+	if not leaving.is_empty() and leaving != location_id and GameManager.current_course != null:
+		WorldMap.take_snapshot(leaving, SaveManager.build_location_snapshot())
+
+	var from_menu := _world_map_from_menu
+	WorldMap.set_active_location(location_id)
+	_close_world_map()
+
+	var snapshot := WorldMap.get_snapshot(location_id)
+	var can_restore := not snapshot.is_empty() and GameManager.current_course != null
+	if can_restore:
+		WorldMap.apply_location_land(location_id)
+		SaveManager.switch_to_location(snapshot)
+		_after_location_activated(from_menu)
+		EventBus.notify("Moved to %s." % WorldMap.get_active_location().get("name", location_id), "info")
+		return
+
+	# Nothing to restore: build this location's course from the company's
+	# Start New Game options (location theme, generated holes, money).
+	_start_new_course_at_location(location_id, from_menu)
+
+func _start_new_course_at_location(location_id: String, from_menu: bool) -> void:
+	var def := WorldLocations.get_definition(location_id)
+	WorldMap.apply_location_land(location_id)
+	_generated_holes_pending = WorldMap.generated_holes
+	_set_gameplay_ui_visible(true)
+	if from_menu:
+		GameManager.set_mode(GameManager.GameMode.SIMULATING)
+
+	# The balance carries over: buying the location before starting the course
+	# comes out of the same company budget.
+	GameManager.new_game(_course_name_for_location(def), int(def.get("theme", CourseTheme.Type.PARKLAND)),
+		WorldMap.difficulty, {
+			"company_name": WorldMap.company_name,
+			"starting_money": GameManager.money,
+			"unlimited": GameManager.unlimited_money,
+			"generated_holes": WorldMap.generated_holes,
+			"features": WorldMap.features,
+		})
+
+	# Center camera on the middle of the grid
+	_center_camera_on_course()
+	# Start with no tool selected — player chooses their first action
+	current_tool = -1
+	if terrain_toolbar:
+		terrain_toolbar.clear_selection()
+	if placement_preview:
+		placement_preview.set_terrain_painting_enabled(false)
+
+## The default course name for a location: "Monterey Golf Club".
+static func _course_name_for_location(definition: Dictionary) -> String:
+	var name := str(definition.get("name", "New Course"))
+	return name if name.to_lower().ends_with("golf club") else "%s Golf Club" % name
+
+## Shared finishing touches after a location's course becomes the live one.
+func _after_location_activated(from_menu: bool) -> void:
+	_set_gameplay_ui_visible(true)
+	if from_menu:
+		GameManager.set_mode(GameManager.GameMode.SIMULATING)
+		GameManager.is_paused = false
+	else:
+		# Came from the pause menu: leave the game paused and show it again.
+		_show_pause_menu()
+
+## Legacy entry point (tests and harnesses): start a game directly on a course
+## name and theme, bypassing the world map.
+func _on_main_menu_new_game(course_name: String, theme_type: int, difficulty: int = -1, options: Dictionary = {}) -> void:
+	var chosen_difficulty: int = difficulty if difficulty >= 0 else WorldMap.difficulty
+	_hide_main_menu()
+	WorldMap.ensure_legacy_world(theme_type)
+	WorldMap.apply_location_land(WorldMap.active_location_id)
 	_set_gameplay_ui_visible(true)
 
-	GameManager.new_game(course_name, theme_type, difficulty)
+	GameManager.new_game(course_name, theme_type, chosen_difficulty, options)
 
 	# Center camera on the middle of the grid
 	_center_camera_on_course()
@@ -704,11 +859,11 @@ var _prebuilt_pending: String = ""  # Package ID, empty = not pending
 var _prebuilt_money: int = 0  # Money to restore after new_game() resets it
 
 func _on_main_menu_prebuilt_course(course_name: String, theme_type: int, package_id: String) -> void:
-	"""Start a new game with a prebuilt course, preserving player money."""
-	var difficulty := main_menu.get_selected_difficulty() if main_menu else DifficultyPresets.Preset.NORMAL
-	if main_menu:
-		main_menu.queue_free()
-		main_menu = null
+	"""Legacy entry point: start a new game with a prebuilt course package."""
+	var difficulty: int = WorldMap.difficulty
+	_hide_main_menu()
+	WorldMap.ensure_legacy_world(theme_type)
+	WorldMap.apply_location_land(WorldMap.active_location_id)
 	_set_gameplay_ui_visible(true)
 
 	# Save money before new_game() resets it (already has cost deducted)
@@ -723,17 +878,20 @@ func _on_main_menu_prebuilt_course(course_name: String, theme_type: int, package
 	if placement_preview:
 		placement_preview.set_terrain_painting_enabled(false)
 
-func _on_main_menu_quick_start(course_name: String, theme_type: int) -> void:
-	"""Start a new game with a landscaped nine-hole course and starter amenities."""
-	var difficulty := main_menu.get_selected_difficulty() if main_menu else DifficultyPresets.Preset.NORMAL
-	if main_menu:
-		main_menu.queue_free()
-		main_menu = null
+func _on_main_menu_quick_start(course_name: String = "", theme_type: int = -1) -> void:
+	"""Legacy entry point (tests, harnesses and the Quick Start hotkey): start a
+	game right away on the landscaped nine-hole Quick Start course. The menu's
+	Quick Start button goes through the world map instead."""
+	var theme := theme_type if theme_type >= 0 else CourseTheme.Type.PARKLAND
+	var difficulty: int = WorldMap.difficulty
+	_hide_main_menu()
+	WorldMap.ensure_legacy_world(theme)
+	WorldMap.apply_location_land(WorldMap.active_location_id)
 	_set_gameplay_ui_visible(true)
 
 	# Flag so _on_new_game_started knows to build the quick-start course
 	_quick_start_pending = true
-	GameManager.new_game(course_name, theme_type, difficulty)
+	GameManager.new_game(course_name if not course_name.is_empty() else "Quick Start Course", theme, difficulty)
 
 	_center_camera_on_course()
 	current_tool = -1
@@ -773,13 +931,6 @@ func _on_main_menu_settings() -> void:
 	settings.close_requested.connect(func(): pass)
 	$UI/HUD.add_child(settings)
 
-func _on_main_menu_credits() -> void:
-	"""Show credits screen from main menu."""
-	var credits = CreditsScreen.new()
-	credits.name = "CreditsScreen"
-	credits.close_requested.connect(func(): pass)
-	$UI/HUD.add_child(credits)
-
 func _on_main_menu_load_panel_closed() -> void:
 	"""Save/load panel closed without loading — return to main menu."""
 	_disconnect_main_menu_load_signal()
@@ -787,9 +938,9 @@ func _on_main_menu_load_panel_closed() -> void:
 func _on_main_menu_load_completed(success: bool) -> void:
 	"""A save was loaded from the main menu — dismiss menu and show game."""
 	_disconnect_main_menu_load_signal()
-	if success and main_menu:
-		main_menu.queue_free()
-		main_menu = null
+	if success:
+		_hide_main_menu()
+		_close_world_map()
 		_set_gameplay_ui_visible(true)
 
 func _disconnect_main_menu_load_signal() -> void:
@@ -799,7 +950,7 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
+	var popup_panels = ["MainMenu", "StartNewGameScreen", "WorldMapScreen", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:
@@ -1910,6 +2061,19 @@ func _on_new_game_started() -> void:
 		terrain_grid.refresh_all_overlays()
 		_suppress_tile_undo = false
 
+	# Lay out the holes the world map asked the first course to start with
+	# (Start New Game: 0, 3, 6, 9 or 18 generated holes).
+	var generated_holes := 0
+	var holes_requested := _generated_holes_pending
+	_generated_holes_pending = 0
+	if holes_requested > 0 and not is_quick_start and not is_prebuilt:
+		_suppress_tile_undo = true
+		terrain_grid.begin_batch()
+		generated_holes = GeneratedCourse.generate(holes_requested, terrain_grid, entity_layer, hole_tool)
+		terrain_grid.end_batch_quiet()
+		terrain_grid.refresh_all_overlays()
+		_suppress_tile_undo = false
+
 	# Build prebuilt course package if selected from main menu
 	if is_prebuilt:
 		var pkg_id := _prebuilt_pending
@@ -1927,6 +2091,11 @@ func _on_new_game_started() -> void:
 
 	if is_quick_start:
 		camera.focus_on(terrain_grid.grid_to_screen_center(Vector2i(57,64)), true)
+		camera.set_zoom_level(1.0, true)
+		GameManager.update_course_rating()
+	elif generated_holes > 0:
+		var anchor := GeneratedCourse.get_anchor(holes_requested)
+		camera.focus_on(terrain_grid.grid_to_screen_center(anchor), true)
 		camera.set_zoom_level(1.0, true)
 		GameManager.update_course_rating()
 
@@ -1947,8 +2116,9 @@ func _on_new_game_started() -> void:
 		if is_inside_tree() and GameManager.current_mode == GameManager.GameMode.SIMULATING:
 			golfer_manager.spawn_initial_group()
 
-	# Start tutorial for first-time players (skip for Quick Start/Prebuilt — they already have a course)
-	if not is_quick_start and not is_prebuilt and not TutorialSystem.is_tutorial_completed():
+	# Start tutorial for first-time players (skip when the course already has
+	# holes: Quick Start, Prebuilt, or a generated first course)
+	if not is_quick_start and not is_prebuilt and generated_holes == 0 and not TutorialSystem.is_tutorial_completed():
 		_start_tutorial()
 
 func _create_loading_overlay(message: String) -> CanvasLayer:
@@ -3871,6 +4041,7 @@ func _show_pause_menu() -> void:
 	pause_menu.resume_requested.connect(_on_pause_resume)
 	pause_menu.save_requested.connect(_on_pause_save)
 	pause_menu.load_requested.connect(_on_pause_load)
+	pause_menu.world_map_requested.connect(_on_pause_world_map)
 	pause_menu.settings_requested.connect(_on_pause_settings)
 	pause_menu.quit_to_menu_requested.connect(_on_pause_quit_to_menu)
 	pause_menu.quit_to_desktop_requested.connect(_on_pause_quit_to_desktop)
@@ -3902,6 +4073,12 @@ func _on_pause_load() -> void:
 	# Keep the game paused while the save/load panel is open
 	_hide_pause_menu()
 	_show_save_load_panel(true)
+
+func _on_pause_world_map() -> void:
+	# Keep the game paused while the world map is open — the course behind it
+	# is snapshotted, so switching locations does not lose any work.
+	_hide_pause_menu()
+	_show_world_map_screen(false)
 
 func _on_pause_settings() -> void:
 	# Keep the game paused while the settings menu is open
