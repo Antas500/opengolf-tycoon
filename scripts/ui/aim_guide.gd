@@ -67,7 +67,8 @@ func clear() -> void:
 ## than the simulated carry/path. Elevation is applied to the flight chord, then
 ## removed from the rollout leg so the displayed roll remains a stable proportion.
 ## Pure and static so tests can assert the shape without a live mouse or draw pass.
-## Returns {} when the preview (or the terrain grid) is unusable.
+## Returns {} when the preview (or the terrain grid) is unusable, or when the
+## golfer's own tile is off the map.
 static func build_geometry(grid: TerrainGrid, aim_preview: Dictionary,
 		arc_steps: int = ARC_STEPS) -> Dictionary:
 	if grid == null or aim_preview.is_empty():
@@ -75,7 +76,10 @@ static func build_geometry(grid: TerrainGrid, aim_preview: Dictionary,
 	var origin: Vector2 = aim_preview.get("origin", Vector2.ZERO)
 	var actual_carry: Vector2 = aim_preview.get("carry", origin)
 	var rest: Vector2 = aim_preview.get("rest", actual_carry)
-	if not grid.is_valid_position(Vector2i(origin.round())) or not grid.is_valid_position(Vector2i(actual_carry.round())):
+	# Only the golfer's own tile has to be on the map. The drawn path comes from the
+	# origin-to-rest chord, so a physical carry that came down past the rim (aiming at
+	# a rim vertex, say) is no reason to draw nothing for an anchor the player picked.
+	if not grid.is_valid_position(Vector2i(origin.round())):
 		return {}
 
 	var origin_screen := grid.grid_to_screen_precise(origin)

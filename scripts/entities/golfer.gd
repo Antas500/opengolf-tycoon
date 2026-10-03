@@ -56,6 +56,20 @@ const CLUB_STATS = {
 ## Bend (degrees) the owner's fade/draw shapes apply to the shot direction.
 const PLAYER_SHAPE_BEND_DEG: float = 8.0
 
+## The owner's clubs for aimed shots, shortest reach first (putting is automatic).
+const OWNER_CLUB_LADDER: Array = [Club.WEDGE, Club.IRON, Club.FAIRWAY_WOOD, Club.DRIVER]
+## An aimed shot counts as resting on its centre/vertex when it lands this close (tiles).
+const REST_SOLVE_TOLERANCE: float = 0.12
+## ...and the solve stops refining as soon as it lands this close (tiles).
+const REST_SOLVE_EXACT_ERROR: float = 0.02
+## Fixed-point refinements of a club's aim before the solve stops converging.
+const REST_SOLVE_ITERATIONS: int = 12
+## Bisections across a jump in the resting point (a bunker, a faster green).
+const REST_SOLVE_BISECTIONS: int = 14
+## A club that cannot land on the anchor only replaces the proposed one if it ends
+## this much closer to it (tiles).
+const CLUB_SWITCH_MARGIN: float = 0.05
+
 ## Golfer identification
 @export var golfer_name: String = "Golfer"
 @export var golfer_id: int = -1
@@ -1243,56 +1257,133 @@ func play_shot_to_rest(target: Vector2) -> bool:
 	take_shot_precise(plan.aim, plan.predicted_rest)
 	return true
 
-## Iteratively invert the deterministic flight + rollout model. Aim is constrained
-## by the selected club's range, and the final discrepancy tells the preview when
-## it needs to show a range-limited endpoint.
+## Iteratively invert the deterministic flight + rollout model for a resting
+## target. The club is not fixed by distance alone: `select_club()` only proposes
+## the club its distance bands call for, and the proposal counts only if that club
+## can actually bring the ball to rest on the anchor. The owner's skill-scaled
+## ranges (`player_max_distance()`) are much shorter than the bands, so each band
+## can end before the next club's band begins and leave a ring of anchors no
+## proposed club reaches. When the proposal falls short, the longer clubs are tried
+## (nearest first) and then the shorter ones, so every anchor inside the bag's
+## reach has a club that lands on it and only anchors beyond it are out of range.
+## Aim is constrained by the club's range, and the final discrepancy tells the
+## preview when it needs to show a range-limited endpoint.
 func _solve_aim_for_rest(target: Vector2) -> Dictionary:
 	var terrain_grid := GameManager.terrain_grid
 	if terrain_grid == null:
 		return {}
 	var origin := Vector2(ball_position)
-	var target_delta := target - origin
-	var target_distance := target_delta.length()
+	var target_distance := origin.distance_to(target)
 	if target_distance < 0.5:
 		return {}
 
 	var current_terrain: int = terrain_grid.get_tile(ball_position)
-	_chosen_club = select_club(target_distance, current_terrain)
-	if _chosen_club == Club.PUTTER:
-		_chosen_club = Club.WEDGE
-	var max_range := player_max_distance(_chosen_club)
+	var proposed := select_club(target_distance, current_terrain)
+	if proposed == Club.PUTTER:
+		proposed = Club.WEDGE
+
+	var best: Dictionary = {}
+	for club: Club in _owner_club_order(proposed):
+		var plan := _solve_aim_with_club(club, origin, target)
+		if plan.is_empty():
+			continue
+		# Keep the proposal unless another club lands on the anchor or is clearly
+		# closer to it; the first club that lands exactly settles the choice.
+		if best.is_empty() or (best.clamped and (not plan.clamped \
+				or plan.target_error < best.target_error - CLUB_SWITCH_MARGIN)):
+			best = plan
+		if not best.clamped:
+			break
+	if best.is_empty():
+		return {}
+	# The execution math reads the club the solve settled on.
+	_chosen_club = best.club
+	return best
+
+## Clubs to try for an owner shot, most natural first: the proposed club, then
+## every longer club (nearest first), then the shorter ones (nearest first).
+func _owner_club_order(proposed: Club) -> Array[Club]:
+	var rung := OWNER_CLUB_LADDER.find(proposed)
+	var order: Array[Club] = [proposed]
+	for i in range(rung + 1, OWNER_CLUB_LADDER.size()):
+		order.append(OWNER_CLUB_LADDER[i])
+	for i in range(rung - 1, -1, -1):
+		order.append(OWNER_CLUB_LADDER[i])
+	return order
+
+## Solve one club's launch point for a resting target (see _solve_aim_for_rest()).
+## Returns the solved plan, or {} when the club has no range to aim with.
+func _solve_aim_with_club(club: Club, origin: Vector2, target: Vector2) -> Dictionary:
+	var max_range := player_max_distance(club)
 	if max_range <= 0.0:
 		return {}
+	_chosen_club = club
+	var target_delta := target - origin
+	var line := target_delta.normalized()
 
-	var aim := origin + target_delta.normalized() * minf(target_distance, max_range)
-	var shot: Dictionary = {}
-	for _iteration in range(12):
-		shot = _calculate_shot_precise(ball_position, aim, true)
-		var predicted_rest: Vector2 = shot.get("landing_position_precise", aim)
-		var error := target - predicted_rest
-		if error.length() <= 0.02:
+	var probe := _probe_aim(origin + line * minf(target_delta.length(), max_range), target)
+	var best := probe
+	# The latest probes that rest short of / long of the target along the line of
+	# play. Terrain edges (a bunker, the green's faster roll, the smallest visible
+	# rollout) make the resting point jump, and the fixed-point pass below can then
+	# bounce between the two sides without ever settling; the pair brackets the jump.
+	var short_probe: Dictionary = {}
+	var long_probe: Dictionary = {}
+	var refinements := 0
+	while probe.error > REST_SOLVE_EXACT_ERROR:
+		if (probe.rest - target).dot(line) < 0.0:
+			short_probe = probe
+		else:
+			long_probe = probe
+		if refinements >= REST_SOLVE_ITERATIONS:
 			break
-		var corrected_aim := aim + error
+		var corrected_aim: Vector2 = probe.aim + (target - probe.rest)
 		var corrected_delta := corrected_aim - origin
 		if corrected_delta.length() > max_range:
 			corrected_aim = origin + corrected_delta.normalized() * max_range
-		if corrected_aim.distance_squared_to(aim) <= 0.0001:
+		if corrected_aim.distance_squared_to(probe.aim) <= 0.0001:
 			break
-		aim = corrected_aim
+		probe = _probe_aim(corrected_aim, target)
+		refinements += 1
+		if probe.error < best.error:
+			best = probe
 
-	# Recalculate at the final point (the last iteration may have moved aim).
-	shot = _calculate_shot_precise(ball_position, aim, true)
-	var final_rest: Vector2 = shot.get("landing_position_precise", aim)
-	var target_error := final_rest.distance_to(target)
-	var range_limited := target_error > 0.12 and aim.distance_to(origin) >= max_range - 0.01
+	var range_limited: bool = best.error > REST_SOLVE_TOLERANCE and best.aim.distance_to(origin) >= max_range - 0.01
+	if best.error > REST_SOLVE_TOLERANCE and not range_limited \
+			and not short_probe.is_empty() and not long_probe.is_empty():
+		# Bisect the bracket: it closes on the real solution when the resting point
+		# is continuous there, or on the edge of the jump, whose nearer side is the
+		# closest the model can come to resting on this anchor.
+		var below := short_probe
+		var above := long_probe
+		for _step in range(REST_SOLVE_BISECTIONS):
+			if below.aim.distance_to(above.aim) <= 0.002:
+				break
+			var middle := _probe_aim(below.aim.lerp(above.aim, 0.5), target)
+			if middle.error < best.error:
+				best = middle
+			if (middle.rest - target).dot(line) < 0.0:
+				below = middle
+			else:
+				above = middle
+		range_limited = best.error > REST_SOLVE_TOLERANCE and best.aim.distance_to(origin) >= max_range - 0.01
+
 	return {
-		"aim": aim,
-		"shot": shot,
-		"predicted_rest": final_rest,
+		"club": club,
+		"aim": best.aim,
+		"shot": best.shot,
+		"predicted_rest": best.rest,
 		"max_range": max_range,
-		"clamped": target_error > 0.12,
+		"target_error": best.error,
+		"clamped": best.error > REST_SOLVE_TOLERANCE,
 		"range_limited": range_limited,
 	}
+
+## The deterministic shot for one aim point, scored by how far it rests from `target`.
+func _probe_aim(aim: Vector2, target: Vector2) -> Dictionary:
+	var shot := _calculate_shot_precise(ball_position, aim, true)
+	var rest: Vector2 = shot.get("landing_position_precise", aim)
+	return {"aim": aim, "shot": shot, "rest": rest, "error": rest.distance_to(target)}
 
 ## A precise shot target is expressed in centre-relative coordinates. Its
 ## corresponding terrain-space point must remain within the map's outer edges.

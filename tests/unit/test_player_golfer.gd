@@ -247,6 +247,149 @@ func test_rest_aim_predicts_flight_and_roll_to_centre_or_vertex() -> void:
 	GameManager.wind_system = saved_wind
 	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
+## Every tile centre and vertex between `min_distance` and `max_distance` of the
+## ball whose guide fails to come to rest exactly on it, as readable strings.
+func _unaimable_anchors(golfer: Golfer, grid: TerrainGrid, min_distance: float, max_distance: float) -> Array[String]:
+	var misses: Array[String] = []
+	var origin := Vector2(golfer.ball_position)
+	var reach := int(ceil(max_distance))
+	for gx in range(-reach, reach + 1):
+		for gy in range(-reach, reach + 1):
+			for kind in ["center", "vertex"]:
+				var target := origin + Vector2(gx, gy)
+				if kind == "vertex":
+					target += Vector2(0.5, 0.5)
+				var distance := target.distance_to(origin)
+				if distance < min_distance or distance > max_distance:
+					continue
+				if not grid.is_valid_position(Vector2i(target.round())):
+					continue
+				var preview := golfer.preview_shot_to_rest(target, kind)
+				if preview.is_empty() or preview.clamped or preview.rest != target:
+					misses.append("%s %s (%.2f tiles)" % [target, kind, distance])
+	return misses
+
+func test_every_centre_and_vertex_within_the_bag_is_aimable() -> void:
+	var saved_grid = GameManager.terrain_grid
+	var saved_wind = GameManager.wind_system
+	GameManager.wind_system = null
+	var grid: TerrainGrid = autofree(TerrainGrid.new())
+	_fill_fairway(grid)
+	GameManager.terrain_grid = grid
+	# A fresh golfer and one with a point in every skill: their clubs reach different
+	# distances, so the gaps between the clubs fall in different places.
+	for points in [0, 1]:
+		var golfer := _ready_preview_golfer(grid, TerrainTypes.Type.FAIRWAY)
+		for skill in 10:
+			golfer.player_profile.allocate(skill, points)
+		var driver_range := golfer.player_max_distance(Golfer.Club.DRIVER)
+		var misses := _unaimable_anchors(golfer, grid, 0.6, driver_range)
+		assert_eq(misses.size(), 0, "With %d points per skill every anchor within the driver's %.1f tiles is aimable: %s"
+			% [points, driver_range, str(misses.slice(0, 6))])
+	GameManager.wind_system = saved_wind
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
+
+func test_a_longer_club_covers_the_distance_between_two_clubs_ranges() -> void:
+	var saved_grid = GameManager.terrain_grid
+	var saved_wind = GameManager.wind_system
+	GameManager.wind_system = null
+	var grid: TerrainGrid = autofree(TerrainGrid.new())
+	_fill_fairway(grid)
+	GameManager.terrain_grid = grid
+	var golfer := _ready_preview_golfer(grid, TerrainTypes.Type.FAIRWAY)
+	# (target, club automatic selection proposes, club that can actually reach it).
+	# The wedge stops short of the iron's 5-tile band, the iron short of the fairway
+	# wood's 8-tile band and the fairway wood short of the driver's 9-tile band.
+	var cases := [
+		[Vector2(14, 12), Golfer.Club.WEDGE, "Iron"],
+		[Vector2(17, 13), Golfer.Club.IRON, "Fairway Wood"],
+		[Vector2(18, 14), Golfer.Club.FAIRWAY_WOOD, "Driver"],
+	]
+	for case in cases:
+		var target: Vector2 = case[0]
+		var proposed: Golfer.Club = case[1]
+		var distance := target.distance_to(Vector2(golfer.ball_position))
+		assert_eq(golfer.select_club(distance, TerrainTypes.Type.FAIRWAY), proposed)
+		assert_lt(golfer.player_max_distance(proposed), distance,
+			"The proposed club's aim range stops short of %s" % target)
+		var preview := golfer.preview_shot_to_rest(target, "center")
+		assert_eq(preview.club_name, case[2], "%s is played with a club that reaches it" % target)
+		assert_false(preview.clamped, "%s is not limited" % target)
+		assert_false(preview.range_limited, "%s is not out of range" % target)
+		assert_eq(preview.rest, target, "The guide ends on %s" % target)
+		assert_eq(Golfer.CLUB_STATS[golfer._chosen_club].name, case[2], "The swing uses the club the guide shows")
+	GameManager.wind_system = saved_wind
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
+
+func test_anchor_beyond_every_club_is_out_of_range_on_the_longest_club() -> void:
+	var saved_grid = GameManager.terrain_grid
+	var saved_wind = GameManager.wind_system
+	GameManager.wind_system = null
+	var grid: TerrainGrid = autofree(TerrainGrid.new())
+	_fill_fairway(grid)
+	GameManager.terrain_grid = grid
+	var golfer := _ready_preview_golfer(grid, TerrainTypes.Type.FAIRWAY)
+	var far := golfer.preview_shot_to_rest(Vector2(10, 40), "center")
+	assert_eq(far.club_name, "Driver", "Past every club the longest one is shown")
+	assert_true(far.range_limited, "The anchor is out of range")
+	assert_lt(far.rest.distance_to(Vector2(golfer.ball_position)), 30.0, "The guide stops short of it")
+	# Just inside the driver's carry-and-roll an anchor is still reachable.
+	var driver_range := golfer.player_max_distance(Golfer.Club.DRIVER)
+	assert_false(golfer.preview_shot_to_rest(Vector2(10, 10.0 + floorf(driver_range)), "center").clamped)
+	GameManager.wind_system = saved_wind
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
+
+func test_rest_aim_settles_on_anchors_the_smallest_visible_roll_hides() -> void:
+	var saved_grid = GameManager.terrain_grid
+	var saved_wind = GameManager.wind_system
+	GameManager.wind_system = null
+	var grid: TerrainGrid = autofree(TerrainGrid.new())
+	for x in range(60):
+		for y in range(60):
+			grid._grid[Vector2i(x, y)] = TerrainTypes.Type.ROUGH
+	GameManager.terrain_grid = grid
+	var golfer := _ready_preview_golfer(grid, TerrainTypes.Type.FAIRWAY)
+	for skill in 10:
+		golfer.player_profile.allocate(skill, 1)
+	# Rolls shorter than 0.15 tiles are dropped, so in the rough the resting point
+	# jumps by that much as the carry grows. A fixed-point pass alone bounces across
+	# the jump and ends 0.15 tiles off; bisecting the jump closes the gap.
+	for target in [Vector2(5, 12), Vector2(8, 15), Vector2(12, 15), Vector2(15, 12)]:
+		var preview := golfer.preview_shot_to_rest(target, "center")
+		assert_false(preview.clamped, "%s is reachable from the fairway lie" % target)
+		var shot := golfer._calculate_shot_precise(golfer.ball_position, preview.aim, true)
+		assert_almost_eq(shot.landing_position_precise.distance_to(target), 0.0, Golfer.REST_SOLVE_TOLERANCE + 0.001,
+			"The solved aim predicts the anchor it is drawn to")
+	GameManager.wind_system = saved_wind
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
+
+func test_anchor_the_roll_cannot_stop_on_is_terrain_limited_not_out_of_range() -> void:
+	var saved_grid = GameManager.terrain_grid
+	var saved_wind = GameManager.wind_system
+	GameManager.wind_system = null
+	var grid: TerrainGrid = autofree(TerrainGrid.new())
+	_fill_fairway(grid)
+	# A two-tile bunker strip across the line of play: a ball that carries it rolls
+	# on well past its far edge, so the tiles just behind it are not places the ball
+	# can come to rest, even though the club reaches far beyond them.
+	for x in range(60):
+		for y in range(16, 18):
+			grid._grid[Vector2i(x, y)] = TerrainTypes.Type.BUNKER
+	GameManager.terrain_grid = grid
+	var golfer := _ready_preview_golfer(grid, TerrainTypes.Type.FAIRWAY)
+	for skill in 10:
+		golfer.player_profile.allocate(skill, 1)
+	var behind := golfer.preview_shot_to_rest(Vector2(10, 18), "center")
+	assert_true(behind.clamped, "The ball cannot stop right behind the bunker")
+	assert_false(behind.range_limited, "...but that is the terrain's doing, not the club's range")
+	assert_lt(behind.aim.distance_to(behind.origin), behind.max_range - 0.5, "The club had range to spare")
+	# Further on the same line the ball comes to rest exactly where it is pointed.
+	var beyond := golfer.preview_shot_to_rest(Vector2(10, 20), "center")
+	assert_false(beyond.clamped, "The anchor beyond the roll is reachable")
+	assert_eq(beyond.rest, Vector2(10, 20))
+	GameManager.wind_system = saved_wind
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
+
 func test_preview_unavailable_outside_the_owner_turn() -> void:
 	var saved_grid = GameManager.terrain_grid
 	var grid: TerrainGrid = autofree(TerrainGrid.new())

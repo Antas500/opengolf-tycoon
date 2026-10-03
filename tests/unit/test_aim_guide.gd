@@ -101,6 +101,64 @@ func test_mouse_snap_tracks_rotated_sculpted_tile_geometry() -> void:
 	assert_eq(snapped.anchor_type, "vertex")
 	assert_eq(snapped.point, vertex_grid_point - Vector2(0.5, 0.5))
 
+func test_every_rim_vertex_and_centre_can_be_picked() -> void:
+	# The far-edge vertices sit exactly on the map's edge, where the hovered point
+	# is "outside" the grid; they must snap just like the near-edge ones.
+	var width := grid.grid_width
+	var height := grid.grid_height
+	for vertex_point in [Vector2(0, 0), Vector2(0, 10), Vector2(10, 0), Vector2(width, 10), Vector2(10, height),
+			Vector2(width, height), Vector2(width, 0), Vector2(0, height)]:
+		var snapped := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(vertex_point))
+		assert_false(snapped.is_empty(), "Rim vertex %s can be picked" % vertex_point)
+		assert_eq(snapped.anchor_type, "vertex")
+		assert_eq(snapped.point, vertex_point - Vector2(0.5, 0.5), "Rim vertex %s snaps to itself" % vertex_point)
+	for centre_point in [Vector2(0, 0), Vector2(width - 1, height - 1), Vector2(0, height - 1), Vector2(width - 1, 0)]:
+		var snapped := grid.snap_world_to_tile_anchor(grid.grid_to_screen_precise(centre_point))
+		assert_eq(snapped.anchor_type, "center")
+		assert_eq(snapped.point, centre_point, "Corner tile centre %s snaps to itself" % centre_point)
+
+func test_every_centre_and_vertex_snaps_to_itself_on_every_view() -> void:
+	# Hovering exactly on an anchor must always pick that anchor, flat or sculpted,
+	# in all four camera orientations.
+	for x in range(grid.grid_width + 1):
+		for y in range(grid.grid_height + 1):
+			if (x + y) % 3 == 0:
+				grid.set_vertex_elevation(Vector2i(x, y), grid.BASE_ELEVATION + 1)
+			elif (x * 7 + y) % 5 == 0:
+				grid.set_vertex_elevation(Vector2i(x, y), grid.BASE_ELEVATION - 1)
+	for orientation in range(4):
+		grid.set_view_orientation(orientation)
+		var misses: Array[String] = []
+		for x in range(1, grid.grid_width - 1):
+			for y in range(1, grid.grid_height - 1):
+				var centre := grid.snap_world_to_tile_anchor(grid.grid_to_screen_precise(Vector2(x, y)))
+				if centre.is_empty() or centre.anchor_type != "center" or centre.point != Vector2(x, y):
+					misses.append("centre (%d, %d)" % [x, y])
+				var vertex := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(Vector2(x, y)))
+				if vertex.is_empty() or vertex.anchor_type != "vertex" or vertex.point != Vector2(x, y) - Vector2(0.5, 0.5):
+					misses.append("vertex (%d, %d)" % [x, y])
+		assert_eq(misses.size(), 0, "Orientation %d snaps every anchor to itself: %s" % [orientation, str(misses.slice(0, 5))])
+
+func test_pointer_just_past_the_rim_snaps_to_the_rim_anchor_and_further_out_picks_nothing() -> void:
+	var width := float(grid.grid_width)
+	var near := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(Vector2(width + 0.3, 10.0)))
+	assert_false(near.is_empty(), "The outer half of a rim vertex's cell still belongs to it")
+	assert_eq(near.point, Vector2(width - 0.5, 9.5))
+	var origin_side := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(Vector2(-0.3, 10.0)))
+	assert_eq(origin_side.point, Vector2(-0.5, 9.5))
+	assert_true(grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(Vector2(width + 0.8, 10.0))).is_empty(),
+		"Well off the map there is nothing to aim at")
+	assert_true(grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(Vector2(-0.8, 10.0))).is_empty())
+
+func test_guide_draws_for_a_rim_anchor_whose_carry_lands_off_the_map() -> void:
+	var rim := Vector2(grid.grid_width - 0.5, 20.5)
+	var preview := _preview({"origin": Vector2(26, 20), "aim": rim, "carry": Vector2(grid.grid_width + 0.5, 20.5),
+		"rest": rim, "target": rim, "anchor_type": "vertex", "roll_path": PackedVector2Array([rim])})
+	var geometry := AimGuide.build_geometry(grid, preview)
+	assert_false(geometry.is_empty(), "A rim vertex still gets its guide")
+	assert_eq(geometry.anchor_type, "vertex")
+	assert_almost_eq(geometry.rest.distance_to(grid.grid_to_screen_precise(rim)), 0.0, 0.01, "It ends on the rim vertex")
+
 func test_roll_trail_uses_type_profile_not_simulated_waypoints() -> void:
 	var preview := _preview({"roll_path": PackedVector2Array([Vector2(8, 20), Vector2(12, 21), Vector2(8, 22)])})
 	var geometry := AimGuide.build_geometry(grid, preview)
