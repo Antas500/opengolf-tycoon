@@ -169,6 +169,10 @@ func _run() -> void:
 	await _frames(3)
 	var world_screen: Node = main.get_node("UI/HUD/WorldMapScreen")
 	var world_view: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check(world_screen.get_node_or_null("Backdrop") is MenuBackdrop,
+		"world map shares the Main Menu and setup-screen backdrop")
+	_check(world_screen.get_node_or_null("Frame/Page/AtlasHeader/TitleBlock/TitleRow/Mark") is MenuFlagMark,
+		"world map title uses the shared golf-flag mark")
 	var globe_rect: Rect2 = world_screen.globe.get_global_rect()
 	_check(world_view.encloses(globe_rect), "desktop globe is fully on screen (%s)" % globe_rect)
 	_check(world_screen._rows.size() == WorldLocations.get_all().size(),
@@ -180,7 +184,36 @@ func _run() -> void:
 	# (and its Buy / Play button) out of sight while still being "on screen".
 	_check_rows_visible(world_screen, world_view, "desktop")
 
-	# Rotated phone: globe above list, both still showing their content.
+	# Tablets use a different atlas: selected site beside the globe, with the
+	# complete location collection in a horizontal destination shelf.
+	await _set_window(1024, 768)
+	await _frames(3)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check(world_screen._layout_mode == WorldMapScreen.LayoutMode.TABLET_LANDSCAPE,
+		"landscape tablet selects the tablet atlas")
+	_check(world_screen._horizontal_directory, "tablet uses the swipeable destination shelf")
+	globe_rect = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "tablet globe is fully on screen (%s)" % globe_rect)
+	_check(world_view.encloses(world_screen._featured_action.get_global_rect()),
+		"tablet selected-site action stays on screen")
+	_check(world_screen._rows.size() == WorldLocations.get_all().size(),
+		"tablet shelf keeps every destination available")
+	var tablet_first: Control = world_screen._rows[WorldLocations.get_all()[0]["id"]]
+	_check(_within(tablet_first.get_global_rect(), world_screen._directory_scroll.get_global_rect()),
+		"the first tablet destination card is visible in the shelf")
+
+	# Portrait tablet keeps the same atlas but moves into a taller composition.
+	await _set_window(768, 1024)
+	await _frames(3)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check(world_screen._layout_mode == WorldMapScreen.LayoutMode.TABLET_PORTRAIT,
+		"portrait tablet selects the tall tablet atlas")
+	globe_rect = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "portrait-tablet globe is fully on screen (%s)" % globe_rect)
+	_check(world_view.encloses(world_screen._featured_action.get_global_rect()),
+		"portrait-tablet selected-site action stays on screen")
+
+	# Rotated phone: a compact globe and touch-sized vertical destination rail.
 	await _set_window(844, 390)
 	await _frames(4)
 	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
@@ -195,6 +228,19 @@ func _run() -> void:
 	await _frames(4)
 	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
 	_check_rows_visible(world_screen, world_view, "phone")
+	var touch_target := ""
+	for id in world_screen.globe._marker_positions:
+		if str(id) != world_screen._selected_id:
+			touch_target = str(id)
+			break
+	if not touch_target.is_empty():
+		var marker_local: Vector2 = world_screen.globe.get_marker_position(touch_target)
+		var marker_screen: Vector2 = world_screen.globe.get_global_transform_with_canvas() * marker_local
+		_push_touch(true, 0, marker_screen)
+		_push_touch(false, 0, marker_screen)
+		await _frames(2)
+		_check(world_screen._selected_id == touch_target,
+			"a phone tap on a globe marker selects its destination")
 	main._close_world_map()
 
 	print("RESPONSIVE: %d failures" % failures)

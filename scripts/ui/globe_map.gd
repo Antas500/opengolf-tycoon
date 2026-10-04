@@ -123,6 +123,9 @@ var _dragging: bool = false
 var _drag_start: Vector2 = Vector2.ZERO
 var _drag_last: Vector2 = Vector2.ZERO
 var _drag_distance: float = 0.0
+## Active finger, if a touch began on the globe. The global TouchInput adapter
+## is for camera gestures; a touch on this control belongs to the atlas instead.
+var _touch_index: int = -1
 var _marker_positions: Dictionary = {}
 static var _land_points: Array = []
 static var _land_polygon_cache: Array = []
@@ -130,10 +133,38 @@ static var _land_polygon_cache: Array = []
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	clip_contents = true
-	custom_minimum_size = Vector2(280, 240)
+	# Screens that embed the globe may provide a tighter minimum for a phone;
+	# keep a comfortable default for standalone previews and other callers.
+	if custom_minimum_size == Vector2.ZERO:
+		custom_minimum_size = Vector2(280, 240)
 	if _land_points.is_empty():
 		_land_points = build_land_points()
 	resized.connect(queue_redraw)
+
+## Current orientation and zoom, used to preserve the player's globe view when
+## the responsive screen is rebuilt after a resize or device rotation.
+func get_view_state() -> Dictionary:
+	return {
+		"center_lon": _center_lon,
+		"center_lat": _center_lat,
+		"radius_scale": _radius_scale,
+	}
+
+func set_view_state(state: Dictionary) -> void:
+	if state.is_empty():
+		return
+	_center_lon = float(state.get("center_lon", _center_lon))
+	_center_lat = clampf(float(state.get("center_lat", _center_lat)), -MAX_CENTER_LAT, MAX_CENTER_LAT)
+	_radius_scale = clampf(float(state.get("radius_scale", _radius_scale)), MIN_RADIUS_SCALE, MAX_RADIUS_SCALE)
+	queue_redraw()
+
+func zoom_in() -> void:
+	_radius_scale = clampf(_radius_scale * 1.12, MIN_RADIUS_SCALE, MAX_RADIUS_SCALE)
+	queue_redraw()
+
+func zoom_out() -> void:
+	_radius_scale = clampf(_radius_scale / 1.12, MIN_RADIUS_SCALE, MAX_RADIUS_SCALE)
+	queue_redraw()
 
 ## Give the globe the locations to pin: array of dictionaries with
 ## id/name/lat/lon (plus any extra state the marker colour needs).
@@ -335,6 +366,55 @@ static func marker_color(loc: Dictionary) -> Color:
 	return Color("7d8a80")
 
 ## ── Interaction ──────────────────────────────────────────────────────────
+
+## Handle raw screen touches here instead of letting the game's camera gesture
+## adapter claim them. On phones, a drag on the atlas rotates this globe; a tap
+## on a marker selects a destination. Other screen gestures still flow to the
+## shared TouchInput adapter as usual.
+func _input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
+	if event is InputEventScreenTouch:
+		_handle_screen_touch(event)
+	elif event is InputEventScreenDrag and event.index == _touch_index:
+		var local_pos := _screen_to_local(event.position)
+		var delta := local_pos - _drag_last
+		_drag_last = local_pos
+		_drag_distance += delta.length()
+		var radius := maxf(_sphere_radius(), 1.0)
+		_center_lon = fposmod(_center_lon - delta.x * (190.0 / radius), 360.0)
+		_center_lat = clampf(_center_lat + delta.y * (170.0 / radius), -MAX_CENTER_LAT, MAX_CENTER_LAT)
+		queue_redraw()
+		get_viewport().set_input_as_handled()
+
+func _handle_screen_touch(event: InputEventScreenTouch) -> void:
+	var local_pos := _screen_to_local(event.position)
+	var inside := Rect2(Vector2.ZERO, size).has_point(local_pos)
+	if event.pressed:
+		if not inside:
+			return
+		if _touch_index == -1:
+			_touch_index = event.index
+			_dragging = true
+			_drag_start = local_pos
+			_drag_last = local_pos
+			_drag_distance = 0.0
+		get_viewport().set_input_as_handled()
+		return
+	if event.index == _touch_index:
+		_dragging = false
+		if _drag_distance < 6.0:
+			var hit := _marker_at(local_pos)
+			if not hit.is_empty():
+				location_clicked.emit(hit)
+		_touch_index = -1
+		get_viewport().set_input_as_handled()
+	elif inside:
+		# A second finger on the map should not start panning the course behind it.
+		get_viewport().set_input_as_handled()
+
+func _screen_to_local(screen_pos: Vector2) -> Vector2:
+	return get_global_transform_with_canvas().affine_inverse() * screen_pos
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
