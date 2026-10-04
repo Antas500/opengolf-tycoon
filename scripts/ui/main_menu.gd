@@ -69,14 +69,16 @@ const REPROPORTION_STEP := 0.12
 # =============================================================================
 
 const TITLE_TEXT := "OpenGolf Tycoon"
-const TITLE_COLOR := Color("e7f3d6")
+# The palette and card recipe are shared with the Start New Game screen (see
+# MenuStyle); the names stay here so the builders below read as before.
+const TITLE_COLOR := MenuStyle.TITLE_COLOR
 
-const CARD_RADIUS := 12
-const CARD_BG := Color(0.043, 0.098, 0.078, 0.88)
-const CARD_BG_HOVER := Color(0.086, 0.180, 0.141, 0.95)
-const CARD_BG_PRESSED := Color(0.027, 0.063, 0.051, 0.97)
-const CARD_BG_DISABLED := Color(0.043, 0.098, 0.078, 0.55)
-const RAIL_BG := Color(0.031, 0.071, 0.059, 0.72)
+const CARD_RADIUS := MenuStyle.CARD_RADIUS
+const CARD_BG := MenuStyle.CARD_BG
+const CARD_BG_HOVER := MenuStyle.CARD_BG_HOVER
+const CARD_BG_PRESSED := MenuStyle.CARD_BG_PRESSED
+const CARD_BG_DISABLED := MenuStyle.CARD_BG_DISABLED
+const RAIL_BG := MenuStyle.RAIL_BG
 
 ## Where the backdrop's green (and its flag) sits in each arrangement, as a
 ## share of the window. Kept clear of that arrangement's cards.
@@ -93,11 +95,11 @@ const WIDE_MAX_WIDTH := 1800.0
 const LANDSCAPE_MAX_WIDTH := 1500.0
 
 ## Start New Game is the headline action: gold, the palette's "special" colour.
-const ACCENT_PRIMARY := UIConstants.COLOR_GOLD
+const ACCENT_PRIMARY := MenuStyle.ACCENT_PRIMARY
 ## Quick Start and Continue are the green, everyday path into the game.
-const ACCENT_SECONDARY := Color("7fb08a")
-const ACCENT_UTILITY := Color("6d8a76")
-const ACCENT_QUIT := UIConstants.COLOR_DANGER_MUTED
+const ACCENT_SECONDARY := MenuStyle.ACCENT_SECONDARY
+const ACCENT_UTILITY := MenuStyle.ACCENT_UTILITY
+const ACCENT_QUIT := MenuStyle.ACCENT_QUIT
 
 var _continue_button: Button = null
 var _load_button: Button = null
@@ -669,44 +671,16 @@ static func _caption_block(font_size: int, lines: int) -> float:
 ## the caption strip along the bottom edge.
 func _paint_card(button: Button, accent: Color, caption_block: float, pad: int,
 		text_color: Color, hover_color: Color) -> void:
-	var bottom := pad + int(caption_block)
-	var styles := {
-		"normal": _style(CARD_BG, _with_alpha(accent, 0.42), 1, CARD_RADIUS, pad, pad, bottom),
-		"hover": _style(CARD_BG_HOVER, accent, 2, CARD_RADIUS, pad - 1, pad - 1, bottom - 1),
-		"pressed": _style(CARD_BG_PRESSED, accent, 2, CARD_RADIUS, pad - 1, pad - 1, bottom - 1),
-		"focus": _style(Color(0, 0, 0, 0), _with_alpha(accent, 0.75), 2, CARD_RADIUS, pad, pad, bottom),
-		"disabled": _style(CARD_BG_DISABLED, _with_alpha(accent, 0.18), 1, CARD_RADIUS, pad, pad, bottom),
-	}
-	var font_colors := {
-		"normal": text_color,
-		"hover": hover_color,
-		"pressed": text_color,
-		"focus": hover_color,
-		"disabled": UIConstants.COLOR_TEXT_MUTED,
-	}
-	for state in styles:
-		button.add_theme_stylebox_override(state, styles[state])
-		# "normal" is the Button theme's plain `font_color`.
-		button.add_theme_color_override("font_color" if state == "normal" else "font_%s_color" % state,
-			font_colors[state])
+	MenuStyle.paint_card(button, accent, caption_block, pad, text_color, hover_color)
 
 ## StyleBoxFlat with uniform side margins, its own top margin and the room a
 ## caption needs below the label.
 static func _style(bg: Color, border: Color, border_width: int, radius: int,
 		pad: int, top: int, bottom: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	style.border_color = border
-	style.set_border_width_all(border_width)
-	style.set_corner_radius_all(radius)
-	style.content_margin_left = float(pad)
-	style.content_margin_right = float(pad)
-	style.content_margin_top = float(top)
-	style.content_margin_bottom = float(bottom)
-	return style
+	return MenuStyle.flat(bg, border, border_width, radius, pad, top, bottom)
 
 static func _with_alpha(color: Color, alpha: float) -> Color:
-	return Color(color.r, color.g, color.b, alpha)
+	return MenuStyle.with_alpha(color, alpha)
 
 # =============================================================================
 # INPUT

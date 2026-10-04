@@ -134,6 +134,13 @@ static func can_generate(hole_count: int) -> bool:
 			return false
 	return true
 
+## The layout `generate` paints for `hole_count` holes (empty for 0 or an
+## unsupported count), in the same [tee, green, corridor, water, bunker]
+## offset form as the LAYOUT_* tables. The Start New Game screen draws its
+## course plan preview from this, so the preview is always the real layout.
+static func layout_for(hole_count: int) -> Array:
+	return _get_layout(hole_count)
+
 static func _get_layout(hole_count: int) -> Array:
 	match hole_count:
 		3:
