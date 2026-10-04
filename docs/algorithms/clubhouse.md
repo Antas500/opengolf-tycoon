@@ -2,7 +2,13 @@
 
 > **Source:** `scripts/systems/course_clubhouse.gd`, `scripts/entities/building.gd`,
 > `scripts/course/entity_layer.gd`, `scripts/entities/golfer.gd`,
-> `scripts/managers/golfer_manager.gd`
+> `scripts/managers/golfer_manager.gd`, `scripts/entities/course_architecture.gd`
+
+The clubhouse is drawn as an isometric solid on its four tiles — paved terrace,
+stone plinth, hipped roof, chimney and an entrance canopy on the edge golfers
+walk to — by the shared building renderer. Each upgrade tier adds a storey or a
+wing and never grows past the tiles it stands on. See
+[isometric-buildings docs](isometric-buildings.md).
 
 ## Plain English
 

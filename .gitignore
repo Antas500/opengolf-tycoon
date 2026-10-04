@@ -53,3 +53,7 @@ package-lock.json
 # Local development
 .env
 .env.local
+
+# Retired pixel-art building sprites: buildings are drawn from the grid's own
+# isometric geometry (scripts/entities/course_architecture.gd).
+assets/sprites/buildings/
