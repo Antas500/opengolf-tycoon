@@ -1522,6 +1522,8 @@ func test_elevation_selectors_are_terrain_tile_previews() -> void:
 		var btn = toolbar._tool_buttons[tool_name]
 		assert_true(btn is ElevationSelectorButton, "%s is a diamond of terrain tiles" % tool_name)
 		assert_not_null(btn.get_node_or_null("ElevationPreviewArt"), "%s shows its example" % tool_name)
+	# A grid of tiles has an integer middle row/column: whole-tile maths.
+	@warning_ignore("integer_division")
 	var mid := ElevationSelectorButton.GRID_TILES / 2
 	var vertex: Array = ElevationSelectorButton.example_heights("vertex")
 	assert_eq(vertex[mid][mid], 1, "vertex example lifts one vertex")
@@ -1552,6 +1554,8 @@ func test_square_selector_examples_are_5x5_grids_with_3x3_selected() -> void:
 	assert_eq(ElevationSelectorButton.GRID_TILES, 5, "the examples draw 5x5 tile grids")
 	assert_eq(ElevationSelectorButton.SELECTED_TILES, 3, "the examples select 3x3 tiles")
 	var n: int = ElevationSelectorButton.GRID_TILES + 1
+	# Tile indices are whole numbers: the margin is half the leftover tiles.
+	@warning_ignore("integer_division")
 	var lo: int = (ElevationSelectorButton.GRID_TILES - ElevationSelectorButton.SELECTED_TILES) / 2
 	var hi: int = lo + ElevationSelectorButton.SELECTED_TILES
 

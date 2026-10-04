@@ -22,6 +22,7 @@ signal back_requested()
 enum LayoutMode { DESKTOP, TABLET_LANDSCAPE, TABLET_PORTRAIT, PHONE_LANDSCAPE, PHONE_PORTRAIT }
 enum BrowseFilter { ALL, OWNED, AFFORDABLE }
 
+const WorldMapStateScript := preload("res://scripts/autoload/world_map_state.gd")
 const DESKTOP_MIN_WIDTH := 1180.0
 const DESKTOP_MIN_HEIGHT := 680.0
 const TABLET_MIN_WIDTH := 680.0
@@ -78,7 +79,7 @@ var _globe_view_state: Dictionary = {}
 func _ready() -> void:
 	name = "WorldMapScreen"
 	if WorldMap.locations.is_empty():
-		WorldMap.new_world(WorldMap.default_options())
+		WorldMap.new_world(WorldMapStateScript.default_options())
 	if has_node("/root/Screen"):
 		Screen.changed.connect(_on_screen_changed)
 	if has_node("/root/EventBus") and not EventBus.money_changed.is_connected(_on_money_changed):
@@ -102,10 +103,10 @@ static func layout_mode_for(view: Vector2) -> int:
 		return LayoutMode.PHONE_LANDSCAPE
 	return LayoutMode.PHONE_PORTRAIT
 
-func _on_screen_changed(size: Vector2, _scale: float) -> void:
-	var mode := layout_mode_for(size)
-	var width_delta := absf(size.x - _built_size.x)
-	var height_delta := absf(size.y - _built_size.y)
+func _on_screen_changed(window_size: Vector2, _scale: float) -> void:
+	var mode := layout_mode_for(window_size)
+	var width_delta := absf(window_size.x - _built_size.x)
+	var height_delta := absf(window_size.y - _built_size.y)
 	var needs_remeasure := width_delta > maxf(96.0, _built_size.x * 0.14) \
 		or height_delta > maxf(72.0, _built_size.y * 0.14)
 	if mode != _layout_mode or needs_remeasure:
@@ -355,7 +356,7 @@ func _build_tablet_body(view: Vector2) -> Control:
 	stage.add_child(feature)
 	body.add_child(stage)
 
-	var shelf := _build_horizontal_catalog(_layout_mode)
+	var shelf := _build_horizontal_catalog()
 	shelf.custom_minimum_size.y = 204.0 if _layout_mode == LayoutMode.TABLET_PORTRAIT else 194.0
 	shelf.size_flags_vertical = Control.SIZE_SHRINK_END
 	body.add_child(shelf)
@@ -708,7 +709,7 @@ func _build_vertical_catalog(mode: int, page_scrolled: bool) -> PanelContainer:
 	scroll.add_child(_list_box)
 	return panel
 
-func _build_horizontal_catalog(mode: int) -> PanelContainer:
+func _build_horizontal_catalog() -> PanelContainer:
 	var panel := _make_panel(COLOR_SURFACE, MenuStyle.with_alpha(UIConstants.COLOR_BORDER, 0.42), MenuStyle.CARD_RADIUS)
 	panel.name = "DestinationShelf"
 	var margin := MarginContainer.new()
@@ -863,20 +864,20 @@ func _update_map_header() -> void:
 func _row_state(def: Dictionary) -> Dictionary:
 	var id := str(def.get("id", ""))
 	var owned := WorldMap.is_owned(id)
-	var size := int(def.get("size", WorldLocations.Size.SMALL))
+	var location_size := int(def.get("size", WorldLocations.Size.SMALL))
 	var price := WorldMap.get_price(id)
 	var parcels := WorldMap.get_total_parcels(id)
-	var ready := WorldMap.get_unlocked_parcels(id).size()
+	var ready_parcels := WorldMap.get_unlocked_parcels(id).size()
 	return {
 		"id": id,
 		"name": str(def.get("name", id)),
 		"region": str(def.get("region", "")),
 		"description": str(def.get("description", "")),
 		"theme_name": CourseTheme.get_theme_name(int(def.get("theme", 0))),
-		"size_name": WorldLocations.get_size_name(size),
-		"capacity": WorldLocations.get_hole_capacity(size),
+		"size_name": WorldLocations.get_size_name(location_size),
+		"capacity": WorldLocations.get_hole_capacity(location_size),
 		"parcels": parcels,
-		"ready": ready,
+		"ready": ready_parcels,
 		"price": price,
 		"owned": owned,
 		"active": id == WorldMap.active_location_id,

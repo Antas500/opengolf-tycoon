@@ -5,18 +5,22 @@
 
 GODOT ?= $(shell ./scripts/resolve-godot.sh)
 
-.PHONY: test run editor help
+.PHONY: test run editor warnings help
 
 help:
 	@echo "OpenGolf Tycoon - Available commands:"
-	@echo "  make test    - Run unit tests (extracts Godot and imports on first run)"
-	@echo "  make run     - Run the game"
-	@echo "  make editor  - Open in Godot editor"
+	@echo "  make test     - Run unit tests (extracts Godot and imports on first run)"
+	@echo "  make warnings - Fail if any project script carries a GDScript warning"
+	@echo "  make run      - Run the game"
+	@echo "  make editor   - Open in Godot editor"
 	@echo ""
 	@echo "Override Godot path: make test GODOT=/path/to/godot"
 
 test:
 	@./test.sh
+
+warnings:
+	@./check-warnings.sh
 
 run:
 	@if [ -z "$(GODOT)" ]; then \

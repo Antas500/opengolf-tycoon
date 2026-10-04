@@ -218,6 +218,15 @@ make test          # Using Makefile
 ./test.sh          # Using shell script
 ```
 
+**GDScript warnings:** Godot prints them only while a debugger is attached, so
+neither the tests nor any other headless run show them — they surface in the
+editor's debugger only. `make warnings` (or `./check-warnings.sh`) force-reloads
+every project script with `-d` through `tools/warning_scan.gd` and fails on
+anything Godot reports. CI runs it next to the unit tests. Prefer a real fix
+(rename the shadowing variable, use the parameter) over `@warning_ignore`; use
+`@warning_ignore("code")` or `@warning_ignore_start`/`@warning_ignore_restore`
+only where the construct is deliberate.
+
 `./test.sh` resolves Godot automatically (bundled `Godot_v4.6-stable_linux.x86_64.zip`, `$GODOT`, or PATH) and imports the project on first run.
 
 **Headless integration harnesses** (real main scene, quick-start course):

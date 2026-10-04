@@ -245,12 +245,12 @@ func _window_size() -> Vector2:
 
 ## Which of the four arrangements a window size gets. Pure, so the breakpoints
 ## can be unit-tested without a window.
-static func layout_mode_for(size: Vector2) -> int:
-	if size.x >= WIDE_MIN_WIDTH and size.y >= WIDE_MIN_HEIGHT and size.x > size.y:
+static func layout_mode_for(window_size: Vector2) -> int:
+	if window_size.x >= WIDE_MIN_WIDTH and window_size.y >= WIDE_MIN_HEIGHT and window_size.x > window_size.y:
 		return Layout.WIDE
-	if size.x >= TABLET_MIN_WIDTH and size.y >= TABLET_MIN_HEIGHT:
+	if window_size.x >= TABLET_MIN_WIDTH and window_size.y >= TABLET_MIN_HEIGHT:
 		return Layout.TABLET
-	if size.x >= LANDSCAPE_MIN_WIDTH and size.x > size.y:
+	if window_size.x >= LANDSCAPE_MIN_WIDTH and window_size.x > window_size.y:
 		return Layout.LANDSCAPE
 	return Layout.PHONE
 
@@ -555,8 +555,11 @@ func _build_landscape(m: Metrics) -> void:
 	_difficulty_hint = _make_hint(m, _difficulty_hint_texts(2), width, 2)
 	difficulty.add_child(_difficulty_hint)
 	left.add_child(difficulty)
-	left.add_child(_make_section("Starting money",
-		_make_money_cards(m, 2) if m.landscape_plan else _make_money_segments(m), m))
+	# Cards and segments are different Control subclasses; both branches are
+	# widened to their shared base so the ternary's value types are compatible.
+	var money_block := (_make_money_cards(m, 2) as Control) if m.landscape_plan \
+			else (_make_money_segments(m) as Control)
+	left.add_child(_make_section("Starting money", money_block, m))
 
 	var right := _make_sheet(body, m, "RightSheet")
 	right.get_parent().size_flags_horizontal = Control.SIZE_EXPAND_FILL

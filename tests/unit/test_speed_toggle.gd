@@ -6,6 +6,7 @@ extends GutTest
 ## GameManager owns the cycling, and Main derives the button's face and tooltip
 ## from the tier that is currently running.
 
+const GameManagerScript := preload("res://scripts/autoload/game_manager.gd")
 const MainScript := preload("res://scripts/main/main.gd")
 
 
@@ -19,12 +20,12 @@ func after_each() -> void:
 # --- Cycling logic ---
 
 func test_first_press_from_normal_enters_fast() -> void:
-	assert_eq(GameManager.next_fast_forward_speed(GameManager.GameSpeed.NORMAL),
+	assert_eq(GameManagerScript.next_fast_forward_speed(GameManager.GameSpeed.NORMAL),
 			GameManager.GameSpeed.FAST,
 			"One press from normal speed starts at Fast (3x)")
 
 func test_first_press_from_paused_enters_fast() -> void:
-	assert_eq(GameManager.next_fast_forward_speed(GameManager.GameSpeed.PAUSED),
+	assert_eq(GameManagerScript.next_fast_forward_speed(GameManager.GameSpeed.PAUSED),
 			GameManager.GameSpeed.FAST,
 			"The toggle unpauses into Fast, never straight into the 8x tier")
 
@@ -32,7 +33,7 @@ func test_repeated_presses_swap_between_fast_and_ultra() -> void:
 	var speed: int = GameManager.GameSpeed.NORMAL
 	var visited: Array = []
 	for _press in 4:
-		speed = GameManager.next_fast_forward_speed(speed)
+		speed = GameManagerScript.next_fast_forward_speed(speed)
 		visited.append(speed)
 	assert_eq(visited,
 			[GameManager.GameSpeed.FAST, GameManager.GameSpeed.ULTRA,
@@ -40,13 +41,13 @@ func test_repeated_presses_swap_between_fast_and_ultra() -> void:
 			"Pressing the one button alternates Fast and Ultra forever")
 
 func test_only_the_two_tiers_belong_to_the_toggle() -> void:
-	assert_true(GameManager.is_fast_forward_speed(GameManager.GameSpeed.FAST),
+	assert_true(GameManagerScript.is_fast_forward_speed(GameManager.GameSpeed.FAST),
 			"Fast is a fast-forward tier")
-	assert_true(GameManager.is_fast_forward_speed(GameManager.GameSpeed.ULTRA),
+	assert_true(GameManagerScript.is_fast_forward_speed(GameManager.GameSpeed.ULTRA),
 			"Ultra is a fast-forward tier")
-	assert_false(GameManager.is_fast_forward_speed(GameManager.GameSpeed.NORMAL),
+	assert_false(GameManagerScript.is_fast_forward_speed(GameManager.GameSpeed.NORMAL),
 			"Normal speed belongs to the play button")
-	assert_false(GameManager.is_fast_forward_speed(GameManager.GameSpeed.PAUSED),
+	assert_false(GameManagerScript.is_fast_forward_speed(GameManager.GameSpeed.PAUSED),
 			"Paused belongs to the pause button")
 
 

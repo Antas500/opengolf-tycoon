@@ -138,4 +138,4 @@ func _property(state: SceneState, node_index: int, property_name: String) -> Var
 
 func _script_name(state: SceneState, node_index: int) -> String:
 	var script: Script = _property(state, node_index, "script")
-	return script.get_global_name() if script else ""
+	return str(script.get_global_name()) if script else ""
