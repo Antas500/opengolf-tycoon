@@ -58,8 +58,8 @@ func _run() -> void:
 	_check(menu_buttons.size() == 6, "main menu shows six actions on phones (got %d)" % menu_buttons.size())
 	var menu_fits := true
 	for button in menu_buttons:
-		var rect: Rect2 = button.get_global_rect()
-		if rect.size.x > 390.0 or rect.size.y < 30.0:
+		var button_rect: Rect2 = button.get_global_rect()
+		if button_rect.size.x > 390.0 or button_rect.size.y < 30.0:
 			menu_fits = false
 	_check(menu_fits, "main menu buttons fit the phone width and stay tappable")
 

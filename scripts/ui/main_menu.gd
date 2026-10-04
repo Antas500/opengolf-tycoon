@@ -118,7 +118,7 @@ func _ready() -> void:
 		Screen.changed.connect(_on_screen_changed)
 	_build()
 
-func _on_screen_changed(size: Vector2, _world_scale: float) -> void:
+func _on_screen_changed(window_size: Vector2, _world_scale: float) -> void:
 	if _current_layout() != _layout_mode:
 		_build()
 		return
@@ -126,12 +126,12 @@ func _on_screen_changed(size: Vector2, _world_scale: float) -> void:
 	# ScrollContainer sizes its child to the child's minimum, see _make_page),
 	# so it has to be told about the new window even when nothing else changes.
 	if _page != null:
-		_page.custom_minimum_size = size
+		_page.custom_minimum_size = window_size
 	# Card heights and type are measured from the window at build time, so the
 	# tree is put back through the builders once the window has moved enough
 	# for those proportions to look stale - but not on every pixel of a drag.
-	if absf(size.x - _built_size.x) > _built_size.x * REPROPORTION_STEP \
-			or absf(size.y - _built_size.y) > _built_size.y * REPROPORTION_STEP:
+	if absf(window_size.x - _built_size.x) > _built_size.x * REPROPORTION_STEP \
+			or absf(window_size.y - _built_size.y) > _built_size.y * REPROPORTION_STEP:
 		_build()
 
 ## The layout the current window calls for.
@@ -145,12 +145,12 @@ func _window_size() -> Vector2:
 
 ## Which of the four arrangements a window size gets. Pure, so the breakpoints
 ## can be unit-tested without a window.
-static func layout_mode_for(size: Vector2) -> int:
-	if size.x >= WIDE_MIN_WIDTH and size.y >= TALL_MIN_HEIGHT:
+static func layout_mode_for(window_size: Vector2) -> int:
+	if window_size.x >= WIDE_MIN_WIDTH and window_size.y >= TALL_MIN_HEIGHT:
 		return Layout.WIDE
-	if size.x >= TABLET_MIN_WIDTH and size.y >= TALL_MIN_HEIGHT:
+	if window_size.x >= TABLET_MIN_WIDTH and window_size.y >= TALL_MIN_HEIGHT:
 		return Layout.TABLET
-	if size.x >= TABLET_MIN_WIDTH and size.x > size.y:
+	if window_size.x >= TABLET_MIN_WIDTH and window_size.x > window_size.y:
 		return Layout.LANDSCAPE
 	return Layout.PHONE
 

@@ -215,10 +215,10 @@ func test_the_planet_shader_stays_in_step_with_the_script() -> void:
 	assert_eq(source.count("("), source.count(")"), "the shader's parentheses balance")
 
 	var declared := _declared_uniforms(source)
-	for name in SCRIPT_UNIFORMS:
-		assert_true(declared.has(name),
-			"the shader declares %s, which GlobeMap sets by name" % name)
-		assert_true(source.count(name) > 1, "the shader actually uses %s" % name)
+	for uniform_name in SCRIPT_UNIFORMS:
+		assert_true(declared.has(uniform_name),
+			"the shader declares %s, which GlobeMap sets by name" % uniform_name)
+		assert_true(source.count(uniform_name) > 1, "the shader actually uses %s" % uniform_name)
 	assert_true(declared.size() >= SCRIPT_UNIFORMS.size(), "the palette and lighting are tunable as uniforms")
 
 ## ── The shader's projection must match the pins' ─────────────────────────

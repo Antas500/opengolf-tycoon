@@ -99,12 +99,22 @@ static func plan(count: int) -> Dictionary:
 		parcel_lines.append(float(LandManager.GRID_OFFSET + p * parcel) - (float(anchor.x) + 0.5))
 	var holes: Array = []
 	for entry in GeneratedCourse.layout_for(count):
+		# Optional hazards: a hole has water/bunker only when the generator
+		# placed one, so the entry is null rather than a point. Assigned with
+		# statements because Vector2 and null are not mutually compatible
+		# branches for the ternary operator.
+		var water: Variant = null
+		if entry.size() > 3 and entry[3] != null:
+			water = Vector2(entry[3])
+		var bunker: Variant = null
+		if entry.size() > 4 and entry[4] != null:
+			bunker = Vector2(entry[4])
 		holes.append({
 			"tee": Vector2(entry[0]),
 			"green": Vector2(entry[1]),
 			"width": float(entry[2]),
-			"water": Vector2(entry[3]) if entry.size() > 3 and entry[3] != null else null,
-			"bunker": Vector2(entry[4]) if entry.size() > 4 and entry[4] != null else null,
+			"water": water,
+			"bunker": bunker,
 		})
 	var amenities: Array = []
 	if count > 0:

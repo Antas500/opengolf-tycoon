@@ -55,8 +55,10 @@ const TILE_W := 64.0
 const TILE_H := 32.0
 
 ## Quarter-turn a grid-space offset the way GridProjection rotates the course.
-static func rotate_uv(offset: Vector2, facing: int) -> Vector2:
-	match wrapi(facing, 0, 4):
+## The parameter is named `view_facing` rather than `facing` so that a static
+## helper does not shadow the view rotation a placed node keeps in `facing`.
+static func rotate_uv(offset: Vector2, view_facing: int) -> Vector2:
+	match wrapi(view_facing, 0, 4):
 		1:
 			return Vector2(-offset.y, offset.x)
 		2:
@@ -79,20 +81,20 @@ static func screen_delta(offset: Vector2) -> Vector2:
 ## the footprint's projected centre swings around it as the view turns. This is
 ## the offset that reconciles the two, and it is what keeps the art on the tiles
 ## at every rotation.
-static func grid_origin_offset(size: Vector2, facing: int) -> Vector2:
+static func grid_origin_offset(size: Vector2, view_facing: int) -> Vector2:
 	var tiles := Vector2(size.x / TILE_W, size.y / TILE_H)
 	var anchor := Vector2(size.x * 0.5, size.y)
-	return anchor - screen_delta(rotate_uv(tiles * 0.5, facing))
+	return anchor - screen_delta(rotate_uv(tiles * 0.5, view_facing))
 
 ## Grid point (u across, v down, z up) to local draw space.
-static func project_point(origin: Vector2, p: Vector3, facing: int) -> Vector2:
-	var r := rotate_uv(Vector2(p.x, p.y), facing)
+static func project_point(origin: Vector2, p: Vector3, view_facing: int) -> Vector2:
+	var r := rotate_uv(Vector2(p.x, p.y), view_facing)
 	return origin + Vector2((r.x - r.y) * TILE_W * 0.5, (r.x + r.y) * TILE_H * 0.5 - p.z)
 
 ## Painter's-algorithm key: how near the viewer a plan position sits. Bigger
 ## draws later, on top.
-static func depth_of(u: float, v: float, facing: int) -> float:
-	var r := rotate_uv(Vector2(u, v), facing)
+static func depth_of(u: float, v: float, view_facing: int) -> float:
+	var r := rotate_uv(Vector2(u, v), view_facing)
 	return r.x + r.y
 
 ## Brightness of a wall or roof plane from the grid direction it faces. The sun
@@ -607,13 +609,13 @@ static func tiles_of(size: Vector2) -> Vector2:
 ## can ignore the return value; the placement ghost and the catalogue tile use
 ## the same routine, so all three show the identical volume.
 static func draw_building(c: CanvasItem, kind_name: String, size: Vector2, tier := 1,
-		time := 0.0, gloomy := false, facing := 0) -> AABB:
+		time := 0.0, gloomy := false, view_facing := 0) -> AABB:
 	if kind_name == "bench":
 		c.draw_set_transform(Vector2(size.x * 0.5, size.y * 0.7))
 		PathFurniture.draw_item(c, "park_bench", Vector2i.DOWN)
 		c.draw_set_transform(Vector2.ZERO)
 		return AABB(Vector3.ZERO, Vector3(size.x / TILE_W, size.y / TILE_H, 0.0))
-	var sk := Sketch.new(c, grid_origin_offset(size, facing), facing)
+	var sk := Sketch.new(c, grid_origin_offset(size, view_facing), view_facing)
 	match kind_name:
 		"clubhouse":
 			draw_clubhouse(sk, size, clampi(tier, 1, 3), time, gloomy)
@@ -769,7 +771,7 @@ static func _draw_clubhouse_front(sk: Sketch, rect: Rect2, wall_h: float, tier: 
 	sk.climbing_roses("v", rect.end.x, rect.position.y + 0.4, wall_h - 2.0)
 
 
-static func _draw_chimney(sk: Sketch, rect: Rect2, eave: float, rise: float, tier: int,
+static func _draw_chimney(sk: Sketch, rect: Rect2, eave: float, rise: float, _tier: int,
 		time: float, smoking: bool) -> void:
 	if not smoking:
 		return
@@ -891,7 +893,7 @@ static func draw_pro_shop(sk: Sketch, size: Vector2, gloomy: bool) -> void:
 	sk.climbing_roses("v", rect.end.x, rect.position.y + 0.35, 20.0)
 
 
-static func draw_restaurant(sk: Sketch, size: Vector2, time: float, gloomy: bool) -> void:
+static func draw_restaurant(sk: Sketch, size: Vector2, _time: float, gloomy: bool) -> void:
 	var wall := wall_colour("restaurant")
 	var roof := roof_colour("restaurant", 1)
 	var rect := _hall(sk, size, 28.0, 14.0, wall, roof, 0.36)
@@ -921,7 +923,7 @@ static func draw_restaurant(sk: Sketch, size: Vector2, time: float, gloomy: bool
 			Vector3(rect.position.x + 0.15 + side * 0.24, v + 0.43, 7.0), Color("8c6847"), 2.0)
 
 
-static func draw_snack_bar(sk: Sketch, size: Vector2, gloomy: bool) -> void:
+static func draw_snack_bar(sk: Sketch, size: Vector2, _gloomy: bool) -> void:
 	var wall := wall_colour("snack_bar")
 	var roof := roof_colour("snack_bar", 1)
 	# A one-tile hut: the diamond is tiny, so the hatch does the talking and the
@@ -1105,7 +1107,7 @@ static func draw_garden_spa(sk: Sketch, size: Vector2, gloomy: bool) -> void:
 	sk.lantern("v", rect.end.x, rect.end.y - 0.3, 18.0, gloomy)
 
 
-static func draw_golf_academy(sk: Sketch, size: Vector2, gloomy: bool) -> void:
+static func draw_golf_academy(sk: Sketch, size: Vector2, _gloomy: bool) -> void:
 	var wall := wall_colour("golf_academy")
 	var roof := roof_colour("golf_academy", 1)
 	var tiles := tiles_of(size)

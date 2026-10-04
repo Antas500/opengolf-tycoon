@@ -88,18 +88,18 @@ func test_mouse_snap_chooses_the_nearest_centre_or_vertex() -> void:
 	var centre := grid.grid_to_screen_precise(Vector2(8, 8))
 	var vertex := grid.grid_point_to_screen(Vector2(9, 8))
 	var pointer := centre.lerp(vertex, 0.8)
-	var snapped := grid.snap_world_to_tile_anchor(pointer)
-	assert_eq(snapped.anchor_type, "vertex")
-	assert_eq(snapped.point, Vector2(8.5, 7.5))
+	var snapped_anchor := grid.snap_world_to_tile_anchor(pointer)
+	assert_eq(snapped_anchor.anchor_type, "vertex")
+	assert_eq(snapped_anchor.point, Vector2(8.5, 7.5))
 
 func test_mouse_snap_tracks_rotated_sculpted_tile_geometry() -> void:
 	grid.set_vertex_elevation(Vector2i(11, 10), grid.BASE_ELEVATION + 3)
 	grid.set_view_orientation(1)
 	var vertex_grid_point := Vector2(11, 10)
-	var snapped := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(vertex_grid_point))
-	assert_false(snapped.is_empty())
-	assert_eq(snapped.anchor_type, "vertex")
-	assert_eq(snapped.point, vertex_grid_point - Vector2(0.5, 0.5))
+	var snapped_anchor := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(vertex_grid_point))
+	assert_false(snapped_anchor.is_empty())
+	assert_eq(snapped_anchor.anchor_type, "vertex")
+	assert_eq(snapped_anchor.point, vertex_grid_point - Vector2(0.5, 0.5))
 
 func test_every_rim_vertex_and_centre_can_be_picked() -> void:
 	# The far-edge vertices sit exactly on the map's edge, where the hovered point
@@ -108,14 +108,14 @@ func test_every_rim_vertex_and_centre_can_be_picked() -> void:
 	var height := grid.grid_height
 	for vertex_point in [Vector2(0, 0), Vector2(0, 10), Vector2(10, 0), Vector2(width, 10), Vector2(10, height),
 			Vector2(width, height), Vector2(width, 0), Vector2(0, height)]:
-		var snapped := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(vertex_point))
-		assert_false(snapped.is_empty(), "Rim vertex %s can be picked" % vertex_point)
-		assert_eq(snapped.anchor_type, "vertex")
-		assert_eq(snapped.point, vertex_point - Vector2(0.5, 0.5), "Rim vertex %s snaps to itself" % vertex_point)
+		var snapped_anchor := grid.snap_world_to_tile_anchor(grid.grid_point_to_screen(vertex_point))
+		assert_false(snapped_anchor.is_empty(), "Rim vertex %s can be picked" % vertex_point)
+		assert_eq(snapped_anchor.anchor_type, "vertex")
+		assert_eq(snapped_anchor.point, vertex_point - Vector2(0.5, 0.5), "Rim vertex %s snaps to itself" % vertex_point)
 	for centre_point in [Vector2(0, 0), Vector2(width - 1, height - 1), Vector2(0, height - 1), Vector2(width - 1, 0)]:
-		var snapped := grid.snap_world_to_tile_anchor(grid.grid_to_screen_precise(centre_point))
-		assert_eq(snapped.anchor_type, "center")
-		assert_eq(snapped.point, centre_point, "Corner tile centre %s snaps to itself" % centre_point)
+		var snapped_anchor := grid.snap_world_to_tile_anchor(grid.grid_to_screen_precise(centre_point))
+		assert_eq(snapped_anchor.anchor_type, "center")
+		assert_eq(snapped_anchor.point, centre_point, "Corner tile centre %s snaps to itself" % centre_point)
 
 func test_every_centre_and_vertex_snaps_to_itself_on_every_view() -> void:
 	# Hovering exactly on an anchor must always pick that anchor, flat or sculpted,

@@ -5,6 +5,8 @@ extends GutTest
 ## integration (manual) testing. Helpers mirror SaveManager's actual logic
 ## so drift is detected early.
 
+const SaveManagerScript := preload("res://scripts/autoload/save_manager.gd")
+
 
 # --- Hole Serialization Round-trip ---
 
@@ -140,7 +142,7 @@ func test_pre_v4_elevation_heights_shift_into_the_new_range() -> void:
 	# Pre-v4 saves stored signed heights with flat ground at 0. Shifting by
 	# BASE_ELEVATION maps the old bottom (-5) to 0, flat (0) to 5, top (+5) to 10.
 	var legacy := {"3,3": -5, "4,4": -3, "5,5": 0, "6,6": 2, "7,7": 5}
-	var shifted: Dictionary = SaveManager._shift_elevation_dict(legacy, TerrainGrid.BASE_ELEVATION)
+	var shifted: Dictionary = SaveManagerScript._shift_elevation_dict(legacy, TerrainGrid.BASE_ELEVATION)
 	assert_eq(int(shifted["3,3"]), TerrainGrid.MIN_ELEVATION)
 	assert_eq(int(shifted["4,4"]), TerrainGrid.BASE_ELEVATION - 3)
 	assert_eq(int(shifted["5,5"]), TerrainGrid.BASE_ELEVATION, "old flat ground becomes the base level")
@@ -149,7 +151,7 @@ func test_pre_v4_elevation_heights_shift_into_the_new_range() -> void:
 
 func test_shift_elevation_dict_is_a_no_op_for_current_saves() -> void:
 	var current := {"3,3": 0, "4,4": 7}
-	assert_eq(SaveManager._shift_elevation_dict(current, 0), current)
+	assert_eq(SaveManagerScript._shift_elevation_dict(current, 0), current)
 
 func test_elevation_roundtrip_keeps_base_level_sparse() -> void:
 	var grid := TerrainGrid.new()
@@ -183,7 +185,7 @@ func test_legacy_tile_elevation_migrates_around_the_base_level() -> void:
 	add_child_autofree(grid)
 	var legacy_tiles := {"4,4": 2}
 	grid.migrate_tile_elevation(
-			SaveManager._shift_elevation_dict(legacy_tiles, TerrainGrid.BASE_ELEVATION))
+			SaveManagerScript._shift_elevation_dict(legacy_tiles, TerrainGrid.BASE_ELEVATION))
 	assert_eq(grid.get_elevation(Vector2i(4, 4)), TerrainGrid.BASE_ELEVATION + 1,
 			"a +2 legacy tile averages to one level above the base")
 	assert_eq(grid.get_elevation(Vector2i(0, 0)), TerrainGrid.BASE_ELEVATION)

@@ -46,8 +46,8 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	GameManager.current_mode = _saved_mode
-	GameManager.current_speed = _saved_speed
+	GameManager.current_mode = _saved_mode as GameManager.GameMode
+	GameManager.current_speed = _saved_speed as GameManager.GameSpeed
 	GameManager.current_day = _saved_day
 	# hole_created triggers GameManager's green fee clamp; keep it from leaking.
 	GameManager.green_fee = _saved_green_fee

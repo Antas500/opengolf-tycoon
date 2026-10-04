@@ -41,7 +41,7 @@ func _run() -> void:
 	_check(main.main_menu != null, "the game opens on the title screen")
 	_check(main.main_menu._layout_mode == MainMenu.Layout.PHONE,
 		"390x844 uses the phone layout (got %d)" % main.main_menu._layout_mode)
-	await _check_screen("phone portrait", 390.0, 844.0, 44.0)
+	_check_screen("phone portrait", 390.0, 844.0, 44.0)
 	_check_continue_state("phone portrait")
 
 	# ------------------------------------------------------------------
@@ -50,7 +50,7 @@ func _run() -> void:
 	await _set_window(844, 390)
 	_check(main.main_menu._layout_mode == MainMenu.Layout.LANDSCAPE,
 		"844x390 uses the landscape layout (got %d)" % main.main_menu._layout_mode)
-	await _check_screen("rotated phone", 844.0, 390.0, 40.0)
+	_check_screen("rotated phone", 844.0, 390.0, 40.0)
 	_check(not _scrolls(main.main_menu), "rotated phone fits without scrolling")
 
 	# ------------------------------------------------------------------
@@ -59,12 +59,12 @@ func _run() -> void:
 	await _set_window(768, 1024)
 	_check(main.main_menu._layout_mode == MainMenu.Layout.TABLET,
 		"768x1024 uses the tablet layout (got %d)" % main.main_menu._layout_mode)
-	await _check_screen("tablet portrait", 768.0, 1024.0, 44.0)
+	_check_screen("tablet portrait", 768.0, 1024.0, 44.0)
 
 	await _set_window(1024, 768)
 	_check(main.main_menu._layout_mode == MainMenu.Layout.TABLET,
 		"1024x768 uses the tablet layout (got %d)" % main.main_menu._layout_mode)
-	await _check_screen("tablet", 1024.0, 768.0, 44.0)
+	_check_screen("tablet", 1024.0, 768.0, 44.0)
 	_check(not _scrolls(main.main_menu), "1024x768 tablet fits without scrolling")
 
 	# ------------------------------------------------------------------
@@ -73,7 +73,7 @@ func _run() -> void:
 	await _set_window(1600, 1000)
 	_check(main.main_menu._layout_mode == MainMenu.Layout.WIDE,
 		"1600x1000 uses the wide layout (got %d)" % main.main_menu._layout_mode)
-	await _check_screen("desktop", 1600.0, 1000.0, 44.0)
+	_check_screen("desktop", 1600.0, 1000.0, 44.0)
 	_check(not _scrolls(main.main_menu), "desktop fits without scrolling")
 	_check(_uses_side_space(main.main_menu, 1600.0),
 		"desktop spreads the layout across the window instead of a centre strip")
@@ -82,7 +82,7 @@ func _run() -> void:
 	await _set_window(2560, 1440)
 	_check(main.main_menu._layout_mode == MainMenu.Layout.WIDE,
 		"2560x1440 uses the wide layout (got %d)" % main.main_menu._layout_mode)
-	await _check_screen("large desktop", 2560.0, 1440.0, 44.0)
+	_check_screen("large desktop", 2560.0, 1440.0, 44.0)
 
 	# ------------------------------------------------------------------
 	# Back to the phone: the layout must come back, and no tagline.
@@ -91,7 +91,7 @@ func _run() -> void:
 	await _frames(4)
 	_check(main.main_menu._layout_mode == MainMenu.Layout.PHONE,
 		"the phone layout returns when the window shrinks back")
-	await _check_screen("phone portrait (again)", 390.0, 844.0, 44.0)
+	_check_screen("phone portrait (again)", 390.0, 844.0, 44.0)
 	_check(not _has_tagline(main.main_menu),
 		"no tagline sits under the title any more")
 	_check(_backdrop(main.main_menu) != null, "a drawn backdrop sits behind the menu")

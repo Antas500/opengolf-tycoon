@@ -761,10 +761,8 @@ func test_skills_auto_save_and_take_effect_for_next_shot_mid_round() -> void:
 	for button in skill_page.find_children("*", "Button", true, false):
 		assert_false(button.disabled, "Skill adjustment buttons must remain enabled during round")
 
-	# Record initial driving skill and driver distance
+	# Record the initial driving skill to compare against after allocating points
 	var initial_driving_skill := rounds.player.driving_skill
-	var initial_driver_dist := rounds.player.player_max_distance(Golfer.Club.DRIVER)
-	var initial_accuracy_skill := rounds.player.accuracy_skill
 
 	# Mid-round: change skills (e.g. shift a point from Power Hitter to Long Driver, and add to Accurate Irons)
 	# First refund 1 from skill 0 (Power Hitter)
