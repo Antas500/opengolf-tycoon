@@ -18,3 +18,18 @@ jobs:
         run: |
           chmod +x test.sh scripts/resolve-godot.sh
           ./test.sh
+
+  warnings:
+    name: GDScript warnings
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Headless runs never print GDScript warnings, so this sweeps every
+      # script with a debugger attached (see check-warnings.sh).
+      - name: Check for GDScript warnings
+        run: |
+          chmod +x check-warnings.sh scripts/resolve-godot.sh
+          ./check-warnings.sh
