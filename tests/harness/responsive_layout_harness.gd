@@ -53,9 +53,15 @@ func _run() -> void:
 	_check(main.bottom_bar.offset_top <= -190.0, "bottom bar stays at its full height on phones")
 	_check(absf(main.hud_status_column.offset_right + 8.0) < 1.0, "status column stays in the corner")
 
-	# The main menu must fit (scrollable) and its theme grid must be 2-up.
-	var grid: GridContainer = _find_grid(main.main_menu)
-	_check(grid != null and grid.columns == 2, "main menu theme grid is 2 columns on phones")
+	# The main menu must fit (scrollable) with its six actions reachable.
+	var menu_buttons: Array = _find_buttons(main.main_menu)
+	_check(menu_buttons.size() == 6, "main menu shows six actions on phones (got %d)" % menu_buttons.size())
+	var menu_fits := true
+	for button in menu_buttons:
+		var rect: Rect2 = button.get_global_rect()
+		if rect.size.x > 390.0 or rect.size.y < 30.0:
+			menu_fits = false
+	_check(menu_fits, "main menu buttons fit the phone width and stay tappable")
 
 	# Touch gestures are wired to the live camera.
 	_check(touch.camera == main.camera, "TouchInput is wired to the main camera")
@@ -152,8 +158,122 @@ func _run() -> void:
 	var dy: float = main.camera._target_position.y - cam_y_before
 	_check(absf(dx) > 20.0 and absf(dy) > 10.0, "one-finger drag pans the camera (moved %s, %s)" % [dx, dy])
 
+	# ------------------------------------------------------------------
+	# World map: the globe and the location list stay on screen at both the
+	# desktop reference size and a phone, where they stack vertically.
+	# ------------------------------------------------------------------
+	var world: Node = get_node("/root/WorldMap")
+	world.new_world(world.default_options())
+	await _set_window(1600, 1000)
+	main._show_world_map_screen(false)
+	await _frames(3)
+	var world_screen: Node = main.get_node("UI/HUD/WorldMapScreen")
+	var world_view: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check(world_screen.get_node_or_null("Backdrop") is MenuBackdrop,
+		"world map shares the Main Menu and setup-screen backdrop")
+	_check(world_screen.get_node_or_null("Frame/Page/AtlasHeader/TitleBlock/TitleRow/Mark") is MenuFlagMark,
+		"world map title uses the shared golf-flag mark")
+	var globe_rect: Rect2 = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "desktop globe is fully on screen (%s)" % globe_rect)
+	_check(world_screen._rows.size() == WorldLocations.get_all().size(),
+		"every location has a list row")
+	var list_rect: Rect2 = world_screen._list_box.get_global_rect()
+	_check(list_rect.position.x > globe_rect.position.x,
+		"desktop list sits beside the globe")
+	# The list must actually show rows: a panel that collapses clips every row
+	# (and its Buy / Play button) out of sight while still being "on screen".
+	_check_rows_visible(world_screen, world_view, "desktop")
+
+	# Tablets use a different atlas: selected site beside the globe, with the
+	# complete location collection in a horizontal destination shelf.
+	await _set_window(1024, 768)
+	await _frames(3)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check(world_screen._layout_mode == WorldMapScreen.LayoutMode.TABLET_LANDSCAPE,
+		"landscape tablet selects the tablet atlas")
+	_check(world_screen._horizontal_directory, "tablet uses the swipeable destination shelf")
+	globe_rect = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "tablet globe is fully on screen (%s)" % globe_rect)
+	_check(world_view.encloses(world_screen._featured_action.get_global_rect()),
+		"tablet selected-site action stays on screen")
+	_check(world_screen._rows.size() == WorldLocations.get_all().size(),
+		"tablet shelf keeps every destination available")
+	var tablet_first: Control = world_screen._rows[WorldLocations.get_all()[0]["id"]]
+	_check(_within(tablet_first.get_global_rect(), world_screen._directory_scroll.get_global_rect()),
+		"the first tablet destination card is visible in the shelf")
+
+	# Portrait tablet keeps the same atlas but moves into a taller composition.
+	await _set_window(768, 1024)
+	await _frames(3)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check(world_screen._layout_mode == WorldMapScreen.LayoutMode.TABLET_PORTRAIT,
+		"portrait tablet selects the tall tablet atlas")
+	globe_rect = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "portrait-tablet globe is fully on screen (%s)" % globe_rect)
+	_check(world_view.encloses(world_screen._featured_action.get_global_rect()),
+		"portrait-tablet selected-site action stays on screen")
+
+	# Rotated phone: a compact globe and touch-sized vertical destination rail.
+	await _set_window(844, 390)
+	await _frames(4)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	globe_rect = world_screen.globe.get_global_rect()
+	_check(world_view.encloses(globe_rect), "rotated-phone globe is fully on screen (%s)" % globe_rect)
+	_check(globe_rect.size.x <= world_view.size.x and globe_rect.position.y > 0.0,
+		"compact layout puts the globe above the list")
+	_check_rows_visible(world_screen, world_view, "rotated phone")
+
+	# Phone portrait, the layout the list is most likely to be squeezed out of.
+	await _set_window(390, 844)
+	await _frames(4)
+	world_view = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_check_rows_visible(world_screen, world_view, "phone")
+	var touch_target := ""
+	for id in world_screen.globe._marker_positions:
+		if str(id) != world_screen._selected_id:
+			touch_target = str(id)
+			break
+	if not touch_target.is_empty():
+		var marker_local: Vector2 = world_screen.globe.get_marker_position(touch_target)
+		var marker_screen: Vector2 = world_screen.globe.get_global_transform_with_canvas() * marker_local
+		_push_touch(true, 0, marker_screen)
+		_push_touch(false, 0, marker_screen)
+		await _frames(2)
+		_check(world_screen._selected_id == touch_target,
+			"a phone tap on a globe marker selects its destination")
+	main._close_world_map()
+
 	print("RESPONSIVE: %d failures" % failures)
 	get_tree().quit(0 if failures == 0 else 1)
+
+## The location list has to be readable and clickable: several rows, and the
+## first row's Buy / Play button, must sit inside the list's clip rect and the
+## window. A list panel that collapses to its minimum height still passes a
+## "panel is on screen" check while hiding every row.
+func _check_rows_visible(world_screen: Node, view: Rect2, tag: String) -> void:
+	var scroll: ScrollContainer = world_screen._list_box.get_parent()
+	var clip: Rect2 = scroll.get_global_rect()
+	var fully_shown := 0
+	for row in world_screen._list_box.get_children():
+		if _within(row.get_global_rect(), clip) and _within(row.get_global_rect(), view):
+			fully_shown += 1
+	_check(fully_shown >= 4, "%s list shows at least four location rows (got %d, clip %s)" % [tag, fully_shown, clip])
+	var first_row: Control = world_screen._list_box.get_child(0)
+	_check(_within(first_row.get_global_rect(), view),
+		"%s first location row is on screen (%s)" % [tag, first_row.get_global_rect()])
+	var buttons: Array = _find_buttons(first_row)
+	_check(buttons.size() == 1, "%s row has one action button (got %d)" % [tag, buttons.size()])
+	if buttons.size() == 1:
+		var button: Control = buttons[0]
+		_check(_within(button.get_global_rect(), clip) and _within(button.get_global_rect(), view),
+			"%s row's %s button is clickable (%s)" % [tag, button.text, button.get_global_rect()])
+
+## inner sits inside outer, allowing a pixel of float slack.
+func _within(inner: Rect2, outer: Rect2, slack: float = 1.0) -> bool:
+	return inner.position.x >= outer.position.x - slack \
+		and inner.position.y >= outer.position.y - slack \
+		and inner.end.x <= outer.end.x + slack \
+		and inner.end.y <= outer.end.y + slack
 
 func _push_touch(pressed: bool, index: int, pos: Vector2) -> void:
 	var ev := InputEventScreenTouch.new()
@@ -168,13 +288,13 @@ func _push_drag(index: int, pos: Vector2) -> void:
 	ev.position = pos
 	get_viewport().push_input(ev, true)
 
-func _find_grid(node: Node) -> GridContainer:
+## Every Button under a node, for menu layout checks.
+func _find_buttons(node: Node) -> Array:
+	var found: Array = []
 	if node == null:
-		return null
-	if node is GridContainer:
-		return node
+		return found
+	if node is Button:
+		found.append(node)
 	for child in node.get_children():
-		var found: GridContainer = _find_grid(child)
-		if found != null:
-			return found
-	return null
+		found.append_array(_find_buttons(child))
+	return found

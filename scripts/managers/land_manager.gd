@@ -118,6 +118,10 @@ var owned_parcels: Dictionary = {}
 var _total_parcels_purchased: int = 0
 ## Tracks which parcels have had premium features generated (to avoid re-generation)
 var _parcel_features_generated: Dictionary = {}
+## Parcels that belong to the location being played (set by WorldMap). Empty
+## means the whole 6x6 grid is available, which is what maps created before the
+## world map did.
+var location_parcels: Dictionary = {}
 
 func _ready() -> void:
 	# Start with the center 2x2 parcels (40x40 area)
@@ -151,9 +155,34 @@ func parcel_to_tile_rect(parcel: Vector2i) -> Rect2i:
 	var y = GRID_OFFSET + parcel.y * PARCEL_SIZE
 	return Rect2i(x, y, PARCEL_SIZE, PARCEL_SIZE)
 
+## The land manager now serves one location at a time: only parcels inside the
+## location's block can ever be bought. An empty set (legacy saves, tests)
+## leaves the whole parcel grid available.
+func set_location_parcels(parcels: Array) -> void:
+	location_parcels.clear()
+	for parcel in parcels:
+		location_parcels[parcel] = true
+
+## Replace the owned land with a set of parcels (used when a location is bought
+## or switched to: its pre-cleared parcels are owned from the start).
+func grant_parcels(parcels: Array) -> void:
+	owned_parcels.clear()
+	for parcel in parcels:
+		owned_parcels[parcel] = true
+	if owned_parcels.is_empty():
+		_grant_starting_parcels()
+	_total_parcels_purchased = 0
+	_parcel_features_generated.clear()
+	land_boundary_changed.emit()
+
+func is_parcel_in_location(parcel: Vector2i) -> bool:
+	return location_parcels.is_empty() or location_parcels.has(parcel)
+
 func is_parcel_purchasable(parcel: Vector2i) -> bool:
 	"""A parcel is purchasable if it's not owned and is adjacent to owned land."""
 	if owned_parcels.has(parcel):
+		return false
+	if not is_parcel_in_location(parcel):
 		return false
 	if parcel.x < 0 or parcel.x >= PARCEL_GRID_COLS:
 		return false
@@ -249,10 +278,14 @@ func serialize() -> Dictionary:
 	var features_arr: Array = []
 	for parcel in _parcel_features_generated:
 		features_arr.append({"x": parcel.x, "y": parcel.y})
+	var location_arr: Array = []
+	for parcel in location_parcels:
+		location_arr.append({"x": parcel.x, "y": parcel.y})
 	return {
 		"owned_parcels": parcels_arr,
 		"total_purchased": _total_parcels_purchased,
 		"features_generated": features_arr,
+		"location_parcels": location_arr,
 	}
 
 func deserialize(data: Dictionary) -> void:
@@ -265,3 +298,10 @@ func deserialize(data: Dictionary) -> void:
 	_parcel_features_generated.clear()
 	for p in data.get("features_generated", []):
 		_parcel_features_generated[Vector2i(int(p.x), int(p.y))] = true
+	# Parcels saved before the world map existed have no location block: leave
+	# the current one in place (an empty set means "the whole grid").
+	if data.has("location_parcels"):
+		location_parcels.clear()
+		for p in data.get("location_parcels", []):
+			location_parcels[Vector2i(int(p.x), int(p.y))] = true
+	land_boundary_changed.emit()

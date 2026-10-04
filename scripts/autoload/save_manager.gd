@@ -21,7 +21,9 @@ const SAVE_DIR: String = "user://saves/"
 const SETTINGS_PATH: String = "user://settings.cfg"
 ## v4 moved terrain elevation levels from -5..+5 to 0..10 (flat ground moved
 ## from level 0 to BASE_ELEVATION = 5); older saves are shifted up on load.
-const SAVE_VERSION: int = 4
+## v5 added the company world map (owned locations and the course stored for
+## each of them) and the enabled game features. Older saves load unchanged.
+const SAVE_VERSION: int = 5
 
 ## Scene-tree references (set by Main in _ready())
 var terrain_grid: TerrainGrid = null
@@ -82,6 +84,67 @@ func save_game(save_name: String = "") -> bool:
 	EventBus.save_completed.emit(false)
 	EventBus.notify("Failed to save game!", "error")
 	return false
+
+## ── Company world: one course per location ────────────────────────────────
+## Money, reputation, the calendar, milestones and analytics belong to the
+## company; terrain, entities, holes, land, staff and the local records belong
+## to a single course site. These helpers snapshot and restore one site.
+
+## Game-state keys that describe the site rather than the company.
+const SITE_STATE_KEYS: Array[String] = [
+	"course_name", "theme", "green_fee", "tee_booking_interval",
+	"heightmap_noise_seed", "stagnation_hole_count", "stagnation_day_started",
+]
+
+## Save keys that must never be captured in (or restored from) a site snapshot.
+const SNAPSHOT_COMPANY_KEYS: Array[String] = [
+	"world_map", "player_golfer", "milestones", "daily_history",
+	"yearly_stats", "yearly_days", "yearly_satisfaction_sum",
+	"previous_year_stats", "previous_year_satisfaction", "prior_year_stats",
+]
+
+## The course the player is leaving, ready to be stored on the world map.
+func build_location_snapshot() -> Dictionary:
+	var data := _build_save_data()
+	for key in SNAPSHOT_COMPANY_KEYS:
+		data.erase(key)
+	var state: Dictionary = (data.get("game_state", {}) as Dictionary).duplicate()
+	var site_state: Dictionary = {}
+	for key in SITE_STATE_KEYS:
+		if state.has(key):
+			site_state[key] = state[key]
+	data["game_state"] = site_state
+	data["location_id"] = WorldMap.active_location_id
+	return data
+
+## Make a stored course the live one, keeping the company's money, calendar,
+## reputation, milestones and analytics.
+func switch_to_location(snapshot: Dictionary) -> bool:
+	if snapshot.is_empty():
+		return false
+	var data := snapshot.duplicate(true)
+	var state: Dictionary = data.get("game_state", {})
+	state["money"] = GameManager.money
+	state["reputation"] = GameManager.reputation
+	state["current_day"] = GameManager.current_day
+	state["loan_balance"] = GameManager.loan_balance
+	state["difficulty"] = DifficultyPresets.to_string_name(GameManager.current_difficulty)
+	data["game_state"] = state
+	data["player_golfer"] = GameManager.player_profile.serialize()
+	data["world_map"] = WorldMap.serialize()
+	data["milestones"] = milestone_manager.serialize() if milestone_manager else {}
+	data["daily_history"] = GameManager.daily_history
+	data["yearly_stats"] = _serialize_stats(GameManager.yearly_stats)
+	data["yearly_days"] = GameManager.yearly_days
+	data["yearly_satisfaction_sum"] = GameManager.yearly_satisfaction_sum
+	data["previous_year_stats"] = _serialize_stats(GameManager.previous_year_stats) if GameManager.previous_year_stats else {}
+	data["previous_year_satisfaction"] = GameManager.previous_year_satisfaction
+	data["prior_year_stats"] = _serialize_stats(GameManager.prior_year_stats) if GameManager.prior_year_stats else {}
+	_apply_save_data(data)
+	# Rebuilding the hole list, visualisations and camera is exactly what the
+	# load path already does, so announce the swap like a load.
+	EventBus.load_completed.emit(true)
+	return true
 
 func load_game(save_name: String) -> bool:
 	var save_path = SAVE_DIR + save_name + ".save"
@@ -242,6 +305,10 @@ func _build_save_data() -> Dictionary:
 	if milestone_manager:
 		data["milestones"] = milestone_manager.serialize()
 
+	# Company world: owned locations, their prices, the land that came with
+	# them, and the course snapshot of every location left behind.
+	data["world_map"] = WorldMap.serialize()
+
 	# Shot heatmap
 	if GameManager.shot_heatmap_tracker:
 		data["shot_heatmap"] = GameManager.shot_heatmap_tracker.serialize()
@@ -303,6 +370,16 @@ func _apply_save_data(data: Dictionary) -> void:
 
 	# Active owner rounds are transient, like visitor rounds.
 	GameManager.player_profile = PlayerGolferProfile.from_data(data.get("player_golfer", {}))
+
+	# Company world: which locations are owned, their prices and the courses
+	# stored for them. Older saves carry no world: give the company a matching
+	# location so the world map screen still has somewhere to build.
+	if data.has("world_map"):
+		WorldMap.deserialize(data.get("world_map", {}))
+	else:
+		WorldMap.ensure_legacy_world(GameManager.current_theme)
+	# The course being loaded is the live one: a stored copy of it is stale.
+	WorldMap.clear_snapshot(WorldMap.active_location_id)
 
 	# Game state (with fallbacks for older save versions)
 	var game = data.get("game_state", data)  # v1 had flat structure
@@ -446,6 +523,13 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager.update_course_rating()
 	if GameManager.wind_system and GameManager.wind_system.has_method("_emit_wind_changed"):
 		GameManager.wind_system._emit_wind_changed()
+
+	# Feature toggles survive a load and a location switch: keep the disabled
+	# features neutral rather than letting restored weather/wind data back in.
+	if not GameManager.weather_enabled and GameManager.weather_system:
+		GameManager.weather_system.force_clear_weather()
+	if not GameManager.wind_enabled and GameManager.wind_system:
+		GameManager.wind_system.force_calm()
 
 	# The day is already in play. Resume simulation after the save state is restored
 	# so a loaded course does not sit frozen in a separate build mode.

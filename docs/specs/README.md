@@ -1,6 +1,6 @@
 # Proposed Specs — Priority Review
 
-**Date:** 2026-02-27
+**Date:** 2026-02-27 (spec inventory updated 2026-10-03)
 **Context:** Alpha 0.1.0, LAUNCH_EVALUATION rated 6.5/10
 
 This document reviews the current game state and proposes specs that should be written next, ordered by impact. Each entry includes the rationale, what the spec should cover, and suggested scope.
@@ -17,6 +17,7 @@ This document reviews the current game state and proposes specs that should be w
 | 3 | Seasonal System Expansion | [`completed/seasonal-system-expansion.md`](completed/seasonal-system-expansion.md) | HIGH | Completed |
 | 4 | Economic Balance & Tuning | [`completed/economic-balance-tuning.md`](completed/economic-balance-tuning.md) | HIGH | Completed |
 | 5 | Premium Land & Prebuilt Courses | [`completed/premium-land-prebuilt-courses.md`](completed/premium-land-prebuilt-courses.md) | MEDIUM-HIGH | Completed |
+| 5b | World Map & New Game Flow | [`completed/world-map-new-game-flow.md`](completed/world-map-new-game-flow.md) | HIGH | Completed |
 | 6 | Career / Progression Mode | [`career-progression-mode.md`](career-progression-mode.md) | MEDIUM-HIGH | Proposal |
 | 7 | Audio Design Document | [`audio-design.md`](audio-design.md) | MEDIUM | Proposal |
 | 8 | Notification & Event Feed | [`completed/notification-event-feed.md`](completed/notification-event-feed.md) | MEDIUM | Completed |

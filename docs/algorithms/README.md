@@ -39,6 +39,7 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 - [Terrain Types](terrain-types.md) — All 20 terrain types: ids, families, costs, lies, roll-out, AI scores, hotkeys, and the Firm Fairway / Pot Bunker / Stream / Deep Rough / Waste Bunker / Rocks / Brush tiles
 
 ### Economy & Progression
+- [World Map, Locations & Site Land](world-map.md) — Buying destinations, site sizes and prestige pricing, how much land comes pre-cleared, Reset World, the generated first course, and the two-layer shader globe (baked land mask, marker layer, flick inertia)
 - [Premium Land & Prebuilt Courses](premium-land.md) — 3-tier land parcels (Standard/Premium/Elite), cost multipliers, terrain feature generation, prebuilt course packages
 - [Economy & Financial System](economy.md) — Green fees, operating costs, loans, staff tiers, profit calculation
 - [Reputation System](reputation.md) — Daily decay, per-golfer mood-based gains, tournament bonuses, prestige multiplier

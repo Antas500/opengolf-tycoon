@@ -47,7 +47,9 @@ Generation uses a deterministic RNG seed based on parcel position, so the same p
 
 ## Prebuilt Course Packages
 
-Prebuilt courses are purchased from the **Main Menu** before starting a new game. Money earned in previous games carries over (GameManager is an autoload that persists across scene reloads). The package cost is deducted, then a new game starts with the course pre-built.
+Prebuilt courses are purchased before starting a new game. (The old main-menu package picker
+was replaced by the World Map / Start New Game flow — see [world-map.md](world-map.md) —
+and `_on_main_menu_prebuilt_course()` remains as a legacy entry point rather than a menu item.) Money earned in previous games carries over (GameManager is an autoload that persists across scene reloads). The package cost is deducted, then a new game starts with the course pre-built.
 
 | Package | Holes | Par | Cost |
 |---------|-------|-----|------|

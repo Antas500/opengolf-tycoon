@@ -13,7 +13,7 @@ static func get_modifiers(preset: int) -> Dictionary:
 		Preset.EASY:
 			return {
 				"name": "Easy",
-				"description": "Relaxed pace. More starting money, forgiving costs, slower reputation decay.",
+				"description": "Relaxed pace: forgiving costs, busier tee sheets and a patient bank.",
 				"starting_money": 40000,
 				"maintenance_multiplier": 0.8,
 				"spawn_rate_multiplier": 1.2,
@@ -25,7 +25,7 @@ static func get_modifiers(preset: int) -> Dictionary:
 		Preset.HARD:
 			return {
 				"name": "Hard",
-				"description": "Tight budget, costly upkeep, demanding golfers. For experienced players.",
+				"description": "Costly upkeep, fewer golfers and no overdraft. For experienced players.",
 				"starting_money": 15000,
 				"maintenance_multiplier": 1.3,
 				"spawn_rate_multiplier": 0.8,

@@ -13,6 +13,10 @@ OpenGolf Tycoon is a spiritual successor to the classic SimGolf (2002). Design a
 
 ## Current Features
 
+### Locations & the World Map
+
+A company grows by buying golf course locations around the world — **27 destinations** from Monterey and San Diego to Scotland, Spain, Jamaica, Dubai, Japan and Australia — each with its own theme, land size, globe position and price. A location's land comes partly unlocked; the amount is rolled per world and raises the price, so **Reset World** gives a fresh set of deals. Every location is a separate site with its own terrain, buildings, staff and holes, while money, reputation, the calendar and milestones belong to the company, so players can switch between the courses they own without starting over.
+
 ### Course Themes
 
 Choose from 10 distinct course environments, each with unique terrain colors, gameplay modifiers, and visual style:
@@ -97,7 +101,10 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 ### UI & Controls
 
 - **Isometric view** — 2:1 diamond terrain with SimGolf-style rotation: **Q** / **Shift+Q** rotate the course, **I** toggles isometric / top-down, plus W/A/S/D pan and mouse-wheel zoom
-- **Main menu** — New Game (with theme selection and course naming), Load Game, Settings, Quit
+- **Main menu** — six entries only: **Start New Game**, **Quick Start**, **Continue**, **Load Game**, **Settings**, **Quit**. The screen is laid out by weight rather than listed: Start New Game and Quick Start are hero cards, Continue is a card showing the newest save's course, day and slot, and the three utilities sit together at the quiet end. Behind it, a golf hole is drawn in code (sky, hills, fairway, green, flag and drifting clouds) — no texture assets
+- **Start New Game** — company name (or roll the die for a random one), difficulty (Easy/Normal/Hard, each card spelling out what it changes: upkeep, golfer numbers, building costs, reputation decay), starting money ($100K / $150K / $200K / Unlimited), generated holes for the first course (0/3/6/9/18, with the par for each) and the Weather / Wind / Seasons game features. A live plan of the course that will be generated redraws as you pick a hole count, a summary follows every choice, and **Choose Location** opens the World Map (Back or Esc returns to the title screen)
+- **Quick Start** — jumps straight to the World Map with defaults (random company name, Normal, $100,000, no generated holes, all features on)
+- **World Map** — a globe with a marker per destination, a list giving every location's name, theme, size and cost, Buy/Play actions, and **Reset World** to re-roll each location's unlocked land (and therefore its price); return from the pause menu at any time to buy more locations or swap the one you are playing
 - **Pause menu** — Escape key opens pause overlay with Resume, Settings, Save, and Quit options
 - **Camera while paused** — the game freezes but the camera stays controllable: pan with W/A/S/D or middle-mouse drag, zoom with the scroll wheel (also works from behind the pause and settings overlays)
 - **Settings menu** — Display, audio, and gameplay options
@@ -118,13 +125,17 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 
 ### Save / Load
 
-Saved state includes: terrain tiles, elevation, entity positions, hole configurations, economy state (money, reputation, green fee), day/hour, wind, weather, seasons, course theme, and course records. Auto-saves at day end (with indicator); manual save with named slots. Quit to Menu option available from pause menu.
+Saved state includes: the company world map (settings, owned locations, unlocked land, the active location and a snapshot per owned site), terrain tiles, elevation, entity positions, hole configurations, economy state (money, reputation, green fee), day/hour, wind, weather, seasons, course theme, and course records. Company-level state (money, reputation, calendar, milestones) is shared across every location; course-level state is kept per site. Auto-saves at day end (with indicator); manual save with named slots. Quit to Menu option available from pause menu.
 
 ### Platforms
 
 Playable on **desktop (Windows/macOS/Linux), tablets, phones, and in the browser** (Web build, including the Cloudflare Pages deployment).
 
-The game renders at the window's native resolution and adapts to the screen: the course view keeps the reference physical size on large desktops while staying 1:1 (tiles never shrink) on phones and tablets; the HUD switches to a compact layout on narrow windows (narrower stats column, smaller minimap, scrollable main menu with larger tap targets); popup panels clamp to the available space and scroll instead of spilling off small screens. Desktop behavior at 1600x1000 is unchanged from the original fixed-viewport layout.
+The title screen has four arrangements, picked from the window size: a **wide** split (title and hero cards left, a Continue rail right) on desktop, a **centred column** on tablets, a **side-by-side compact** layout for wide-but-short windows (rotated phone, squat browser window) so nothing has to be scrolled, and a **single scrollable column** on phones with every target at least 46 px tall.
+
+The Start New Game screen does the same with its own four arrangements: on desktops and landscape tablets the options sit on a sheet of cards beside a "your company" rail with the course plan, a summary and the Choose Location button, scaled to fill the window without scrolling; portrait tablets get one centred column with the plan beside the hole picker and Choose Location pinned to the bottom; rotated phones get two compact panels that fit without scrolling; and phones get one scrolling column of thumb-sized pickers over a pinned Choose Location button.
+
+The game renders at the window's native resolution and adapts to the screen: the course view keeps the reference physical size on large desktops while staying 1:1 (tiles never shrink) on phones and tablets; the HUD switches to a compact layout on narrow windows (narrower stats column, smaller minimap); popup panels clamp to the available space and scroll instead of spilling off small screens. Desktop behavior at 1600x1000 is unchanged from the original fixed-viewport layout.
 
 ---
 
@@ -168,7 +179,7 @@ simgolf-godot/
 │   ├── main/main.tscn      # Primary game scene
 │   └── entities/golfer.tscn
 ├── scripts/
-│   ├── autoload/           # Singletons: GameManager, EventBus, SaveManager,
+│   ├── autoload/           # Singletons: GameManager, EventBus, WorldMap, SaveManager,
 │   │                       #   FeedbackManager, SoundManager, ShadowSystem
 │   ├── course/             # HoleVisualizer, DifficultyCalculator, EntityLayer
 │   ├── effects/            # RainOverlay, HoleInOneCelebration, SandSprayEffect
@@ -176,12 +187,13 @@ simgolf-godot/
 │   ├── managers/           # GolferManager, BallManager, HoleManager, PlacementManager,
 │   │                       #   BuildingRegistry, TournamentManager
 │   ├── systems/            # WindSystem, WeatherSystem, DayNightSystem, CourseRatingSystem,
-│   │                       #   CourseTheme, ShotAI, GolferNeeds, SeasonSystem,
-│   │                       #   MilestoneSystem, TutorialSystem, and more
+│   │                       #   CourseTheme, WorldLocations, GeneratedCourse, ShotAI, GolferNeeds,
+│   │                       #   SeasonSystem, MilestoneSystem, TutorialSystem, and more
 │   ├── terrain/            # TerrainGrid, TerrainTypes, TerrainPalette, overlays
 │   ├── tools/              # HoleCreationTool, ElevationTool, UndoManager
-│   ├── ui/                 # 39 UI components: MainMenu, PauseMenu, SettingsMenu,
-│   │                       #   MiniMap, FinancialPanel, MilestonesPanel, and more
+│   ├── ui/                 # UI components: MainMenu, StartNewGameScreen, WorldMapScreen,
+│   │                       #   GlobeMap, PauseMenu, SettingsMenu, MiniMap, FinancialPanel,
+│   │                       #   MilestonesPanel, and more
 │   └── utils/              # IsometricCamera
 ├── tests/
 │   └── unit/               # GUT framework unit tests
@@ -210,6 +222,7 @@ simgolf-godot/
 - **Player-controlled golfer mode** — Play your own course as a golfer
 - **Performance optimization** — Object pooling, occlusion for large courses
 - **Career mode** — Progression, unlockables, achievements
+- **More locations & prebuilt sites** — Additional destinations and turnkey courses
 - **Course sharing** — Export/import course layouts
 - **Seasonal visuals** — Spring/summer/fall/winter terrain appearance changes
 
