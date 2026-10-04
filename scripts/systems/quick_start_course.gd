@@ -202,6 +202,10 @@ static func _clear_entities_on_course(terrain_grid: TerrainGrid, entity_layer: E
 		entity_layer.remove_rock(pos)
 		terrain_grid.set_tile(pos, surface)
 
+## Where the arrival garden's clubhouse stands. main.gd reads this to know
+## which tile to ask for when it makes sure the course has one.
+const CLUBHOUSE_TILE := Vector2i(54, 61)
+
 ## Compact central arrival garden, outside the nine playing corridors.
 static func _build_arrival_garden(grid: TerrainGrid, entities: EntityLayer) -> void:
 	if not entities: return
@@ -215,7 +219,7 @@ static func _build_arrival_garden(grid: TerrainGrid, entities: EntityLayer) -> v
 			entities.remove_tree(p)
 			entities.remove_rock(p)
 			grid.set_tile(p, TerrainTypes.Type.PATH if y >= 65 and y <= 67 else TerrainTypes.Type.GRASS)
-	for item in [["clubhouse",Vector2i(54,61)],["coffee_house",Vector2i(59,61)],["restroom",Vector2i(56,68)],["snack_bar",Vector2i(66,74)]]:
+	for item in [["clubhouse",CLUBHOUSE_TILE],["coffee_house",Vector2i(59,61)],["restroom",Vector2i(56,68)],["snack_bar",Vector2i(66,74)]]:
 		var kind: String = item[0]
 		var position: Vector2i = item[1]
 		for dx in range(buildings[kind].size[0]):

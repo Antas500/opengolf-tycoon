@@ -63,6 +63,19 @@ func cancel_placement() -> void:
 func can_place_at(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 	return get_placement_error(grid_pos, terrain_grid).is_empty()
 
+## The terrain a building may stand on. One list for the player's Buildings tab
+## and for a clubhouse being carried to a new spot (see CourseClubhouse).
+static func building_terrain_ok(tile_type: int) -> bool:
+	return tile_type in [
+		TerrainTypes.Type.GRASS,
+		TerrainTypes.Type.ROUGH,
+		TerrainTypes.Type.HEAVY_ROUGH,
+		TerrainTypes.Type.DEEP_ROUGH,
+		TerrainTypes.Type.FAIRWAY,
+		TerrainTypes.Type.FIRM_FAIRWAY,
+		TerrainTypes.Type.PATH,
+	]
+
 func get_placement_error(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> String:
 	if placement_mode == PlacementMode.NONE:
 		return "Select an item first."
@@ -176,21 +189,9 @@ func _can_place_building(grid_pos: Vector2i, terrain_grid: TerrainGrid) -> bool:
 			if not terrain_grid.is_valid_position(check_pos):
 				return false
 			
-			var tile_type = terrain_grid.get_tile(check_pos)
-			
-			# Buildings can be placed on any grass-type terrain
-			# placeable_on_course buildings can also be placed on path
-			var valid_tiles = [
-				TerrainTypes.Type.GRASS,
-				TerrainTypes.Type.ROUGH,
-				TerrainTypes.Type.HEAVY_ROUGH,
-				TerrainTypes.Type.DEEP_ROUGH,
-				TerrainTypes.Type.FAIRWAY,
-				TerrainTypes.Type.FIRM_FAIRWAY,
-				TerrainTypes.Type.PATH
-			]
-			
-			if not (tile_type in valid_tiles):
+			# Buildings stand on grass-type terrain or a cart path; greens,
+			# tees, sand and water stay clear (shared with the clubhouse move).
+			if not building_terrain_ok(terrain_grid.get_tile(check_pos)):
 				return false
 	
 	return true

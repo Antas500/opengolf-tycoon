@@ -130,6 +130,17 @@ func get_footprint() -> Array:
 			footprint.append(grid_position + Vector2i(x, y))
 	return footprint
 
+## A required building is part of the course itself: the clubhouse. There can
+## only ever be one, it can never be bulldozed, and it is moved rather than
+## demolished (see CourseClubhouse). Everything else is optional scenery.
+func is_required() -> bool:
+	return building_data.get("required", false)
+
+func is_clubhouse() -> bool:
+	# Literal "clubhouse" (rather than CourseClubhouse.BUILDING_TYPE) so the
+	# building script does not depend on the clubhouse system that places it.
+	return building_type == "clubhouse"
+
 ## Check if this building can be upgraded
 func can_upgrade() -> bool:
 	if not building_data.get("upgradeable", false):
@@ -217,7 +228,13 @@ func get_satisfaction_bonus() -> float:
 func get_operating_cost() -> int:
 	return building_data.get("operating_cost", 0)
 
-func destroy() -> void:
+## Take the building off the course. A required building (the clubhouse) has
+## no destroy path at all — callers that might touch one must go through
+## CourseClubhouse.move_to instead (or pass force for teardown-only flows).
+func destroy(force: bool = false) -> void:
+	if is_required() and not force:
+		push_warning("Refusing to destroy required building: %s" % building_type)
+		return
 	building_destroyed.emit(self)
 	queue_free()
 

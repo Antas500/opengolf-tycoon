@@ -153,12 +153,17 @@ static func _get_layout(hole_count: int) -> Array:
 			return LAYOUT_18_FRONT + LAYOUT_18_BACK
 	return []
 
-## A small clubhouse cluster sits in the pocket every layout leaves clear
+## The clubhouse every layout leaves its pocket for (see AMENITY_SPOTS). It is
+## placed through CourseClubhouse.ensure rather than directly: if the pocket is
+## ever unusable — a tree-dotted patch, a future layout — the clubhouse still
+## lands somewhere legal instead of the course going without one.
+const CLUBHOUSE_OFFSET: Vector2i = Vector2i(1, 6)
+
+## A small amenity cluster sits in the pocket every layout leaves clear
 ## (offsets (1,6)..(8,11) from the anchor) and gives a generated course a
 ## revenue stream from day one. A footprint that would sit on a playing surface
 ## or another building is skipped rather than bulldozed into the course.
 const AMENITY_SPOTS: Array = [
-	["clubhouse", Vector2i(1, 6)],
 	["coffee_house", Vector2i(6, 6)],
 	["snack_bar", Vector2i(6, 9)],
 	["restroom", Vector2i(8, 9)],
@@ -167,6 +172,7 @@ const AMENITY_SPOTS: Array = [
 static func _place_starter_amenity(terrain_grid: TerrainGrid, entity_layer: EntityLayer, anchor: Vector2i) -> void:
 	if not entity_layer:
 		return
+	CourseClubhouse.ensure(terrain_grid, entity_layer, anchor + CLUBHOUSE_OFFSET)
 	var buildings: Dictionary = {}
 	var raw = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))
 	if raw is Dictionary and raw.has("buildings"):

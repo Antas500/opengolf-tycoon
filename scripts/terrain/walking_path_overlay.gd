@@ -96,11 +96,18 @@ func _ensure_entity_connections() -> void:
 		el.building_removed.connect(_on_entity_building_changed)
 	if el.has_signal("building_placed") and not el.building_placed.is_connected(_on_entity_building_placed):
 		el.building_placed.connect(_on_entity_building_placed)
+	# Moving the clubhouse moves the paving: the trail that reached its old
+	# tiles reverts to dirt, and the trail at its new doorstep is paved.
+	if el.has_signal("building_moved") and not el.building_moved.is_connected(_on_entity_building_moved):
+		el.building_moved.connect(_on_entity_building_moved)
 
 func _on_entity_building_changed(_grid_pos: Vector2i) -> void:
 	rebuild()
 
 func _on_entity_building_placed(_building, _cost: int) -> void:
+	rebuild()
+
+func _on_entity_building_moved(_building, _from_pos: Vector2i, _to_pos: Vector2i) -> void:
 	rebuild()
 
 ## Rescan the walking-path layer and the network it forms. Cheap: the walk

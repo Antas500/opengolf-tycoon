@@ -21,6 +21,9 @@ var _cached_groups: Dictionary = {}  # group_id -> Array[Golfer]
 var _cached_sorted_group_ids: Array = []
 var _groups_dirty: bool = true  # Rebuild groups when golfers are added/removed
 
+## True while clear_all_golfers() empties the course (see _on_golfer_left_course).
+var _clearing_golfers: bool = false
+
 ## Throttle visual offset recalculation (O(n²) distance checks)
 var _visual_offset_timer: float = 0.0
 const VISUAL_OFFSET_INTERVAL: float = 0.2  # Recalculate every 200ms
@@ -34,10 +37,13 @@ signal golfer_clicked(golfer: Golfer)
 func _ready() -> void:
 	# Connect to EventBus
 	EventBus.golfer_finished_round.connect(_on_golfer_finished_round)
+	EventBus.golfer_left_course.connect(_on_golfer_left_course)
 
 func _exit_tree() -> void:
 	if EventBus.golfer_finished_round.is_connected(_on_golfer_finished_round):
 		EventBus.golfer_finished_round.disconnect(_on_golfer_finished_round)
+	if EventBus.golfer_left_course.is_connected(_on_golfer_left_course):
+		EventBus.golfer_left_course.disconnect(_on_golfer_left_course)
 
 func get_group_size_weights() -> Array:
 	"""Get weighted probabilities for group sizes based on green fee"""
@@ -118,11 +124,18 @@ func get_max_concurrent_golfers() -> int:
 	var guests_per_hole := 2 if GameManager.tee_booking_interval >= 180 else 4
 	return max(4, holes * guests_per_hole)
 
+## A golfer whose round is over. LEAVING is the walk home and the clubhouse
+## visit that follows the last putt; FINISHED is once they have gone inside.
+## Neither is in play any more, so the group-ahead safety checks, the tee
+## bookkeeping and the course capacity count all skip both.
+static func _is_off_the_course(golfer: Golfer) -> bool:
+	return golfer.current_state in [Golfer.State.FINISHED, Golfer.State.LEAVING]
+
 func _is_at_golfer_cap() -> bool:
 	"""Check if the course has reached its maximum golfer capacity."""
 	var non_finished = 0
 	for golfer in active_golfers:
-		if golfer.current_state != Golfer.State.FINISHED:
+		if not _is_off_the_course(golfer):
 			non_finished += 1
 	return non_finished >= get_max_concurrent_golfers()
 
@@ -158,7 +171,7 @@ func _is_hole_clear_of_earlier_golfers(hole_index: int) -> bool:
 	"""Check if any golfers from earlier groups are still playing this hole.
 	Used for par 3 green-clear checks."""
 	for golfer in active_golfers:
-		if golfer.current_state == Golfer.State.FINISHED:
+		if _is_off_the_course(golfer):
 			continue
 		if golfer.current_hole == hole_index:
 			return false  # Someone is still on this hole
@@ -183,7 +196,7 @@ func _is_cone_clear_of_golfers(origin: Vector2, target: Vector2, lateral_radius:
 	var max_check_distance = shot_distance + lateral_radius  # Landing zone extends to target + spread
 
 	for golfer in active_golfers:
-		if golfer.current_state == Golfer.State.FINISHED:
+		if _is_off_the_course(golfer):
 			continue
 
 		# Skip golfers in the excluded group (same group as shooter)
@@ -227,7 +240,7 @@ func _is_area_clear_of_golfers(target: Vector2, radius: float, exclude_group_id:
 	exclude_group_id: golfers in this group are skipped (-1 to check all groups)
 	restrict_to_hole: only check golfers on this hole (-1 to check all holes)"""
 	for golfer in active_golfers:
-		if golfer.current_state == Golfer.State.FINISHED:
+		if _is_off_the_course(golfer):
 			continue
 
 		# Skip golfers in the excluded group (same group as shooter)
@@ -482,7 +495,7 @@ func _get_group_current_hole(group: Array) -> int:
 	var current_hole: int = -1
 	var fewest_played: int = 0
 	for golfer in group:
-		if golfer.current_state == Golfer.State.FINISHED:
+		if _is_off_the_course(golfer):
 			continue
 		if golfer.current_hole < 0 or golfer.current_hole >= hole_count:
 			continue
@@ -583,8 +596,8 @@ func _is_tee_clear_of_other_groups(hole_index: int, current_group_id: int) -> bo
 		# Skip golfers in our group or later groups
 		if golfer.group_id >= current_group_id:
 			continue
-		# Skip finished golfers
-		if golfer.current_state == Golfer.State.FINISHED:
+		# Skip golfers who are finished or walking home
+		if _is_off_the_course(golfer):
 			continue
 		# Check if this golfer is at the same tee and actively shooting
 		if golfer.current_hole == hole_index and golfer.current_strokes == 0:
@@ -616,7 +629,7 @@ func _is_landing_area_clear(shooting_golfer: Golfer, _group_golfers: Array) -> b
 		for golfer in active_golfers:
 			if golfer.group_id == shooting_golfer.group_id:
 				continue
-			if golfer.current_state == Golfer.State.FINISHED:
+			if _is_off_the_course(golfer):
 				continue
 			if golfer.group_id > shooting_golfer.group_id:
 				continue
@@ -689,6 +702,10 @@ func _advance_golfer(golfer: Golfer) -> void:
 	"""Advance a specific golfer to their next shot"""
 	var course_data = GameManager.course_data
 	if not course_data or course_data.holes.is_empty():
+		return
+	# A golfer whose round is over is walking home: a ball that was still
+	# rolling when they finished must not pull them back into play.
+	if _is_off_the_course(golfer):
 		return
 
 	var next_hole_index = golfer.current_hole
@@ -835,6 +852,11 @@ func spawn_golfer(golfer_name: String, skill_level: float = 0.5, group_id: int =
 	_groups_dirty = true
 	golfer.golfer_selected.connect(_on_golfer_selected)
 
+	# Guests arrive through the clubhouse: they appear at its door and walk to
+	# the first tee before the turn system can pick them (only an IDLE golfer
+	# plays, and the arrival walk leaves them WALKING until they get there).
+	_send_golfer_in_from_clubhouse(golfer)
+
 	# Process green fee payment
 	GameManager.process_green_fee_payment(golfer.golfer_id, golfer_name)
 
@@ -842,6 +864,25 @@ func spawn_golfer(golfer_name: String, skill_level: float = 0.5, group_id: int =
 	golfer_spawned.emit(golfer)
 
 	return golfer
+
+## Start a newly spawned guest on the walk from the clubhouse door to the first
+## open tee. Without a clubhouse (or terrain) the golfer is left where the old
+## flow left them: the turn system seats them on the tee when their group is up.
+func _send_golfer_in_from_clubhouse(golfer: Golfer) -> void:
+	var terrain_grid = GameManager.terrain_grid
+	var course_data = GameManager.course_data
+	if terrain_grid == null or course_data == null or course_data.holes.is_empty():
+		return
+	var clubhouse := CourseClubhouse.find(GameManager.entity_layer)
+	if clubhouse == null:
+		return
+	var door := CourseClubhouse.front_tile(clubhouse, terrain_grid, GameManager.entity_layer)
+	if door.x < 0:
+		return
+	var first_hole := _find_next_open_hole(0, course_data)
+	if first_hole < 0 or first_hole >= course_data.holes.size():
+		return
+	golfer.begin_arrival_from_clubhouse(door, course_data.holes[first_hole].tee_position)
 
 ## Spawn a random golfer with tier-based skills
 func spawn_random_golfer(group_id: int = -1) -> Golfer:
@@ -989,7 +1030,10 @@ func remove_golfer(golfer_id: int) -> void:
 			if golfer.golfer_selected.is_connected(_on_golfer_selected):
 				golfer.golfer_selected.disconnect(_on_golfer_selected)
 			golfer.queue_free()
-			EventBus.golfer_left_course.emit(golfer_id)
+			# A golfer who walked home announced leaving at the clubhouse door;
+			# anyone else taken off the course says so now.
+			if not golfer.has_left_course():
+				EventBus.golfer_left_course.emit(golfer_id)
 			golfer_removed.emit(golfer_id)
 			return
 
@@ -999,25 +1043,11 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 	if not finished_golfer:
 		return
 
-	# Tournament golfers don't give reputation or record daily stats — skip to group removal
-	if finished_golfer.is_owner_round:
-		return
-
-	if finished_golfer.is_tournament_golfer:
-		var t_group_id = finished_golfer.group_id
-		var t_all_finished = true
-		var t_group_golfers: Array[Golfer] = []
-		for golfer in active_golfers:
-			if golfer.group_id == t_group_id:
-				t_group_golfers.append(golfer)
-				if golfer.current_state != Golfer.State.FINISHED:
-					t_all_finished = false
-		if t_all_finished:
-			# (Timer-node delay: a pending SceneTreeTimer await would leak at quit.)
-			await Delay.seconds(self, 1.0)
-			for golfer in t_group_golfers:
-				if is_instance_valid(golfer):
-					remove_golfer(golfer.golfer_id)
+	# Tournament and owner-round golfers don't give reputation or record daily
+	# stats. Taking anyone off the course is not this signal's job any more:
+	# the round ends here, but the golfer still walks back to the clubhouse —
+	# see _on_golfer_left_course.
+	if finished_golfer.is_owner_round or finished_golfer.is_tournament_golfer:
 		return
 
 	# Record tier for daily statistics
@@ -1051,25 +1081,31 @@ func _on_golfer_finished_round(golfer_id: int, total_strokes: int, _total_par: i
 	if finished_golfer.hole_scores.size() >= finished_golfer._round_total_holes:
 		GameManager.modify_reputation(reputation_gain)
 
-	var group_id = finished_golfer.group_id
-
-	# Check if all golfers in this group are finished
-	var all_finished = true
-	var group_golfers: Array[Golfer] = []
-	for golfer in active_golfers:
-		if golfer.group_id == group_id:
-			group_golfers.append(golfer)
-			if golfer.current_state != Golfer.State.FINISHED:
-				all_finished = false
-
-	if all_finished:
-		# Wait a moment so players can see the group finish
-		# (Timer-node delay: a pending SceneTreeTimer await would leak at quit.)
-		await Delay.seconds(self, 1.0)
-		# Remove all golfers in the group (check validity — golfers may have been freed by a save/load)
-		for golfer in group_golfers:
-			if is_instance_valid(golfer):
-				remove_golfer(golfer.golfer_id)
+## A golfer has gone indoors (Golfer._leave_course). A group leaves the course
+## together: once every member of the group has finished their round and walked
+## back, the group is taken off so the player can watch them go. This is the
+## only place golfers are removed for finishing — the round-over signal fires
+## before the walk home, so it cannot be.
+func _on_golfer_left_course(golfer_id: int) -> void:
+	if _clearing_golfers:
+		return
+	var golfer := get_golfer(golfer_id)
+	if golfer == null or golfer.is_owner_round:
+		return
+	var group_id := golfer.group_id
+	var group: Array[Golfer] = []
+	for member in active_golfers:
+		if member.group_id == group_id:
+			group.append(member)
+			if member.current_state != Golfer.State.FINISHED:
+				return  # Somebody is still walking home; wait for them
+	# Wait a moment so players can see the group finish
+	# (Timer-node delay: a pending SceneTreeTimer await would leak at quit.)
+	await Delay.seconds(self, 1.0)
+	# Remove all golfers in the group (check validity — golfers may have been freed by a save/load)
+	for member in group:
+		if is_instance_valid(member):
+			remove_golfer(member.golfer_id)
 
 ## Get all active golfers
 func get_active_golfers() -> Array[Golfer]:
@@ -1088,6 +1124,10 @@ func get_golfer(golfer_id: int) -> Golfer:
 
 ## Clear all golfers from the course (used when loading saves)
 func clear_all_golfers() -> void:
+	# The whole course is being emptied (save/load, teardown). Everyone who
+	# watches golfers still hears about each one leaving, but the group-removal
+	# handler must not fire for golfers that are already on their way out.
+	_clearing_golfers = true
 	for golfer in active_golfers:
 		EventBus.golfer_left_course.emit(golfer.golfer_id)
 		golfer.queue_free()
@@ -1098,6 +1138,7 @@ func clear_all_golfers() -> void:
 	next_golfer_id = 0
 	next_group_id = 0
 	time_since_last_spawn = 0.0
+	_clearing_golfers = false
 
 ## Serialize all active golfers
 func serialize_golfers() -> Array:

@@ -31,6 +31,14 @@ Groups of 1–4 golfers spawn together. Higher green fees attract larger groups 
 
 Before spawning a new group, the system checks that the first tee's landing zone is clear using a **cone-shaped directional check**. This prevents new groups from hitting into golfers already on the course.
 
+### Arriving Through the Clubhouse
+
+A new group does not appear on the first tee. Every guest is placed on the clubhouse's front door tile and walks the course to the first open tee (`Golfer.begin_arrival_from_clubhouse()`), with their ball already waiting there. The turn system only ever picks an IDLE golfer, so the arrival walk doubles as the group's entry queue: nobody tees off straight out of the doorway. A course with no clubhouse (only possible in a hand-built fixture or a stale save) keeps the old behaviour and seats the guest when their turn comes.
+
+### Leaving Through the Clubhouse
+
+The round ends when the last putt drops, but the golfer stays on the course for a few seconds more: they walk back to the clubhouse door, spend a moment there (that visit is what pays the clubhouse its per-golfer income and restores their needs), and only then turn `FINISHED` — state `LEAVING` (appended last, so saved state ids never shift) covers the walk home. Only then is the group taken off the course, once every member of the group is inside. `LEAVING` counts as off the course for capacity, tee/landing-zone clearance, hole-clear checks, staff service and amenity visits, so a group walking home never blocks play or holds a slot.
+
 ---
 
 ## Algorithm
@@ -224,6 +232,10 @@ for each active golfer (from earlier groups):
 | Landing zone base radius | `golfer_manager.gd:85` | 2.0 tiles | Wider = more cautious spawning |
 | Landing zone variance | `golfer_manager.gd:86` | 0.3 (30%) | Higher = more cautious on long shots |
 | Cone half-angle | `golfer_manager.gd:147` | 45 degrees | Wider = more conservative safety check |
+| Arrival walk | `golfer.gd::begin_arrival_from_clubhouse` | door tile → first tee | Where guests start; skipped without a clubhouse |
+| Walk-home timeout | `golfer.gd` `DEPARTURE_TIMEOUT_SECONDS` | 30 s | After this the clubhouse visit happens wherever the golfer is |
+| Clubhouse visit | `golfer.gd` `CLUBHOUSE_VISIT_SECONDS` | 1.6 s | How long a golfer stands at the door before leaving |
+| Group send-off | `golfer_manager.gd::_on_golfer_left_course` | 1.0 s | Pause after the last golfer is inside before the group is removed |
 
 ## September 2026 tuning
 

@@ -21,6 +21,8 @@ signal tree_placed(tree: TreeEntity, cost: int)
 signal rock_placed(rock: Rock, cost: int)
 signal decoration_placed(decoration: Decoration, cost: int)
 signal building_removed(grid_pos: Vector2i)
+## The building changed address: its dictionary key and its node both moved.
+signal building_moved(building: Building, from_pos: Vector2i, to_pos: Vector2i)
 signal tree_removed(grid_pos: Vector2i)
 signal rock_removed(grid_pos: Vector2i)
 signal decoration_removed(grid_pos: Vector2i)
@@ -244,12 +246,39 @@ func get_rocks_in_area(top_left: Vector2i, bottom_right: Vector2i) -> Array:
 			result.append(rocks[pos])
 	return result
 
-func remove_building(grid_pos: Vector2i) -> void:
+func remove_building(grid_pos: Vector2i, force: bool = false) -> void:
 	var building = buildings.get(grid_pos, null)
-	if building:
-		building.destroy()
-		buildings.erase(grid_pos)
-		building_removed.emit(grid_pos)
+	if building == null:
+		# Buildings are keyed by their top-left tile; a demolition click can
+		# land anywhere on a multi-tile facility.
+		building = get_building_containing(grid_pos)
+		if building == null:
+			return
+		grid_pos = building.grid_position
+	# A required building (the clubhouse) is part of the course: it can be
+	# moved, never demolished. `force` is for teardown paths that must clear
+	# the layer regardless (see clear_all).
+	if not force and building.is_required():
+		return
+	building.destroy()
+	buildings.erase(grid_pos)
+	building_removed.emit(grid_pos)
+
+## Move a building to a new top-left tile, keeping its node — upgrade level,
+## architecture and lifetime revenue all carry over. The dictionary key follows
+## the building so lookups by the old tile find nothing. Returns false when
+## there is no such building or it is already there.
+func move_building(building: Building, new_pos: Vector2i) -> bool:
+	if not is_instance_valid(building):
+		return false
+	var old_pos: Vector2i = building.grid_position
+	if old_pos == new_pos:
+		return false
+	buildings.erase(old_pos)
+	building.set_position_in_grid(new_pos)
+	buildings[new_pos] = building
+	building_moved.emit(building, old_pos, new_pos)
+	return true
 
 func remove_tree(grid_pos: Vector2i) -> void:
 	var tree = trees.get(grid_pos, null)
@@ -525,7 +554,9 @@ func serialize() -> Dictionary:
 func clear_all() -> void:
 	"""Remove all entities from the layer."""
 	for pos in buildings.keys():
-		buildings[pos].destroy()
+		# force: teardown clears the layer regardless of what is standing on
+		# it. clear_all means "empty", not "demolish what the rules allow".
+		buildings[pos].destroy(true)
 	buildings.clear()
 	for pos in trees.keys():
 		trees[pos].destroy()
