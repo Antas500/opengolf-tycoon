@@ -19,6 +19,9 @@ var bulldozer_mode_active: bool = false  # Whether bulldozer mode is active
 var round_brush := true
 var brush_size: int = 1  # Current terrain brush size (1, 3, 5, 7 or 9)
 var _hole_move_mode: int = 0  # 0=NONE, matches main.gd HoleMoveMode enum
+## The building being carried to a new tile (the clubhouse) — its ghost follows
+## the cursor until it is set down or the move is cancelled.
+var _move_building: Building = null
 
 # Preview state
 var current_grid_pos: Vector2i = Vector2i(-1, -1)
@@ -89,7 +92,7 @@ func _process(_delta: float) -> void:
 	var show_terrain_preview = terrain_painting_enabled and current_terrain_tool >= 0
 	var show_elevation_preview = elevation_mode_active
 	var show_bulldozer_preview = bulldozer_mode_active
-	var show_move_preview = _hole_move_mode != 0
+	var show_move_preview = _hole_move_mode != 0 or _move_building != null
 
 	if show_entity_preview or show_terrain_preview or show_elevation_preview or show_bulldozer_preview or show_move_preview:
 		_target_alpha = 1.0
@@ -156,6 +159,11 @@ func set_bulldozer_mode(active: bool) -> void:
 func set_hole_move_mode(mode: int) -> void:
 	_hole_move_mode = mode
 
+## Carry `building` with the cursor (null ends the move). The ghost shows where
+## the footprint would land and turns red where placement is refused.
+func set_building_move_target(building: Building) -> void:
+	_move_building = building if is_instance_valid(building) else null
+
 func _exit_tree() -> void:
 	# A running route task reads a terrain copy the planner owns: let it finish.
 	_hole_path_planner.shutdown()
@@ -172,6 +180,17 @@ func _update_preview(delta: float) -> void:
 	smooth_world_pos = smooth_world_pos.lerp(current_world_pos, SMOOTH_SPEED * delta)
 
 	current_grid_pos = grid_pos
+
+	# Carrying a building: the footprint follows the cursor and placement rules
+	# decide its colour (its own tiles are not in the way of itself).
+	if _move_building != null:
+		var move_size := Vector2i(_move_building.width, _move_building.height)
+		current_preview_positions = _get_footprint_at(grid_pos, move_size)
+		current_preview_valid = CourseClubhouse.move_error(terrain_grid, GameManager.entity_layer,
+				_move_building, grid_pos).is_empty()
+		_update_potential_hole(grid_pos)
+		queue_redraw()
+		return
 
 	# Get positions to preview based on placement mode
 	if placement_manager and placement_manager.placement_mode != PlacementManager.PlacementMode.NONE:
@@ -219,6 +238,7 @@ func _update_preview(delta: float) -> void:
 ## painting with the Green tool, a Green With Hole comes next and a tee box waits.
 func _update_potential_hole(grid_pos: Vector2i) -> void:
 	var show_path: bool = terrain_painting_enabled and _hole_move_mode == 0 \
+			and _move_building == null \
 			and not elevation_mode_active and not bulldozer_mode_active \
 			and not (placement_manager and placement_manager.placement_mode != PlacementManager.PlacementMode.NONE)
 	var hole: Dictionary = {}
@@ -249,6 +269,14 @@ func _get_building_footprint(grid_pos: Vector2i) -> Array:
 		result.append(grid_pos + offset)
 	return result
 
+## Footprint tiles of a `size` building whose top-left corner is at `grid_pos`.
+func _get_footprint_at(grid_pos: Vector2i, size: Vector2i) -> Array:
+	var result: Array = []
+	for x in maxi(1, size.x):
+		for y in maxi(1, size.y):
+			result.append(grid_pos + Vector2i(x, y))
+	return result
+
 func _draw() -> void:
 	if is_instance_valid(_garden_ghost):
 		_garden_ghost.visible = false
@@ -260,6 +288,12 @@ func _draw() -> void:
 	# Check for hole move mode preview
 	if _hole_move_mode != 0:
 		_draw_hole_move_preview()
+		return
+
+	# Carrying the clubhouse: its footprint and its architecture follow the
+	# cursor, both coloured by whether the tile it is over can take it.
+	if _move_building != null:
+		_draw_building_move_preview()
 		return
 
 	if not waiting_hole.is_empty():
@@ -653,29 +687,62 @@ func _draw_building_ghost(grid_pos: Vector2i, color: Color) -> void:
 	for offset in footprint:
 		fw = max(fw, offset.x + 1)
 		fh = max(fh, offset.y + 1)
+	_draw_building_ghost_shape(grid_pos, placement_manager.selected_building_type,
+			Vector2i(fw, fh), color)
 
-	var w = fw * 64.0
-	var h = fh * 32.0
+## Footprint and architecture ghost for a building of `size` at `grid_pos`.
+## Shared by the Buildings tab preview and a clubhouse being carried to a new
+## tile, so both show the same outline the click will drop.
+func _draw_building_ghost_shape(grid_pos: Vector2i, building_type: String, size: Vector2i, color: Color, upgrade_level: int = 1) -> void:
+	var w = size.x * 64.0
+	var h = size.y * 32.0
 	var pos: Vector2
 	if terrain_grid != null:
 		if terrain_grid.is_view_isometric():
 			var center := terrain_grid.grid_point_to_screen(
-					Vector2(grid_pos) + Vector2(fw * 0.5, fh * 0.5))
+					Vector2(grid_pos) + Vector2(size.x * 0.5, size.y * 0.5))
 			pos = center - Vector2(w * 0.5, h)
 		else:
 			pos = terrain_grid.grid_to_screen(Vector2i(grid_pos))
 	else:
 		pos = Vector2(grid_pos)
-	var building_type = placement_manager.selected_building_type
 
 	if not is_instance_valid(_building_ghost):
 		return
 	_building_ghost.kind = building_type
+	_building_ghost.facing = terrain_grid.get_view_orientation() if terrain_grid != null else 0
+	if "level" in _building_ghost:
+		_building_ghost.level = upgrade_level
 	_building_ghost.footprint = Vector2(w, h)
 	_building_ghost.position = pos
 	_building_ghost.modulate = Color(color.r * 1.5, color.g * 1.5, color.b * 1.5, color.a)
 	_building_ghost.visible = true
 	_building_ghost.queue_redraw()
+
+## The building being carried to a new tile: footprint tiles coloured per tile
+## (its own tiles are not in the way of itself) plus its architecture ghost.
+func _draw_building_move_preview() -> void:
+	if not is_instance_valid(_move_building):
+		return
+	var pulse = 0.85 + sin(_pulse_time) * 0.15
+	var alpha_mod = _current_alpha * pulse
+	var ghost_color = VALID_COLOR if current_preview_valid else INVALID_COLOR
+	ghost_color.a = alpha_mod * 0.8
+	for i in range(current_preview_positions.size()):
+		var tile: Vector2i = current_preview_positions[i]
+		if terrain_grid.is_valid_position(tile):
+			_draw_isometric_tile(tile, _tile_allows_move(tile), alpha_mod, i == 0, false)
+	_draw_building_ghost_shape(current_grid_pos, _move_building.building_type,
+			Vector2i(_move_building.width, _move_building.height), ghost_color,
+			_move_building.upgrade_level)
+
+## Would this footprint tile take the building being moved? Its own footprint
+## is skipped: the building is leaving those tiles behind as it goes. The rules
+## come from CourseClubhouse, so the tiles cannot say yes where the click says
+## no.
+func _tile_allows_move(tile: Vector2i) -> bool:
+	return CourseClubhouse.tile_error(tile, terrain_grid, GameManager.entity_layer,
+			_move_building).is_empty()
 
 func _draw_decoration_ghost(pos: Vector2, color: Color) -> void:
 	"""Draw ghost preview for decoration placement using Decoration sprites/fallback"""

@@ -109,6 +109,10 @@ var selected_rock_size: String = "medium"
 var bulldozer_mode: bool = false
 var _bulldoze_drag_count: int = 0
 var _bulldoze_drag_cost: int = 0
+## The required building (the clubhouse) being carried to a new tile. While it
+## is set, the next click on the course sets it down — see
+## _handle_building_move_click.
+var _moving_building: Building = null
 var placement_preview: PlacementPreview = null
 var main_menu: MainMenu = null
 var world_map_screen: WorldMapScreen = null
@@ -1120,6 +1124,11 @@ func _start_painting() -> void:
 		_handle_staff_area_click(terrain_grid.screen_to_grid(camera.get_mouse_world_position()))
 		return
 
+	# The building being carried (the clubhouse) takes the next click.
+	if _moving_building != null:
+		_handle_building_move_click(terrain_grid.screen_to_grid(camera.get_mouse_world_position()))
+		return
+
 	# Handle hole move mode clicks first
 	if _hole_move_mode != HoleMoveMode.NONE:
 		var mouse_world = camera.get_mouse_world_position()
@@ -1404,6 +1413,7 @@ func _on_staff_area_move_requested(index: int) -> void:
 		return
 	# Any other tool would fight the click, so clear it first.
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
 	_cancel_elevation_mode()
@@ -1474,6 +1484,9 @@ func _cancel_action() -> void:
 	if _hole_move_mode != HoleMoveMode.NONE:
 		_cancel_hole_move_mode()
 		had_active_operation = true
+	if _moving_building != null:
+		_cancel_building_move()
+		had_active_operation = true
 	if bulldozer_mode:
 		_cancel_bulldozer_mode()
 		had_active_operation = true
@@ -1502,6 +1515,8 @@ func _has_active_tool() -> bool:
 		return true
 	if _hole_move_mode != HoleMoveMode.NONE:
 		return true
+	if _moving_building != null:
+		return true
 	if bulldozer_mode:
 		return true
 	if elevation_tool.is_active():
@@ -1526,6 +1541,7 @@ func _on_tool_selected(tool_type: int) -> void:
 	# Cancel any building/tree placement, elevation mode, and bulldozer mode
 	_cancel_staff_area_mode()
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
 	_cancel_elevation_mode()
@@ -1849,6 +1865,7 @@ func _prepare_for_nature_placement() -> void:
 	"""Leave other placement modes before starting a tree or boulder placement."""
 	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
@@ -1859,6 +1876,7 @@ func _on_building_type_selected_from_toolbar(building_type: String) -> void:
 	"""Start placement immediately for a building card in the Buildings tab."""
 	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
@@ -1902,6 +1920,7 @@ func _on_decoration_type_selected_from_toolbar(decoration_type: String) -> void:
 	"""Start placement immediately for a decoration tile in the Improvements tab."""
 	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	_close_hole_context_menu()
 	_cancel_elevation_mode()
 	_cancel_bulldozer_mode()
@@ -1930,6 +1949,7 @@ func _on_elevation_tool_pressed(tool_name: String) -> void:
 		_:
 			return
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
 	_cancel_bulldozer_mode()
@@ -1973,6 +1993,7 @@ func _on_bulldozer_pressed() -> void:
 	"""Activate bulldozer mode to demolish improvements and buildings"""
 	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	_close_hole_context_menu()
 	placement_manager.cancel_placement()
 	_cancel_elevation_mode()
@@ -2007,6 +2028,7 @@ func _on_new_game_started() -> void:
 	_game_over_shown = false
 	_close_hole_context_menu()
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 
 	# Show loading screen and wait a frame so it actually renders
 	# before the synchronous generation blocks the main thread.
@@ -2089,6 +2111,25 @@ func _on_new_game_started() -> void:
 		terrain_grid.refresh_all_overlays()
 		_suppress_tile_undo = false
 
+	# Every course starts with a clubhouse. Quick Start and the generated
+	# courses place one with their layout; if the layout could not fit it, or
+	# the course was built empty or from a prebuilt package, it is placed here.
+	# Golfers arrive and leave through its door either way.
+	var clubhouse_preferred := Vector2i(-1, -1)
+	if is_quick_start:
+		clubhouse_preferred = QuickStartCourse.CLUBHOUSE_TILE
+	elif generated_holes > 0:
+		clubhouse_preferred = GeneratedCourse.get_anchor(holes_requested) + GeneratedCourse.CLUBHOUSE_OFFSET
+	else:
+		# An empty lot or a prebuilt package: the corner of the property every
+		# shipped layout keeps clear (the Quick Start garden's spot).
+		clubhouse_preferred = CourseClubhouse.arrival_corner()
+	# Laying the grounds is the course's landscaping, not a player edit: keep
+	# it out of the undo history (and off the maintenance books).
+	_suppress_tile_undo = true
+	var clubhouse := _ensure_course_clubhouse(clubhouse_preferred)
+	_suppress_tile_undo = false
+
 	if is_quick_start:
 		camera.focus_on(terrain_grid.grid_to_screen_center(Vector2i(57,64)), true)
 		camera.set_zoom_level(1.0, true)
@@ -2098,6 +2139,10 @@ func _on_new_game_started() -> void:
 		camera.focus_on(terrain_grid.grid_to_screen_center(anchor), true)
 		camera.set_zoom_level(1.0, true)
 		GameManager.update_course_rating()
+	elif is_instance_valid(clubhouse):
+		# An empty course opens on its new clubhouse: that is the whole start.
+		camera.focus_on(terrain_grid.grid_to_screen_center(clubhouse.grid_position), true)
+		camera.set_zoom_level(1.0, true)
 
 	# Remove loading screen
 	loading_overlay.queue_free()
@@ -2420,6 +2465,12 @@ func _handle_bulldozer_click(grid_pos: Vector2i, _mouse_world: Vector2 = Vector2
 	# facility for a flat fee.
 	var hit_building = entity_layer.get_building_containing(grid_pos)
 	if hit_building:
+		# The required clubhouse is part of the course: it is moved, never
+		# demolished (Move Clubhouse in its info panel).
+		if hit_building.is_required():
+			if not dragging:
+				EventBus.notify("%s cannot be demolished — use Move in its panel to put it somewhere else." % _building_display_name(hit_building), "info")
+			return
 		var cost = BULLDOZER_COSTS["building"]
 		if not GameManager.can_afford(cost):
 			if not dragging:
@@ -2428,10 +2479,7 @@ func _handle_bulldozer_click(grid_pos: Vector2i, _mouse_world: Vector2 = Vector2
 				else:
 					EventBus.notify("Not enough money to demolish the building ($%d)" % cost, "error")
 			return
-		var building_name: String = str(hit_building.building_data.get("name", "")) \
-				if not hit_building.building_data.is_empty() else ""
-		if building_name.is_empty():
-			building_name = hit_building.building_type.replace("_", " ").capitalize()
+		var building_name := _building_display_name(hit_building)
 		GameManager.modify_money(-cost)
 		EventBus.log_transaction("Demolish %s" % building_name, -cost)
 		entity_layer.remove_building(hit_building.grid_position)
@@ -2725,13 +2773,29 @@ func _on_quit_to_menu() -> void:
 	GameManager.set_mode(GameManager.GameMode.MAIN_MENU)
 	get_tree().reload_current_scene()
 
+## Guarantee the course has its one required building. Existing clubhouses are
+## left exactly where they are; a missing one is placed at `preferred` (or at
+## the centre of the owned land when nothing is suggested) — the same helper
+## golfers read for their front door.
+func _ensure_course_clubhouse(preferred: Vector2i = Vector2i(-1, -1)) -> Building:
+	if terrain_grid == null or entity_layer == null:
+		return null
+	return CourseClubhouse.ensure(terrain_grid, entity_layer, preferred)
+
 func _on_load_completed(success: bool) -> void:
 	_cancel_inspect_mode()
 	_just_loaded_game = success
 	_close_hole_context_menu()
 	_cancel_hole_move_mode()
+	_cancel_building_move()
 	if success:
 		_game_over_shown = false
+		# A save from before the clubhouse rule (or one whose clubhouse could
+		# not be placed where its layout wanted) still gets one. Its grounds
+		# are landscaping, not an edit to undo.
+		_suppress_tile_undo = true
+		_ensure_course_clubhouse()
+		_suppress_tile_undo = false
 		_rebuild_hole_list()
 		# Sync hole creation tool so the next hole gets the correct number
 		if GameManager.current_course:
@@ -3208,6 +3272,11 @@ func _execute_undo_action(action: Dictionary) -> void:
 				# The cup rides along with the green back to its old home.
 				vis.update_green_position(old_green)
 			GameManager.modify_money(action.get("cost", 0))
+		"building_move":
+			var move_building = action.get("building", null)
+			var move_to: Vector2i = action.get("old_pos", Vector2i.ZERO)
+			if is_instance_valid(move_building) and entity_layer:
+				entity_layer.move_building(move_building, move_to)
 
 func _execute_redo_action(action: Dictionary) -> void:
 	match action.get("type", ""):
@@ -3268,6 +3337,11 @@ func _execute_redo_action(action: Dictionary) -> void:
 					entity_layer.place_decoration(subtype, grid_pos, decoration_registry)
 			if cost > 0:
 				GameManager.modify_money(-cost)
+		"building_move":
+			var move_building = action.get("building", null)
+			var move_to: Vector2i = action.get("new_pos", Vector2i.ZERO)
+			if is_instance_valid(move_building) and entity_layer:
+				entity_layer.move_building(move_building, move_to)
 		"tee_move":
 			var hn = action.get("hole_number", 0)
 			var old_tee = action.get("old_tee_pos", Vector2i.ZERO)
@@ -3302,6 +3376,7 @@ func _setup_building_info_panel() -> void:
 	var hud = $UI/HUD
 	building_info_panel.name = "BuildingInfoPanel"
 	hud.add_child(building_info_panel)
+	building_info_panel.move_requested.connect(_on_building_move_requested)
 	building_info_panel.hide()
 
 func _on_building_clicked(building: Building) -> void:
@@ -3312,8 +3387,9 @@ func _on_building_clicked(building: Building) -> void:
 			EventBus.notify("Cannot place here - overlaps with existing building!", "error")
 		return
 
-	# Only show for upgradeable buildings or buildings with stats
-	if building.building_data.get("upgradeable", false) or building.get_income_per_golfer() > 0:
+	# Only show for upgradeable buildings or buildings with stats. The required
+	# clubhouse always opens: its panel carries the only way to move it.
+	if building.is_required() or building.building_data.get("upgradeable", false) or building.get_income_per_golfer() > 0:
 		building_info_panel.show_for_building(building)
 
 		# Center the panel on screen, clamped so it stays fully visible on
@@ -3325,6 +3401,75 @@ func _on_building_clicked(building: Building) -> void:
 func _on_building_panel_closed() -> void:
 	"""Hide the building info panel."""
 	building_info_panel.hide()
+
+# --- Moving the clubhouse ---
+#
+# The clubhouse is the course's one required building: it cannot be demolished
+# (the Bulldozer refuses it, EntityLayer.remove_building refuses it), so the way
+# to put it somewhere else is to pick it up. Move Clubhouse in its info panel
+# starts that: the ghost of the building follows the cursor, and the next click
+# sets it down on a legal footprint — the same rules the Buildings tab uses,
+# with the building itself ignored. Esc or a right-click puts it back.
+
+func _on_building_move_requested(building: Building) -> void:
+	"""Pick a required building up so the next click sets it down."""
+	if not is_instance_valid(building) or not building.is_required():
+		return
+	_cancel_inspect_mode()
+	_cancel_hole_move_mode()
+	_close_hole_context_menu()
+	_cancel_elevation_mode()
+	_cancel_bulldozer_mode()
+	_cancel_staff_area_mode()
+	placement_manager.cancel_placement()
+	_disable_terrain_painting_preview()
+	if terrain_toolbar:
+		terrain_toolbar.clear_selection()
+	is_painting = false
+	_moving_building = building
+	building_info_panel.hide()
+	if placement_preview:
+		placement_preview.set_building_move_target(building)
+	EventBus.notify("%s picked up — click a tile to set it down, right-click or Esc to cancel." % _building_display_name(building), "info")
+
+func _cancel_building_move() -> void:
+	"""Put the carried building back down where it was."""
+	if _moving_building == null:
+		return
+	_moving_building = null
+	if placement_preview:
+		placement_preview.set_building_move_target(null)
+
+func _handle_building_move_click(grid_pos: Vector2i) -> void:
+	"""Set the carried building down on the clicked tile when the rules allow."""
+	if _moving_building == null:
+		return
+	var error := CourseClubhouse.move_error(terrain_grid, entity_layer, _moving_building, grid_pos)
+	if not error.is_empty():
+		EventBus.notify(error, "error")
+		return
+	var building := _moving_building
+	var name := _building_display_name(building)
+	var old_pos: Vector2i = building.grid_position
+	if CourseClubhouse.move_to(entity_layer, building, grid_pos):
+		# Moving is free; Ctrl+Z still puts it back where it stood.
+		undo_manager.record_action({
+			"type": "building_move",
+			"building": building,
+			"old_pos": old_pos,
+			"new_pos": grid_pos,
+		})
+		EventBus.notify("%s moved." % name, "success")
+	_cancel_building_move()
+
+## The name a building is announced under (its data name, else its type).
+func _building_display_name(building: Building) -> String:
+	if building == null:
+		return "Building"
+	var name: String = str(building.building_data.get("name", "")) if not building.building_data.is_empty() else ""
+	if name.is_empty():
+		name = building.building_type.replace("_", " ").capitalize()
+	return name
 
 # --- Financial Panel ---
 

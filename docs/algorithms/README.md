@@ -25,6 +25,7 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 - [Hole Creation](hole-creation.md) — 1x1 tee boxes, Green With Hole vs Green Without Hole, the potential hole path preview, and opening a hole from the waiting pair
 - [Tee Aim Arrow](tee-aim-arrow.md) — The painted aiming arrow in the grass of every tee tile: red ball either side, straight at the cup or curved round a dogleg's corner
 - [Landforms and Clubhouse Life](course-character.md) — Sculpted hills, coherent building architecture, and golfer reactions
+- [The Clubhouse](clubhouse.md) — The one required building: where a new course gets one, its front door, why it can be moved but never demolished, and how golfers arrive from it and walk back to it
 - [Path Furniture](path-furniture.md) — Path-edge alignment, grounded fixtures, and matching placement ghosts
 - [Living Course Details](course-wildlife.md) — Ducks, garden visitors, seasonal blooms, and decorative water animation
 - [Continuous Course Surface](course-surface.md) — Connected terrain materials, theme palettes, foliage motion, and generated-course cleanup

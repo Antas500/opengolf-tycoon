@@ -8,7 +8,13 @@ enum State {
 	PREPARING_SHOT, # Lining up shot
 	SWINGING,       # Taking a shot
 	WATCHING,       # Watching ball flight
-	FINISHED        # Completed round
+	FINISHED,       # Completed round and gone home
+	# Rounds are over the moment the last putt drops, but the golfer is still
+	# on the course: LEAVING is the walk back to the clubhouse and the visit
+	# at its door. Appended last so the saved/compared numbers of the older
+	# states never shift. Nothing picks a LEAVING golfer to play — see
+	# GolferManager — and only FINISHED means "gone".
+	LEAVING
 }
 
 enum Club {
@@ -123,6 +129,24 @@ var activity_text := "Playing golf"
 ## greeter/vendor/marshal from parking next to one golfer and spamming effects.
 var staff_help_cooldown := 0.0
 const STAFF_HELP_COOLDOWN_SECONDS: float = 20.0
+## How the round ends: the golfer walks to the clubhouse door, spends a moment
+## there (the visit that pays the clubhouse its per-golfer income), and only
+## then turns FINISHED — which is when the group is taken off the course.
+const CLUBHOUSE_VISIT_SECONDS: float = 1.6
+## A blocked walk home must never strand a golfer (and with them the group and
+## a slot on the course): after this long the visit happens wherever they are.
+const DEPARTURE_TIMEOUT_SECONDS: float = 30.0
+
+## 0 = staying, 1 = walking to the clubhouse, 2 = visiting at its door.
+var _departure_phase := 0
+var _departure_elapsed := 0.0
+var _departure_pause := 0.0
+## Set once the golfer has gone indoors and EventBus.golfer_left_course has
+## been announced for them (see _leave_course).
+var _left_course_announced := false
+## True while walking in from the clubhouse to the first tee at spawn.
+var _arriving_from_clubhouse := false
+
 var _amenity_phase := 0
 var _amenity_destination := Vector2.ZERO
 var _amenity_origin := Vector2.ZERO
@@ -759,6 +783,13 @@ func _process(delta: float) -> void:
 	_update_group_badge()
 	_update_mood_visuals()
 
+	# The round is over: this golfer is walking home and visiting the
+	# clubhouse, not playing. Keep away from the turn system (which only ever
+	# picks an IDLE golfer) until the visit ends.
+	if _departure_phase > 0:
+		_process_departure(delta)
+		return
+
 	# Track waiting time for pace satisfaction decay
 	if current_state == State.IDLE and traffic_blocked:
 		traffic_wait_seconds += delta
@@ -784,7 +815,7 @@ func _process(delta: float) -> void:
 
 func _process_walking(delta: float) -> void:
 	if path.is_empty() or path_index >= path.size():
-		_change_state(State.IDLE)
+		_on_reached_destination()
 		return
 
 	var target = path[path_index]
@@ -1054,6 +1085,7 @@ func _on_swing_tween_finished() -> void:
 
 ## Start playing a hole
 func start_hole(hole_number: int, tee_position: Vector2i) -> void:
+	_arriving_from_clubhouse = false
 	current_hole = hole_number
 	current_strokes = 0
 	ball_position = tee_position
@@ -1709,17 +1741,16 @@ func finish_hole(par: int) -> void:
 
 ## Finish the round
 func finish_round() -> void:
-	_change_state(State.FINISHED)
-
+	# The round is over, but the golfer is not gone: _begin_departure (at the
+	# end of this function) walks them back to the clubhouse, visits it —
+	# revenue, satisfaction and needs all land there — and only then turns
+	# FINISHED. Without a clubhouse this is a straight FINISHED as before.
 	# Only record course record if golfer completed all holes (not a partial round)
 	# Use the hole count from when this golfer started, not the current count
 	# (holes may have been opened/closed mid-round)
 	var total_holes = _round_total_holes if _round_total_holes > 0 else GameManager.get_open_hole_count()
 	if hole_scores.size() >= total_holes and total_holes > 0:
 		GameManager.check_round_record(golfer_name, total_strokes, total_holes)
-
-	# Apply clubhouse effects (golfer visits clubhouse after round)
-	_apply_clubhouse_effects()
 
 	# Check if course has too few holes — golfers are disappointed by short courses
 	var open_holes = GameManager.get_open_hole_count()
@@ -1764,6 +1795,9 @@ func finish_round() -> void:
 		FeedbackManager.record_visit(self)
 		EventBus.golfer_completed_round.emit(golfer_id, total_strokes, total_par)
 	EventBus.golfer_finished_round.emit(golfer_id, total_strokes, total_par)
+
+	# Last thing: leave through the clubhouse door (see _begin_departure).
+	_begin_departure()
 
 ## Select appropriate club based on distance and terrain (legacy compatibility).
 ## Primary club selection is now handled by ShotAI.decide_shot().
@@ -2893,9 +2927,102 @@ func _find_cart_path_route(start: Vector2i, end: Vector2i) -> Array[Vector2]:
 
 ## Called when golfer reaches destination
 func _on_reached_destination() -> void:
-	if current_state == State.WALKING:
+	if current_state == State.LEAVING:
+		_arrive_at_clubhouse()
+	elif current_state == State.WALKING:
 		# Transition to IDLE and wait for turn system to advance us
 		_change_state(State.IDLE)
+
+# =============================================================================
+# THE CLUBHOUSE DOOR (arriving and leaving)
+# =============================================================================
+
+## Guests walk out of the clubhouse instead of appearing on the first tee.
+## `door` is the clubhouse's front tile and `tee` the first open tee; the
+## arrival walk keeps the golfer out of play until they get there, because the
+## turn system only picks an IDLE golfer.
+func begin_arrival_from_clubhouse(door: Vector2i, tee: Vector2i) -> void:
+	var terrain_grid = GameManager.terrain_grid
+	if terrain_grid == null:
+		return
+	if not terrain_grid.is_valid_position(door) or not terrain_grid.is_valid_position(tee):
+		return
+	# The ball is already on the tee: an arriving golfer is not in play, and
+	# the group-ahead safety checks read ball positions.
+	ball_position = tee
+	ball_position_precise = Vector2(tee)
+	global_position = terrain_grid.grid_to_screen_center(door)
+	path = _find_path_to(terrain_grid.grid_to_screen_center(tee))
+	path_index = 0
+	_arriving_from_clubhouse = true
+	activity_text = "Arriving from the clubhouse"
+	_change_state(State.WALKING)
+
+## The round is over: walk back to the clubhouse door and visit it before
+## leaving the course. Without a clubhouse (or a grid) the golfer finishes
+## where they stand, exactly as before.
+func _begin_departure() -> void:
+	_departure_phase = 0
+	_departure_elapsed = 0.0
+	_arriving_from_clubhouse = false
+	var clubhouse := CourseClubhouse.find(GameManager.entity_layer)
+	var terrain_grid = GameManager.terrain_grid
+	if clubhouse == null or terrain_grid == null:
+		_leave_course()
+		return
+	var door := CourseClubhouse.front_tile(clubhouse, terrain_grid, GameManager.entity_layer)
+	if door.x < 0:
+		_leave_course()
+		return
+	_departure_phase = 1
+	activity_text = "Returning to the clubhouse"
+	path = _find_path_to(terrain_grid.grid_to_screen_center(door))
+	path_index = 0
+	_change_state(State.LEAVING)
+
+## Walk home (phase 1) or stand at the door for the visit (phase 2).
+func _process_departure(delta: float) -> void:
+	_departure_elapsed += delta
+	if _departure_phase == 2:
+		_departure_pause -= delta
+		if _departure_pause <= 0.0:
+			_departure_phase = 0
+			_leave_course()
+		return
+	if _departure_elapsed >= DEPARTURE_TIMEOUT_SECONDS:
+		_arrive_at_clubhouse()
+		return
+	_process_walking(delta)
+
+## At the clubhouse door: pay the visit (its revenue and need restoration are
+## the same visit a walking guest gets) and stand for a beat before leaving.
+func _arrive_at_clubhouse() -> void:
+	if _departure_phase == 2 or current_state == State.FINISHED:
+		return
+	_departure_phase = 2
+	_departure_pause = CLUBHOUSE_VISIT_SECONDS
+	velocity = Vector2.ZERO
+	activity_text = "Visiting the clubhouse"
+	path.clear()
+	path_index = 0
+	_apply_clubhouse_effects()
+
+## The golfer is gone: FINISHED, and everyone watching the course told about
+## it. Called once, wherever the round-over walk ends — the clubhouse door, or
+## straight away on a course with no door to walk to. GolferManager waits for
+## this (not for the round itself, which ends before the walk) to take the
+## group off the course.
+func _leave_course() -> void:
+	if _left_course_announced:
+		return
+	_left_course_announced = true
+	_change_state(State.FINISHED)
+	EventBus.golfer_left_course.emit(golfer_id)
+
+## Whether this golfer has already been announced as having left. Removal
+## (GolferManager.remove_golfer) uses it to avoid saying it twice.
+func has_left_course() -> bool:
+	return _left_course_announced
 
 ## Change state with signal emission
 func _change_state(new_state: State) -> void:
@@ -2925,9 +3052,10 @@ func _check_need_triggers() -> void:
 # On-course staff service (greeters, marshals, drinks vendors)
 # =============================================================================
 
-## Whether this golfer can be served by on-course staff right now.
+## Whether this golfer can be served by on-course staff right now. A golfer
+## walking home (LEAVING) is done for the day, like a finished one.
 func is_staff_service_available() -> bool:
-	return staff_help_cooldown <= 0.0 and current_state != State.FINISHED
+	return staff_help_cooldown <= 0.0 and current_state not in [State.FINISHED, State.LEAVING]
 
 ## A greeter chatted with this golfer — cheers them up.
 func receive_greeting(amount: float) -> void:
@@ -3082,7 +3210,7 @@ func _update_visual() -> void:
 				var anim = "idle_%s" % dir
 				if _animated_sprite.sprite_frames.has_animation(anim):
 					_animated_sprite.play(anim)
-			State.WALKING:
+			State.WALKING, State.LEAVING:
 				pass  # Handled in _process_walking
 			State.SWINGING:
 				# Use swing animation if available, otherwise idle
@@ -3138,7 +3266,7 @@ func _update_visual() -> void:
 	match current_state:
 		State.IDLE:
 			pass  # Default appearance
-		State.WALKING:
+		State.WALKING, State.LEAVING:
 			pass  # Walk animation handled in _process_walking
 		State.PREPARING_SHOT:
 			# Show golf club while preparing
@@ -3226,7 +3354,9 @@ func show_payment_notification(amount: int) -> void:
 func _check_building_proximity() -> void:
 	var entities = GameManager.entity_layer
 	var grid = GameManager.terrain_grid
-	if not entities or not grid or _amenity_phase > 0: return
+	# A golfer on the way home is done for the day: no new amenities (the
+	# clubhouse visit itself is handled by _arrive_at_clubhouse).
+	if not entities or not grid or _amenity_phase > 0 or _departure_phase > 0: return
 	var current: Vector2i = grid.screen_to_grid(global_position)
 	var candidates: Array = entities.get_all_buildings()
 	candidates.append_array(entities.get_all_decorations())

@@ -5,7 +5,9 @@ class_name TerrainToolbar
 ## Nine tabs:
 ##  - Course Terrain: one course, hazard & landscape tiles honeycomb, with the brush controls pinned to the page's bottom-left corner so they ride above the tiles instead of scrolling with them; the Open Hole action nestles into the notch between the tee box and the green tiles it pairs. Every tile on this tab replaces every other tile (ground, wild flowers, trees and boulders) and is never touched by the Bulldozer.
 ##  - Improvements:   walking path tile leading the decoration tiles honeycomb (the garden shed catalogue), with the Bulldozer pinned to the bottom-left corner
-##  - Buildings:      amenity buildings catalogue, with the Bulldozer pinned to the bottom-left corner
+##  - Buildings:      optional amenity catalogue; the required clubhouse is
+##                    supplied with every course, with the Bulldozer pinned to
+##                    the bottom-left corner
 ##  - Elevation:      the Vertex, Flat Square and Gradual Square selector tools in one honeycomb, with the Elevation Brush (size and shape) the two Square tools share nestled into the notch between them — the size stepper in the V above the point where those tiles meet, the shape toggle in the V below it — while the terrain brush stays the Course Terrain tab's own
 ##  - Holes:          one button per course hole, three to a column, each opening that hole's context menu (the buttons are filled by main.gd)
 ##  - Golfers:        who is on the course, four golfers to a column, beside the recent rounds, six rounds to a column
@@ -675,13 +677,14 @@ func _populate_landscape_tiles() -> void:
 	_update_selection_highlight()
 
 func _build_buildings_tab(hbox: HBoxContainer) -> void:
-	# Facilities use the same interlocking isometric buttons as Course & Hazards,
-	# laid out in two rows (columns follow the catalogue size, see
-	# _populate_building_shelf) so the big tiles fill the toolbar height; the
-	# page scrolls sideways when the catalogue is wider than the window.
+	# Optional facilities use the same interlocking isometric buttons as Course
+	# & Hazards. Required buildings (currently the clubhouse) are supplied with
+	# the course and aren't construction choices in this shelf.
+	# Tiles are laid out in two rows (columns follow the catalogue size, see
+	# _populate_building_shelf) and the page scrolls sideways when needed.
 	_building_shelf = TileHoneycomb.new()
 	_building_shelf.name = "BuildingShelf"
-	_building_shelf.columns = tile_columns(_building_registry.size())
+	_building_shelf.columns = tile_columns(_optional_building_types().size())
 	_building_shelf.tile_size = TerrainTileButton.BUTTON_SIZE
 	_building_shelf.h_separation = TILE_H_SEPARATION
 	_building_shelf.v_separation = TILE_V_SEPARATION
@@ -705,13 +708,26 @@ func _populate_building_shelf() -> void:
 	for child in _building_shelf.get_children():
 		_building_shelf.remove_child(child)
 		child.queue_free()
-	_building_shelf.columns = tile_columns(_building_registry.size())
-	for building_type in _building_registry:
+	var building_types := _optional_building_types()
+	_building_shelf.columns = tile_columns(building_types.size())
+	for building_type in building_types:
 		var data: Dictionary = _building_registry[building_type]
 		var button := BuildingTileButton.new()
 		button.configure_building(str(building_type), data)
 		button.pressed.connect(_on_building_card_pressed.bind(str(building_type)))
 		_building_shelf.add_child(button)
+
+## The clubhouse (and any other required building) is created as part of the
+## course, so required entries remain in the registry for game logic but don't
+## appear as player-placeable choices.
+func _optional_building_types() -> Array:
+	var building_types: Array = []
+	for building_type in _building_registry:
+		var data: Dictionary = _building_registry[building_type]
+		if data.get("required", false):
+			continue
+		building_types.append(building_type)
+	return building_types
 
 ## Columns needed to lay `count` catalogue tiles out in TILE_ROWS rows.
 static func tile_columns(count: int) -> int:

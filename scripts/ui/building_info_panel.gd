@@ -3,6 +3,8 @@ class_name BuildingInfoPanel
 ## BuildingInfoPanel - Shows building info and upgrade options when clicked
 
 signal upgrade_requested(building: Building)
+## The player picked the clubhouse up to set it down somewhere else.
+signal move_requested(building: Building)
 signal close_requested
 
 var _building: Building = null
@@ -125,6 +127,23 @@ func _update_display() -> void:
 		max_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_vbox.add_child(max_label)
 
+	# The clubhouse is the course's one required building: it can never be
+	# demolished, so here is how it changes address instead.
+	if _building.is_required():
+		var hint = Label.new()
+		hint.text = "The clubhouse can be moved, never demolished."
+		hint.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75))
+		hint.add_theme_font_size_override("font_size", 12)
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_vbox.add_child(hint)
+
+		var move_btn = Button.new()
+		move_btn.name = "MoveButton"
+		move_btn.text = "Move Clubhouse"
+		move_btn.tooltip_text = "Pick the clubhouse up, then click a tile to set it down."
+		move_btn.pressed.connect(_on_move_pressed)
+		_vbox.add_child(move_btn)
+
 	# Close button
 	var close_btn = Button.new()
 	close_btn.text = "Close"
@@ -146,6 +165,10 @@ func _create_stat_row(label_text: String, value_text: String, value_color: Color
 	row.add_child(value)
 
 	return row
+
+func _on_move_pressed() -> void:
+	if _building:
+		move_requested.emit(_building)
 
 func _on_upgrade_pressed() -> void:
 	if _building and _building.upgrade():

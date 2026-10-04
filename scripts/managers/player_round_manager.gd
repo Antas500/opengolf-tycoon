@@ -570,6 +570,8 @@ func _process(delta: float) -> void:
 		action_text = "%s is shooting..." % active_shooter.golfer_name
 	elif player.current_state == Golfer.State.WALKING:
 		action_text = "Walking to ball..."
+	elif player.current_state == Golfer.State.LEAVING:
+		action_text = "Back to the clubhouse..."
 	elif player.current_state == Golfer.State.FINISHED:
 		action_text = "You've holed out — waiting for the field"
 	else:

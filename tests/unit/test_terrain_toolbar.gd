@@ -339,16 +339,20 @@ func test_terrain_paint_tools_are_isometric_course_tiles() -> void:
 	assert_false(toolbar._tool_buttons.has("bulldozer"), "The Bulldozer is not a Course Terrain tool")
 	assert_false(toolbar._open_hole_buttons[0] is TerrainTileButton)
 
-func test_building_choices_use_the_course_tile_design() -> void:
+func test_building_choices_use_the_course_tile_design_without_required_clubhouse() -> void:
 	var registry := {
-		"clubhouse": {"name": "Clubhouse", "size": [4, 4], "cost": 10000, "operating_cost": 100},
+		"clubhouse": {"name": "Clubhouse", "size": [4, 4], "cost": 10000,
+			"operating_cost": 100, "required": true},
 		"bench": {"name": "Bench", "size": [1, 1], "cost": 200, "operating_cost": 0},
 	}
 	toolbar.set_building_registry(registry)
 
 	assert_true(toolbar._building_shelf is TileHoneycomb)
-	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.tile_columns(registry.size()))
-	assert_eq(toolbar._building_shelf.get_child_count(), registry.size())
+	assert_true(toolbar._building_registry.has("clubhouse"),
+		"The required clubhouse stays registered for course and building logic")
+	assert_eq(toolbar._building_shelf.columns, TerrainToolbar.tile_columns(1))
+	assert_eq(toolbar._building_shelf.get_child_count(), 1,
+		"The required clubhouse is supplied with the course, not offered as a placement button")
 	for button in toolbar._building_shelf.get_children():
 		assert_true(button is BuildingTileButton, "Building choices should use isometric tile buttons")
 		assert_true(button is TerrainTileButton, "Building tiles should share the Course/Hazards button base")
@@ -356,8 +360,9 @@ func test_building_choices_use_the_course_tile_design() -> void:
 		assert_eq(button.text, "", "Building names should be drawn on the tile")
 		assert_eq(button._name_label.size, TerrainTileButton.BUTTON_SIZE)
 		assert_not_null(button._building_art)
+		assert_ne(button.tool_type, "clubhouse", "The clubhouse should not appear in the Buildings shelf")
 
-	var bench: BuildingTileButton = toolbar._building_shelf.get_child(1)
+	var bench: BuildingTileButton = toolbar._building_shelf.get_child(0)
 	assert_eq(bench.tool_name, "Bench")
 	assert_eq(bench.cost, 200)
 	assert_eq(bench.maintenance, 0)
