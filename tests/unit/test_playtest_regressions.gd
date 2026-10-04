@@ -71,6 +71,13 @@ func test_fast_brush_drag_has_no_gaps_and_includes_endpoints() -> void:
 		assert_lte(absi(points[i].y - points[i-1].y), 1)
 	assert_false(TerrainBrush.offsets(5).has(Vector2i(2, 2)))
 	assert_true(TerrainBrush.offsets(5, false).has(Vector2i(2, 2)))
+	# Even sizes cover an S×S block, matching the Elevation Brush: a 2×2 stamp
+	# is four tiles, not the 1×1 the old odd-only radius produced.
+	assert_eq(TerrainBrush.offsets(2, false).size(), 4)
+	assert_eq(TerrainBrush.offsets(4, false).size(), 16)
+	assert_true(TerrainBrush.offsets(2, false).has(Vector2i(-1, -1)))
+	assert_true(TerrainBrush.offsets(2, false).has(Vector2i(0, 0)))
+	assert_false(TerrainBrush.offsets(2, false).has(Vector2i(1, 0)))
 
 func test_overpricing_reduces_demand_and_expected_green_fee_income() -> void:
 	var fair_demand := CourseEconomy.price_demand(5, 9, 45.0)
