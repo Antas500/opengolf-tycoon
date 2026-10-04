@@ -1,16 +1,38 @@
 extends SceneTree
 ## Dev harness: renders the GlobeMap land mask to PNGs so the continent
 ## outlines can be eyeballed without a GPU. Not part of the test suite.
-
+##
+##  * `equirect.png` — the polygons tested point by point (GlobeMap.is_land).
+##  * `mask.png` — the mask the planet shader actually samples, straight from
+##    GlobeMap.build_land_mask(), so coastlines and the polar cap can be
+##    compared against the first render.
+##  * `ortho.png` — the old land-dot globe, still drawn by LandStyle.DOTS.
+##
 ## Writes into the project's tmp_preview/ folder (git-ignored).
 const OUT_DIR := "res://tmp_preview"
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_render_equirect()
+	_render_mask()
 	_render_ortho()
 	print("wrote previews to ", OUT_DIR)
 	quit()
+
+## The baked mask, exactly as the globe hands it to the shader.
+func _render_mask() -> void:
+	var started := Time.get_ticks_usec()
+	var mask := GlobeMap.build_land_mask()
+	# R8 reads back as grey; save it as RGB so ordinary image viewers agree
+	# with what the shader samples.
+	var preview := Image.create(mask.get_width(), mask.get_height(), false, Image.FORMAT_RGB8)
+	for y in range(mask.get_height()):
+		for x in range(mask.get_width()):
+			var coverage := mask.get_pixel(x, y).r
+			preview.set_pixel(x, y, Color(coverage, coverage, coverage))
+	print("mask.png: %dx%d baked in %.1f ms" % [
+		mask.get_width(), mask.get_height(), float(Time.get_ticks_usec() - started) / 1000.0])
+	print("mask save: ", preview.save_png(OUT_DIR + "/mask.png"))
 
 func _render_equirect() -> void:
 	var w := 720
