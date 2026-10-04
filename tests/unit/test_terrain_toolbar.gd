@@ -445,20 +445,26 @@ func test_tile_previews_follow_course_theme_colors() -> void:
 
 func test_brush_size_controls() -> void:
 	watch_signals(toolbar)
+	assert_eq(TerrainToolbar.BRUSH_SIZES, ElevationTool.BRUSH_SIZES,
+			"Terrain paint steps 1×1 through 9×9, matching the Elevation Brush")
 
 	toolbar.set_brush_size(1)
 	assert_eq(toolbar.get_brush_size(), 1)
 
 	toolbar._on_brush_increase()
-	assert_eq(toolbar.get_brush_size(), 3)
-	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [3])
+	assert_eq(toolbar.get_brush_size(), 2)
+	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [2])
 
 	toolbar._on_brush_increase()
-	assert_eq(toolbar.get_brush_size(), 5)
+	assert_eq(toolbar.get_brush_size(), 3)
 
 	toolbar._on_brush_decrease()
-	assert_eq(toolbar.get_brush_size(), 3)
-	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [3])
+	assert_eq(toolbar.get_brush_size(), 2)
+	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [2])
+
+	toolbar.set_brush_size(9)
+	toolbar._on_brush_increase()
+	assert_eq(toolbar.get_brush_size(), 9, "9×9 is the largest terrain brush")
 
 func test_green_tile_flag_tracks_the_next_green_type() -> void:
 	var button: TerrainTileButton = toolbar._tool_buttons[TerrainTypes.Type.GREEN]
@@ -701,9 +707,9 @@ func test_pinned_brush_dock_carries_the_whole_brush() -> void:
 	for step in steps:
 		if step.text == "+":
 			step.pressed.emit()
-	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [7])
-	assert_eq(toolbar.get_brush_size(), 7)
-	assert_eq(chip.text, "7x7")
+	assert_signal_emitted_with_parameters(toolbar, "brush_size_changed", [6])
+	assert_eq(toolbar.get_brush_size(), 6)
+	assert_eq(chip.text, "6x6")
 
 	# A tool capped at a single tile locks the dock, like every other brush UI.
 	toolbar.set_brush_limit(1)

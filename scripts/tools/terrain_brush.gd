@@ -24,11 +24,29 @@ static func centers_4_connected(from: Vector2i, to: Vector2i) -> Array[Vector2i]
 		points.append(p)
 	return points
 
+## Tile offsets of an S x S stamp. Odd sizes centre on the cursor tile; even
+## sizes centre on the vertex at that tile's near corner — the same geometry
+## as ElevationTool.tile_offsets, so a 2x2 brush really paints four tiles.
+## The round shape keeps tiles whose centre lies within a circle of radius
+## S/2 around the middle of the block, clipping the square's corners.
 static func offsets(diameter: int, round_shape: bool = true) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var radius := int((diameter - 1) / 2.0)
-	for x in range(-radius, radius + 1):
-		for y in range(-radius, radius + 1):
-			if not round_shape or x*x + y*y <= radius*radius + radius*.5:
-				result.append(Vector2i(x, y))
+	# Keep the anchor and round footprint snapped to whole-tile half sizes.
+	@warning_ignore_start("integer_division")
+	var half_size: int = diameter / 2
+	@warning_ignore_restore("integer_division")
+	var from: int = -half_size
+	var to: int = diameter - 1 + from
+	# Middle of the block in tile-offset space: tile centres sit half a tile
+	# along from their offset, so the block's centre is (from + to + 1) / 2.
+	var middle: float = float(from + to + 1) * 0.5
+	var limit: float = float(half_size)
+	for x in range(from, to + 1):
+		for y in range(from, to + 1):
+			if round_shape:
+				var dx: float = float(x) + 0.5 - middle
+				var dy: float = float(y) + 0.5 - middle
+				if dx * dx + dy * dy > limit * limit:
+					continue
+			result.append(Vector2i(x, y))
 	return result

@@ -132,6 +132,13 @@ func test_round_brush_clips_the_corners_to_the_documented_counts() -> void:
 	for size in [1, 2]:
 		assert_eq(ElevationTool.tile_offsets(size, false), ElevationTool.tile_offsets(size, true))
 
+func test_terrain_and_elevation_brushes_share_tile_offsets() -> void:
+	for size in ElevationTool.BRUSH_SIZES:
+		assert_eq(ElevationTool.tile_offsets(size, true), TerrainBrush.offsets(size, false),
+				"%dx%d square stamps match" % [size, size])
+		assert_eq(ElevationTool.tile_offsets(size, false), TerrainBrush.offsets(size, true),
+				"%dx%d round stamps match" % [size, size])
+
 func test_tile_offsets_centre_on_the_anchor() -> void:
 	# Odd sizes centre on the anchor tile...
 	var odd := ElevationTool.tile_offsets(3, true)

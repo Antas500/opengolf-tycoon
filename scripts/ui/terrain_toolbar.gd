@@ -147,7 +147,8 @@ const ELEVATION_BRUSH_NOTCH_SLOT := 1
 ## course rows and the toolbar never changes height with the tab.
 const ELEVATION_V_PADDING := 15
 const MAX_RECENT_ROUNDS := 30
-const BRUSH_SIZES := [1, 3, 5, 7, 9]
+## Paint-brush sizes in tiles. Same 1×1 through 9×9 steps as the Elevation Brush.
+const BRUSH_SIZES: Array[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 ## Brush controls pinned to the Course Terrain page's bottom-left corner: a
 ## 2x2 plate of square cells (shape, size, smaller, bigger). The plate is held
 ## this narrow so its right edge stops short of the tile diamonds beside it —

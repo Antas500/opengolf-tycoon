@@ -17,7 +17,7 @@ var elevation_brush_size: int = 3
 var elevation_brush_square := true
 var bulldozer_mode_active: bool = false  # Whether bulldozer mode is active
 var round_brush := true
-var brush_size: int = 1  # Current terrain brush size (1, 3, 5, 7 or 9)
+var brush_size: int = 1  # Current terrain brush size (1 through 9)
 var _hole_move_mode: int = 0  # 0=NONE, matches main.gd HoleMoveMode enum
 ## The building being carried to a new tile (the clubhouse) — its ghost follows
 ## the cursor until it is set down or the move is cancelled.
