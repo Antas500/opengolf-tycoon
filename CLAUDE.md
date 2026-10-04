@@ -109,6 +109,7 @@ Shot error uses an **angular dispersion** model rather than absolute tile offset
 ### Economy
 - Green fee configurable $10-$200. Bankruptcy threshold at -$1000. See [economy docs](docs/algorithms/economy.md).
 - Buildings: 8 types (Clubhouse, Pro Shop, Restaurant, Snack Bar, Driving Range, Cart Shed, Restroom, Bench). Proximity-based revenue. The clubhouse is the one `required: true` building: every course starts with one (a save without one heals on load), it can never be demolished, and it is relocated from its panel with Move Clubhouse. 3 upgrade tiers. See [clubhouse docs](docs/algorithms/clubhouse.md).
+- Building architecture (`scripts/entities/course_architecture.gd`): every facility is drawn as an isometric solid on its own footprint — authored in grid space (tiles across, tiles down, pixels up) and projected through the terrain's own 2:1 axes, so its walls and roof follow the diamonds of the tiles it occupies and turn with the view (`Building` hands the architecture the grid's view orientation). The same `draw_building()` renders the placed building, the placement ghost and the Buildings-tab tile. Buildings are procedural only; the pixel-art building sprites were retired. See [isometric-buildings docs](docs/algorithms/isometric-buildings.md).
 - CourseRatingSystem: 4-star rating from Condition (30%), Design (20%), Value (30%), Pace (20%). See [course-rating docs](docs/algorithms/course-rating.md).
 - Reputation: 0-100, daily decay by star level, per-golfer mood-based gains. See [reputation docs](docs/algorithms/reputation.md).
 

@@ -41,7 +41,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Hole creation** — 3-step flow (tee box → green → flag); auto-calculates par based on yardage; holes numbered and renameable
 - **Tee aim arrows** — Every tee tile is painted with an arrow and a red tee marker either side of it, aimed at the hole's cup; doglegs get a curved arrow
 - **Object placement** — Theme-specific vegetation (oaks, pines, palms, cacti, fescue, heather, and more), 3 rock sizes, decorative flower beds
-- **Building placement** — 8 building types (Clubhouse, Pro Shop, Restaurant, Snack Bar, Driving Range, Cart Shed, Restroom, Bench) with proximity-based revenue/satisfaction effects and placement validation
+- **Building placement** — 8 building types (Clubhouse, Pro Shop, Restaurant, Snack Bar, Driving Range, Cart Shed, Restroom, Bench) with proximity-based revenue/satisfaction effects and placement validation. Every building is drawn as an isometric solid that fills its own grid square and turns with the course view
 - **Undo/redo** — 50-action stack covering terrain changes and entity placement, with cost refunds on undo
 - **OB markers** — Automatic white-stake placement at out-of-bounds boundaries
 
