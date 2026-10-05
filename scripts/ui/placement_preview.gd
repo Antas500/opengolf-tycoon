@@ -1001,22 +1001,15 @@ func _draw_potential_hole(alpha: float, hole: Dictionary, route: Array[Vector2i]
 		draw_circle(points[i], 5.0, Color(0.0, 0.0, 0.0, 0.5 * alpha))
 		draw_circle(points[i], 3.5, Color(HOLE_PATH_LANDING, HOLE_PATH_LANDING.a * alpha))
 
-	var cup_point := points[points.size() - 1]
-	var pin_top := _draw_potential_cup(cup, cup_point, alpha, hole_ready)
+	var pin_top := _draw_potential_cup(cup, alpha, hole_ready)
 	_draw_potential_hole_label(hole, pin_top, alpha)
 
-## Cup ellipse plus a small gold pin, previewing the waiting pin CupOverlay will
-## plant. Returns the top of the pin so the plaque can sit above it.
-func _draw_potential_cup(cup: Vector2i, cup_point: Vector2, alpha: float, hole_ready: bool) -> Vector2:
-	var right := OverlayGeometry.point_in_tile(terrain_grid, self, cup, Vector2(1.0, 0.5))
-	var bottom := OverlayGeometry.point_in_tile(terrain_grid, self, cup, Vector2(0.5, 1.0))
-	var radius := Vector2((right - cup_point).length(), (bottom - cup_point).length()) \
-			* CupOverlay.CUP_RADIUS_SCALE
-	var ellipse := PackedVector2Array()
-	for i in range(12):
-		var angle := TAU * float(i) / 12.0
-		ellipse.append(cup_point + Vector2(cos(angle) * radius.x, sin(angle) * radius.y))
-	draw_colored_polygon(ellipse, Color(CupOverlay.CUP_COLOR, CupOverlay.CUP_COLOR.a * alpha))
+## The hole CupOverlay will cut — black and exactly the golf ball's width — plus
+## a small gold pin, previewing the waiting pin it will plant. Returns the top
+## of the pin so the plaque can sit above it.
+func _draw_potential_cup(cup: Vector2i, alpha: float, hole_ready: bool) -> Vector2:
+	CupOverlay.draw_hole(self, terrain_grid, cup, alpha)
+	var cup_point := OverlayGeometry.tile_center(terrain_grid, self, cup)
 
 	var pin_color := CupOverlay.WAITING_PIN_COLOR if hole_ready else HOLE_PATH_BLOCKED
 	var pole_top := cup_point - Vector2(0.0, CupOverlay.WAITING_POLE_HEIGHT * 0.75)
