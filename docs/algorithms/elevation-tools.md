@@ -64,7 +64,7 @@ so every course can still be raised five levels or dug down five levels.
 
 ## Algorithm
 
-### Brush area geometry (`ElevationTool.tile_offsets`)
+### Brush area geometry (`ElevationTool.tile_offsets` / `TerrainBrush.offsets`)
 
 A brush of size S is anchored on the tile under the cursor (`anchor_tile()`,
 the floor of the tile-space point), so the hover preview sits on the tile the
@@ -77,22 +77,12 @@ With the round shape, a tile is kept when its centre lies inside a circle of
 radius `S/2` (integer division) around the middle of the block — the corners
 of the square are clipped away:
 
+The same offsets drive the Course Terrain paint brush (`TerrainBrush.offsets`),
+so an S×S round or square stamp covers the same tiles in both tools.
+
 ```gdscript
 static func tile_offsets(size: int, square_shape: bool) -> Array[Vector2i]:
-	var result: Array[Vector2i] = []
-	var from: int = -(size / 2)
-	var to: int = size - 1 + from
-	var middle: float = float(from + to + 1) * 0.5   # block centre, tile centres are +0.5
-	var limit: float = float(size / 2)
-	for x in range(from, to + 1):
-		for y in range(from, to + 1):
-			if not square_shape:
-				var dx: float = float(x) + 0.5 - middle
-				var dy: float = float(y) + 0.5 - middle
-				if dx * dx + dy * dy > limit * limit:
-					continue
-			result.append(Vector2i(x, y))
-	return result
+	return TerrainBrush.offsets(size, not square_shape)
 ```
 
 `vertex_offsets()` collects the corners of those tiles (deduplicated), and

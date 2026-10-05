@@ -8,7 +8,7 @@ Course Review translates observable conditions into actions: repair a tee/cup su
 
 ## Algorithm
 
-`TerrainBrush.centers` samples and rounds a line with `max(abs(dx), abs(dy))` steps. Consecutive stamps differ by at most one tile per axis. A round brush includes offsets satisfying `x²+y² <= r² + .5r`; a square includes all offsets in the bounding box.
+`TerrainBrush.centers` samples and rounds a line with `max(abs(dx), abs(dy))` steps. Consecutive stamps differ by at most one tile per axis. Brush sizes run 1×1 through 9×9 (the same steps as the Elevation Brush). Odd sizes centre on the cursor tile; even sizes centre on the vertex at that tile's near corner, so an S×S stamp always covers S tiles per side. A square includes every offset in that block; a round brush keeps tiles whose centre lies within a circle of radius `S/2` around the middle of the block.
 
 `CourseAdvisor.review` returns up to four suggestions. It checks tee/cup terrain, samples a three-tile corridor (flags short turf below 65%), flags value below 2.8/5, checks food service reach at tees from hole four onward, then operating loss and aesthetics below 2.5/5. Direct-corridor advice is a heuristic, not a routing solver; intentional doglegs and hazards require judgment.
 
@@ -21,7 +21,8 @@ Quick Start builds nine holes with gently curved, variable-width fairways and a 
 | Corridor coverage threshold | CourseAdvisor | 65% |
 | Value warning | CourseAdvisor | 2.8/5 |
 | Maximum suggestions | CourseAdvisor | 4 |
-| Round brush edge | TerrainBrush | r² + .5r |
+| Brush sizes | TerrainToolbar.BRUSH_SIZES | 1..9 | S×S tile stamps, matching the Elevation Brush |
+| Round brush edge | TerrainBrush | tile centre within S/2 of the block middle |
 | Starter fee | QuickStartCourse | $5/hole |
 
 Course Review now leads with actual visitor complaint hotspots (name, hole and grid position available in records), warns when arrivals exceed completed rounds at closing, displays on-course amenity use and income, and compares completed-visit satisfaction and operating profit with the prior three days. The advice area scrolls. Quick Start also includes small layered groups of trees and low planting around the clubhouse entrance, while preserving tees, greens and existing entities.
