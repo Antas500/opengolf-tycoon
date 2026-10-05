@@ -69,24 +69,24 @@ func test_minimap_switches_between_standard_and_compact() -> void:
 	grid.grid_width = 16
 	grid.grid_height = 16
 	add_child(grid)
-	var mini: MiniMap = autofree(MiniMap.new())
-	mini.setup(grid, null, null)
-	add_child(mini)
+	var mini_map: MiniMap = autofree(MiniMap.new())
+	mini_map.setup(grid, null, null)
+	add_child(mini_map)
 
 	await _set_window(1600, 1000)
-	mini.apply_screen()
-	assert_eq(mini.get("_map_size"), MiniMap.MAP_SIZE)
-	assert_eq(mini.get_map_total_size(), Vector2(MiniMap.MAP_SIZE + 4, MiniMap.MAP_SIZE / 2.0 + 4))
+	mini_map.apply_screen()
+	assert_eq(mini_map.get("_map_size"), MiniMap.MAP_SIZE)
+	assert_eq(mini_map.get_map_total_size(), Vector2(MiniMap.MAP_SIZE + 4, MiniMap.MAP_SIZE / 2.0 + 4))
 
 	await _set_window(390, 844)
-	mini.apply_screen()
-	assert_eq(mini.get("_map_size"), MiniMap.COMPACT_MAP_SIZE)
-	assert_eq(mini.get_map_total_size(), Vector2(MiniMap.COMPACT_MAP_SIZE + 4, MiniMap.COMPACT_MAP_SIZE / 2.0 + 4))
+	mini_map.apply_screen()
+	assert_eq(mini_map.get("_map_size"), MiniMap.COMPACT_MAP_SIZE)
+	assert_eq(mini_map.get_map_total_size(), Vector2(MiniMap.COMPACT_MAP_SIZE + 4, MiniMap.COMPACT_MAP_SIZE / 2.0 + 4))
 
 	# Explicit sizing wins over the window.
-	mini.set_map_size(100)
-	assert_eq(mini.get("_map_size"), 100)
-	assert_eq(mini.get_map_total_size(), Vector2(104, 54))
+	mini_map.set_map_size(100)
+	assert_eq(mini_map.get("_map_size"), 100)
+	assert_eq(mini_map.get_map_total_size(), Vector2(104, 54))
 
 func test_status_column_uses_compact_width_on_narrow_windows() -> void:
 	await _set_window(1600, 1000)

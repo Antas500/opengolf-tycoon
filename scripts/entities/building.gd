@@ -36,8 +36,13 @@ func _ready() -> void:
 		width = size[0]
 		height = size[1]
 
+	# EntityLayer positions the node before adding it to the scene tree. That
+	# first position uses the default 4x4 size, which happens to be the
+	# clubhouse's footprint but is wrong for every other building. Recalculate
+	# once the data-driven footprint is known so the visual stays on its placed
+	# grid cells.
+	set_position_in_grid(grid_position)
 	_update_visuals()
-	_update_facing()
 
 func _on_click_area_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:

@@ -127,10 +127,10 @@ func _draw_clouds(s: Vector2) -> void:
 	for cluster in clusters:
 		var drift := fposmod(float(cluster["x"]) * span + _time * float(cluster["speed"]), span)
 		var center := Vector2(drift - 180.0, s.y * float(cluster["y"]))
-		var scale: float = float(cluster["scale"]) * minf(s.x, s.y) * 0.05
-		_ellipse(center, Vector2(scale * 2.4, scale * 0.85), CLOUD_COLOR)
-		_ellipse(center + Vector2(-scale * 1.1, scale * 0.22), Vector2(scale * 1.5, scale * 0.7), CLOUD_COLOR)
-		_ellipse(center + Vector2(scale * 1.2, scale * 0.3), Vector2(scale * 1.3, scale * 0.6), CLOUD_COLOR)
+		var cloud_scale: float = float(cluster["scale"]) * minf(s.x, s.y) * 0.05
+		_ellipse(center, Vector2(cloud_scale * 2.4, cloud_scale * 0.85), CLOUD_COLOR)
+		_ellipse(center + Vector2(-cloud_scale * 1.1, cloud_scale * 0.22), Vector2(cloud_scale * 1.5, cloud_scale * 0.7), CLOUD_COLOR)
+		_ellipse(center + Vector2(cloud_scale * 1.2, cloud_scale * 0.3), Vector2(cloud_scale * 1.3, cloud_scale * 0.6), CLOUD_COLOR)
 
 ## Three rolled hill ridges, far to near, each closed down to the bottom edge.
 func _draw_hills(s: Vector2, horizon: float) -> void:
@@ -229,13 +229,13 @@ func _draw_trees(s: Vector2, horizon: float) -> void:
 	var unit := _unit * TREE_UNIT_SHARE
 	for spot in spots:
 		var base := Vector2(s.x * float(spot["x"]), horizon + s.y * float(spot["y"]))
-		var scale: float = float(spot["scale"]) * unit
-		var trunk := maxf(1.5, scale * 0.16)
-		draw_line(base, base - Vector2(0.0, scale * 1.05), TRUNK_COLOR, trunk, true)
-		var crown := base - Vector2(0.0, scale * 1.6)
-		draw_circle(crown, scale * 0.85, TREE_DARK)
-		draw_circle(crown + Vector2(-scale * 0.45, scale * 0.22), scale * 0.55, TREE_DARK)
-		draw_circle(crown + Vector2(scale * 0.42, scale * 0.16), scale * 0.48, TREE_LIGHT)
+		var tree_scale: float = float(spot["scale"]) * unit
+		var trunk := maxf(1.5, tree_scale * 0.16)
+		draw_line(base, base - Vector2(0.0, tree_scale * 1.05), TRUNK_COLOR, trunk, true)
+		var crown := base - Vector2(0.0, tree_scale * 1.6)
+		draw_circle(crown, tree_scale * 0.85, TREE_DARK)
+		draw_circle(crown + Vector2(-tree_scale * 0.45, tree_scale * 0.22), tree_scale * 0.55, TREE_DARK)
+		draw_circle(crown + Vector2(tree_scale * 0.42, tree_scale * 0.16), tree_scale * 0.48, TREE_LIGHT)
 
 ## Darken the top and bottom edges so the title text and the version line have
 ## something to sit on wherever the window is a different shape.

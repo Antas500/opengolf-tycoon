@@ -40,8 +40,8 @@ building actually has.
 
 | Piece | What it is |
 | --- | --- |
-| `grid_origin_offset(size, facing)` | Where grid `(0, 0)` falls in the building node's local space, matching the anchor `Building.set_position_in_grid()` uses |
-| `project_point(origin, p, facing)` | Grid point → local draw space |
+| `grid_origin_offset(size, view_facing)` | Where grid `(0, 0)` falls in the building node's local space, matching the anchor `Building.set_position_in_grid()` uses |
+| `project_point(origin, p, view_facing)` | Grid point → local draw space |
 | `screen_delta(offset)` | A bare grid offset → screen offset (used for extents and shadows) |
 | `face_shade(normal)` | How brightly a plane facing a grid direction is lit |
 | `Sketch` | The shared drawing surface: `walls`, `hip_roof`, `window_at`, `door_at`, `awning`, `terrace`, `contact_shadow`… |

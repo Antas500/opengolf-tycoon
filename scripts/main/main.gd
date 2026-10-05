@@ -2,6 +2,7 @@ extends Node2D
 ## Main - Primary game scene controller
 
 const GameManagerScript := preload("res://scripts/autoload/game_manager.gd")
+const WorldMapStateScript := preload("res://scripts/autoload/world_map_state.gd")
 
 @onready var terrain_grid: TerrainGrid = $TerrainGrid
 @onready var camera: IsometricCamera = $IsometricCamera
@@ -721,7 +722,7 @@ func _on_menu_start_new_game() -> void:
 ## 0 generated holes, every feature on) and straight to the world map.
 func _on_menu_quick_start() -> void:
 	_hide_main_menu()
-	WorldMap.new_world(WorldMap.default_options())
+	WorldMap.new_world(WorldMapStateScript.default_options())
 	_show_world_map_screen(true)
 
 func _on_menu_continue(save_name: String) -> void:
@@ -825,8 +826,8 @@ func _start_new_course_at_location(location_id: String, from_menu: bool) -> void
 
 ## The default course name for a location: "Monterey Golf Club".
 static func _course_name_for_location(definition: Dictionary) -> String:
-	var name := str(definition.get("name", "New Course"))
-	return name if name.to_lower().ends_with("golf club") else "%s Golf Club" % name
+	var course_name := str(definition.get("name", "New Course"))
+	return course_name if course_name.to_lower().ends_with("golf club") else "%s Golf Club" % course_name
 
 ## Shared finishing touches after a location's course becomes the live one.
 func _after_location_activated(from_menu: bool) -> void:
@@ -3449,7 +3450,7 @@ func _handle_building_move_click(grid_pos: Vector2i) -> void:
 		EventBus.notify(error, "error")
 		return
 	var building := _moving_building
-	var name := _building_display_name(building)
+	var building_name := _building_display_name(building)
 	var old_pos: Vector2i = building.grid_position
 	if CourseClubhouse.move_to(entity_layer, building, grid_pos):
 		# Moving is free; Ctrl+Z still puts it back where it stood.
@@ -3459,17 +3460,17 @@ func _handle_building_move_click(grid_pos: Vector2i) -> void:
 			"old_pos": old_pos,
 			"new_pos": grid_pos,
 		})
-		EventBus.notify("%s moved." % name, "success")
+		EventBus.notify("%s moved." % building_name, "success")
 	_cancel_building_move()
 
 ## The name a building is announced under (its data name, else its type).
 func _building_display_name(building: Building) -> String:
 	if building == null:
 		return "Building"
-	var name: String = str(building.building_data.get("name", "")) if not building.building_data.is_empty() else ""
-	if name.is_empty():
-		name = building.building_type.replace("_", " ").capitalize()
-	return name
+	var display_name: String = str(building.building_data.get("name", "")) if not building.building_data.is_empty() else ""
+	if display_name.is_empty():
+		display_name = building.building_type.replace("_", " ").capitalize()
+	return display_name
 
 # --- Financial Panel ---
 

@@ -512,9 +512,10 @@ static func get_land_mask_texture() -> ImageTexture:
 	return _mask_texture
 
 ## UV of a lon/lat point in the mask: (0, 0) is the north-west corner. The
-## longitude wraps, so any value works; the latitude is kept half a texel
-## inside the polar rows so the top/bottom edge is never sampled.
-static func mask_uv(lon_deg: float, lat_deg: float, width: int = MASK_WIDTH, height: int = MASK_HEIGHT) -> Vector2:
+## longitude wraps, so any value works — and the mask width is therefore not
+## needed; the latitude is kept half a texel inside the polar rows so the
+## top/bottom edge is never sampled.
+static func mask_uv(lon_deg: float, lat_deg: float, _width: int = MASK_WIDTH, height: int = MASK_HEIGHT) -> Vector2:
 	var half_row := 0.5 / float(height)
 	return Vector2(
 		fposmod((lon_deg + 180.0) / 360.0, 1.0),
@@ -561,6 +562,8 @@ static func _get_mask_edges() -> Dictionary:
 				if absf(from.y - to.y) < 0.000001:
 					continue
 				coords.append_array(PackedFloat32Array([from.x, from.y, to.x, to.y]))
+			# Four floats per edge: whole-edge count is exact integer maths.
+			@warning_ignore("integer_division")
 			end.append(coords.size() / 4)
 			lat_min.append(low)
 			lat_max.append(high)

@@ -234,6 +234,8 @@ static func _front_tiles(building: Building) -> Array[Vector2i]:
 ## "edge" choices land at the centre of a side first.
 static func _middle_out(count: int) -> Array[int]:
 	var order: Array[int] = []
+	# Whole-tile indices on purpose: the lower middle of an odd/even count.
+	@warning_ignore("integer_division")
 	var left: int = (count - 1) / 2
 	var right: int = left + 1
 	while order.size() < count:
@@ -388,6 +390,8 @@ static func owned_land_centre() -> Vector2i:
 		min_tile.y = mini(min_tile.y, rect.position.y)
 		max_tile.x = maxi(max_tile.x, rect.position.x + rect.size.x - 1)
 		max_tile.y = maxi(max_tile.y, rect.position.y + rect.size.y - 1)
+	# The middle tile of the bounding box: tile indices are integers.
+	@warning_ignore("integer_division")
 	return Vector2i((min_tile.x + max_tile.x) / 2, (min_tile.y + max_tile.y) / 2)
 
 static func _data_size(data: Dictionary) -> Vector2i:

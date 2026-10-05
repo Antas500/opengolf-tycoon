@@ -3,6 +3,8 @@ extends GutTest
 ## of land that comes pre-cleared, buying and switching locations, the
 ## unlimited-money option and the enabled game features.
 
+const WorldMapStateScript := preload("res://scripts/autoload/world_map_state.gd")
+
 var _saved_world: Dictionary
 var _saved_money: int
 var _saved_unlimited: bool
@@ -98,7 +100,7 @@ func test_growth_order_keeps_the_centre_cluster() -> void:
 ## ── World rolls ──────────────────────────────────────────────────────────
 
 func test_new_world_rolls_every_location_and_prices_it() -> void:
-	WorldMap.new_world(WorldMap.default_options(), 12345)
+	WorldMap.new_world(WorldMapStateScript.default_options(), 12345)
 	assert_eq(WorldMap.locations.size(), WorldLocations.get_all().size())
 	for def in WorldLocations.get_all():
 		var id: String = def["id"]
@@ -126,7 +128,7 @@ func test_new_world_applies_company_settings() -> void:
 	assert_eq(WorldMap.generated_holes, 9)
 
 func test_quick_start_defaults_match_the_agreed_options() -> void:
-	var options := WorldMap.default_options()
+	var options := WorldMapStateScript.default_options()
 	assert_eq(options["difficulty"], DifficultyPresets.Preset.NORMAL)
 	assert_eq(options["starting_money"], 100000)
 	assert_eq(options["generated_holes"], 0)
@@ -135,7 +137,7 @@ func test_quick_start_defaults_match_the_agreed_options() -> void:
 	assert_ne(options["company_name"], "", "Quick Start picks a random company name")
 
 func test_reset_world_never_takes_owned_land_away() -> void:
-	WorldMap.new_world(WorldMap.default_options(), 999)
+	WorldMap.new_world(WorldMapStateScript.default_options(), 999)
 	GameManager.money = 10000000
 	assert_true(WorldMap.buy_location("monterey"), "the location can be bought")
 	var owned_land: Array = WorldMap.get_unlocked_parcels("monterey").duplicate()
@@ -146,7 +148,7 @@ func test_reset_world_never_takes_owned_land_away() -> void:
 	assert_gt(WorldMap.get_price("florida"), 0, "unowned locations are re-priced")
 
 func test_buying_deducts_the_price_and_marks_the_location_owned() -> void:
-	WorldMap.new_world(WorldMap.default_options(), 4242)
+	WorldMap.new_world(WorldMapStateScript.default_options(), 4242)
 	GameManager.money = 500000
 	var price := WorldMap.get_price("ireland")
 	assert_true(WorldMap.buy_location("ireland"), "Ireland can be bought")
@@ -156,7 +158,7 @@ func test_buying_deducts_the_price_and_marks_the_location_owned() -> void:
 	assert_eq(GameManager.money, 500000 - price, "buying twice does not charge twice")
 
 func test_cannot_buy_what_the_company_cannot_afford() -> void:
-	WorldMap.new_world(WorldMap.default_options(), 777)
+	WorldMap.new_world(WorldMapStateScript.default_options(), 777)
 	GameManager.money = 100
 	GameManager.bankruptcy_threshold = -1000
 	var price := WorldMap.get_price("scotland")
@@ -180,14 +182,14 @@ func test_unlimited_money_never_runs_out() -> void:
 	assert_true(WorldMap.buy_location("rocky_mountains"), "locations can still be bought")
 
 func test_world_state_survives_a_save_round_trip() -> void:
-	WorldMap.new_world(WorldMap.default_options(), 31337)
+	WorldMap.new_world(WorldMapStateScript.default_options(), 31337)
 	GameManager.money = 500000
 	WorldMap.buy_location("wales")
 	WorldMap.set_active_location("wales")
 	WorldMap.take_snapshot("wales", {"marker": true})
 	var data := WorldMap.serialize()
 
-	WorldMap.new_world(WorldMap.default_options(), 1)
+	WorldMap.new_world(WorldMapStateScript.default_options(), 1)
 	assert_false(WorldMap.is_owned("wales"), "the fresh world forgets the purchase")
 	WorldMap.deserialize(data)
 
@@ -200,7 +202,7 @@ func test_world_state_survives_a_save_round_trip() -> void:
 ## ── Land ─────────────────────────────────────────────────────────────────
 
 func test_location_land_limits_what_can_be_bought() -> void:
-	WorldMap.new_world(WorldMap.default_options(), 2024)
+	WorldMap.new_world(WorldMapStateScript.default_options(), 2024)
 	var land := LandManager.new()
 	add_child_autofree(land)
 	GameManager.land_manager = land

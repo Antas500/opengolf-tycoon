@@ -117,26 +117,37 @@ func test_the_art_covers_exactly_the_tiles_a_building_stands_on() -> void:
 					"%s at rotation %d: corner %s down" % [building_type, facing, corner])
 
 
-func test_a_placed_building_lands_on_its_tile_corners() -> void:
-	# The same check through the real Building node, so the anchor formula in
-	# Building.set_position_in_grid() and the renderer's projection cannot drift
-	# apart without this failing.
-	var building := entities.place_building("clubhouse", POS, registry)
-	assert_not_null(building, "the clubhouse is placed")
-	var size := _size_of("clubhouse")
-	var tiles := _tiles_of(size)
-	for facing in range(4):
-		grid.set_view_orientation(facing)
-		building.set_position_in_grid(POS)
-		var origin := CourseArchitecture.grid_origin_offset(size, facing)
-		for corner in _corners(tiles):
-			var drawn := building.position + origin + CourseArchitecture.project_point(
-					Vector2.ZERO, Vector3(corner.x, corner.y, 0), facing)
-			var expected := grid.grid_point_to_screen(Vector2(POS) + corner)
-			assert_almost_eq(drawn.x, expected.x, 0.001,
-				"rotation %d: corner %s across" % [facing, corner])
-			assert_almost_eq(drawn.y, expected.y, 0.001,
-				"rotation %d: corner %s down" % [facing, corner])
+func test_every_placed_building_lands_on_its_tile_corners() -> void:
+	# Exercise the real placement path: EntityLayer positions a building before
+	# it enters the tree, while Building loads its data-driven footprint in
+	# _ready(). Every building type must be re-anchored to that final footprint,
+	# not just the 4x4 clubhouse whose size matches Building's default.
+	for building_type in registry:
+		var kind := str(building_type)
+		var building := entities.place_building(kind, POS, registry)
+		assert_not_null(building, "%s is placed" % kind)
+		if building == null:
+			continue
+
+		var size := _size_of(kind)
+		var tiles := _tiles_of(size)
+		assert_eq(Vector2i(building.width, building.height), Vector2i(tiles),
+			"%s loads its registered footprint" % kind)
+		for facing in range(4):
+			grid.set_view_orientation(facing)
+			building.set_position_in_grid(POS)
+			var origin := CourseArchitecture.grid_origin_offset(size, facing)
+			for corner in _corners(tiles):
+				var drawn := building.global_position + origin + CourseArchitecture.project_point(
+						Vector2.ZERO, Vector3(corner.x, corner.y, 0), facing)
+				var expected := grid.to_global(grid.grid_point_to_screen(Vector2(POS) + corner))
+				assert_almost_eq(drawn.x, expected.x, 0.001,
+					"%s rotation %d: corner %s across" % [kind, facing, corner])
+				assert_almost_eq(drawn.y, expected.y, 0.001,
+					"%s rotation %d: corner %s down" % [kind, facing, corner])
+
+		entities.clear_all()
+		await get_tree().process_frame
 
 
 func test_the_projection_matches_the_grids_own_away_from_the_corners() -> void:
