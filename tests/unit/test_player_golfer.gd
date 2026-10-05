@@ -1,5 +1,40 @@
 extends GutTest
 
+func test_player_appearance_recolors_the_casual_pixel_sprites() -> void:
+	var golfer: Golfer = add_child_autofree(load("res://scenes/entities/golfer.tscn").instantiate())
+	await get_tree().process_frame
+	assert_true(golfer._use_sprites, "The owner keeps the same pixel sprite renderer as visiting golfers")
+	assert_not_null(golfer._animated_sprite)
+
+	var profile := PlayerGolferProfile.new()
+	profile.appearance = {
+		"shirt_color": "2878d0",
+		"pants_color": "2e9f55",
+		"cap_color": "ecd247",
+		"hair_color": "b34725",
+		"skin_tone": "76c4a1",
+	}
+	golfer.apply_player_appearance(profile)
+
+	assert_true(golfer._use_sprites, "Custom colors must not switch the owner back to polygon art")
+	var sprite_frames: SpriteFrames = golfer._animated_sprite.sprite_frames
+	var sprite_image := sprite_frames.get_frame_texture("idle_south", 0).get_image()
+	var back_image := sprite_frames.get_frame_texture("idle_north", 0).get_image()
+	var shirt := sprite_image.get_pixel(24, 21)
+	var cap := sprite_image.get_pixel(24, 9)
+	var skin := sprite_image.get_pixel(24, 15)
+	var pants := sprite_image.get_pixel(24, 31)
+	var hair := sprite_image.get_pixel(20, 11)
+	var original_eye: Color = golfer._base_sprite_frames.get_frame_texture("idle_south", 0).get_image().get_pixel(23, 16)
+	assert_eq(sprite_image.get_pixel(23, 16), original_eye, "Hair recoloring leaves facial details intact")
+	assert_gt(shirt.b, shirt.r, "The shirt takes the selected blue color")
+	assert_gt(cap.r, cap.b, "The cap takes the selected yellow color")
+	assert_gt(skin.g, skin.r, "The skin uses its selected color")
+	assert_gt(pants.g, pants.r, "The trousers use their selected color")
+	assert_gt(hair.r, hair.b, "The hair uses its selected color")
+	assert_gt(back_image.get_pixel(22, 12).r, back_image.get_pixel(22, 12).b,
+		"Hair remains customizable on the back-facing animation too")
+
 func test_initial_budget_and_refund() -> void:
 	var profile := PlayerGolferProfile.new()
 	assert_eq(profile.remaining(), 10)
