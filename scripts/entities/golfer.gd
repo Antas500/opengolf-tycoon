@@ -373,7 +373,7 @@ func _setup_sprite_animations() -> void:
 	_load_skin_frames()
 
 ## Deal this visitor one of the skins their tier may spawn with. The tier's own
-## art keeps the old tier colour palettes; the themed skins wear their own.
+## hand-made art keeps the old tier colour palettes.
 func assign_visitor_skin() -> void:
 	var picked := GolferSkinLibrary.random_skin_for_tier(golfer_tier)
 	if picked == null:

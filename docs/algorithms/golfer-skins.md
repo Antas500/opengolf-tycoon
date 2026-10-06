@@ -3,14 +3,12 @@
 ## Plain English
 
 Every golfer on the course draws from a **skin**: a complete set of pixel art for
-the walk, idle and swing animations in all eight facings. Two of them are
-hand-made tier looks (**Weekend Beginner** and **Club Casual**) and thirteen more
-are themed skins drawn procedurally by `tools/generate_golfer_skins.py`
-(astronaut, caddie, chef, cowboy, knight, lumberjack, ninja, pirate, plain,
-retro, robot, suit, wizard). Visitors spawn wearing the skin their tier allows:
-the hand-made art leads the Beginner and Casual tiers, while the Serious and Pro
-tiers have no art of their own and are dressed from the themed skins. The course
-owner wears whichever skin they picked.
+the walk, idle and swing animations in all eight facings. The game ships two
+hand-made looks: **Weekend Beginner** and **Club Casual**. Visitors spawn wearing
+the skin their tier allows - the Beginner tier wears Weekend Beginner, the Casual
+tier wears Club Casual - and the Tour Serious and Tour Pro tiers, which have no
+art of their own, fall back to Club Casual. The course owner wears whichever
+skin they picked.
 
 A skin is not baked flat: every sprite ships with a **part layer** beside it, a
 byte per pixel recording which body part the artist drew that pixel as (top,
@@ -51,23 +49,23 @@ before any game has been saved.
 `GolferSkinLibrary` (`scripts/systems/golfer_skin_library.gd`, all static) is the
 single source of truth. The shipped catalogue comes from
 `res://data/golfer_skins.json`, written by `tools/generate_golfer_skins.py`
-together with the 1456 PNGs under `assets/sprites/golfer/skins/<id>/` and a part
-layer beside each one. Each record carries:
+together with the part layer it authors beside every frame of the hand-made art
+(`assets/sprites/golfer/beginner/`, `.../casual/`). Each record carries:
 
 | Field | Meaning |
 | --- | --- |
 | `id`, `name`, `description` | Identity, shown in the designer and the pickers |
 | `root` | Folder holding `animations/<anim>/<direction>/frame_NNN.png` (+ `.layer.bin`) |
-| `legacy` | `true` for the hand-made tier art (shading carried across, not re-emitted from a ramp) |
+| `legacy` | `true` for hand-made art (shading carried across, not re-emitted from a ramp). Both shipped looks are `true` - neither was drawn from ramps |
 | `customizable[]` | The parts this skin's layer holds - the parts the colour pickers offer |
 | `colors{}` | The colours the art was drawn in, one per part |
 | `spawn_tiers[]` | Which visitor tiers may wear it |
 | `frames` | `4 idle · 4 walk · 6 swing` per direction |
 
-`customizable[]` is written from what the generator actually drew, so it matches
-the layer exactly: an outfit that never draws its "trousers" (a wizard's robe
-covers the legs, a caddie's towel is drawn as trim) does not offer that part
-until the player adds it.
+`customizable[]` is written from the parts the layer actually tags, so it matches
+the art exactly: the Beginner look draws no headwear, and neither look draws a
+trouser tone it never uses, so those parts are not offered until the player adds
+them.
 
 `all_skins()` merges that with the player's recipes from
 `PlayerGolferProfile.custom_skins`, rebuilt whenever the profile's
@@ -102,29 +100,32 @@ borrows those pixels; the byte is the same value the designer stores for a
 painted pixel:
 
 ```
-0                    no part: empty canvas, the drop shadow, the shadow under the
-                     hat brim - anything that is not a body part. Never re-coloured.
+0                    no part: empty canvas, and any pixel that is not a body
+                     part. Never re-coloured.
 1 + part*5 + shade   a shade of a part (see PART_ORDER)
 ```
 
-`tools/generate_golfer_skins.py` writes the layers:
+`tools/generate_golfer_skins.py` writes the layers. The art itself is hand-made,
+so the tool does not know the parts by construction; it reads every frame back
+(`read_png`) and tags it from a **key** authored per look (`CASUAL_ART`,
+`BEGINNER_ART`): the tones the artist drew each part in, plus the band of the
+figure (head / body / waist / legs / feet) a pixel has to sit in to belong to one
+part rather than another. That is how one dark brown can be the hair's outline
+above the neck, a crease in the top on the shirt, the belt at the waist, the
+trouser seam below it and the sole at the feet, and how a pupil (drawn in the
+hair's own tone) is found by having skin on all sides of it. Anything the key
+does not list takes the part of the nearest tone it does, so the layer always
+covers the whole figure; the shade is the ramp stop closest to the tone the pixel
+was drawn in. Re-running the tool reproduces the layers byte for byte.
 
-* The **drawn (themed) skins** know their parts by construction: `Painter.to_layer()`
-  records `(part, shade)` for every pixel it puts down, so the layer is exact -
-  including the parts drawn in the fixed colours (eyes, highlights).
-* The **hand-made tier art** was not drawn by the tool, so its layers are
-  authored there instead (`CASUAL_ART`, `BEGINNER_ART`), as a key: the tones the
-  artist drew each part in, plus the band of the figure (head / body / waist /
-  legs / feet) a pixel has to sit in to belong to one part rather than another.
-  That is how one dark brown can be the hair's outline above the neck, a crease
-  in the top on the shirt, the belt at the waist, the trouser seam below it and
-  the sole at the feet, and how a pupil (drawn in the hair's own tone) is found
-  by having skin on all sides of it. Anything the key does not list takes the
-  part of the nearest tone it does, so the layer always covers the whole figure.
-  The shade is the ramp stop closest to the tone the pixel was drawn in.
+A look drawn from ramps instead - one added later, drawn by a tool that knows
+its own parts - would be tagged as it is drawn and ship with `legacy: false`;
+the library re-colours that kind of art by re-emitting the ramp stop the layer
+records, and the tests build one over the hand-made frames to keep the path
+honest. No such art ships today.
 
 `layer_report(skin)` counts the pixels of each part over the skin's whole art
-(once per art, cached) and `layer_parts()` lists them in `PART_ORDER`:
+(once per art, cached) and `layer_parts()` lists them in picker order:
 `PlayerGolferProfile.parts_for_skin()` and the designer's colour pickers come
 straight off it.
 
@@ -135,11 +136,12 @@ skin's palette (`source_skin()`, the shipped skin a custom skin forked from) and
 only for the parts the skin's layer holds, so an untouched skin is rebuilt
 byte-for-byte from disk. `recolour()` then walks the layer:
 
-* A pixel whose part the player changed is re-emitted - from the new colour's
-  ramp, in the shade the layer recorded, for the drawn art.
-* The hand-made tier art was not drawn from ramps, so its own light and dark is
-  carried across instead (`shade_legacy(source, target, reference)` scales the
-  new colour by how bright the pixel was against the colour the artist used).
+* A pixel whose part the player changed is re-emitted. Ramp-drawn art takes the
+  ramp stop the layer recorded; the hand-made art this game ships was not drawn
+  from ramps, so its own light and dark is carried across instead
+  (`shade_legacy(source, target, reference)` scales the new colour by how bright
+  the pixel was against the colour the artist used), which is what keeps the
+  artist's blended shading rather than flattening the sprite.
 * Every other pixel, and every pixel the layer marks 0, keeps the art exactly.
 
 Canvas-space distance is all `recolour()` needs, so it works on any 48x48 frame.
@@ -176,9 +178,11 @@ after an edit. Eight visitors wearing one skin therefore cost one build.
 ### Spawning
 
 `skins_for_tier(tier)` puts the tier's own art first - for the tiers whose art
-the game ships - and then the themed skins that tier may wear;
-`random_skin_for_tier(tier)` picks the tier look about 55% of the time and a
-themed skin otherwise. `golfer.gd` deals a skin in `assign_visitor_skin()` for
+the game ships - and then the other skins that tier may wear;
+`random_skin_for_tier(tier)` picks the tier look about 55% of the time and
+another allowed skin otherwise. A tier the game ships no art for (Tour Serious,
+Tour Pro) has no skins in its list at all and is dealt the default skin, Club
+Casual, so every visitor can still be dressed. `golfer.gd` deals a skin in `assign_visitor_skin()` for
 visitor rounds; for the owner round, `apply_player_appearance(profile)` reads
 the profile's `skin_id` and colours. A legacy tier skin keeps the golfer's own
 `shirt_color`/`pants_color`/… so the existing tier colour variation still
@@ -211,11 +215,11 @@ be a revision out of date - its layer with it.
 
 | Lever | Location | Value | Effect |
 | --- | --- | --- | --- |
-| Themed skins | `tools/generate_golfer_skins.py` (`SKINS`, `_draw_pack`) | 13 | How many extra skins ship; regenerate with `python3 tools/generate_golfer_skins.py` |
-| Part layers | `tools/generate_golfer_skins.py` (`Painter.to_layer`, `legacy_layer`) | one `.layer.bin` per frame | Which pixels each part owns; re-run the tool after editing the tier-art key |
+| Part layers | `tools/generate_golfer_skins.py` (`legacy_layer`, and the `CASUAL_ART` / `BEGINNER_ART` keys) | one `.layer.bin` per frame | Which pixels each part owns; re-run the tool after editing the art or a key |
+| Shipped skins | `tools/generate_golfer_skins.py` (`LEGACY_ART`), `data/golfer_skins.json` | 2 | Which looks the game ships |
 | Ramp stops | `GolferSkinLibrary.ramp()` | 0.24 / 0.30 / 0.62 / 0.42 | How much light, dark and outline the shading has |
 | Match tolerance | `GolferSkinLibrary.MATCH_TOLERANCE` | 0.010 | How close a pixel must be to a ramp entry to be re-coloured - art with no layer only |
-| Tier-art share | `GolferSkinLibrary.random_skin_for_tier()` | 0.55 | How often a visitor wears their tier's own look instead of a themed skin |
+| Tier-art share | `GolferSkinLibrary.random_skin_for_tier()` | 0.55 | How often a visitor wears their tier's own look instead of another skin that tier may wear |
 | Own-skin limit | `PlayerGolferProfile.MAX_CUSTOM_SKINS` | 24 | How many skins of their own a player may keep |
 | Name length | `PlayerGolferProfile.MAX_SKIN_NAME` | 24 | Longest skin name the designer accepts |
 | Designer breakpoint | `GolferSkinDesigner.BREAKPOINT` | 980 px | Below this the three columns stack into one scrolling column |

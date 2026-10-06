@@ -4,7 +4,7 @@ extends Node
 ## Opens the real Customise Golfer Skins screen from the title screen and drives
 ## it through phone, tablet and desktop window sizes. At every size it checks the
 ## three columns are on screen and reachable, the skin list offers the whole
-## catalogue (themed skins included), the part layer is listed, and the canvas is
+## catalogue, the part layer is listed, and the canvas is
 ## showing art.
 ##
 ## Then it plays the screen: edits the part layer (removes a part and adds one
@@ -74,22 +74,22 @@ func _run() -> void:
 	# ------------------------------------------------------------------
 	# The part layer: the pixels each colour change is allowed to touch.
 	# ------------------------------------------------------------------
-	designer._select_by_id("plain")
+	designer._select_by_id("casual")
 	await _frames(2)
 	var layer_list: ItemList = _named(designer, "LayerList")
 	var parts_before := layer_list.item_count if layer_list != null else -1
 	_check(parts_before == GolferSkinLibrary.parts_for_skin(
-		GolferSkinLibrary.skin_by_id("plain")).size(),
+		GolferSkinLibrary.skin_by_id("casual")).size(),
 		"the layer lists the parts the art draws (got %d)" % parts_before)
-	_check(_layer_holds("plain", "cap"), "the layer holds the headwear")
+	_check(_layer_holds("casual", "cap"), "the layer holds the headwear")
 	designer._set_layer_part("cap", false)
 	await _frames(2)
-	_check(not _layer_holds("plain", "cap"), "a part can be taken out of the layer")
-	_check(not Array(PlayerGolferProfile.parts_for_skin("plain")).has("cap"),
+	_check(not _layer_holds("casual", "cap"), "a part can be taken out of the layer")
+	_check(not Array(PlayerGolferProfile.parts_for_skin("casual")).has("cap"),
 		"and the colour pickers stop offering it")
 	designer._set_layer_part("cap", true)
 	await _frames(2)
-	_check(_layer_holds("plain", "cap"), "and put back again")
+	_check(_layer_holds("casual", "cap"), "and put back again")
 	# A part the art never drew can join the layer: it comes with no pixels, so
 	# the art is untouched until the player paints some.
 	designer._set_layer_part("accent", true)
@@ -108,11 +108,11 @@ func _run() -> void:
 	designer._on_pixels_changed()
 	await _frames(2)
 	_check(designer._editor.image().get_pixel(20, 7).a > 0.5, "and can be painted")
-	designer._select_by_id("plain")
+	designer._select_by_id("casual")
 	await _frames(2)
 
 	# Re-colour the top of the skin the owner wears.
-	designer._select_by_id("plain")
+	designer._select_by_id("casual")
 	designer._set_part_colour("shirt", Color("1188ee"))
 	await _frames(3)
 	var stored: Dictionary = profile.custom_skins[0] if not profile.custom_skins.is_empty() else {}
@@ -120,7 +120,7 @@ func _run() -> void:
 	_check(str(stored.get("colors", {}).get("shirt", "")) == "1188ee",
 		"the colour the player picked is the one stored (got %s)" % str(stored.get("colors", {}).get("shirt", "")))
 	_check(_list_has_edit_mark(), "the edited skin is marked in the list")
-	var worn_skin = GolferSkinLibrary.skin_by_id("plain")
+	var worn_skin = GolferSkinLibrary.skin_by_id("casual")
 	_check(worn_skin != null and worn_skin.custom, "the catalogue hands back the edited skin")
 	_check(worn_skin != null and worn_skin.colors.get("shirt", Color.BLACK) == Color("1188ee"),
 		"and it wears the player's colour")

@@ -6,9 +6,9 @@ class_name GolferSkinLibrary
 ## A *skin* is a full set of pixel art for the golfer: idle, walk and swing
 ## animations, eight facings each. The catalogue comes from two places:
 ##
-##  * ``res://data/golfer_skins.json`` - the shipped skins. Thirteen themed
-##    skins are drawn by ``tools/generate_golfer_skins.py``; two more records
-##    mark the hand-made tier art (Beginner/Casual) as recolourable skins.
+##  * ``res://data/golfer_skins.json`` - the shipped skins: the two hand-made
+##    tier looks, Weekend Beginner and Club Casual. Their records (and the part
+##    layers beside their art) are written by ``tools/generate_golfer_skins.py``.
 ##  * the owner's profile - ``PlayerGolferProfile.custom_skins`` holds recipes
 ##    the player built in the Skin Designer (see ``scripts/ui/golfer_skin_designer.gd``).
 ##
@@ -198,7 +198,7 @@ class SkinDef extends RefCounted:
 		skin.name = str(data.get("name", "My Skin"))
 		skin.description = str(data.get("description", ""))
 		skin.custom = true
-		skin.base_id = str(data.get("base", "plain"))
+		skin.base_id = str(data.get("base", GolferSkinLibrary.default_skin_id()))
 		skin.root = ""
 		skin.legacy = false
 		var palette = data.get("colors", {})
@@ -402,7 +402,9 @@ static func tier_key(tier: int) -> String:
 
 
 ## The skins a visitor of this tier may spawn wearing, the tier's own art first
-## so it stays the common look.
+## so it stays the common look. A tier whose art the game does not ship - Tour
+## Serious and Tour Pro - has no skins of its own, and takes the default skin
+## instead (see ``random_skin_for_tier``).
 static func skins_for_tier(tier: int) -> Array:
 	var key := tier_key(tier)
 	var tier_skin: Array = []
@@ -421,8 +423,9 @@ static func skins_for_tier(tier: int) -> Array:
 	return tier_skin + themed
 
 
-## Pick a skin for a spawning visitor: usually the tier's own art, sometimes one
-## of the themed skins that tier is allowed to wear.
+## Pick a skin for a spawning visitor: usually the tier's own art, sometimes
+## another skin that tier is allowed to wear. A tier with no skins at all (the
+## game ships art for Beginner and Casual only) gets the default skin.
 static func random_skin_for_tier(tier: int) -> SkinDef:
 	var options := skins_for_tier(tier)
 	if options.is_empty():
@@ -544,9 +547,11 @@ static func layer_root(skin: SkinDef) -> String:
 
 ## One frame's part layer: a byte per pixel of the 48x48 canvas saying which
 ## part the artist drew that pixel as and in which shade (see ``pixel_index``);
-## 0 means no part - empty canvas, the shadow, or a pixel the layer does not own
-## - and a pixel like that is never re-coloured.
-## Returns an empty array when the art has no layer on disk.
+## 0 means no part - empty canvas, or a pixel the layer does not own - and a
+## pixel like that is never re-coloured.
+## Returns an empty array when the art has no layer on disk, and always hands
+## out a copy: the layer is cached for the whole run and shared by every reader,
+## so a caller painting on what it is given must not reach the cache.
 static func frame_layer(skin: SkinDef, direction: String, anim: String, frame: int) -> PackedByteArray:
 	var art := source_skin(skin)
 	if art == null:
@@ -555,11 +560,9 @@ static func frame_layer(skin: SkinDef, direction: String, anim: String, frame: i
 	if path.is_empty():
 		return PackedByteArray()
 	path = path.trim_suffix(".png") + LAYER_SUFFIX
-	if _layer_cache.has(path):
-		return _layer_cache[path]
-	var layer := _read_layer(path)
-	_layer_cache[path] = layer
-	return layer
+	if not _layer_cache.has(path):
+		_layer_cache[path] = _read_layer(path)
+	return _layer_cache[path].duplicate()
 
 
 ## The part+shade bytes for one frame of a skin - what the designer paints on.
@@ -960,8 +963,11 @@ static func encode_image(image: Image, skin: SkinDef) -> PackedByteArray:
 ## The image for a hand-painted frame: each stored index drawn from its ramp.
 static func image_from_overlay(skin: SkinDef, _overrides: Dictionary, palette: Dictionary,
 		anim: String, direction: String, frame: int) -> Image:
-	var bytes: PackedByteArray = skin.overlays.get(skin.frame_key(anim, direction, frame))
-	if bytes == null or bytes.size() != CANVAS * CANVAS:
+	var key := skin.frame_key(anim, direction, frame)
+	if not skin.overlays.has(key):
+		return null
+	var bytes := _to_bytes(skin.overlays[key])
+	if bytes.size() != CANVAS * CANVAS:
 		return null
 	var image := Image.create_empty(CANVAS, CANVAS, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0, 0, 0, 0))

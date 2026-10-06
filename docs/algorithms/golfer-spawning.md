@@ -182,12 +182,16 @@ miss_tendency = magnitude * sign
 ### 9. Spawn Skin
 
 Each guest is dealt a Golfer Skin from the ones their tier may wear
-(`GolferSkinLibrary.random_skin_for_tier`): the tier's own art about 55% of the
-time, otherwise one of the themed skins whose `spawn_tiers` lists that tier. A
-skin is a full animation set (idle / walk / swing, eight facings); the tier's
-hand-made art is re-coloured from the golfer's own `shirt_color`, `pants_color`,
-`cap_color`, `hair_color` and `skin_tone`, and themed skins are re-coloured from
-their part ramps. See [Golfer Skins & the Skin Designer](golfer-skins.md).
+(`GolferSkinLibrary.random_skin_for_tier`). The game ships the two hand-made
+tier looks - **Weekend Beginner** for the Beginner tier and **Club Casual**,
+which the Casual and Beginner tiers share - so a guest is dealt their tier's art
+about 55% of the time and an allowed skin otherwise. The Tour Serious and Tour
+Pro tiers have no art of their own and fall back to Club Casual, so every guest
+can still be dressed. A skin is a full animation set (idle / walk / swing, eight
+facings), and its hand-made art is re-coloured from the golfer's own
+`shirt_color`, `pants_color`, `cap_color`, `hair_color` and `skin_tone` by
+following the skin's part layer.
+See [Golfer Skins & the Skin Designer](golfer-skins.md).
 
 ### 10. Group Size Distribution
 
@@ -232,7 +236,7 @@ for each active golfer (from earlier groups):
 | Difficulty spawn multiplier | `golfer_manager.gd:89` | Easy 1.2x, Normal 1.0x, Hard 0.8x | Scales base modifier by difficulty preset |
 | Max golfers per hole | `golfer_manager.gd:98` | 4 | Higher = more crowded course |
 | Tier base weights | `golfer_tier.gd:16-60` | 0.35/0.40/0.20/0.05 | Base probability of each tier |
-| Tier-art share | `golfer_skin_library.gd::random_skin_for_tier` | 0.55 | How often a guest wears the tier art instead of a themed skin |
+| Tier-art share | `golfer_skin_library.gd::random_skin_for_tier` | 0.55 | How often a guest wears their tier's own art instead of another skin they may wear |
 | Tier skill ranges | `golfer_tier.gd:16-60` | See table | Skill bounds per tier |
 | Rating filter multiplier | `golfer_tier.gd:86` | 0.1 | Lower = harder to attract above-tier golfers |
 | Hole count filter | `golfer_tier.gd:91` | 0.05 | Lower = stricter hole count requirement |

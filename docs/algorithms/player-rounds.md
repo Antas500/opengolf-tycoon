@@ -11,11 +11,12 @@ the camera and any prior tool states.
 
 The owner chooses a name and their look: a Golfer Skin (one of the seventeen
 shipped skins, or one they built themselves) plus the colours of that skin's
-parts. Every skin is drawn as pixel art with a part-and-shade record per pixel,
-so the owner's colours are applied by re-emitting the art from their ramps
-rather than by baking new sprites (see
+parts. Every skin is drawn as pixel art with a part-and-shade record - its part
+layer - beside each frame, so the owner's colours are applied to exactly the
+pixels the layer gives a part rather than by baking new sprites (see
 [Golfer Skins & the Skin Designer](golfer-skins.md)). Opponents wear the same
-kind of skins: their tier's art, or a themed skin that tier is allowed to wear.
+kind of skins: the hand-made art of their tier, or another skin that tier is
+allowed to wear.
 
 Formats:
 - **Practice round:** owner only.

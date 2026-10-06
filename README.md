@@ -58,7 +58,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Personality traits** — Aggression (0.0–1.0) affects risk/reward club selection and target choice
 - **Green reading** — Putts account for slope break with skill-based accuracy
 - **Score tracking** — Per-hole scores, running total, displayed on course
-- **Golfer skins** — Looks to meet on the course: themed skins drawn pixel by pixel, each with idle, walk and swing animations in eight facings and every part re-colourable
+- **Golfer skins** — Looks to meet on the course: hand-made pixel-art golfers (Weekend Beginner and Club Casual), each with idle, walk and swing animations in eight facings, a part layer that records what every pixel was drawn as, and every part re-colourable
 - **Play the Course** — Play your own round alongside the management sim, in a group with AI pros, with persistent skills, shot shapes (fade/draw/backspin/punch) and an aim guide that draws the intended flight arc and the roll that follows it
 
 ### Economy & Management
