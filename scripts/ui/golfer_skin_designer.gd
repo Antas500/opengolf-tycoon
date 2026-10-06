@@ -5,13 +5,20 @@ class_name GolferSkinDesigner
 ## Three columns: every skin the game knows on the left, the pixel canvas in the
 ## middle, and a live preview with the part colour pickers on the right.
 ##
-##  * Selecting a skin loads its art. The player can then re-colour its parts,
-##    paint its pixels frame by frame, or press New Skin to fork the selected
-##    skin into one of their own.
+##  * Selecting a skin loads its art *and its part layer* - the byte-per-pixel
+##    record that says which body part each pixel was drawn as. The layer is
+##    what re-colouring follows: changing the top's colour repaints the pixels
+##    the layer tags as the top and nothing else.
+##  * The player can edit that layer: **Add part** puts a part into it (so a
+##    skin of their own can carry a part its art never drew, and can be
+##    re-coloured in it), **Remove part** takes one out. Selecting a part in the
+##    list arms the pixel brush with it.
+##  * Beyond that they can re-colour the parts, paint pixels frame by frame, or
+##    press New Skin to fork the selected skin into one of their own.
 ##  * Edits are written to the owner's profile as they are made (a recipe per
-##    skin: the colours they changed plus a part+shade index per painted pixel),
-##    so the golfer is wearing the change the moment the player looks at the
-##    course - and it is saved with the game.
+##    skin: the parts its layer holds, the colours they changed plus a
+##    part+shade index per painted pixel), so the golfer is wearing the change
+##    the moment the player looks at the course - and it is saved with the game.
 ##  * A shipped skin that has been painted can be put back with "Revert", and a
 ##    skin of the player's own can be deleted.
 ##
@@ -54,6 +61,12 @@ var _preview_frames: SpriteFrames = null
 var _preview_small: TextureRect = null
 var _preview_timer: Timer = null
 var _preview_frame := 0
+var _layer_list: ItemList = null
+var _layer_add_picker: OptionButton = null
+var _layer_note: Label = null
+## True while the part layer list is being rebuilt, so its own select() cannot
+## be mistaken for the player picking a part.
+var _updating_layer := false
 var _columns: Array[Control] = []
 var _dirty_note := ""
 
@@ -128,7 +141,9 @@ func _select_index(index: int) -> void:
 	_direction = "south"
 	_frame = 0
 	_dirty_note = ""
-	if _skins_list != null:
+	if _skins_list != null and _skins_list.item_count > index:
+		# The list is refilled from the catalogue a moment later; selecting a row
+		# that does not exist yet is not an error worth raising.
 		_skins_list.select(index)
 	_refresh_everything()
 
@@ -155,25 +170,39 @@ func _working_recipe(skin: GolferSkinLibrary.SkinDef) -> Dictionary:
 	return recipe
 
 
+## The skin as the catalogue has it right now. Every edit rebuilds the
+## catalogue, so the skin the designer started from can be a revision out of
+## date - and its part layer with it.
+func _current_skin() -> GolferSkinLibrary.SkinDef:
+	if _selected == null:
+		return null
+	var fresh := GolferSkinLibrary.skin_by_id(_selected.skin.id)
+	return fresh if fresh != null else _selected.skin
+
+
 func _working_skin() -> GolferSkinLibrary.SkinDef:
 	if _selected == null:
 		return null
+	var current := _current_skin()
 	var skin := GolferSkinLibrary.SkinDef.from_recipe(_selected.recipe)
-	if GolferSkinLibrary.is_shipped(_selected.skin.id):
-		skin.id = _selected.skin.id
-		skin.name = _selected.skin.name
-		skin.description = _selected.skin.description
-		skin.root = _selected.skin.root
-		skin.legacy = _selected.skin.legacy
+	if GolferSkinLibrary.is_shipped(current.id):
+		skin.id = current.id
+		skin.name = current.name
+		skin.description = current.description
+		skin.root = current.root
+		skin.legacy = current.legacy
 		skin.custom = true
-		skin.base_id = _selected.skin.id
-		skin.customizable = _selected.skin.customizable
-		for part in _selected.skin.colors:
+		skin.base_id = current.id
+		# The layer the player is building: the recipe's own parts when it has
+		# them, the art's when the recipe is fresh (see SkinDef.parts_from_recipe).
+		if not skin.parts_from_recipe:
+			skin.customizable = current.customizable
+		for part in current.colors:
 			if not skin.colors.has(part):
-				skin.colors[part] = _selected.skin.colors[part]
+				skin.colors[part] = current.colors[part]
 	else:
 		skin.custom = true
-		skin.inherit_from(_selected.skin)
+		skin.inherit_from(current)
 	return skin
 
 
@@ -261,7 +290,7 @@ func _build() -> void:
 	_status.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_DIM)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_status)
-	_set_status("Pick a skin, then re-colour its parts or paint its pixels. Changes are saved as you make them.")
+	_set_status("Pick a skin, then re-colour a part of its layer or paint its pixels. Changes are saved as you make them.")
 
 
 func _rebuild_body() -> void:
@@ -321,7 +350,7 @@ func _make_header() -> Control:
 
 	_hint = Label.new()
 	_hint.name = "Hint"
-	_hint.text = "13 themed skins · 4 tier looks · your own"
+	_hint.text = "Re-colour a part, or edit the layer of parts behind it"
 	_hint.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	_hint.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -400,6 +429,34 @@ func _make_left_panel() -> PanelContainer:
 	row2.add_child(_revert_button)
 	_use_button = _small_button("Wear it", _on_wear, "Play in this skin")
 	row2.add_child(_use_button)
+
+	column.add_child(_section_label("Part layer"))
+	_layer_note = Label.new()
+	_layer_note.name = "LayerNote"
+	_layer_note.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	_layer_note.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	_layer_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_layer_note)
+
+	_layer_list = ItemList.new()
+	_layer_list.name = "LayerList"
+	_layer_list.custom_minimum_size = Vector2(0, 132)
+	_layer_list.tooltip_text = "The parts this skin's layer holds: only their pixels change colour"
+	_layer_list.item_selected.connect(_on_layer_part_selected)
+	column.add_child(_layer_list)
+
+	_layer_add_picker = OptionButton.new()
+	_layer_add_picker.name = "LayerAddPicker"
+	_layer_add_picker.tooltip_text = "A part this skin's layer does not hold yet"
+	column.add_child(_layer_add_picker)
+
+	var row3 := HBoxContainer.new()
+	row3.add_theme_constant_override("separation", 6)
+	column.add_child(row3)
+	row3.add_child(_small_button("Add part", _on_add_layer_part,
+		"Put a part into this skin's layer, so its pixels can be re-coloured and painted"))
+	row3.add_child(_small_button("Remove part", _on_remove_layer_part,
+		"Take the selected part out of this skin's layer: its pixels stop changing colour"))
 	return panel
 
 
@@ -479,6 +536,9 @@ func _make_middle_panel() -> PanelContainer:
 	hint.text = "Left click paints · right click picks the pixel under the cursor"
 	hint.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
 	hint.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	# Wraps rather than setting the width of the middle column: on a phone that
+	# is what would push the Done button off the edge of the screen.
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(hint)
 	return panel
 
@@ -556,6 +616,7 @@ func _refresh_everything() -> void:
 	_refresh_canvas()
 	_refresh_brush_row()
 	_refresh_colour_rows()
+	_refresh_layer_list()
 	_refresh_preview()
 
 
@@ -657,7 +718,7 @@ func _frame_image(skin: GolferSkinLibrary.SkinDef, palette: Dictionary) -> Image
 		copy.fill(Color(0, 0, 0, 0))
 	var changed := GolferSkinLibrary.changed_colours(skin, {})
 	if not changed.is_empty():
-		GolferSkinLibrary.recolour(copy, skin, changed)
+		GolferSkinLibrary.recolour(copy, skin, changed, _direction, _anim, _frame)
 	return copy
 
 
@@ -666,9 +727,10 @@ func _refresh_brush_row() -> void:
 		return
 	for child in _part_row.get_children():
 		child.queue_free()
-	var parts := PlayerGolferProfile.parts_for_skin(_selected.skin.id)
-	if parts.is_empty():
-		parts = PlayerGolferProfile.parts_for_skin(GolferSkinLibrary.default_skin_id())
+	# Every part can be painted - painting one the layer does not hold yet puts
+	# it in (see _on_pixels_changed) - while the colour pickers offer exactly
+	# the parts the layer holds.
+	var parts := GolferSkinLibrary.PAINTABLE_PARTS
 	for part in parts:
 		var button := Button.new()
 		button.text = GolferSkinLibrary.PART_LABELS.get(part, part)
@@ -711,6 +773,87 @@ func _refresh_brush_row() -> void:
 		_shade_row.add_child(button)
 
 
+## The part layer the player is editing: the parts this skin holds, how many
+## pixels of the art each one owns, and the parts still on offer to add.
+func _refresh_layer_list() -> void:
+	if _layer_list == null or _selected == null:
+		return
+	_updating_layer = true
+	var skin := _working_skin()
+	var counts := GolferSkinLibrary.layer_report(_selected.skin)
+	_layer_list.clear()
+	for part in skin.customizable:
+		_layer_list.add_item("%s — %d px" % [GolferSkinLibrary.PART_LABELS.get(part, part),
+			int(counts.get(part, 0))])
+		if _editor != null and part == _editor.brush_part:
+			_layer_list.select(_layer_list.item_count - 1)
+	if _layer_add_picker != null:
+		_layer_add_picker.clear()
+		for part in GolferSkinLibrary.PAINTABLE_PARTS:
+			if skin.customizable.has(part):
+				continue
+			_layer_add_picker.add_item(GolferSkinLibrary.PART_LABELS.get(part, part))
+			_layer_add_picker.set_item_metadata(_layer_add_picker.item_count - 1, part)
+		_layer_add_picker.disabled = _layer_add_picker.item_count == 0
+	if _layer_note != null:
+		var drawn := skin.customizable.size()
+		var available: int = GolferSkinLibrary.PAINTABLE_PARTS.size()
+		if drawn > 0:
+			_layer_note.text = "%d of %d parts · only these pixels change colour" % [drawn, available]
+		else:
+			_layer_note.text = "No parts: nothing on this skin changes colour yet."
+	_updating_layer = false
+
+
+## Selecting a part in the layer arms the pixel brush with it, so the list is
+## also the quickest way to carry on painting a part.
+func _on_layer_part_selected(index: int) -> void:
+	if _updating_layer or _selected == null or _editor == null:
+		return
+	var skin := _working_skin()
+	if index < 0 or index >= skin.customizable.size():
+		return
+	_editor.brush_part = skin.customizable[index]
+	_editor.erasing = false
+	_refresh_brush_row()
+	_refresh_colour_rows()
+	_refresh_layer_list()
+
+
+func _on_add_layer_part() -> void:
+	if _layer_add_picker == null or _layer_add_picker.item_count == 0:
+		return
+	_set_layer_part(str(_layer_add_picker.get_item_metadata(_layer_add_picker.selected)), true)
+
+
+func _on_remove_layer_part() -> void:
+	var selected := _layer_list.get_selected_items()
+	if selected.is_empty():
+		return
+	var skin := _working_skin()
+	_set_layer_part(skin.customizable[selected[0]], false)
+
+
+## Put a part into a skin's layer, or take it out, and store the layer's parts
+## on the skin's recipe. A skin starts with the parts its art drew; from here
+## the player decides which of them - and which they add themselves - the colour
+## pickers offer, and so which pixels change colour.
+func _set_layer_part(part: String, present: bool) -> void:
+	if _selected == null:
+		return
+	var skin := _working_skin()
+	if not skin.set_part(part, present):
+		return
+	_selected.recipe["parts"] = Array(skin.customizable)
+	var label: String = GolferSkinLibrary.PART_LABELS.get(part, part)
+	_commit("")
+	if present:
+		_set_status("%s is in this skin's layer: its pixels change colour, and can be painted." % label)
+	else:
+		_set_status("%s is out of this skin's layer: its pixels keep the colour they have." % label)
+	_refresh_everything()
+
+
 func _refresh_colour_rows() -> void:
 	if _colour_rows == null or _selected == null:
 		return
@@ -719,7 +862,7 @@ func _refresh_colour_rows() -> void:
 	var skin := _working_skin()
 	_colour_picker.color = GolferSkinLibrary.colour_for(skin, _editor.brush_part if _editor != null else "shirt")
 	_colour_label.text = "Re-colouring: %s" % GolferSkinLibrary.PART_LABELS.get(_editor.brush_part, _editor.brush_part)
-	for part in PlayerGolferProfile.parts_for_skin(_selected.skin.id):
+	for part in skin.customizable:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		var label := Label.new()
@@ -859,15 +1002,25 @@ func _on_pixels_changed() -> void:
 	var skin := _working_skin()
 	var key := skin.frame_key(_anim, _direction, _frame)
 	var bytes := _overlay_bytes(skin, key)
+	var parts := PackedStringArray(skin.customizable)
 	for pixel in written:
-		bytes[int(pixel.y) * GolferSkinLibrary.CANVAS + int(pixel.x)] = int(written[pixel])
+		var index: int = int(written[pixel])
+		bytes[int(pixel.y) * GolferSkinLibrary.CANVAS + int(pixel.x)] = index
+		# A part the player paints joins the skin's layer, so the pixels they
+		# put down can be re-coloured like any other.
+		var decoded := GolferSkinLibrary.decode_pixel(index)
+		if not decoded.is_empty() and not parts.has(str(decoded["part"])):
+			parts.append(str(decoded["part"]))
 	_selected.recipe["overlays"][key] = Array(bytes)
+	if skin.set_part_order(parts):
+		_selected.recipe["parts"] = Array(skin.customizable)
 	_commit("Painted %s / %s frame %d." % [_anim.capitalize(), _direction.replace("-", " "), _frame + 1])
-	_refresh_preview()
+	_refresh_everything()
 
 
-## The stored pixels for one frame: what is already there, or the frame's art
-## turned into part+shade indices so a first stroke starts from the art.
+## The stored pixels for one frame: what is already there, or the frame's part
+## layer, so a first stroke starts from the pixels the artist drew - each one
+## already tagged with the part and shade it belongs to.
 func _overlay_bytes(skin: GolferSkinLibrary.SkinDef, key: String) -> PackedByteArray:
 	var stored = _selected.recipe.get("overlays", {}).get(key)
 	if stored is Array or stored is PackedByteArray:
@@ -876,8 +1029,7 @@ func _overlay_bytes(skin: GolferSkinLibrary.SkinDef, key: String) -> PackedByteA
 			bytes.append(clampi(int(entry), 0, 255))
 		if bytes.size() == GolferSkinLibrary.CANVAS * GolferSkinLibrary.CANVAS:
 			return bytes
-	var image := _frame_image(skin, GolferSkinLibrary.palette_for(skin, {}))
-	return GolferSkinLibrary.encode_image(image, skin, _direction)
+	return GolferSkinLibrary.frame_bytes(skin, _direction, _anim, _frame)
 
 
 func _on_colour_changed(value: Color) -> void:

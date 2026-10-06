@@ -7,21 +7,27 @@ class_name GolferSkinLibrary
 ## animations, eight facings each. The catalogue comes from two places:
 ##
 ##  * ``res://data/golfer_skins.json`` - the shipped skins. Thirteen themed
-##    skins are drawn by ``tools/generate_golfer_skins.py``; four more records
-##    mark the original hand-made tier art (Beginner/Casual/Serious/Pro) as
-##    palette-recolourable skins.
+##    skins are drawn by ``tools/generate_golfer_skins.py``; two more records
+##    mark the hand-made tier art (Beginner/Casual) as recolourable skins.
 ##  * the owner's profile - ``PlayerGolferProfile.custom_skins`` holds recipes
 ##    the player built in the Skin Designer (see ``scripts/ui/golfer_skin_designer.gd``).
 ##
-## Every pixel of the themed art is drawn from a four-or-five stop *ramp* per
-## body part (base, light, dark, outline). That is what lets a golfer re-colour
-## "the shirt" without repainting the sprite: a pixel is matched back to the
-## ramp entry it was drawn from and re-emitted from the new colour's ramp, so
-## the shading survives. The designer stores its edits the same way - as a part
-## + shade index per pixel - so a skin keeps its colours when they change.
+## Every sprite ships with a *part layer*: a sidecar beside each PNG
+## (``frame_000.layer.bin``) holding one byte per pixel that says which part
+## that pixel was drawn as and in which shade (see PART_ORDER). Re-colouring a
+## golfer reads the layer, so exactly the pixels of the parts the player
+## changed are re-emitted - from the new colour's ramp for the drawn art, and
+## carrying the artist's own light and dark for the hand-made tier art. Every
+## other pixel, the eyes and the highlights included, is left alone.
 ##
-## All state here is static: the catalogue and the built SpriteFrames are shared
-## by every golfer, so eight visitors wearing the same skin cost one build.
+## The designer's own byte-per-pixel format is the same one, which is what makes
+## the two meet: the layer a frame is painted on *is* its stored pixels, so a
+## painted frame keeps following the palette, and a part the player adds or
+## removes from a skin is a part the layer does or does not offer.
+##
+## All state here is static: the catalogue, the layers and the built
+## SpriteFrames are shared by every golfer, so eight visitors wearing the same
+## skin cost one build.
 
 ## The shipped catalogue.
 const DATA_PATH := "res://data/golfer_skins.json"
@@ -46,8 +52,11 @@ const PAINTABLE_PARTS: Array[String] = [
 ]
 const SHADE_COUNT := 5
 const CANVAS := 48
+## The part layer that ships beside a sprite: ``frame_000.png`` is described by
+## ``frame_000.layer.bin`` (deflated, one byte per pixel, see ``pixel_index``).
+const LAYER_SUFFIX := ".layer.bin"
 
-## Which aimation names exist, and how they play.
+## Which animation names exist, and how they play.
 const ANIMATIONS := {
 	"idle": {"fps": 4.0, "loop": true, "frames": 4},
 	"walk": {"fps": 8.0, "loop": true, "frames": 4},
@@ -76,18 +85,11 @@ const FIXABLE_PARTS: Array[String] = [
 	"shirt", "pants", "cap", "hair", "skin", "shoes", "accent", "gear",
 ]
 
-## The palette the original hand-made tier art is drawn in - the reference for
-## classifying its pixels by part.
-const LEGACY_REFERENCE := {
-	"shirt": Color("b41929"), "pants": Color("8c6b5f"), "cap": Color("cccbe4"),
-	"hair": Color("56261c"), "skin": Color("e6a38d"), "shoes": Color("2f1813"),
-	"accent": Color("dddcee"),
-}
 ## How close a sprite pixel has to be to a ramp entry to be recognised as that
-## part (squared distance in 0-1 RGB). Anything further away keeps its art.
+## part (squared distance in 0-1 RGB). Only art that ships without a part layer
+## is matched this way: with a layer, the layer itself says which part a pixel
+## belongs to, right down to the artist's shading.
 const MATCH_TOLERANCE := 0.010
-## The same, for the hand-made tier art, whose shading wanders off the ramps.
-const LEGACY_TOLERANCE := 0.055
 
 ## skin id -> array of SkinDef, built once from the JSON.
 static var _builtin: Array = []
@@ -97,6 +99,11 @@ static var _catalogue: Array = []
 static var _catalogue_signature := ""
 ## Built SpriteFrames, keyed by skin id + colours + revision.
 static var _frames_cache: Dictionary = {}
+## Part layers, keyed by file path. A layer never changes while the game runs.
+static var _layer_cache: Dictionary = {}
+## Which parts each skin's art draws, and how many pixels of each, keyed by the
+## art's folder. Counted once per art (it means reading every frame).
+static var _layer_report_cache: Dictionary = {}
 
 
 ## One skin: its art, its palette, and which parts the player may change.
@@ -106,13 +113,17 @@ class SkinDef extends RefCounted:
 	var description: String = ""
 	## Folder holding ``animations/<anim>/<direction>/frame_NNN.png``.
 	var root: String = ""
-	## True for the original hand-made tier art, which is re-coloured with the
-	## legacy classifier rather than exact ramp matching.
+	## True for the hand-made tier art, which is re-coloured by carrying the
+	## artist's own shading across instead of re-emitting a ramp stop.
 	var legacy: bool = false
 	## True for a skin the player made in the Skin Designer.
 	var custom: bool = false
 	## The built-in skin a custom skin was forked from.
 	var base_id: String = ""
+	## *The parts of this skin's layer*: the body parts the colour pickers offer
+	## and the only ones re-colouring touches. Comes from the art's own layer
+	## (``layer_report``), as edited by the player on the Customise Golfer Skins
+	## screen - they can add a part the art never drew, or take one out.
 	var customizable: PackedStringArray = PackedStringArray()
 	## part -> Color, the colours the art was drawn in.
 	var colors: Dictionary = {}
@@ -121,11 +132,43 @@ class SkinDef extends RefCounted:
 	## Hand-painted frames: "<anim>_<direction>_<frame>" -> PackedByteArray of
 	## part+shade indices (0 = transparent).
 	var overlays: Dictionary = {}
+	## True when this skin's parts came out of its recipe rather than off the
+	## art - a recipe always wins, so a layer the player edited is not put back
+	## to the art's when the skin is rebuilt.
+	var parts_from_recipe := false
 	## Bumped whenever the overlays change, to invalidate built SpriteFrames.
 	var revision: int = 0
 
 	func is_customisable(part: String) -> bool:
 		return customizable.has(part)
+
+	## Add a part to this skin's layer, or take it out again: the parts the layer
+	## offers to the colour pickers, and the only ones re-colouring touches. The
+	## pixels a part owns are always the artist's - what the player changes here
+	## is which parts the layer holds.
+	## Returns false when that is already the case.
+	func set_part(part: String, present: bool) -> bool:
+		if not PAINTABLE_PARTS.has(part):
+			return false
+		var parts := Array(customizable)
+		if present:
+			parts.append(part)
+		else:
+			parts.erase(part)
+		return set_part_order(parts)
+
+	## Take this skin's layer from a list of parts, in whatever order they come
+	## in: the layer keeps its own order (see PART_ORDER). Returns false when
+	## that list is what the layer already holds.
+	func set_part_order(parts) -> bool:
+		var wanted := PackedStringArray()
+		for candidate in PAINTABLE_PARTS:
+			if parts.has(candidate):
+				wanted.append(candidate)
+		if wanted == customizable:
+			return false
+		customizable = wanted
+		return true
 
 	func frame_key(anim: String, direction: String, frame: int) -> String:
 		return "%s_%s_%d" % [anim, direction, frame]
@@ -146,6 +189,7 @@ class SkinDef extends RefCounted:
 		return {
 			"id": id, "name": name, "description": description, "base": base_id,
 			"colors": palette, "overlays": stored, "revision": revision,
+			"parts": Array(customizable),
 		}
 
 	static func from_recipe(data: Dictionary) -> SkinDef:
@@ -166,7 +210,15 @@ class SkinDef extends RefCounted:
 		if stored is Dictionary:
 			for key in stored:
 				skin.overlays[str(key)] = GolferSkinLibrary._to_bytes(stored[key])
+		# The parts this skin's layer offers. A recipe written before parts were
+		# editable carries no list at all, and takes the art's own.
 		skin.customizable = PackedStringArray(PAINTABLE_PARTS)
+		if data.has("parts") and data["parts"] is Array:
+			skin.customizable = PackedStringArray()
+			for part in data["parts"]:
+				if PAINTABLE_PARTS.has(str(part)):
+					skin.customizable.append(str(part))
+			skin.parts_from_recipe = true
 		skin.spawn_tiers = PackedStringArray()
 		return skin
 
@@ -175,10 +227,12 @@ class SkinDef extends RefCounted:
 	func inherit_from(base: SkinDef) -> void:
 		root = base.root
 		legacy = base.legacy
-		customizable = PackedStringArray()
-		for part in base.customizable:
-			if PAINTABLE_PARTS.has(part):
-				customizable.append(part)
+		# The art's layer, unless the recipe brought one of its own.
+		if not parts_from_recipe:
+			customizable = PackedStringArray()
+			for part in base.customizable:
+				if PAINTABLE_PARTS.has(part):
+					customizable.append(part)
 		for part in PAINTABLE_PARTS:
 			if not colors.has(part):
 				colors[part] = base.colors.get(part, Color.WHITE)
@@ -294,7 +348,9 @@ static func _merge_edit(skin: SkinDef, recipe: Dictionary) -> SkinDef:
 	edited.legacy = skin.legacy
 	edited.custom = true
 	edited.base_id = skin.id
-	edited.customizable = skin.customizable
+	# The art's own layer, unless the player has edited which parts it offers.
+	if not edited.parts_from_recipe:
+		edited.customizable = skin.customizable
 	edited.spawn_tiers = skin.spawn_tiers
 	for part in skin.colors:
 		if not edited.colors.has(part):
@@ -317,6 +373,8 @@ static func _recipe_to_skin(recipe: Dictionary) -> SkinDef:
 				break
 	if base != null:
 		skin.inherit_from(base)
+	elif skin.customizable.is_empty():
+		skin.customizable = PackedStringArray(PAINTABLE_PARTS)
 	skin.custom = true
 	return skin
 
@@ -471,6 +529,125 @@ static func palette_for(skin: SkinDef, overrides: Dictionary = {}) -> Dictionary
 
 
 # =============================================================================
+# PART LAYERS
+# =============================================================================
+
+## The folder holding the art - and so the part layers - this skin is drawn
+## with: a skin of the player's own borrows the layers of the skin it was forked
+## from, exactly as it borrows that skin's pixels.
+static func layer_root(skin: SkinDef) -> String:
+	var art := source_skin(skin)
+	if art != null and not art.root.is_empty():
+		return art.root
+	return skin.root if skin != null else ""
+
+
+## One frame's part layer: a byte per pixel of the 48x48 canvas saying which
+## part the artist drew that pixel as and in which shade (see ``pixel_index``);
+## 0 means no part - empty canvas, the shadow, or a pixel the layer does not own
+## - and a pixel like that is never re-coloured.
+## Returns an empty array when the art has no layer on disk.
+static func frame_layer(skin: SkinDef, direction: String, anim: String, frame: int) -> PackedByteArray:
+	var art := source_skin(skin)
+	if art == null:
+		return PackedByteArray()
+	var path := _frame_path(art, direction, anim, frame)
+	if path.is_empty():
+		return PackedByteArray()
+	path = path.trim_suffix(".png") + LAYER_SUFFIX
+	if _layer_cache.has(path):
+		return _layer_cache[path]
+	var layer := _read_layer(path)
+	_layer_cache[path] = layer
+	return layer
+
+
+## The part+shade bytes for one frame of a skin - what the designer paints on.
+## The art's own layer when it ships with one; a frame that has none is read
+## back off the drawn pixels instead, so an older or hand-authored skin still
+## paints and re-colours the way it always did.
+static func frame_bytes(skin: SkinDef, direction: String, anim: String, frame: int) -> PackedByteArray:
+	var layer := frame_layer(skin, direction, anim, frame)
+	if layer.size() == CANVAS * CANVAS:
+		return layer
+	var image := base_frame_image(skin, direction, anim, frame)
+	if image == null:
+		return PackedByteArray()
+	return encode_image(image, skin)
+
+
+static func _read_layer(path: String) -> PackedByteArray:
+	if not FileAccess.file_exists(path):
+		push_warning("GolferSkinLibrary: no part layer for %s - that art will not be re-coloured" % path)
+		return PackedByteArray()
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_warning("GolferSkinLibrary: cannot open the part layer %s" % path)
+		return PackedByteArray()
+	var raw := file.get_buffer(file.get_length())
+	file.close()
+	var layer := raw.decompress_dynamic(CANVAS * CANVAS, FileAccess.COMPRESSION_DEFLATE)
+	if layer.size() != CANVAS * CANVAS:
+		push_warning("GolferSkinLibrary: the part layer %s is not %dx%d" % [path, CANVAS, CANVAS])
+		return PackedByteArray()
+	return layer
+
+
+## Which parts a skin's art draws, and how much of each: part -> pixel count
+## over every frame, in PART_ORDER. This is the layer a skin starts life with -
+## the parts the Customise Golfer Skins screen lists, offers colours for and
+## lets the player add to or take away from. Counted once per art: a layer never
+## changes while the game runs.
+static func layer_report(skin: SkinDef) -> Dictionary:
+	var root := layer_root(skin)
+	if _layer_report_cache.has(root):
+		return _layer_report_cache[root]
+	var counts := {}
+	var art := source_skin(skin)
+	if art != null:
+		for direction in DIRECTION_ORDER:
+			for anim in ANIMATIONS:
+				var frames: int = ANIMATIONS[anim]["frames"]
+				for frame in frames:
+					var layer := frame_layer(art, direction, anim, frame)
+					for index in layer:
+						if index == 0:
+							continue
+						@warning_ignore("integer_division")
+						var part := part_for_index((index - 1) / SHADE_COUNT)
+						if part.is_empty():
+							continue
+						counts[part] = int(counts.get(part, 0)) + 1
+	_layer_report_cache[root] = counts
+	return counts
+
+
+## The parts the *art's* layer covers, in the order the colour pickers want them
+## (``PAINTABLE_PARTS``, the same order as PART_ORDER). What a skin offers is
+## ``skin.customizable``: it starts here, and from then on it is the player's to
+## edit - so this is the palette of parts the art draws, not the current layer.
+static func layer_parts(skin: SkinDef) -> Array:
+	var counts := layer_report(skin)
+	var parts: Array = []
+	for part in PAINTABLE_PARTS:
+		if counts.has(part):
+			parts.append(part)
+	return parts
+
+
+## The parts of a skin the player may re-colour and paint: exactly the parts its
+## layer holds, whether they came from the art or the player put them there.
+static func parts_for_skin(skin: SkinDef) -> Array:
+	if skin == null:
+		return []
+	var parts: Array = []
+	for part in PAINTABLE_PARTS:
+		if skin.is_customisable(part):
+			parts.append(part)
+	return parts
+
+
+# =============================================================================
 # FRAMES
 # =============================================================================
 
@@ -540,14 +717,17 @@ static func source_skin(skin: SkinDef) -> SkinDef:
 
 
 ## The colours that actually change how a frame is drawn: the picks that differ
-## from the skin's own palette. Anything else is left exactly as it was drawn, so
-## an untouched skin is byte-for-byte the shipped art.
+## from the skin's own palette, for the parts this skin's layer still offers.
+## Anything else is left exactly as it was drawn, so an untouched skin is
+## byte-for-byte the shipped art.
 static func changed_colours(skin: SkinDef, overrides: Dictionary) -> Dictionary:
 	var changed := {}
 	if skin == null:
 		return overrides
 	var art := source_skin(skin)
 	for part in FIXABLE_PARTS:
+		if not skin.customizable.has(part):
+			continue
 		if not overrides.has(part) and not (skin.custom and skin.colors.has(part)):
 			continue
 		var wanted := colour_for(skin, part, overrides)
@@ -576,7 +756,8 @@ static func _build_frames(skin: SkinDef, overrides: Dictionary) -> SpriteFrames:
 	return frames
 
 
-## One frame, ready to hand to an AnimatedSprite2D.
+## One frame, ready to hand to an AnimatedSprite2D: the player's painted pixels
+## when this frame has any, otherwise the art with its part layer applied.
 static func frame_texture(skin: SkinDef, overrides: Dictionary, palette: Dictionary,
 		anim: String, direction: String, frame: int) -> Texture2D:
 	if skin.has_overlay(anim, direction, frame):
@@ -590,7 +771,7 @@ static func frame_texture(skin: SkinDef, overrides: Dictionary, palette: Diction
 	if image == null:
 		return null
 	var changed := changed_colours(skin, overrides)
-	recolour(image, skin, changed)
+	recolour(image, skin, changed, direction, anim, frame)
 	return ImageTexture.create_from_image(image)
 
 
@@ -629,23 +810,69 @@ static func _frame_path(skin: SkinDef, direction: String, anim: String, frame: i
 # RE-COLOURING
 # =============================================================================
 
-## Re-colour an image in place: the player's parts get their chosen colour, in
-## the shade the pixel was drawn in.
-static func recolour(image: Image, skin: SkinDef, overrides: Dictionary) -> void:
+## Re-colour an image in place, from its part layer: the pixels of the parts the
+## player changed are re-emitted in their new colour and every other pixel keeps
+## the one the artist drew. Which pixels a part owns is the layer's job (see
+## ``frame_layer``), so this is exact - a very dark shirt is never mistaken for
+## hair, and the eyes and highlights never move.
+##
+## Pass the frame the image is of (``direction``/``anim``/``frame``) whenever it
+## is known: that is what finds the layer. Without it - or for art that ships
+## without a layer - the pixels are matched back against the art's own palette
+## instead, the way re-colouring worked before layers existed.
+static func recolour(image: Image, skin: SkinDef, overrides: Dictionary,
+		direction: String = "", anim: String = "", frame: int = -1) -> void:
 	if overrides.is_empty():
 		return
 	# Eyes and highlights are the same in every skin.
 	for part in overrides.keys():
 		if not FIXABLE_PARTS.has(part):
 			overrides.erase(part)
-	if skin != null and skin.legacy:
-		_recolour_legacy(image, overrides)
+	if overrides.is_empty():
 		return
-	var wanted: Array = []
-	for part in overrides:
-		wanted.append(part)
-	if wanted.is_empty():
+	var layer := PackedByteArray()
+	if not direction.is_empty():
+		layer = frame_layer(skin, direction, anim, frame)
+	if layer.size() == CANVAS * CANVAS:
+		_recolour_from_layer(image, skin, overrides, layer)
 		return
+	_recolour_by_pixel(image, skin, overrides)
+
+
+## The main path: walk the layer, and re-emit the pixels of every changed part
+## from that part's ramp in the shade the artist used.
+static func _recolour_from_layer(image: Image, skin: SkinDef, overrides: Dictionary,
+		layer: PackedByteArray) -> void:
+	var palette := palette_for(skin, overrides)
+	var art := source_skin(skin)
+	var legacy := art != null and art.legacy
+	var width := mini(image.get_width(), CANVAS)
+	var height := mini(image.get_height(), CANVAS)
+	for y in height:
+		for x in width:
+			var index: int = layer[y * CANVAS + x]
+			if index == 0:
+				continue
+			@warning_ignore("integer_division")
+			var part := part_for_index((index - 1) / SHADE_COUNT)
+			if part.is_empty() or not overrides.has(part):
+				continue
+			var source := image.get_pixel(x, y)
+			if source.a <= 0.01:
+				continue
+			if legacy:
+				# The hand-made art was not drawn from ramps, so its own
+				# light and dark is carried across onto the new colour.
+				image.set_pixel(x, y, shade_legacy(source, colour_for(skin, part, overrides),
+					colour_for(art, part).v))
+			else:
+				var shades: PackedColorArray = palette[part]
+				image.set_pixel(x, y, shades[mini((index - 1) % SHADE_COUNT, shades.size() - 1)])
+
+
+## The fallback for art with no layer on disk: match each drawn pixel against
+## the palette the artist used and re-emit it from the player's.
+static func _recolour_by_pixel(image: Image, skin: SkinDef, overrides: Dictionary) -> void:
 	var palette := palette_for(skin, overrides)
 	var width := image.get_width()
 	var height := image.get_height()
@@ -654,8 +881,6 @@ static func recolour(image: Image, skin: SkinDef, overrides: Dictionary) -> void
 			var source := image.get_pixel(x, y)
 			if source.a <= 0.01:
 				continue
-			# The pixels on hand are the artist's: match them against the art's
-			# palette, then emit them from the player's.
 			var found := match_pixel(source, skin, source_skin(skin))
 			if found.is_empty():
 				continue
@@ -693,64 +918,6 @@ static func _distance_squared(a: Color, b: Color) -> float:
 	return dr * dr + dg * dg + db * db
 
 
-## The hand-made tier art is re-coloured the way it always was: parts are found
-## by where they sit on the sprite and what hue they are, and the shading is
-## carried across from the source pixel's own brightness.
-static func _recolour_legacy(image: Image, overrides: Dictionary) -> void:
-	var width := image.get_width()
-	var height := image.get_height()
-	for y in height:
-		for x in width:
-			var source := image.get_pixel(x, y)
-			if source.a <= 0.01:
-				continue
-			var part := classify_legacy_pixel(source, x, y, width, height, "")
-			if part.is_empty() or not overrides.has(part):
-				continue
-			var target := colour_for(null, part, overrides)
-			image.set_pixel(x, y, shade_legacy(source, target, LEGACY_REFERENCE[part].v))
-
-
-## Which part of the hand-made tier art a pixel belongs to. Direction-aware:
-## the back-facing frames show more hair, the side views keep it behind the face.
-static func classify_legacy_pixel(source: Color, x: int, y: int, width: int, height: int,
-		direction: String) -> String:
-	var vertical := float(y) / float(maxi(height, 1))
-	var horizontal := float(x) / float(maxi(width, 1))
-
-	if vertical <= 0.34 and source.b > source.r * 1.025 \
-			and absf(source.r - source.g) < 0.18 and source.r > 0.30:
-		return "cap"
-
-	var hair_area := vertical <= 0.32
-	if direction.begins_with("north"):
-		hair_area = vertical <= 0.46
-	elif direction.contains("east"):
-		hair_area = vertical <= 0.44 and horizontal < 0.50
-	elif direction.contains("west"):
-		hair_area = vertical <= 0.44 and horizontal > 0.50
-	if hair_area and source.r > source.g * 1.08 and source.g > source.b * 1.01 \
-			and source.r >= 0.22 and source.r < 0.50:
-		return "hair"
-
-	if source.r > source.g * 1.9 and source.r > source.b * 1.55:
-		return "shirt"
-
-	var is_warm_skin := source.r > source.g and source.g > source.b \
-		and source.r > 0.42 and source.r - source.g > 0.045 \
-		and source.r - source.g < 0.48 and source.g - source.b > 0.015
-	var is_face_or_arm_area := vertical < 0.58 \
-		or (vertical < 0.72 and (horizontal < 0.40 or horizontal > 0.60))
-	if is_warm_skin and is_face_or_arm_area:
-		return "skin"
-
-	if vertical >= 0.58 and vertical < 0.83 and source.r > source.g * 1.04 \
-			and source.g >= source.b * 0.95 and source.r < 0.76:
-		return "pants"
-
-	return ""
-
-
 ## Re-colour while keeping the source pixel's light/dark value as shading.
 static func shade_legacy(source: Color, target: Color, reference_value: float) -> Color:
 	var source_value := maxf(source.r, maxf(source.g, source.b))
@@ -763,60 +930,31 @@ static func shade_legacy(source: Color, target: Color, reference_value: float) -
 # PAINTED PIXELS (the Skin Designer's storage format)
 # =============================================================================
 
-## Turn a drawn frame back into part+shade indices, so it can be re-coloured
-## later. Pixels that do not belong to a ramp (a stray artefact, or the parts
-## drawn in fixed colours) are stored as 0, which reads as transparent - the
-## designer only ever encodes art it drew itself.
 ## The palette a hand-painted frame is stored against - a custom skin's own
 ## colours, or the skin's shipped palette.
 static func storage_palette(skin: SkinDef) -> Dictionary:
 	return palette_for(skin, {})
 
 
-static func encode_image(image: Image, skin: SkinDef, direction: String = "") -> PackedByteArray:
+## Read a drawn frame back as part+shade indices, so it can be re-coloured
+## later: a pixel takes the ramp entry it is closest to, and one that is not art
+## from a known palette (a stray artefact, or a part drawn in the fixed colours)
+## is stored as 0. Only used for art that ships without a part layer - art that
+## has one hands out the artist's own pixels through ``frame_bytes``.
+static func encode_image(image: Image, skin: SkinDef) -> PackedByteArray:
 	var bytes := PackedByteArray()
 	bytes.resize(CANVAS * CANVAS)
-	var legacy := skin != null and skin.legacy
 	for y in CANVAS:
 		for x in CANVAS:
 			var index := 0
 			if x < image.get_width() and y < image.get_height():
 				var source := image.get_pixel(x, y)
 				if source.a > 0.01:
-					index = _encode_legacy_pixel(source, x, y, direction, skin) if legacy \
-						else _encode_ramp_pixel(source, skin)
+					var found := match_pixel(source, skin)
+					if not found.is_empty():
+						index = pixel_index(str(found["part"]), int(found["shade"]))
 			bytes[y * CANVAS + x] = index
 	return bytes
-
-
-static func _encode_ramp_pixel(source: Color, skin: SkinDef) -> int:
-	var found := match_pixel(source, skin)
-	if found.is_empty():
-		return 0
-	return pixel_index(str(found["part"]), int(found["shade"]))
-
-
-## The hand-made tier art is not drawn from ramps, so a painted frame is stored
-## as the part the pixel sits in plus the ramp entry closest to its brightness.
-## Painting over tier art therefore re-draws it in the flat ramp style.
-static func _encode_legacy_pixel(source: Color, x: int, y: int, direction: String, skin: SkinDef) -> int:
-	var part := classify_legacy_pixel(source, x, y, CANVAS, CANVAS, direction)
-	if part.is_empty() or not FIXABLE_PARTS.has(part):
-		return 0
-	var reference_value: float = LEGACY_REFERENCE[part].v
-	var ratio := source.v / reference_value if reference_value > 0.0 else 1.0
-	var target := colour_for(skin, part)
-	var wanted := Color(minf(1.0, target.r * ratio), minf(1.0, target.g * ratio),
-		minf(1.0, target.b * ratio))
-	var shades := ramp(target)
-	var best := 0
-	var best_distance := INF
-	for shade in shades.size():
-		var distance := _distance_squared(wanted, shades[shade])
-		if distance < best_distance:
-			best_distance = distance
-			best = shade
-	return pixel_index(part, best)
 
 
 ## The image for a hand-painted frame: each stored index drawn from its ramp.

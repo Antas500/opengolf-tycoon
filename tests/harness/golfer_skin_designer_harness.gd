@@ -4,11 +4,13 @@ extends Node
 ## Opens the real Customise Golfer Skins screen from the title screen and drives
 ## it through phone, tablet and desktop window sizes. At every size it checks the
 ## three columns are on screen and reachable, the skin list offers the whole
-## catalogue (themed skins included), and the canvas is showing art.
+## catalogue (themed skins included), the part layer is listed, and the canvas is
+## showing art.
 ##
-## Then it plays the screen: re-colours a part, paints a pixel, makes a skin of
-## its own, checks the skin the owner wears follows, puts the edits back, and
-## leaves with Done and with Esc — checking the golfer profile survives each way.
+## Then it plays the screen: edits the part layer (removes a part and adds one
+## back), re-colours a part, paints a pixel, makes a skin of its own, checks the
+## skin the owner wears follows, puts the edits back, and leaves with Done and
+## with Esc — checking the golfer profile survives each way.
 ##
 ## Prints one PASS/FAIL line per check and exits non-zero on any failure.
 
@@ -64,10 +66,50 @@ func _run() -> void:
 	await _open_designer()
 	var profile = GameManager.player_profile
 
-	var menus := _find_all(designer, "ItemList")
-	var list: ItemList = menus[0] if not menus.is_empty() else null
-	_check(list != null and list.item_count >= 17,
-		"every skin is listed (got %d)" % [list.item_count if list != null else -1])
+	var list: ItemList = _named(designer, "SkinList")
+	var catalogue := GolferSkinLibrary.all_skins().size()
+	_check(list != null and list.item_count == catalogue,
+		"every skin is listed (got %d of %d)" % [list.item_count if list != null else -1, catalogue])
+
+	# ------------------------------------------------------------------
+	# The part layer: the pixels each colour change is allowed to touch.
+	# ------------------------------------------------------------------
+	designer._select_by_id("plain")
+	await _frames(2)
+	var layer_list: ItemList = _named(designer, "LayerList")
+	var parts_before := layer_list.item_count if layer_list != null else -1
+	_check(parts_before == GolferSkinLibrary.parts_for_skin(
+		GolferSkinLibrary.skin_by_id("plain")).size(),
+		"the layer lists the parts the art draws (got %d)" % parts_before)
+	_check(_layer_holds("plain", "cap"), "the layer holds the headwear")
+	designer._set_layer_part("cap", false)
+	await _frames(2)
+	_check(not _layer_holds("plain", "cap"), "a part can be taken out of the layer")
+	_check(not Array(PlayerGolferProfile.parts_for_skin("plain")).has("cap"),
+		"and the colour pickers stop offering it")
+	designer._set_layer_part("cap", true)
+	await _frames(2)
+	_check(_layer_holds("plain", "cap"), "and put back again")
+	# A part the art never drew can join the layer: it comes with no pixels, so
+	# the art is untouched until the player paints some.
+	designer._set_layer_part("accent", true)
+	designer._select_by_id("beginner")
+	await _frames(2)
+	_check(not _layer_holds("beginner", "cap"), "the beginner art draws no headwear")
+	designer._set_layer_part("cap", true)
+	await _frames(2)
+	_check(_layer_holds("beginner", "cap"), "the beginner's layer can be given one")
+	var beginner_recipe := _recipe_for(designer._selected.skin.id)
+	_check(Array(beginner_recipe.get("parts", [])).has("cap"),
+		"the layer is stored on the profile")
+	designer._editor.brush_part = "cap"
+	designer._editor.brush_shade = 0
+	designer._editor._write(Vector2i(20, 7))
+	designer._on_pixels_changed()
+	await _frames(2)
+	_check(designer._editor.image().get_pixel(20, 7).a > 0.5, "and can be painted")
+	designer._select_by_id("plain")
+	await _frames(2)
 
 	# Re-colour the top of the skin the owner wears.
 	designer._select_by_id("plain")
@@ -150,14 +192,37 @@ func _close_designer() -> void:
 	_check(designer == null, "the designer closes")
 
 func _list_has_edit_mark() -> bool:
-	var menus := _find_all(designer, "ItemList")
-	if menus.is_empty():
+	var list: ItemList = _named(designer, "SkinList")
+	if list == null:
 		return false
-	var list: ItemList = menus[0]
 	for index in list.item_count:
 		if list.get_item_text(index).contains("(edited)"):
 			return true
 	return false
+
+## The first node with this name, anywhere under `root` - the parts of the
+## designer are found by name, since two lists share the ItemList class.
+func _named(root: Node, node_name: String) -> Node:
+	if root.name == node_name:
+		return root
+	for child in root.get_children():
+		var found := _named(child, node_name)
+		if found != null:
+			return found
+	return null
+
+## Whether the catalogue skin wears this part in its layer.
+func _layer_holds(skin_id: String, part: String) -> bool:
+	var skin := GolferSkinLibrary.skin_by_id(skin_id)
+	return skin != null and skin.customizable.has(part)
+
+## The recipe the profile is keeping for one skin.
+func _recipe_for(skin_id: String) -> Dictionary:
+	var profile = GameManager.player_profile
+	if profile == null:
+		return {}
+	var index := profile.find_skin_recipe(skin_id)
+	return profile.custom_skins[index] if index >= 0 else {}
 
 ## The three columns, the canvas and the Done button all have to be on screen and
 ## big enough to use at this window size.
@@ -199,10 +264,19 @@ func _check_layout(tag: String, size: Vector2i) -> void:
 	_check(done != null and _within(done.get_global_rect(), view),
 		"%s: Done is on screen" % tag)
 
-	var list: ItemList = null
-	for candidate in _find_all(designer, "ItemList"):
-		list = candidate
-	_check(list != null and list.item_count >= 17, "%s: the skin list is filled" % tag)
+	var list: ItemList = _named(designer, "SkinList")
+	_check(list != null and list.item_count == GolferSkinLibrary.all_skins().size(),
+		"%s: the skin list offers the whole catalogue" % tag)
+	var layer: ItemList = _named(designer, "LayerList")
+	_check(layer != null and layer.item_count > 0, "%s: the part layer is listed" % tag)
+	_check(layer != null and layer.get_global_rect().size.y >= 44.0,
+		"%s: the part layer list is a usable size" % tag)
+	var add_part := _find_button(designer, "Add part")
+	_check(add_part != null and _within(add_part.get_global_rect(), view),
+		"%s: the layer can be added to" % tag)
+	var remove_part := _find_button(designer, "Remove part")
+	_check(remove_part != null and _within(remove_part.get_global_rect(), view),
+		"%s: and taken away from" % tag)
 
 func _find_all(root: Node, type_name: String, script_class: bool = false) -> Array:
 	var found: Array = []

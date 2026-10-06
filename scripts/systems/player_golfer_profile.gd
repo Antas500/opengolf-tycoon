@@ -69,16 +69,10 @@ func normalized_skill(index: int) -> float:
 static func appearance_key(part: String) -> String:
 	return APPEARANCE_KEYS.get(part, part + "_color")
 
-## The parts of a skin the player may re-colour, in appearance-key order.
+## The parts of a skin the player may re-colour: the parts its layer holds, in
+## body-part order (see GolferSkinLibrary.parts_for_skin).
 static func parts_for_skin(id: String) -> Array:
-	var parts: Array = []
-	var skin := GolferSkinLibrary.skin_by_id(id)
-	if skin == null:
-		return parts
-	for part in GolferSkinLibrary.PAINTABLE_PARTS:
-		if skin.is_customisable(part):
-			parts.append(part)
-	return parts
+	return GolferSkinLibrary.parts_for_skin(GolferSkinLibrary.skin_by_id(id))
 
 ## The colours the owner's golfer draws its skin with, keyed by body part.
 func skin_colors() -> Dictionary:

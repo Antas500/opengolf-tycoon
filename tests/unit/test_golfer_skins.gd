@@ -151,8 +151,238 @@ func test_random_skin_for_a_tier_only_offers_that_tiers_skins() -> void:
 		for skin in options:
 			assert_true(skin.spawn_tiers.has(GolferSkinLibrary.tier_key(tier)),
 				"%s may be worn by tier %d" % [skin.id, tier])
-		assert_eq(options[0].id, GolferSkinLibrary.tier_skin_id(tier),
-			"the tier's own art is the common look")
+		# The tier's own hand-made look leads the list, for the tiers whose art
+		# the game ships; a tier without art of its own (Tour Serious and Tour
+		# Pro are looked after by the themed skins) still has skins to wear.
+		var own: String = GolferSkinLibrary.tier_skin_id(tier)
+		var has_own_art := not GolferSkinLibrary.layer_parts(
+			GolferSkinLibrary.skin_by_id(own)).is_empty()
+		if has_own_art:
+			assert_eq(options[0].id, own, "the tier's own art is the common look")
+
+## ── The part layers ───────────────────────────────────────────────────────
+
+## Every pixel of every shipped frame is described by a part layer: that is what
+## makes re-colouring exact rather than a guess at the colours. A frame without
+## one would silently fall back to matching colours.
+func test_every_shipped_frame_has_a_part_layer() -> void:
+	var missing: Array = []
+	var undecoded := 0
+	for skin in GolferSkinLibrary.builtin_skins():
+		var drawn := GolferSkinLibrary.layer_parts(skin)
+		if drawn.is_empty():
+			missing.append("%s (no layers at all)" % skin.id)
+		for direction in GolferSkinLibrary.DIRECTION_ORDER:
+			for anim in GolferSkinLibrary.ANIMATIONS:
+				for frame in GolferSkinLibrary.ANIMATIONS[anim]["frames"]:
+					var path := GolferSkinLibrary._frame_path(skin, direction, anim, frame)
+					if path.is_empty():
+						continue
+					var layer := GolferSkinLibrary.frame_layer(skin, direction, anim, frame)
+					if layer.size() != GolferSkinLibrary.CANVAS * GolferSkinLibrary.CANVAS:
+						missing.append("%s/%s/%s/%d" % [skin.id, anim, direction, frame])
+						continue
+					for index in layer:
+						if index == 0:
+							continue
+						var decoded := GolferSkinLibrary.decode_pixel(index)
+						if decoded.is_empty() or not GolferSkinLibrary.PART_ORDER.has(str(decoded["part"])):
+							undecoded += 1
+	assert_true(missing.is_empty(), "every frame ships a layer (missing %d: %s)" % [missing.size(), missing.slice(0, 4)])
+	assert_eq(undecoded, 0, "every layer byte decodes to a real part")
+
+
+## The layer is the single source of truth for what a skin offers: a part the
+## art draws is a part the colour pickers offer.
+func test_a_skins_parts_are_the_parts_its_layer_draws() -> void:
+	for skin in GolferSkinLibrary.builtin_skins():
+		var drawn := GolferSkinLibrary.layer_parts(skin)
+		assert_eq(Array(skin.customizable), drawn, "%s offers the parts its art draws" % skin.id)
+		assert_eq(Array(PlayerGolferProfile.parts_for_skin(skin.id)), drawn,
+			"%s offers them to the profile too" % skin.id)
+		for part in drawn:
+			assert_false(GolferSkinLibrary.layer_report(skin).get(part, 0) == 0,
+				"%s really draws %s" % [skin.id, part])
+
+
+## The point of the layer: a pixel only changes colour because of the part it was
+## drawn as. The beginner art draws the hair and the trousers in the same navy,
+## so re-colouring the trousers must leave the hair exactly as it was.
+func test_recolouring_follows_the_layer_not_the_colour() -> void:
+	var skin := GolferSkinLibrary.skin_by_id("beginner")
+	var art := GolferSkinLibrary.base_frame_image(skin, "south", "idle", 0)
+	var layer := GolferSkinLibrary.frame_layer(skin, "south", "idle", 0)
+	var image: Image = GolferSkinLibrary.frames_for(skin, {"pants": Color("ff0000")}, true) \
+		.get_frame_texture("idle_south", 0).get_image()
+	var hair_pixels := 0
+	var trouser_pixels := 0
+	for y in GolferSkinLibrary.CANVAS:
+		for x in GolferSkinLibrary.CANVAS:
+			var index: int = layer[y * GolferSkinLibrary.CANVAS + x]
+			if index == 0:
+				continue
+			var decoded := GolferSkinLibrary.decode_pixel(index)
+			var before := art.get_pixel(x, y)
+			var after := image.get_pixel(x, y)
+			if str(decoded["part"]) == "hair":
+				hair_pixels += 1
+				assert_eq(after, before, "the hair at %d,%d is not the trousers" % [x, y])
+			elif str(decoded["part"]) == "pants":
+				trouser_pixels += 1
+				assert_ne(after, before, "the trousers at %d,%d take the new colour" % [x, y])
+	assert_gt(hair_pixels, 20, "the art draws a head of hair")
+	assert_gt(trouser_pixels, 20, "and a pair of trousers")
+
+
+## Re-colouring one part touches that part's pixels and nothing else - the eyes
+## and highlights included.
+func test_recolouring_one_part_keeps_every_other_pixel() -> void:
+	for skin_id in ["plain", "knight", "casual"]:
+		var skin := GolferSkinLibrary.skin_by_id(skin_id)
+		var art := GolferSkinLibrary.base_frame_image(skin, "south", "idle", 0)
+		var layer := GolferSkinLibrary.frame_layer(skin, "south", "idle", 0)
+		var image := art.duplicate() as Image
+		var changed := GolferSkinLibrary.changed_colours(skin, {"shirt": Color("1188ee")})
+		GolferSkinLibrary.recolour(image, skin, changed, "south", "idle", 0)
+		var repainted := 0
+		for y in GolferSkinLibrary.CANVAS:
+			for x in GolferSkinLibrary.CANVAS:
+				var index: int = layer[y * GolferSkinLibrary.CANVAS + x]
+				var part := ""
+				if index > 0:
+					part = str(GolferSkinLibrary.decode_pixel(index).get("part", ""))
+				if part == "shirt":
+					repainted += 1
+					assert_ne(image.get_pixel(x, y), art.get_pixel(x, y),
+						"%s: the top at %d,%d is repainted" % [skin_id, x, y])
+				else:
+					assert_eq(image.get_pixel(x, y), art.get_pixel(x, y),
+						"%s: %s at %d,%d keeps its art" % [skin_id, part if part else "the background", x, y])
+		assert_gt(repainted, 40, "%s draws a top" % skin_id)
+
+
+## A player-made skin is drawn with the art it was forked from, layer included.
+func test_a_custom_skin_borrows_the_layers_of_its_base() -> void:
+	var base := GolferSkinLibrary.skin_by_id("casual")
+	var mine := GolferSkinLibrary.new_custom_skin(base, "Layer Test")
+	assert_eq(Array(mine.customizable), Array(base.customizable), "it offers the base's parts")
+	assert_eq(GolferSkinLibrary.layer_root(mine), GolferSkinLibrary.layer_root(base),
+		"its layer lives with the base's art")
+	assert_eq(GolferSkinLibrary.frame_layer(mine, "south", "idle", 0),
+		GolferSkinLibrary.frame_layer(base, "south", "idle", 0), "and holds the same pixels")
+	var drawn: Image = GolferSkinLibrary.frames_for(base, {"shirt": Color("00cc44")}, true) \
+		.get_frame_texture("idle_south", 0).get_image()
+	var mine_drawn: Image = GolferSkinLibrary.frames_for(mine, {"shirt": Color("00cc44")}, true) \
+		.get_frame_texture("idle_south", 0).get_image()
+	assert_eq(mine_drawn.get_data(), drawn.get_data(),
+		"and re-colours the very same pixels the base does")
+
+
+## Art that ships without a layer still paints and re-colours: the pixels are
+## matched back to the palette instead, the way it worked before layers.
+func test_art_without_a_layer_still_recolours() -> void:
+	var skin := GolferSkinLibrary.skin_by_id("plain")
+	var art := GolferSkinLibrary.base_frame_image(skin, "south", "idle", 0)
+	var image := art.duplicate() as Image
+	GolferSkinLibrary.recolour(image, skin, {"pants": Color("22ff22")})
+	assert_ne(image.get_data(), art.get_data(), "the trousers are repainted without a layer to follow")
+	var plain_layer := GolferSkinLibrary.frame_layer(skin, "south", "idle", 0)
+	var matched := true
+	for y in GolferSkinLibrary.CANVAS:
+		for x in GolferSkinLibrary.CANVAS:
+			var index: int = plain_layer[y * GolferSkinLibrary.CANVAS + x]
+			var is_pants := index > 0 and str(GolferSkinLibrary.decode_pixel(index)["part"]) == "pants"
+			if is_pants != (image.get_pixel(x, y) != art.get_pixel(x, y)):
+				matched = false
+	assert_true(matched, "and lands on the same pixels the layer would have")
+
+
+## ── Editing the layer ─────────────────────────────────────────────────────
+
+## The player can take a part out of a skin's layer: the colour pickers stop
+## offering it and its pixels keep the colour they have.
+func test_the_designer_can_remove_a_part_from_the_layer() -> void:
+	var profile := _fresh_profile()
+	var designer := await _designer()
+	designer._select_by_id("plain")
+	designer._set_layer_part("cap", false)
+	assert_true(profile.has_custom_skin("plain"), "the edit is stored on the profile")
+	var skin := GolferSkinLibrary.skin_by_id("plain")
+	assert_false(skin.customizable.has("cap"), "the layer no longer holds the headwear")
+	assert_false(Array(PlayerGolferProfile.parts_for_skin("plain")).has("cap"),
+		"so the colour pickers do not offer it")
+	var art := GolferSkinLibrary.base_frame_image(skin, "south", "idle", 0)
+	var image := art.duplicate() as Image
+	var changed := GolferSkinLibrary.changed_colours(skin, {"cap": Color("ff0000")})
+	assert_false(changed.has("cap"), "and a colour for it changes nothing")
+	GolferSkinLibrary.recolour(image, skin, changed, "south", "idle", 0)
+	assert_eq(image.get_data(), art.get_data(), "the frame is untouched")
+
+
+## And put one back - a part the art never drew, so a skin of the player's own
+## can carry a part the base skin does not.
+func test_the_designer_can_add_a_part_to_the_layer() -> void:
+	var profile := _fresh_profile()
+	var designer := await _designer()
+	designer._select_by_id("beginner")
+	assert_false(GolferSkinLibrary.skin_by_id("beginner").customizable.has("cap"),
+		"the beginner art draws no headwear")
+	var before := GolferSkinLibrary.frames_for(GolferSkinLibrary.skin_by_id("beginner"), {}, true) \
+		.get_frame_texture("idle_south", 0).get_image().get_data()
+	designer._set_layer_part("cap", true)
+	var skin := GolferSkinLibrary.skin_by_id("beginner")
+	assert_true(skin.customizable.has("cap"), "the layer holds it now")
+	assert_true(Array(PlayerGolferProfile.parts_for_skin("beginner")).has("cap"),
+		"and the colour pickers offer it")
+	var after := GolferSkinLibrary.frames_for(skin, {}, true) \
+		.get_frame_texture("idle_south", 0).get_image().get_data()
+	assert_eq(after, before, "adding a part does not change the art: it has no pixels to change")
+	assert_true(profile.has_custom_skin("beginner"), "the edit is stored")
+
+
+## Painting a pixel of a part the layer does not hold puts that part in, so the
+## pixels the player paints are re-colourable like any other.
+func test_painting_a_part_puts_it_into_the_layer() -> void:
+	var profile := _fresh_profile()
+	var designer := await _designer()
+	designer._select_by_id("beginner")
+	designer._editor.brush_part = "cap"
+	designer._editor.brush_shade = 0
+	designer._editor._write(Vector2i(20, 8))
+	designer._on_pixels_changed()
+	var recipe: Dictionary = profile.custom_skins[0]
+	assert_true(Array(recipe.get("parts", [])).has("cap"), "the painted part joins the layer")
+	var skin := GolferSkinLibrary.skin_by_id("beginner")
+	assert_true(skin.customizable.has("cap"))
+	var image: Image = GolferSkinLibrary.frames_for(skin, {}, true) \
+		.get_frame_texture("idle_south", 0).get_image()
+	assert_eq(image.get_pixel(20, 8), GolferSkinLibrary.ramp(
+		GolferSkinLibrary.colour_for(skin, "cap"))[0], "and the painted pixel is there")
+
+
+## A recipe is a save file, so the layer's parts have to survive a round trip -
+## and a recipe written before layers were editable has to keep working.
+func test_the_layer_survives_a_save_and_an_older_recipe() -> void:
+	var profile := _fresh_profile()
+	profile.store_custom_skin({"id": "custom_5", "name": "Layered", "base": "beginner",
+		"colors": {"shirt": "00ff00"}, "overlays": {}, "parts": ["shirt", "pants", "skin"], "revision": 1})
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(profile.serialize()))
+	GameManager.player_profile = PlayerGolferProfile.from_data(saved)
+	var skin := GolferSkinLibrary.skin_by_id("custom_5")
+	assert_not_null(skin)
+	if skin == null:
+		return
+	assert_eq(Array(skin.customizable), ["shirt", "pants", "skin"], "the player's layer comes back")
+	# An edit written by an older build carries no list at all: it keeps the
+	# layer the art shipped with.
+	var art_layer := GolferSkinLibrary.layer_parts(GolferSkinLibrary.skin_by_id("casual"))
+	profile.store_custom_skin({"id": "casual", "name": "Older Edit", "base": "casual",
+		"colors": {"shirt": "ff00ff"}, "overlays": {}})
+	GolferSkinLibrary.invalidate_catalogue()
+	var edited := GolferSkinLibrary.skin_by_id("casual")
+	assert_eq(Array(edited.customizable), art_layer,
+		"an older recipe keeps the art's own layer")
+
 
 ## ── The golfer ────────────────────────────────────────────────────────────
 

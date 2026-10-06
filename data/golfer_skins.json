@@ -29,6 +29,600 @@
   },
   "skins": [
     {
+      "id": "plain",
+      "name": "Club Standard",
+      "description": "The plain club golfer: flat colours, no fancy kit, one clean silhouette. The best starting point for a skin of your own.",
+      "root": "res://assets/sprites/golfer/skins/plain",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "4a86c8",
+        "pants": "3b4a63",
+        "cap": "dcdcd9",
+        "hair": "4a3324",
+        "skin": "eab68f",
+        "shoes": "2e2a28",
+        "accent": "ececec",
+        "gear": "9a9a9a"
+      },
+      "spawn_tiers": [
+        "beginner",
+        "casual"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "caddie",
+      "name": "Caddie",
+      "description": "Flat cap, bib overalls over a polo, a towel over one shoulder and a bag strap across the chest.",
+      "root": "res://assets/sprites/golfer/skins/caddie",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent"
+      ],
+      "colors": {
+        "shirt": "3f7fb5",
+        "pants": "2f4b78",
+        "cap": "6b6f74",
+        "hair": "3a2617",
+        "skin": "dda87e",
+        "shoes": "3a2f26",
+        "accent": "efe9dc",
+        "gear": "6d4b2f"
+      },
+      "spawn_tiers": [
+        "casual",
+        "beginner"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "wizard",
+      "name": "Wizard",
+      "description": "A tall crooked hat, a long robe that sweeps past the knees, a pointed grey beard and a staff with a glowing stone.",
+      "root": "res://assets/sprites/golfer/skins/wizard",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "cap",
+        "hair",
+        "skin",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "4a3d8f",
+        "pants": "362c6b",
+        "cap": "4a3d8f",
+        "hair": "d8dbe2",
+        "skin": "e7bd97",
+        "shoes": "4a3524",
+        "accent": "e5c76b",
+        "gear": "7a5a34"
+      },
+      "spawn_tiers": [
+        "casual",
+        "serious"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "robot",
+      "name": "Robot",
+      "description": "A boxy chrome caddie with a glowing eyeslit, a shoulder aerial and claw hands. Every panel hums with light.",
+      "root": "res://assets/sprites/golfer/skins/robot",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "cap",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "a3b0bf",
+        "pants": "6e7a88",
+        "cap": "c9d4e0",
+        "hair": "6a7480",
+        "skin": "9aa6b2",
+        "shoes": "444c56",
+        "accent": "3fd6c0",
+        "gear": "8a949f"
+      },
+      "spawn_tiers": [
+        "serious",
+        "pro"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "ninja",
+      "name": "Ninja",
+      "description": "A hood and mask with only the eyes showing, a knotted headband trailing behind, and wrapped tabi boots. Silent off the tee.",
+      "root": "res://assets/sprites/golfer/skins/ninja",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "2b2f3a",
+        "pants": "23262f",
+        "cap": "2b2f3a",
+        "hair": "1d1d24",
+        "skin": "e0ac84",
+        "shoes": "15151a",
+        "accent": "c03a3a",
+        "gear": "3a3f4b"
+      },
+      "spawn_tiers": [
+        "casual",
+        "serious",
+        "pro"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "pirate",
+      "name": "Pirate",
+      "description": "A tricorn hat, a striped shirt, an eyepatch, a cutlass and a wooden peg where one leg should be.",
+      "root": "res://assets/sprites/golfer/skins/pirate",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "ece6da",
+        "pants": "33405c",
+        "cap": "23252e",
+        "hair": "241a14",
+        "skin": "d9a173",
+        "shoes": "2b2118",
+        "accent": "b8453c",
+        "gear": "c9c9cf"
+      },
+      "spawn_tiers": [
+        "beginner",
+        "casual",
+        "serious"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "cowboy",
+      "name": "Cowboy",
+      "description": "A wide-brimmed hat, a poncho over the shoulders, a knotted bandana and spurred boots that click down the fairway.",
+      "root": "res://assets/sprites/golfer/skins/cowboy",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "8a5a34",
+        "pants": "3f4a5c",
+        "cap": "6f4d2c",
+        "hair": "3d2a18",
+        "skin": "d6a071",
+        "shoes": "4a3320",
+        "accent": "b8443c",
+        "gear": "c8a05a"
+      },
+      "spawn_tiers": [
+        "beginner",
+        "casual"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "astronaut",
+      "name": "Astronaut",
+      "description": "A bubble helmet over a life-support pack, with thick gloves and magnetised boots. Brings a spare ball for every planet.",
+      "root": "res://assets/sprites/golfer/skins/astronaut",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "d3dce6",
+        "pants": "a9b6c6",
+        "cap": "e8f4ff",
+        "hair": "3a2b22",
+        "skin": "e2b18c",
+        "shoes": "7f8b99",
+        "accent": "e0662f",
+        "gear": "95a3b3"
+      },
+      "spawn_tiers": [
+        "pro"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "suit",
+      "name": "Business Golfer",
+      "description": "A pressed blazer, a silk tie, dark glasses and a briefcase the caddie never gets to carry.",
+      "root": "res://assets/sprites/golfer/skins/suit",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "f4f4f2",
+        "pants": "33384a",
+        "cap": "f4f4f2",
+        "hair": "2c2320",
+        "skin": "e3b389",
+        "shoes": "1e1e22",
+        "accent": "8f2b3c",
+        "gear": "4a3625"
+      },
+      "spawn_tiers": [
+        "serious",
+        "pro"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "lumberjack",
+      "name": "Lumberjack",
+      "description": "A plaid flannel, a knitted beanie, a thick beard and an axe that doubles as a driver.",
+      "root": "res://assets/sprites/golfer/skins/lumberjack",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "b03a2e",
+        "pants": "3d5670",
+        "cap": "3f7f6a",
+        "hair": "6b3a1c",
+        "skin": "dfa77c",
+        "shoes": "3a2a1c",
+        "accent": "d8c07a",
+        "gear": "9aa0a6"
+      },
+      "spawn_tiers": [
+        "beginner",
+        "casual"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "chef",
+      "name": "Chef",
+      "description": "A tall toque, a double-breasted jacket over an apron and a red neckerchief. Food is the other kind of club.",
+      "root": "res://assets/sprites/golfer/skins/chef",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "f6f6f4",
+        "pants": "3a3f45",
+        "cap": "fbfbfb",
+        "hair": "4a3222",
+        "skin": "e6b78f",
+        "shoes": "2a2624",
+        "accent": "c23b32",
+        "gear": "b9c0c6"
+      },
+      "spawn_tiers": [
+        "beginner",
+        "casual",
+        "serious"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "knight",
+      "name": "Knight",
+      "description": "Plate armour with pauldrons, a plumed helm with the visor up, and a tabard over the breastplate.",
+      "root": "res://assets/sprites/golfer/skins/knight",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "97a5b5",
+        "pants": "7d8896",
+        "cap": "c3cfdc",
+        "hair": "2e2b2f",
+        "skin": "e0b08c",
+        "shoes": "6b7684",
+        "accent": "3f63b0",
+        "gear": "b4bdc7"
+      },
+      "spawn_tiers": [
+        "serious",
+        "pro"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "retro",
+      "name": "Retro Sprite",
+      "description": "A 24x24 sprite blown up to 48x48, straight off a 1990s cartridge. Chunky pixels, tiny palette, huge nostalgia.",
+      "root": "res://assets/sprites/golfer/skins/retro",
+      "legacy": false,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
+      ],
+      "colors": {
+        "shirt": "d84848",
+        "pants": "3050a0",
+        "cap": "f0f0f0",
+        "hair": "503020",
+        "skin": "f0c090",
+        "shoes": "282828",
+        "accent": "f0d040",
+        "gear": "808080"
+      },
+      "spawn_tiers": [
+        "beginner",
+        "casual",
+        "serious",
+        "pro"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
       "id": "casual",
       "name": "Club Casual",
       "description": "The original pixel golfer: red polo, soft cap and brown trousers.",
@@ -39,7 +633,10 @@
         "pants",
         "cap",
         "hair",
-        "skin"
+        "skin",
+        "shoes",
+        "accent",
+        "gear"
       ],
       "colors": {
         "shirt": "b41929",
@@ -48,7 +645,8 @@
         "hair": "56261c",
         "skin": "e6a38d",
         "shoes": "2f1813",
-        "accent": "dddcee"
+        "accent": "dddcee",
+        "gear": "000000"
       },
       "spawn_tiers": [
         "casual",
@@ -79,18 +677,18 @@
       "customizable": [
         "shirt",
         "pants",
-        "cap",
         "hair",
-        "skin"
+        "skin",
+        "shoes",
+        "gear"
       ],
       "colors": {
-        "shirt": "b41929",
-        "pants": "8c6b5f",
-        "cap": "cccbe4",
-        "hair": "56261c",
-        "skin": "e6a38d",
-        "shoes": "2f1813",
-        "accent": "dddcee"
+        "shirt": "ebe7e7",
+        "pants": "2c2537",
+        "hair": "383249",
+        "skin": "f4ada0",
+        "shoes": "241d26",
+        "gear": "643a23"
       },
       "spawn_tiers": [
         "beginner"

@@ -50,6 +50,10 @@ Thumbs.db
 node_modules/
 package-lock.json
 
+# Python caches (tools/generate_golfer_skins.py)
+__pycache__/
+*.pyc
+
 # Local development
 .env
 .env.local

@@ -5,11 +5,13 @@ class_name SkinPixelEditor
 ## Shows one 48x48 frame of a golfer skin blown up, with a grid, and lets the
 ## player paint it one pixel at a time. What gets painted is not a colour but a
 ## *part and shade* (shirt / dark, cap / base, ...): the canvas stores part+shade
-## indices, and the colours come from the skin's palette. That is what keeps a
-## skin re-colourable after it has been painted.
+## indices, and the colours come from the skin's palette. That is the same
+## format the art's own part layers use, so a painted pixel and a pixel the
+## artist drew are told apart by exactly the same rule.
 ##
 ## Left mouse paints, right mouse picks the part under the cursor (an eyedropper,
-## so a player can carry on from a pixel they already have).
+## so a player can carry on from a pixel they already have - within the parts
+## the skin's layer offers).
 
 signal pixels_changed()
 signal part_picked(part: String, shade: int)

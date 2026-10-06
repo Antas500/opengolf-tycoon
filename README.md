@@ -170,6 +170,7 @@ Godot will automatically import all assets on first load.
 simgolf-godot/
 ├── assets/
 │   ├── sprites/            # Buildings, golfers, trees, rocks, and decorations
+│   │                       #   golfer art: frame_NNN.png + frame_NNN.layer.bin beside it
 │   └── themes/             # Shared UI theme resources
 ├── data/
 │   ├── buildings.json      # Building types, costs, revenue, upgrade tiers
