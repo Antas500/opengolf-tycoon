@@ -103,7 +103,7 @@ func test_practice_waits_for_input_and_restores_visitors() -> void:
 	assert_eq(rounds.participants.size(), 1)
 	assert_true(rounds.player.awaits_player_shot())
 	assert_eq(rounds.player.golfer_name, "Test Owner")
-	assert_false(rounds.player._use_sprites)
+	assert_true(rounds.player._use_sprites, "The owner uses the Casual pixel-art sprite during a round")
 	assert_eq(rounds.player.body.color, Color(GameManager.player_profile.appearance.shirt_color))
 	assert_eq(visitor.process_mode, Node.PROCESS_MODE_INHERIT, "Visitors are not disabled during round")
 	assert_true(rounds.hud.visible, "Management HUD remains visible during play")

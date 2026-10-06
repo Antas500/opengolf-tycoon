@@ -221,6 +221,10 @@ var _group_badge: Label = null
 
 ## Sprite-based rendering (replaces polygon visuals when available)
 var _animated_sprite: AnimatedSprite2D = null
+enum SpriteColorPart { NONE, CAP, SHIRT, HAIR, SKIN, PANTS }
+## Unmodified art is retained so profile changes always recolor from the original
+## casual palette rather than accumulating tinting across edits.
+var _base_sprite_frames: SpriteFrames = null
 var _use_sprites: bool = false
 var _swing_tween: Tween  # Active procedural swing tween (see _start_swing_tween)
 var _current_direction: String = "south"  # south, east, north, west + diagonals
@@ -420,12 +424,13 @@ func _setup_sprite_animations() -> void:
 					sprite_frames.add_frame(full_name, texture)
 					has_any_animation = true
 
-	if not has_any_animation:
+	if not has_any_animation or not visual:
 		return
 
+	_base_sprite_frames = sprite_frames
 	_animated_sprite = AnimatedSprite2D.new()
 	_animated_sprite.name = "GolferSprite"
-	_animated_sprite.sprite_frames = sprite_frames
+	_animated_sprite.sprite_frames = _base_sprite_frames
 	_animated_sprite.centered = true
 	_animated_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_animated_sprite.position = Vector2(0, -8)
@@ -563,18 +568,143 @@ func _randomize_appearance() -> void:
 	]
 	skin_tone = skin_tones[randi() % skin_tones.size()]
 
-## Apply appearance colors to visual components
+## Apply appearance colors to visual components.
+##
+## The player uses the same pixel-art Casual golfer frames as visitors. The
+## source art uses a consistent palette, so recolor those palette regions while
+## retaining each frame's pixel shading instead of switching the owner back to
+## the older polygon model.
 func apply_player_appearance(profile: PlayerGolferProfile) -> void:
-	# Pre-rendered tier sprites cannot represent the five customizable colors.
-	# Use the existing procedural golfer renderer for the owner instead.
-	_use_sprites = false
-	if visual:
-		for child in visual.get_children():
-			if child is CanvasItem:
-				child.visible = child != _animated_sprite
+	if profile == null:
+		return
 	for key in PlayerGolferProfile.COLORS:
-		set(key, Color(profile.appearance[key]))
+		set(key, Color(profile.appearance.get(key, "ffffff")))
 	_apply_appearance()
+	if _use_sprites and _animated_sprite and _base_sprite_frames:
+		_apply_player_sprite_appearance()
+
+func _apply_player_sprite_appearance() -> void:
+	if not _animated_sprite or not _base_sprite_frames:
+		return
+
+	var old_animation := _animated_sprite.animation
+	var old_frame := _animated_sprite.frame
+	var was_playing := _animated_sprite.is_playing()
+	var recolored_frames := SpriteFrames.new()
+	if recolored_frames.has_animation("default"):
+		recolored_frames.remove_animation("default")
+
+	for animation_name in _base_sprite_frames.get_animation_names():
+		recolored_frames.add_animation(animation_name)
+		recolored_frames.set_animation_speed(animation_name, _base_sprite_frames.get_animation_speed(animation_name))
+		recolored_frames.set_animation_loop(animation_name, _base_sprite_frames.get_animation_loop(animation_name))
+		var direction := animation_name.get_slice("_", 1)
+		for frame_index in _base_sprite_frames.get_frame_count(animation_name):
+			var source_texture := _base_sprite_frames.get_frame_texture(animation_name, frame_index)
+			var texture := _recolor_player_sprite_texture(source_texture, direction)
+			var duration := _base_sprite_frames.get_frame_duration(animation_name, frame_index)
+			recolored_frames.add_frame(animation_name, texture, duration)
+
+	_animated_sprite.sprite_frames = recolored_frames
+	if recolored_frames.has_animation(old_animation):
+		_animated_sprite.play(old_animation)
+		_animated_sprite.frame = mini(old_frame, recolored_frames.get_frame_count(old_animation) - 1)
+	else:
+		_animated_sprite.play("idle_south")
+	if not was_playing:
+		_animated_sprite.pause()
+
+func _recolor_player_sprite_texture(source_texture: Texture2D, direction: String) -> Texture2D:
+	if source_texture == null:
+		return source_texture
+	var image := source_texture.get_image()
+	if image == null or image.is_empty():
+		return source_texture
+	image.convert(Image.FORMAT_RGBA8)
+
+	var width := image.get_width()
+	var height := image.get_height()
+	for y in height:
+		for x in width:
+			var source_color := image.get_pixel(x, y)
+			var part := _classify_player_sprite_pixel(source_color, x, y, width, height, direction)
+			if part == SpriteColorPart.NONE:
+				continue
+			var replacement: Color
+			var reference_value: float
+			match part:
+				SpriteColorPart.CAP:
+					replacement = cap_color
+					reference_value = 0.93
+				SpriteColorPart.SHIRT:
+					replacement = shirt_color
+					reference_value = 0.71
+				SpriteColorPart.HAIR:
+					replacement = hair_color
+					reference_value = 0.45
+				SpriteColorPart.SKIN:
+					replacement = skin_tone
+					reference_value = 0.94
+				SpriteColorPart.PANTS:
+					replacement = pants_color
+					reference_value = 0.55
+			image.set_pixel(x, y, _shade_sprite_color(source_color, replacement, reference_value))
+
+	return ImageTexture.create_from_image(image)
+
+## Identify flat-color regions in the 48x48 Casual sprite. Their palette hues
+## are intentionally distinct (red shirt, cool light cap, warm skin/brown hair
+## and lower-body trousers); direction-aware checks separate the hair from
+## facial details and similarly shaded pants/shoes.
+func _classify_player_sprite_pixel(source: Color, x: int, y: int, width: int, height: int, direction: String) -> int:
+	if source.a <= 0.01:
+		return SpriteColorPart.NONE
+	var vertical := float(y) / float(maxi(height, 1))
+	var horizontal := float(x) / float(maxi(width, 1))
+
+	# The cap is a cool, near-white lavender in the stock Casual palette.
+	if vertical <= 0.34 and source.b > source.r * 1.025 and absf(source.r - source.g) < 0.18 and source.r > 0.30:
+		return SpriteColorPart.CAP
+
+	# The back-facing frame exposes more hair below the cap; side views keep it
+	# behind the face, while the south-facing frame stops above the eyes.
+	var hair_area := vertical <= 0.32
+	if direction.begins_with("north"):
+		hair_area = vertical <= 0.46
+	elif direction.contains("east"):
+		hair_area = vertical <= 0.44 and horizontal < 0.50
+	elif direction.contains("west"):
+		hair_area = vertical <= 0.44 and horizontal > 0.50
+	if hair_area and source.r > source.g * 1.08 and source.g > source.b * 1.01 \
+		and source.r >= 0.22 and source.r < 0.50:
+		return SpriteColorPart.HAIR
+
+	# Strong red separates the polo from skin and the dark-brown hair/shoes.
+	if source.r > source.g * 1.9 and source.r > source.b * 1.55:
+		return SpriteColorPart.SHIRT
+
+	var is_warm_skin := source.r > source.g and source.g > source.b \
+		and source.r > 0.42 and source.r - source.g > 0.045 \
+		and source.r - source.g < 0.48 and source.g - source.b > 0.015
+	var is_face_or_arm_area := vertical < 0.58 \
+		or (vertical < 0.72 and (horizontal < 0.40 or horizontal > 0.60))
+	if is_warm_skin and is_face_or_arm_area:
+		return SpriteColorPart.SKIN
+
+	# Pants fill the lower body; keep the shoes below them in their original
+	# dark leather palette. Skin has already been claimed above at the sides.
+	if vertical >= 0.58 and vertical < 0.83 and source.r > source.g * 1.04 \
+		and source.g >= source.b * 0.95 and source.r < 0.76:
+		return SpriteColorPart.PANTS
+
+	return SpriteColorPart.NONE
+
+## Recolor while retaining the source pixel's light/dark value as sprite shading.
+func _shade_sprite_color(source: Color, target: Color, reference_value: float) -> Color:
+	var source_value := maxf(source.r, maxf(source.g, source.b))
+	var shade := source_value / reference_value if reference_value > 0.0 else 1.0
+	return Color(minf(1.0, target.r * shade), minf(1.0, target.g * shade),
+		minf(1.0, target.b * shade), source.a)
 
 func _apply_appearance() -> void:
 	if body:
@@ -590,6 +720,10 @@ func _apply_appearance() -> void:
 		hair.color = hair_color
 	if head:
 		head.color = skin_tone
+	if arms:
+		arms.color = skin_tone
+	if hands:
+		hands.color = skin_tone
 
 ## Synchronize driving, accuracy, putting and recovery skills from the owner profile.
 func sync_player_profile_skills() -> void:
