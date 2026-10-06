@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Ben Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "34495e",
+   "Cap": "5bc0de",
+   "Hair": "cd853f",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Leah Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "566573",
+   "Cap": "292b2c",
+   "Hair": "2c1a0e",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Gene Lake",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "1a1a2e",
+   "Cap": "8e44ad",
+   "Hair": "1a1a1a",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Frank Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "4a235a",
+   "Cap": "f0ad4e",
+   "Hair": "483c32",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Ella Lake",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "1c2833",
+   "Cap": "5cb85c",
+   "Hair": "1a1a1a",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Heather Lake",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "bdc3c7",
+   "Cap": "cb4335",
+   "Hair": "b8860b",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Maggie Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "4a235a",
+   "Cap": "1a1a2e",
+   "Hair": "f5deb3",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Penny Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "34495e",
+   "Cap": "5bc0de",
+   "Hair": "704214",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Jasmine Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "4a235a",
+   "Cap": "f0ad4e",
+   "Hair": "d2b48c",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Iris Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "a04000",
+   "Pants": "616a6b",
+   "Cap": "b9770e",
+   "Hair": "f5deb3",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Jed Lake",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "1b2631",
+   "Cap": "1e8449",
+   "Hair": "6b4423",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Kate Lake",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "5b2c6f",
+   "Cap": "f0ad4e",
+   "Hair": "704214",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Liam Lake",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "bdc3c7",
+   "Cap": "cb4335",
+   "Hair": "d4a76a",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Ike Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "1a1a2e",
+   "Cap": "292b2c",
+   "Hair": "6b4423",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Dana Lake",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "34495e",
+   "Cap": "27ae60",
+   "Hair": "8b7355",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Sam Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "bdc3c7",
+   "Cap": "8e44ad",
+   "Hair": "3b2f1a",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Tex Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "7d6608",
+   "Cap": "27ae60",
+   "Hair": "cd853f",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Phil Lake",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "2e4053",
+   "Cap": "5bc0de",
+   "Hair": "a0522d",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Kurt Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "bdc3c7",
+   "Cap": "c0392b",
+   "Hair": "483c32",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Mack Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "4a235a",
+   "Cap": "e8e8e8",
+   "Hair": "3b2f1a",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Monica Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "1b2631",
+   "Cap": "2c3e50",
+   "Hair": "c0c0c0",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Al Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "a04000",
+   "Pants": "34495e",
+   "Cap": "c0392b",
+   "Hair": "6b4423",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Luna Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "2c3e50",
+   "Cap": "5bc0de",
+   "Hair": "cd853f",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Pam Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "4a235a",
+   "Cap": "4a90d9",
+   "Hair": "d4a76a",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Skip Lake",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "7d6608",
+   "Cap": "1e8449",
+   "Hair": "8b4513",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Ken Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "1b2631",
+   "Cap": "292b2c",
+   "Hair": "8b4513",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Casey Lake",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1e8449",
+   "Pants": "5b2c6f",
+   "Cap": "5cb85c",
+   "Hair": "1a1a1a",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Emmett Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "34495e",
+   "Cap": "27ae60",
+   "Hair": "1a1a1a",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Jasper Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "566573",
+   "Cap": "5cb85c",
+   "Hair": "d2691e",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Sue Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "f7f9f9",
+   "Cap": "2c3e50",
+   "Hair": "f5deb3",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Kay Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "5b2c6f",
+   "Cap": "f0ad4e",
+   "Hair": "2c1a0e",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Roy Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "5b2c6f",
+   "Cap": "1e8449",
+   "Hair": "6b4423",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Bonnie Lake",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "bdc3c7",
+   "Cap": "1b4f72",
+   "Hair": "2f1b0e",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Owen Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "5b2c6f",
+   "Cap": "2c3e50",
+   "Hair": "cd853f",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Kai Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "566573",
+   "Cap": "ecf0f1",
+   "Hair": "6b4423",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Cal Lake",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "2c3e50",
+   "Cap": "8e44ad",
+   "Hair": "8b7355",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Chase Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "1a1a2e",
+   "Cap": "5cb85c",
+   "Hair": "1a1a1a",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Kara Lake",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "283747",
+   "Cap": "292b2c",
+   "Hair": "483c32",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Fran Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "2e4053",
+   "Cap": "1e8449",
+   "Hair": "cd853f",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Brooks Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "1b2631",
+   "Cap": "e67e22",
+   "Hair": "6b4423",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Josh Lake",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "2c3e50",
+   "Cap": "4a90d9",
+   "Hair": "5c3a1e",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Hailey Lake",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "4a235a",
+   "Cap": "cb4335",
+   "Hair": "6b4423",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Tate Lake",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "34495e",
+   "Cap": "2c3e50",
+   "Hair": "6b4423",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Mel Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "616a6b",
+   "Cap": "b9770e",
+   "Hair": "704214",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Rob Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "566573",
+   "Cap": "5cb85c",
+   "Hair": "5c3a1e",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Dave Lake",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "bdc3c7",
+   "Cap": "e8e8e8",
+   "Hair": "2f1b0e",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Stella Lake",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "616a6b",
+   "Cap": "1a1a2e",
+   "Hair": "483c32",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Zane Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "808b96",
+   "Cap": "d4ac0d",
+   "Hair": "c0c0c0",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Wade Lake",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "4a235a",
+   "Cap": "b9770e",
+   "Hair": "cd853f",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Ross Lake",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "808b96",
+   "Cap": "d9534f",
+   "Hair": "c0c0c0",
+   "Skin": "dbb98f"
+  }
+ }
+]

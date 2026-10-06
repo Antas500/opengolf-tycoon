@@ -92,6 +92,12 @@ const CLUB_SWITCH_MARGIN: float = 0.05
 		if is_node_ready() and _use_sprites:
 			refresh_skin_sprites()
 
+## Per-group colour overrides for visiting golfers. Maps group name → Color
+## (e.g. {"Shirt": Color("4a90d9")}). When set, these colours replace the
+## skin's own group colours through GolferSkin.color_for_group(); the normal
+## player-profile role-key overrides still take priority when both exist.
+var group_color_overrides: Dictionary = {}
+
 ## Golfer tier (Beginner, Casual, Serious, Pro)
 var golfer_tier: int = GolferTier.Tier.CASUAL
 
@@ -379,7 +385,7 @@ func _setup_sprite_animations() -> bool:
 	var worn := GolferSkins.skin_for_golfer(self)
 	if worn == null:
 		return false
-	var frames := GolferSkins.library.recolored_frames(worn)
+	var frames := GolferSkins.library.recolored_frames(worn, group_color_overrides)
 	if frames == null or frames.get_animation_names().is_empty():
 		return false
 	_skin = worn
@@ -559,16 +565,16 @@ func apply_player_appearance(profile: PlayerGolferProfile) -> void:
 	refresh_skin_sprites()
 
 ## Dress the golfer in its Golfer Skin again: the frames of that skin, with the
-## colours the skin carries (see GolferSkin). The frames themselves are shared
-## between every golfer wearing the same skin (see GolferSkinLibrary), so this is
-## a lookup rather than a re-color.
+## colours the skin carries (see GolferSkin). Visiting golfers carry
+## `group_color_overrides` which replace the skin's default group colours;
+## the frames are cached per colour fingerprint so each visitor draws correctly.
 func refresh_skin_sprites() -> void:
 	if _animated_sprite == null:
 		return
 	var worn := GolferSkins.skin_for_golfer(self)
 	if worn == null:
 		return
-	var frames := GolferSkins.library.recolored_frames(worn)
+	var frames := GolferSkins.library.recolored_frames(worn, group_color_overrides)
 	if frames == null or frames.get_animation_names().is_empty():
 		return
 	_skin = worn
@@ -3588,7 +3594,7 @@ func _on_click_area_input_event(_viewport: Node, event: InputEvent, _shape_idx: 
 
 ## Serialize golfer state
 func serialize() -> Dictionary:
-	return {
+	var data := {
 		"golfer_id": golfer_id,
 		"golfer_name": golfer_name,
 		"group_id": group_id,
@@ -3609,8 +3615,16 @@ func serialize() -> Dictionary:
 		"current_state": current_state,
 		"ball_position": {"x": ball_position.x, "y": ball_position.y},
 		"ball_position_precise": {"x": ball_position_precise.x, "y": ball_position_precise.y},
-		"position": {"x": global_position.x, "y": global_position.y}
+		"position": {"x": global_position.x, "y": global_position.y},
 	}
+	if not skin_id.is_empty():
+		data["skin_id"] = skin_id
+	if not group_color_overrides.is_empty():
+		var color_data := {}
+		for key in group_color_overrides:
+			color_data[key] = (group_color_overrides[key] as Color).to_html(false)
+		data["group_color_overrides"] = color_data
+	return data
 
 ## Deserialize golfer state
 func deserialize(data: Dictionary) -> void:
@@ -3631,6 +3645,12 @@ func deserialize(data: Dictionary) -> void:
 	total_par = data.get("total_par", 0)
 	previous_hole_strokes = data.get("previous_hole_strokes", 0)
 	current_mood = data.get("current_mood", 0.5)
+	skin_id = data.get("skin_id", "")
+	# Restore visiting golfer colour overrides.
+	var saved_overrides: Dictionary = data.get("group_color_overrides", {})
+	group_color_overrides.clear()
+	for key in saved_overrides:
+		group_color_overrides[key] = Color.from_string(str(saved_overrides[key]), Color.WHITE)
 	# Always restore to IDLE state so golfer can resume cleanly
 	# The current_strokes and ball_position tell us where they are in the hole
 	current_state = State.IDLE

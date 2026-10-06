@@ -19,6 +19,11 @@ enum Size { SMALL, MEDIUM, LARGE, CHAMPIONSHIP }
 ## Land value of one parcel that is already unlocked when the location is bought.
 const LAND_VALUE_PER_PARCEL: int = 2200
 
+## Where each location's visiting-golfer JSON file lives (50 golfers each).
+## Each file is a JSON array of objects with keys: name, skin_id, tier,
+## group_colors ({Shirt, Pants, Cap, Hair, Skin} → hex colour string).
+const VISITING_GOLFERS_ROOT: String = "res://data/visiting_golfers"
+
 ## Every location's unlocked land includes at least the central parcel cluster.
 const MIN_UNLOCKED_PARCELS: int = 4
 
@@ -351,6 +356,50 @@ static func random_company_name(rng: RandomNumberGenerator = null) -> String:
 		pick.randomize()
 	return "%s %s" % [prefixes[pick.randi_range(0, prefixes.size() - 1)],
 		suffixes[pick.randi_range(0, suffixes.size() - 1)]]
+
+
+# ==============================================================================
+# VISITING GOLFERS
+# ==============================================================================
+
+## Every visiting golfer definition for a location. Reads from the per-location
+## JSON file in `data/visiting_golfers/<id>.json` once and caches the result.
+static func get_visiting_golfers(location_id: String) -> Array:
+	if _visitor_cache.has(location_id):
+		return _visitor_cache[location_id]
+	var path := VISITING_GOLFERS_ROOT.path_join(location_id + ".json")
+	var result: Array = []
+	if FileAccess.file_exists(path):
+		var text := FileAccess.get_file_as_string(path)
+		var parsed = JSON.parse_string(text)
+		if parsed is Array:
+			result = parsed
+	_visitor_cache[location_id] = result
+	return result
+
+## Module-level cache shared across all callers (static methods need a
+## dictionary that outlives the call — GDScript file-scope `var` does that).
+static var _visitor_cache: Dictionary = {}
+
+## How many visiting golfers a location has in its pool.
+static func visiting_golfer_count(location_id: String) -> int:
+	return get_visiting_golfers(location_id).size()
+
+## All visiting golfer names at a location.
+static func visiting_golfer_names(location_id: String) -> PackedStringArray:
+	var names := PackedStringArray()
+	for entry in get_visiting_golfers(location_id):
+		names.append(str(entry.get("name", "")))
+	return names
+
+## Parse a visiting golfer's group_colors dictionary into Color objects.
+## Keys are group names (e.g. "Shirt"), values are hex strings (e.g. "4a90d9").
+static func parse_visitor_group_colors(visitor: Dictionary) -> Dictionary:
+	var colors := {}
+	for group_name in visitor.get("group_colors", {}):
+		var hex_str := str(visitor["group_colors"][group_name])
+		colors[group_name] = Color.from_string(hex_str, Color.WHITE)
+	return colors
 
 ## Theme for a location id (falls back to parkland).
 static func get_theme(location_id: String) -> int:

@@ -419,15 +419,23 @@ func sprite_keys() -> Array[String]:
 
 ## The colour a group is drawn in, with the owner's profile colours taking over
 ## the groups whose names match the profile's slots ("Shirt", "Pants", "Cap",
-## "Hair", "Skin"). `overrides` maps a role name to a Color.
+## "Hair", "Skin"). `overrides` maps a role name OR a group name to a Color.
+## Visiting golfers use group name keys (e.g. {"Shirt": Color(...)}); the
+## player's own golfer uses profile role keys (e.g. {"shirt_color": Color(...)}).
+## Role-key overrides take priority so the player's profile is never shadowed.
 func color_for_group(group_id: int, overrides: Dictionary = {}) -> Color:
 	var group := group_by_id(group_id)
 	if group.is_empty():
 		return Color.WHITE
 	if not overrides.is_empty():
 		var role := str(group.get("name", "")).to_lower()
+		# Profile role keys (shirt_color, pants_color, …) take priority.
 		if overrides.has(role):
 			return overrides[role]
+		# Group name keys (Shirt, Pants, …) used by visiting golfers.
+		var group_name := str(group.get("name", ""))
+		if overrides.has(group_name):
+			return overrides[group_name]
 	return group.get("color", Color.WHITE)
 
 

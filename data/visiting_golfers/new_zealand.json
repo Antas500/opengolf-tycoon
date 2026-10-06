@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Ellie Auckland",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "4a235a",
+   "Cap": "ecf0f1",
+   "Hair": "c0c0c0",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Dan Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "1b2631",
+   "Cap": "5bc0de",
+   "Hair": "3b2f1a",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Lily Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "2e4053",
+   "Cap": "b9770e",
+   "Hair": "3b2f1a",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Frank Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "808b96",
+   "Cap": "1e8449",
+   "Hair": "c0c0c0",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Sam Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "bdc3c7",
+   "Cap": "ecf0f1",
+   "Hair": "d2b48c",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Liz Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "1c2833",
+   "Cap": "1b4f72",
+   "Hair": "8b4513",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Wade Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "d5d8dc",
+   "Cap": "e67e22",
+   "Hair": "c0c0c0",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Bonnie Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "808b96",
+   "Cap": "d4ac0d",
+   "Hair": "d2b48c",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Rae Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "283747",
+   "Cap": "b9770e",
+   "Hair": "f5deb3",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Flo Auckland",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "2e4053",
+   "Cap": "cb4335",
+   "Hair": "8b4513",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Heather Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "34495e",
+   "Cap": "1a1a2e",
+   "Hair": "d2691e",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Hope Auckland",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "5bc0de",
+   "Pants": "283747",
+   "Cap": "8e44ad",
+   "Hair": "8b4513",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Gene Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "d5d8dc",
+   "Cap": "c0392b",
+   "Hair": "8b4513",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Hailey Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "5b2c6f",
+   "Cap": "1b4f72",
+   "Hair": "1a1a1a",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Laura Auckland",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "1c2833",
+   "Cap": "1b4f72",
+   "Hair": "f5deb3",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Chris Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "283747",
+   "Cap": "ecf0f1",
+   "Hair": "cd853f",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Alex Auckland",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "5b2c6f",
+   "Cap": "e67e22",
+   "Hair": "1a1a1a",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Holt Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "1b2631",
+   "Cap": "1b4f72",
+   "Hair": "483c32",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Erin Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "bdc3c7",
+   "Cap": "ecf0f1",
+   "Hair": "bc8f8f",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Lola Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "f7f9f9",
+   "Cap": "4a90d9",
+   "Hair": "2f1b0e",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Wayne Auckland",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "2e4053",
+   "Cap": "b9770e",
+   "Hair": "704214",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Nora Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "ecf0f1",
+   "Cap": "2c3e50",
+   "Hair": "b8860b",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Monica Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "ecf0f1",
+   "Cap": "6c3483",
+   "Hair": "704214",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Jess Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "bdc3c7",
+   "Cap": "d4ac0d",
+   "Hair": "f5deb3",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Tina Auckland",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "283747",
+   "Cap": "2c3e50",
+   "Hair": "3b2f1a",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Eve Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "808b96",
+   "Cap": "8e44ad",
+   "Hair": "a9a9a9",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Marie Auckland",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "1c2833",
+   "Cap": "292b2c",
+   "Hair": "d2691e",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Neil Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "1a1a2e",
+   "Cap": "ecf0f1",
+   "Hair": "a0522d",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Henry Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "283747",
+   "Cap": "d9534f",
+   "Hair": "d2691e",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Tom Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "1b2631",
+   "Cap": "cb4335",
+   "Hair": "d2b48c",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Ty Auckland",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "7d6608",
+   "Cap": "e8e8e8",
+   "Hair": "b8860b",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Shane Auckland",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "566573",
+   "Cap": "f0ad4e",
+   "Hair": "a9a9a9",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Jake Auckland",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "7d6608",
+   "Cap": "e8e8e8",
+   "Hair": "2f1b0e",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Hank Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "f7f9f9",
+   "Cap": "b9770e",
+   "Hair": "3b2f1a",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Cole Auckland",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "1c2833",
+   "Cap": "1b4f72",
+   "Hair": "2c1a0e",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Fran Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "5b2c6f",
+   "Cap": "d9534f",
+   "Hair": "1a1a1a",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Matt Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1b2631",
+   "Cap": "5cb85c",
+   "Hair": "d4a76a",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Seth Auckland",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "bdc3c7",
+   "Cap": "5bc0de",
+   "Hair": "8b4513",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Cam Auckland",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1a1a2e",
+   "Cap": "b9770e",
+   "Hair": "5c3a1e",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Gina Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "34495e",
+   "Cap": "5bc0de",
+   "Hair": "2f1b0e",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Heath Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "5b2c6f",
+   "Cap": "1e8449",
+   "Hair": "483c32",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Brady Auckland",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "1b2631",
+   "Cap": "1a1a2e",
+   "Hair": "5c3a1e",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Paul Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "616a6b",
+   "Cap": "d9534f",
+   "Hair": "d2691e",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Jeff Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "808b96",
+   "Cap": "292b2c",
+   "Hair": "a0522d",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Dean Auckland",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "d5d8dc",
+   "Cap": "5bc0de",
+   "Hair": "d4a76a",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Ross Auckland",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "1a1a2e",
+   "Cap": "cb4335",
+   "Hair": "b8860b",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Finn Auckland",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "7d6608",
+   "Cap": "c0392b",
+   "Hair": "d2691e",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Rex Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "2c3e50",
+   "Cap": "f0ad4e",
+   "Hair": "5c3a1e",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Nina Auckland",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "808b96",
+   "Cap": "1a1a2e",
+   "Hair": "2f1b0e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Vera Auckland",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "f7f9f9",
+   "Cap": "f0ad4e",
+   "Hair": "3b2f1a",
+   "Skin": "a67c52"
+  }
+ }
+]

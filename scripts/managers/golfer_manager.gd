@@ -16,6 +16,10 @@ var _cached_spawn_modifier: float = 1.0
 var _spawn_modifier_cache_timer: float = 0.0
 const SPAWN_MODIFIER_CACHE_DURATION: float = 5.0  # Recalculate every 5 seconds
 
+## Visiting golfer pool: tracks which named visitors from the current location
+## have already been spawned so each one appears at most once per round.
+var _spawned_visitor_names: Dictionary = {}  # name -> true
+
 ## Cached group data to avoid rebuilding every frame
 var _cached_groups: Dictionary = {}  # group_id -> Array[Golfer]
 var _cached_sorted_group_ids: Array = []
@@ -932,7 +936,44 @@ func spawn_random_golfer(group_id: int = -1) -> Golfer:
 
 	return golfer
 
-## Spawn initial group of golfers when course opens
+## Spawn a visiting golfer from the current location's pool, if any are left.
+## Picks randomly from all golfers not already on the course. Returns the
+## spawned Golfer, or null when the pool is empty or unavailable.
+func spawn_visiting_golfer(group_id: int = -1) -> Golfer:
+	var location_id := WorldMap.active_location_id
+	if location_id.is_empty():
+		return null
+	var pool := WorldLocations.get_visiting_golfers(location_id)
+	if pool.is_empty():
+		return null
+	# Build the list of candidates not yet on the course.
+	var available: Array = []
+	for visitor in pool:
+		if not _spawned_visitor_names.has(str(visitor.get("name", ""))):
+			available.append(visitor)
+	if available.is_empty():
+		return null
+	# Pick one at random.
+	var visitor: Dictionary = available[randi() % available.size()]
+	var visitor_name := str(visitor.get("name", ""))
+	var tier := int(visitor.get("tier", GolferTier.Tier.CASUAL))
+	var skin := str(visitor.get("skin_id", ""))
+	var group_colors := WorldLocations.parse_visitor_group_colors(visitor)
+	var golfer := spawn_golfer(visitor_name, 0.5, group_id)
+	if golfer == null:
+		return null
+	golfer.initialize_from_tier(tier)
+	golfer.skin_id = skin
+	golfer.group_color_overrides = group_colors
+	golfer.refresh_skin_sprites()
+	_spawned_visitor_names[visitor_name] = true
+	print("Spawned visiting golfer: %s (%s skin, %s tier) at %s" % [
+		visitor_name, skin, GolferTier.get_tier_name(tier), location_id])
+	return golfer
+
+## Spawn initial group of golfers when course opens.
+## Prefers visiting golfers from the location's pool; falls back to random
+## golfers once the pool is exhausted.
 func spawn_initial_group() -> void:
 	var group_size = _select_weighted_group_size()
 	var new_group_id = next_group_id
@@ -941,7 +982,10 @@ func spawn_initial_group() -> void:
 	print("New group %d: %d golfers (Fee: $%d)" % [new_group_id, group_size, GameManager.green_fee])
 
 	for i in range(group_size):
-		spawn_random_golfer(new_group_id)
+		# Try the location's visiting golfer pool first.
+		var visitor := spawn_visiting_golfer(new_group_id)
+		if visitor == null:
+			spawn_random_golfer(new_group_id)
 		# Small delay between spawns in the same group
 		# (Timer-node delay: a pending SceneTreeTimer await would leak at quit.)
 		await Delay.seconds(self, 0.5)
@@ -1151,6 +1195,7 @@ func clear_all_golfers() -> void:
 	next_golfer_id = 0
 	next_group_id = 0
 	time_since_last_spawn = 0.0
+	_spawned_visitor_names.clear()
 	_clearing_golfers = false
 
 ## Serialize all active golfers

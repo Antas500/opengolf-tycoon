@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Jasmine Grand",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "4a235a",
+   "Cap": "6c3483",
+   "Hair": "c0c0c0",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Roy Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "5b2c6f",
+   "Cap": "1a1a2e",
+   "Hair": "704214",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Chelsea Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "7d6608",
+   "Cap": "8e44ad",
+   "Hair": "bc8f8f",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Logan Grand",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "808b96",
+   "Cap": "f0ad4e",
+   "Hair": "2c1a0e",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Amy Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "1a1a2e",
+   "Cap": "b9770e",
+   "Hair": "a9a9a9",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Kira Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "ecf0f1",
+   "Cap": "d4ac0d",
+   "Hair": "a9a9a9",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Sunny Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "1b2631",
+   "Cap": "e8e8e8",
+   "Hair": "483c32",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Clay Grand",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "4a235a",
+   "Cap": "1e8449",
+   "Hair": "a9a9a9",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Chloe Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "4a235a",
+   "Cap": "e8e8e8",
+   "Hair": "704214",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Nate Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "1b2631",
+   "Cap": "1b4f72",
+   "Hair": "704214",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Marc Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "ecf0f1",
+   "Cap": "5bc0de",
+   "Hair": "a9a9a9",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Ruby Grand",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "1a1a2e",
+   "Cap": "e67e22",
+   "Hair": "704214",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Troy Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "a04000",
+   "Pants": "2c3e50",
+   "Cap": "8e44ad",
+   "Hair": "f5deb3",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Penny Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "2c3e50",
+   "Cap": "e8e8e8",
+   "Hair": "d2691e",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Tom Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "a04000",
+   "Pants": "808b96",
+   "Cap": "b9770e",
+   "Hair": "bc8f8f",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Mike Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "616a6b",
+   "Cap": "e67e22",
+   "Hair": "cd853f",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Mel Grand",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "7d6608",
+   "Cap": "1b4f72",
+   "Hair": "6b4423",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Emily Grand",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "ecf0f1",
+   "Cap": "292b2c",
+   "Hair": "cd853f",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Fiona Grand",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "2e4053",
+   "Cap": "5bc0de",
+   "Hair": "b8860b",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Cal Grand",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "808b96",
+   "Cap": "1e8449",
+   "Hair": "704214",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Rose Grand",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "2e4053",
+   "Cap": "2c3e50",
+   "Hair": "5c3a1e",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Ben Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "1c2833",
+   "Cap": "e8e8e8",
+   "Hair": "2c1a0e",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Dan Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "2c3e50",
+   "Cap": "ecf0f1",
+   "Hair": "b8860b",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Iris Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "d5d8dc",
+   "Cap": "5bc0de",
+   "Hair": "8b7355",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Ted Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "2c3e50",
+   "Cap": "1a1a2e",
+   "Hair": "b8860b",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Riley Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "d5d8dc",
+   "Cap": "d4ac0d",
+   "Hair": "8b4513",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Vicky Grand",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "4a235a",
+   "Cap": "b9770e",
+   "Hair": "5c3a1e",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Holt Grand",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "4a235a",
+   "Cap": "1e8449",
+   "Hair": "c0c0c0",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Rita Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "4a235a",
+   "Cap": "d9534f",
+   "Hair": "a9a9a9",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Hope Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "808b96",
+   "Cap": "c0392b",
+   "Hair": "d4a76a",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Dave Grand",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "ecf0f1",
+   "Cap": "b9770e",
+   "Hair": "d4a76a",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Marie Grand",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "ecf0f1",
+   "Cap": "cb4335",
+   "Hair": "3b2f1a",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Pam Grand",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "2c3e50",
+   "Cap": "1a1a2e",
+   "Hair": "cd853f",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Josh Grand",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "1a1a2e",
+   "Cap": "292b2c",
+   "Hair": "d2b48c",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Finn Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "1a1a2e",
+   "Cap": "1b4f72",
+   "Hair": "704214",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Amber Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "1a1a2e",
+   "Cap": "d4ac0d",
+   "Hair": "8b7355",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Nick Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "f7f9f9",
+   "Cap": "2c3e50",
+   "Hair": "1a1a1a",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Nancy Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "2e4053",
+   "Cap": "e8e8e8",
+   "Hair": "f5deb3",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Jasper Grand",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "1a1a2e",
+   "Cap": "e67e22",
+   "Hair": "1a1a1a",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Zoe Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "7d6608",
+   "Cap": "d9534f",
+   "Hair": "c0c0c0",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Neil Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "2e4053",
+   "Cap": "c0392b",
+   "Hair": "f5deb3",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Henry Grand",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "616a6b",
+   "Cap": "27ae60",
+   "Hair": "b8860b",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Al Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "5b2c6f",
+   "Cap": "1b4f72",
+   "Hair": "d2b48c",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Hank Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "34495e",
+   "Cap": "2c3e50",
+   "Hair": "d2691e",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Alex Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "808b96",
+   "Cap": "5bc0de",
+   "Hair": "a0522d",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Glen Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "34495e",
+   "Cap": "1a1a2e",
+   "Hair": "2c1a0e",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Whitney Grand",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "1c2833",
+   "Cap": "b9770e",
+   "Hair": "483c32",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Tara Grand",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "808b96",
+   "Cap": "1e8449",
+   "Hair": "704214",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Wade Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "34495e",
+   "Cap": "b9770e",
+   "Hair": "483c32",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Cassie Grand",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "2c3e50",
+   "Cap": "1e8449",
+   "Hair": "5c3a1e",
+   "Skin": "9e7b5a"
+  }
+ }
+]

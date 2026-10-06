@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Riley Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "2c3e50",
+   "Cap": "292b2c",
+   "Hair": "2f1b0e",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Crystal Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "4a235a",
+   "Cap": "cb4335",
+   "Hair": "8b7355",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Ty Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "f7f9f9",
+   "Cap": "e67e22",
+   "Hair": "bc8f8f",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Hank Fundy",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "bdc3c7",
+   "Cap": "cb4335",
+   "Hair": "d2b48c",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Sally Fundy",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "7d6608",
+   "Cap": "f0ad4e",
+   "Hair": "1a1a1a",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Heath Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "808b96",
+   "Cap": "1b4f72",
+   "Hair": "704214",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Hope Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "4a235a",
+   "Cap": "292b2c",
+   "Hair": "483c32",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Dan Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "34495e",
+   "Cap": "1a1a2e",
+   "Hair": "d4a76a",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Sue Fundy",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "1c2833",
+   "Cap": "c0392b",
+   "Hair": "2c1a0e",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Colt Fundy",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "616a6b",
+   "Cap": "e67e22",
+   "Hair": "d2691e",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Gwen Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "1a1a2e",
+   "Cap": "ecf0f1",
+   "Hair": "a9a9a9",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Beth Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "1c2833",
+   "Cap": "4a90d9",
+   "Hair": "8b7355",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Piper Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "2c3e50",
+   "Cap": "8e44ad",
+   "Hair": "a9a9a9",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Blake Fundy",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1a1a2e",
+   "Cap": "1e8449",
+   "Hair": "5c3a1e",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Paige Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "566573",
+   "Cap": "1e8449",
+   "Hair": "f5deb3",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Eve Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "ecf0f1",
+   "Cap": "cb4335",
+   "Hair": "8b4513",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Grant Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "808b96",
+   "Cap": "c0392b",
+   "Hair": "2f1b0e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Holt Fundy",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "34495e",
+   "Cap": "c0392b",
+   "Hair": "8b4513",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Jeff Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "4a235a",
+   "Cap": "b9770e",
+   "Hair": "a9a9a9",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Paul Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "2c3e50",
+   "Cap": "2c3e50",
+   "Hair": "1a1a1a",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Gina Fundy",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "ecf0f1",
+   "Cap": "5bc0de",
+   "Hair": "1a1a1a",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Jed Fundy",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "808b96",
+   "Cap": "c0392b",
+   "Hair": "2f1b0e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Greg Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "2e4053",
+   "Cap": "5cb85c",
+   "Hair": "d2691e",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Pat Fundy",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "d5d8dc",
+   "Cap": "27ae60",
+   "Hair": "a9a9a9",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Val Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "1b2631",
+   "Cap": "4a90d9",
+   "Hair": "b8860b",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Roy Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "bdc3c7",
+   "Cap": "8e44ad",
+   "Hair": "d2691e",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Linc Fundy",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "1a1a2e",
+   "Cap": "5cb85c",
+   "Hair": "d4a76a",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Anna Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "1b2631",
+   "Cap": "292b2c",
+   "Hair": "b8860b",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Josh Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "4a235a",
+   "Cap": "5bc0de",
+   "Hair": "f5deb3",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Cayla Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "1a1a2e",
+   "Cap": "4a90d9",
+   "Hair": "1a1a1a",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Henry Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "616a6b",
+   "Cap": "d9534f",
+   "Hair": "c0c0c0",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Clay Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "5bc0de",
+   "Pants": "d5d8dc",
+   "Cap": "292b2c",
+   "Hair": "a0522d",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Max Fundy",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "1a1a2e",
+   "Cap": "8e44ad",
+   "Hair": "b8860b",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Nina Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "616a6b",
+   "Cap": "cb4335",
+   "Hair": "2f1b0e",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Carmen Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "808b96",
+   "Cap": "e67e22",
+   "Hair": "c0c0c0",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Casey Fundy",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "4a235a",
+   "Cap": "cb4335",
+   "Hair": "cd853f",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Shannon Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "2c3e50",
+   "Cap": "1b4f72",
+   "Hair": "1a1a1a",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Tina Fundy",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "bdc3c7",
+   "Cap": "2c3e50",
+   "Hair": "2f1b0e",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Joel Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "2c3e50",
+   "Cap": "6c3483",
+   "Hair": "5c3a1e",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Jake Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "2c3e50",
+   "Cap": "b9770e",
+   "Hair": "cd853f",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Polly Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "1b2631",
+   "Cap": "cb4335",
+   "Hair": "6b4423",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Corey Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "5b2c6f",
+   "Cap": "d4ac0d",
+   "Hair": "d4a76a",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Brooke Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "616a6b",
+   "Cap": "e8e8e8",
+   "Hair": "bc8f8f",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Gage Fundy",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "f7f9f9",
+   "Cap": "1a1a2e",
+   "Hair": "c0c0c0",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Olive Fundy",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "d5d8dc",
+   "Cap": "cb4335",
+   "Hair": "d4a76a",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Ike Fundy",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "34495e",
+   "Cap": "c0392b",
+   "Hair": "8b7355",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Brooks Fundy",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "34495e",
+   "Cap": "d9534f",
+   "Hair": "5c3a1e",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Emmett Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "5b2c6f",
+   "Cap": "292b2c",
+   "Hair": "d2b48c",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Bo Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "1a1a2e",
+   "Cap": "f0ad4e",
+   "Hair": "cd853f",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Ada Fundy",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "5b2c6f",
+   "Cap": "8e44ad",
+   "Hair": "a9a9a9",
+   "Skin": "6b4423"
+  }
+ }
+]

@@ -58,7 +58,7 @@ func frames_for_golfer(golfer: Golfer) -> SpriteFrames:
 	var skin := skin_for_golfer(golfer)
 	if skin == null:
 		return null
-	return library.recolored_frames(skin)
+	return library.recolored_frames(skin, golfer.group_color_overrides)
 
 
 ## The untouched artwork of a golfer's skin - what the re-color layers are

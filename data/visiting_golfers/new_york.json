@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Piper Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "2e4053",
+   "Cap": "e67e22",
+   "Hair": "b8860b",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Kai Broadway",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "bdc3c7",
+   "Cap": "ecf0f1",
+   "Hair": "c0c0c0",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Gemma Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "1a1a2e",
+   "Cap": "d4ac0d",
+   "Hair": "3b2f1a",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Jess Broadway",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "1a1a2e",
+   "Cap": "d9534f",
+   "Hair": "2c1a0e",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Mia Broadway",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "2e4053",
+   "Cap": "8e44ad",
+   "Hair": "d2691e",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Scott Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "4a235a",
+   "Cap": "27ae60",
+   "Hair": "2c1a0e",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Lynn Broadway",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "7d6608",
+   "Cap": "27ae60",
+   "Hair": "5c3a1e",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Cody Broadway",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "f7f9f9",
+   "Cap": "b9770e",
+   "Hair": "a0522d",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Logan Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "1c2833",
+   "Cap": "4a90d9",
+   "Hair": "a0522d",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Whitney Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "616a6b",
+   "Cap": "d9534f",
+   "Hair": "d2691e",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Jack Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "4a235a",
+   "Cap": "4a90d9",
+   "Hair": "1a1a1a",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Joe Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "d5d8dc",
+   "Cap": "cb4335",
+   "Hair": "a9a9a9",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Raven Broadway",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "808b96",
+   "Cap": "8e44ad",
+   "Hair": "d4a76a",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Roger Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "2c3e50",
+   "Cap": "c0392b",
+   "Hair": "f5deb3",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "April Broadway",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "bdc3c7",
+   "Cap": "ecf0f1",
+   "Hair": "5c3a1e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Jamie Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "2e4053",
+   "Cap": "ecf0f1",
+   "Hair": "b8860b",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Rocky Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "2c3e50",
+   "Cap": "e8e8e8",
+   "Hair": "d2691e",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Pam Broadway",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "808b96",
+   "Cap": "d4ac0d",
+   "Hair": "b8860b",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Luke Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "1c2833",
+   "Cap": "c0392b",
+   "Hair": "d2691e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Brent Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "1c2833",
+   "Cap": "d9534f",
+   "Hair": "8b7355",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Noelle Broadway",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "5b2c6f",
+   "Cap": "ecf0f1",
+   "Hair": "b8860b",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Clay Broadway",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "d5d8dc",
+   "Cap": "cb4335",
+   "Hair": "d4a76a",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Dale Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "7d6608",
+   "Cap": "ecf0f1",
+   "Hair": "a9a9a9",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Brooke Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1c2833",
+   "Cap": "2c3e50",
+   "Hair": "bc8f8f",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Nick Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "283747",
+   "Cap": "1b4f72",
+   "Hair": "d4a76a",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Nora Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "ecf0f1",
+   "Cap": "1e8449",
+   "Hair": "c0c0c0",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Hal Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "34495e",
+   "Cap": "e8e8e8",
+   "Hair": "5c3a1e",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Cole Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "bdc3c7",
+   "Cap": "c0392b",
+   "Hair": "b8860b",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Beth Broadway",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "ecf0f1",
+   "Cap": "e67e22",
+   "Hair": "d2691e",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Trent Broadway",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "2c3e50",
+   "Cap": "1a1a2e",
+   "Hair": "f5deb3",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Riley Broadway",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "bdc3c7",
+   "Cap": "8e44ad",
+   "Hair": "2c1a0e",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Sunny Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "7d6608",
+   "Cap": "cb4335",
+   "Hair": "483c32",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Cam Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "283747",
+   "Cap": "f0ad4e",
+   "Hair": "3b2f1a",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Shannon Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "2e4053",
+   "Cap": "2c3e50",
+   "Hair": "f5deb3",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Jim Broadway",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "ecf0f1",
+   "Cap": "c0392b",
+   "Hair": "b8860b",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Liam Broadway",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "2c3e50",
+   "Cap": "2c3e50",
+   "Hair": "c0c0c0",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Vince Broadway",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "283747",
+   "Cap": "1e8449",
+   "Hair": "a0522d",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Wade Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "ecf0f1",
+   "Cap": "4a90d9",
+   "Hair": "a0522d",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Tex Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1e8449",
+   "Pants": "34495e",
+   "Cap": "5bc0de",
+   "Hair": "6b4423",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Heath Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "a04000",
+   "Pants": "4a235a",
+   "Cap": "292b2c",
+   "Hair": "2f1b0e",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Ruth Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "f7f9f9",
+   "Cap": "1a1a2e",
+   "Hair": "c0c0c0",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Ashley Broadway",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "2c3e50",
+   "Cap": "b9770e",
+   "Hair": "bc8f8f",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Jill Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1a1a2e",
+   "Cap": "1b4f72",
+   "Hair": "704214",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Grant Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "2e4053",
+   "Cap": "b9770e",
+   "Hair": "bc8f8f",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Shane Broadway",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "283747",
+   "Cap": "d4ac0d",
+   "Hair": "a9a9a9",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Lane Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "1c2833",
+   "Cap": "1b4f72",
+   "Hair": "5c3a1e",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Ron Broadway",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "4a235a",
+   "Cap": "1e8449",
+   "Hair": "cd853f",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Jenna Broadway",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "d5d8dc",
+   "Cap": "1b4f72",
+   "Hair": "a0522d",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "June Broadway",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "4a235a",
+   "Cap": "1e8449",
+   "Hair": "b8860b",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Sue Broadway",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "f7f9f9",
+   "Cap": "d9534f",
+   "Hair": "704214",
+   "Skin": "8b5e3c"
+  }
+ }
+]
