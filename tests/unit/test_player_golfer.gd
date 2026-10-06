@@ -1,5 +1,8 @@
 extends GutTest
 
+## The colours of the owner's golfer are the colours of the Golfer Skin they
+## wear - its Re-color Groups (see the Edit Player page and the Edit Golfer Skins
+## screen). The profile keeps the appearance the polygon golfer falls back on.
 func test_player_appearance_recolors_the_casual_pixel_sprites() -> void:
 	var golfer: Golfer = add_child_autofree(load("res://scenes/entities/golfer.tscn").instantiate())
 	await get_tree().process_frame
@@ -15,6 +18,21 @@ func test_player_appearance_recolors_the_casual_pixel_sprites() -> void:
 		"skin_tone": "76c4a1",
 	}
 	golfer.apply_player_appearance(profile)
+	assert_eq(golfer.body.color, Color(profile.appearance.shirt_color),
+		"the profile still colours the polygon golfer underneath")
+
+	# Re-colour the groups of the skin the owner wears, as the studio and the
+	# Edit Player page do.
+	var worn := golfer.skin()
+	assert_not_null(worn, "The owner wears a Golfer Skin")
+	var before := {}
+	for role in ["shirt", "pants", "cap", "hair", "skin"]:
+		var group := worn.group_by_name(role)
+		var key := GolferSkin.profile_key_for_group(role)
+		before[int(group.get("id"))] = group.get("color")
+		worn.set_group_color(int(group.get("id")), Color(profile.appearance[key]))
+	GolferSkins.invalidate(worn.id)
+	golfer.refresh_skin_sprites()
 
 	assert_true(golfer._use_sprites, "Custom colors must not switch the owner back to polygon art")
 	var sprite_frames: SpriteFrames = golfer._animated_sprite.sprite_frames
@@ -34,6 +52,21 @@ func test_player_appearance_recolors_the_casual_pixel_sprites() -> void:
 	assert_gt(hair.r, hair.b, "The hair uses its selected color")
 	assert_gt(back_image.get_pixel(22, 12).r, back_image.get_pixel(22, 12).b,
 		"Hair remains customizable on the back-facing animation too")
+
+	# The skin is shared, so a visitor wearing it is drawn the same way.
+	var visitor: Golfer = add_child_autofree(load("res://scenes/entities/golfer.tscn").instantiate())
+	visitor.skin_id = worn.id
+	await get_tree().process_frame
+	assert_eq(visitor.sprite_node().sprite_frames.get_frame_texture("idle_south", 0),
+		sprite_frames.get_frame_texture("idle_south", 0),
+		"every golfer wearing the skin is drawn from the same frames")
+
+	# The skin is the shipped one every golfer shares: put its colours back so
+	# the next test opens it as the game ships it.
+	for group_id in before:
+		worn.set_group_color(int(group_id), before[group_id])
+	GolferSkins.invalidate(worn.id)
+	visitor.queue_free()
 
 func test_initial_budget_and_refund() -> void:
 	var profile := PlayerGolferProfile.new()

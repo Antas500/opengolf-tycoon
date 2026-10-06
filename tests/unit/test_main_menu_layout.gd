@@ -4,7 +4,7 @@ extends GutTest
 ## MainMenu is built from code, so the parts worth pinning down without a
 ## window are the pure ones: which arrangement a window size asks for, and how
 ## much room a two-line caption needs inside a card. The arrangement is
-## checked end to end (all six actions on screen, no overlaps) by
+## checked end to end (all seven actions on screen, no overlaps) by
 ## tests/harness/main_menu_layout_harness.gd.
 
 func _mode(size: Vector2) -> int:

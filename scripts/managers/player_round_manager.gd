@@ -26,6 +26,13 @@ var status: Label
 var shot_bar: ShotTypeBar
 var draft: PlayerGolferProfile
 var name_edit: LineEdit
+## The Edit Player page's Golfer Skin controls: the picker for the skin the
+## owner wears and one colour button per Re-color Group it carries (see
+## _build_skin_controls). `_skin_controls` is the column they are rebuilt in.
+var _skin_controls: VBoxContainer = null
+var _skin_picker: OptionButton = null
+var _skin_preview: Golfer = null
+var _skin_preview_box: Control = null
 var mode_picker: OptionButton
 var pro_picker: OptionButton
 var skill_labels: Array[Label] = []
@@ -99,6 +106,150 @@ func _make_panel(full_screen: bool) -> void:
 	content.add_theme_constant_override("separation", 8)
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(content)
+
+## The Edit Player page's Golfer Skin controls: which skin the owner's golfer
+## wears and a colour swatch for each Re-color Group that skin carries - the same
+## groups the Edit Golfer Skins screen paints onto the sprite. Changing one
+## writes the skin out (the player's own copy of it) and re-dresses the golfers
+## on the course, so the owner sees the result during a round.
+##
+## The tab has no vertical scrolling - the page has to fit the bottom bar (see
+## tests/unit/test_player_round.gd) - so this is one picker row with a small
+## preview and one row of swatches, not a list of colour rows like the studio's.
+func _build_skin_controls() -> void:
+	_skin_controls = content
+	_label("Golfer skin")
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	content.add_child(row)
+
+	_skin_picker = OptionButton.new()
+	_skin_picker.name = "GolferSkinPicker"
+	_skin_picker.tooltip_text = "Which Golfer Skin your golfer wears. The Edit Golfer Skins screen paints them."
+	_skin_picker.custom_minimum_size = Vector2(180, 28)
+	_skin_picker.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_skin_picker.set_meta("editable_while_playing", true)
+	_skin_picker.item_selected.connect(_on_golfer_skin_selected)
+	row.add_child(_skin_picker)
+
+	_skin_preview_box = Control.new()
+	_skin_preview_box.name = "SkinPreview"
+	_skin_preview_box.custom_minimum_size = Vector2(48, 48)
+	_skin_preview_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(_skin_preview_box)
+	_skin_preview = Golfer.new()
+	_skin_preview.name = "SkinPreviewGolfer"
+	_skin_preview.set_physics_process(false)
+	_skin_preview_box.add_child(_skin_preview)
+
+	_refresh_skin_controls()
+
+
+## Fill the picker and the colour swatches in for the skin the owner wears right
+## now. The groups come with the skin, so this runs again on every change.
+func _refresh_skin_controls() -> void:
+	if _skin_picker == null or _skin_controls == null:
+		return
+	var library := GolferSkins.library
+	var skins := library.skins()
+	_skin_picker.clear()
+	for index in skins.size():
+		_skin_picker.add_item(skins[index].display_name)
+		_skin_picker.set_item_metadata(index, skins[index].id)
+	var worn := GolferSkins.player_skin()
+	for index in skins.size():
+		if worn != null and skins[index].id == worn.id:
+			_skin_picker.select(index)
+	# One colour swatch per Re-color Group of the worn skin, under a heading.
+	for child in _skin_controls.get_children():
+		if child.has_meta("skin_group_row"):
+			_skin_controls.remove_child(child)
+			child.queue_free()
+	if worn == null:
+		return
+	_label("Group colours")
+	var swatches := HBoxContainer.new()
+	swatches.set_meta("skin_group_row", true)
+	swatches.add_theme_constant_override("separation", 4)
+	_skin_controls.add_child(swatches)
+	for group in worn.group_list():
+		var group_id := int(group.get("id", 0))
+		var swatch := ColorPickerButton.new()
+		swatch.name = "SkinGroupColor%s" % str(group.get("name", "")).replace(" ", "")
+		swatch.text = str(group.get("symbol", ""))
+		swatch.color = group.get("color", Color.WHITE)
+		swatch.edit_alpha = false
+		swatch.custom_minimum_size = Vector2(30, 28)
+		swatch.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+		swatch.tooltip_text = "The colour %s is drawn in on this skin" % str(group.get("name", ""))
+		swatch.set_meta("editable_while_playing", true)
+		swatch.color_changed.connect(_on_skin_group_color_changed.bind(group_id))
+		swatches.add_child(swatch)
+	_refresh_skin_preview()
+
+
+func _refresh_skin_preview() -> void:
+	if _skin_preview == null or _skin_preview_box == null:
+		return
+	_skin_preview.player_profile = draft
+	_skin_preview.position = _skin_preview_box.custom_minimum_size * 0.5
+	if not _skin_preview.use_skin_sprites():
+		return
+	var sprite := _skin_preview.sprite_node()
+	if sprite != null and sprite.sprite_frames.has_animation("idle_south"):
+		sprite.play("idle_south")
+
+
+## Wear one of the Golfer Skins: it belongs to the player rather than to the
+## round, so GolferSkins writes the choice to the user settings at once.
+func _on_golfer_skin_selected(index: int) -> void:
+	if _skin_picker == null or index < 0 or index >= _skin_picker.item_count:
+		return
+	var chosen := GolferSkins.library.get_skin(str(_skin_picker.get_item_metadata(index)))
+	if chosen == null:
+		return
+	GolferSkins.set_player_skin(chosen)
+	GolferSkins.skins_changed.emit()
+	_refresh_skin_controls()
+
+
+## Re-colour one Re-color Group of the skin the owner wears. The skin is the
+## player's own from here on (a shipped skin is copied to user://golfer_skins
+## first), and the profile's matching appearance key keeps up with it.
+func _on_skin_group_color_changed(color: Color, group_id: int) -> void:
+	var skin := GolferSkins.player_skin()
+	if skin == null:
+		return
+	if not GolferSkins.library.ensure_editable(skin):
+		return
+	if not skin.set_group_color(group_id, color):
+		return
+	GolferSkins.library.save_skin(skin)
+	GolferSkins.skins_changed.emit()
+	var key := GolferSkin.profile_key_for_group(str(skin.group_by_id(group_id).get("name", "")))
+	if not key.is_empty():
+		draft.appearance[key] = color.to_html(false)
+	_refresh_skin_preview()
+
+
+## The PlayerGolferProfile colour keys the Golfer Skin the owner wears does not
+## name as a Re-color Group: those are the player's own colours, with no sprite
+## to change.
+func _standalone_profile_colors() -> Array:
+	var worn := GolferSkins.player_skin()
+	if worn == null:
+		return PlayerGolferProfile.COLORS.duplicate()
+	var named := []
+	for group in worn.group_list():
+		var key := GolferSkin.profile_key_for_group(str(group.get("name", "")))
+		if not key.is_empty():
+			named.append(key)
+	var remaining := []
+	for key in PlayerGolferProfile.COLORS:
+		if not named.has(key):
+			remaining.append(key)
+	return remaining
+
 
 func _label(text: String) -> Label:
 	var label := Label.new()
@@ -189,8 +340,18 @@ func _build_setup() -> void:
 	content.add_child(name_edit)
 	if is_instance_valid(player_tab):
 		_button("Save player", _save_player)
+		# The golfer's skin and the colours of its Re-color Groups. These stay
+		# editable during a round - dressing the owner is not part of the play
+		# loop being protected (see start_round).
+		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_EDIT], 300)
+		_build_skin_controls()
+	# The player's own colours. The five the Golfer Skins name - Shirt, Pants,
+	# Cap, Hair, Skin - are the colours of that skin's Re-color Groups and are
+	# edited above (they follow into these fields); what is left here is the
+	# appearance the polygon golfer falls back on when a skin has no sprites.
+	var standalone := _standalone_profile_colors()
 	var color_index := 0
-	for key in PlayerGolferProfile.COLORS:
+	for key in standalone:
 		if is_instance_valid(player_tab) and color_index % 3 == 0:
 			content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_EDIT], 260)
 		color_index += 1
@@ -344,8 +505,12 @@ func start_round() -> void:
 	var opponent := pro_picker.selected
 	active = true
 	if is_instance_valid(player_tab):
-		# Lock the Edit Player page while the round runs.
+		# Lock the Edit Player page while the round runs - except the Golfer
+		# Skin controls, which the player is meant to be able to reach during a
+		# round (they only ever change how a golfer is drawn).
 		for control in player_tab.pages[PlayerTab.PAGE_EDIT].find_children("*", "Control", true, false):
+			if control.has_meta("editable_while_playing"):
+				continue
 			if control is BaseButton:
 				control.disabled = true
 			elif control is LineEdit:

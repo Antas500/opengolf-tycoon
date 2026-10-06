@@ -38,12 +38,25 @@ func _ready() -> void:
 	# Connect to EventBus
 	EventBus.golfer_finished_round.connect(_on_golfer_finished_round)
 	EventBus.golfer_left_course.connect(_on_golfer_left_course)
+	# A Golfer Skin the player saves in the studio (see EditGolferSkinsScreen)
+	# dresses the golfers already on the course, not only the ones after them.
+	GolferSkins.skins_changed.connect(_on_skins_changed)
 
 func _exit_tree() -> void:
 	if EventBus.golfer_finished_round.is_connected(_on_golfer_finished_round):
 		EventBus.golfer_finished_round.disconnect(_on_golfer_finished_round)
 	if EventBus.golfer_left_course.is_connected(_on_golfer_left_course):
 		EventBus.golfer_left_course.disconnect(_on_golfer_left_course)
+	if GolferSkins.skins_changed.is_connected(_on_skins_changed):
+		GolferSkins.skins_changed.disconnect(_on_skins_changed)
+
+
+## A Golfer Skin changed: build the frames of everyone on the course again, so a
+## shirt painted in the studio is on the golfers already out there.
+func _on_skins_changed() -> void:
+	for golfer in active_golfers:
+		if golfer != null and is_instance_valid(golfer):
+			golfer.refresh_skin_sprites()
 
 func get_group_size_weights() -> Array:
 	"""Get weighted probabilities for group sizes based on green fee"""
