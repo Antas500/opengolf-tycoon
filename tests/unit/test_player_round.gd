@@ -439,6 +439,27 @@ func test_embedded_player_navigation_and_setup() -> void:
 			assert_eq(tab.pages[page].get_parent().visible, page == index)
 		assert_false(tab.aim_scroll.visible, "The aiming view stays hidden outside a round")
 
+func test_player_skills_use_two_four_four_columns() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+
+	var first_column := rounds.skill_labels[0].get_parent().get_parent()
+	var second_column := rounds.skill_labels[2].get_parent().get_parent()
+	var third_column := rounds.skill_labels[6].get_parent().get_parent()
+
+	for i in range(0, 2):
+		assert_eq(rounds.skill_labels[i].get_parent().get_parent(), first_column,
+			"The first Player Skills column contains skills 1–2")
+	for i in range(2, 6):
+		assert_eq(rounds.skill_labels[i].get_parent().get_parent(), second_column,
+			"The second Player Skills column contains skills 3–6")
+	for i in range(6, 10):
+		assert_eq(rounds.skill_labels[i].get_parent().get_parent(), third_column,
+			"The third Player Skills column contains skills 7–10")
+	assert_ne(first_column, second_column)
+	assert_ne(second_column, third_column)
+
 func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	var tab := PlayerTab.new()
 	fixture.add_child(tab)
