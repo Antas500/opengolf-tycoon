@@ -176,16 +176,19 @@ func test_a_group_walks_home_together_and_then_leaves_the_course() -> void:
 		"but the group waits for the golfer still walking home")
 
 	# The last one in is the one that takes the group off the course.
+	var first_id := first.golfer_id
+	var second_id := second.golfer_id
 	second._arrive_at_clubhouse()
 	second._process_departure(Golfer.CLUBHOUSE_VISIT_SECONDS + 0.01)
 	await wait_seconds(1.5)  # The manager's send-off pause before removal
-	assert_false(golfers.get_active_golfers().has(first),
+	assert_null(golfers.get_golfer(first_id),
 		"The whole group leaves once the last golfer is inside")
-	assert_false(golfers.get_active_golfers().has(second))
+	assert_null(golfers.get_golfer(second_id))
 
 
 func test_a_lone_golfer_leaves_the_course_after_the_walk_home() -> void:
 	var golfer := golfers.spawn_golfer("On my own")
+	var golfer_id := golfer.golfer_id
 	golfer.current_hole = 0
 	golfer.current_strokes = 4
 	golfer.global_position = grid.grid_to_screen_center(TEE)
@@ -195,7 +198,7 @@ func test_a_lone_golfer_leaves_the_course_after_the_walk_home() -> void:
 	golfer._process_departure(Golfer.CLUBHOUSE_VISIT_SECONDS + 0.01)
 	assert_eq(golfer.current_state, Golfer.State.FINISHED)
 	await wait_seconds(1.5)
-	assert_false(golfers.get_active_golfers().has(golfer),
+	assert_null(golfers.get_golfer(golfer_id),
 		"A golfer who has gone inside is taken off the course")
 
 

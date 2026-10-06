@@ -77,8 +77,7 @@ func test_cycle_emits_the_speed_change_signal() -> void:
 	GameManager.cycle_fast_forward_speed()
 
 	assert_signal_emitted_with_parameters(EventBus, "game_speed_changed",
-			[GameManager.GameSpeed.FAST],
-			"The toggle drives the same signal as the other speed buttons")
+			[GameManager.GameSpeed.FAST])
 
 
 # --- Button face ---
