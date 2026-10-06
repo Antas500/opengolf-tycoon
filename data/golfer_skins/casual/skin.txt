@@ -1,0 +1,13 @@
+# OpenGolf Tycoon golfer skin - Re-color Groups and what wears it.
+# The layers/ folder holds one re-color layer per animation sprite.
+golfer-skin 1
+id casual
+name Casual
+sprites casual
+size 48 48
+worn_by casual
+group 1 A b41929 0.706 Shirt
+group 2 B 4d3937 0.302 Pants
+group 3 C dddcee 0.933 Cap
+group 4 D 41261f 0.255 Hair
+group 5 E efb9a5 0.937 Skin

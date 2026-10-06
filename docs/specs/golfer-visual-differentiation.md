@@ -307,7 +307,7 @@ Phase 4 (Tournament):
 
 ## Phase 5: Tier-Specific PixelLab Sprites
 
-**Status:** Not started
+**Status:** Shipped — sprites, Re-color Layers and the player-facing skin editor
 **Priority:** MEDIUM — biggest visual payoff for tier differentiation
 
 ### Problem
@@ -341,6 +341,43 @@ Each character needs:
 
 None required — the existing fallback logic handles everything. When tier-specific folders are populated, golfers will automatically use them.
 
+### What shipped (2026-10)
+
+Four tier characters were not drawn; two were (**Beginner** and **Casual**), and
+everything the spec asked the sprite folders to do is now driven by **Golfer
+Skins** rather than by a hard-coded tier → folder table:
+
+- **A skin** (`scripts/systems/golfer_skin.gd`) is a sprite set plus the
+  **Re-color Groups** it is painted with, and the tiers that wear it
+  (`worn_by`). Only `beginner` and `casual` art exists, so serious and pro
+  visitors wear whatever the player dresses them in - the Casual skin by
+  default - and no visitor ever falls back to the polygon stick figure unless a
+  skin folder has gone missing.
+- **Re-color Layers** (`golfer_skin_layer.gd`): one grid per animation sprite,
+  each pixel belonging to a group or to none. Grouped pixels are drawn in the
+  group's colour with the artwork's own shading (the group's `shade` is the
+  brightest grouped pixel of that sprite); ungrouped pixels ship as drawn.
+  Groups are **per skin** and can be created, renamed, re-coloured and deleted
+  by the player.
+- **Editable text files**: a skin is a folder of them - `skin.txt` (manifest)
+  and `layers/<animation>/<direction>/frame_NNN.layer.txt` (grid). Shipped
+  skins live in `data/golfer_skins/` (regenerate with
+  `tools/generate_golfer_skin_layers.gd`), the player's own in
+  `user://golfer_skins/`, where a copy shadows the shipped skin of the same id
+  until it is reverted.
+- **Edit Golfer Skins** (`scripts/ui/edit_golfer_skins_screen.gd`), opened from
+  the title screen: pick a skin, paint its layers with the group palette
+  (left-click paints, right-click frees, alt-click picks), create/rename/
+  re-colour/delete groups, change the name, sprite set and tiers, **Save
+  Skins** to write it all out, **Wear This** to dress the player's own golfer,
+  Duplicate/Revert/Delete to manage a skin. The owner's profile colours
+  (`PlayerGolferProfile.COLORS`) still override the groups of the same name, so
+  the player's own shirt/cap/hair/skin choices keep winning on their golfer.
+- **The fourth character is still open**: drawing `serious` and `pro` art sets
+  needs nothing but the folders (a new sprite set shows up in the studio's
+  Sprite set picker and gets its own layer files), and the tier → skin table
+  is data (`worn_by`), not code.
+
 ---
 
 ## Out of Scope
@@ -348,7 +385,7 @@ None required — the existing fallback logic handles everything. When tier-spec
 | Feature | Reason |
 |---------|--------|
 | Full sprite replacement for golfers | Covered by Visual Polish spec |
-| Golfer customization by player | Not a character creation game |
+| Golfer customization by player | Superseded by Golfer Skins: the player edits skins and their Re-color Groups in the Edit Golfer Skins screen |
 | Golfer face/expression details | Too small for isometric view |
 | Golfer equipment visibility (golf bag, cart) | Visual complexity |
 | Named golfer storylines / dialogue | No narrative system |

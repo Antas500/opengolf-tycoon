@@ -5,6 +5,10 @@ enum GameMode { MAIN_MENU, BUILDING, SIMULATING, PLAYING, PAUSED }
 enum GameSpeed { PAUSED = 0, NORMAL = 1, FAST = 3, ULTRA = 8 }
 
 var player_profile: PlayerGolferProfile = PlayerGolferProfile.new()
+## Which Golfer Skin the owner's golfer wears (empty = the one for their tier).
+## A player preference rather than save state: it is written to the user
+## settings by GolferSkins.set_player_skin (see SaveManager).
+var player_skin_id: String = ""
 
 var current_mode: GameMode = GameMode.MAIN_MENU
 var current_speed: GameSpeed = GameSpeed.NORMAL

@@ -23,7 +23,7 @@ This document reviews the current game state and proposes specs that should be w
 | 8 | Notification & Event Feed | [`completed/notification-event-feed.md`](completed/notification-event-feed.md) | MEDIUM | Completed |
 | 9 | Expanded Decorations & Aesthetics | [`completed/expanded-decorations-aesthetic-rating.md`](completed/expanded-decorations-aesthetic-rating.md) | MEDIUM | Completed |
 | 10 | Course Scorecard & Hole Handicaps | [`completed/course-scorecard-hole-handicaps.md`](completed/course-scorecard-hole-handicaps.md) | MEDIUM | Completed |
-| 11 | Golfer Visual Differentiation | [`golfer-visual-differentiation.md`](golfer-visual-differentiation.md) | MEDIUM | Proposal |
+| 11 | Golfer Visual Differentiation | [`golfer-visual-differentiation.md`](golfer-visual-differentiation.md) | MEDIUM | Phase 5 shipped (Golfer Skins + Re-color Layers + the Edit Golfer Skins studio); the Serious/Pro art sets are still open |
 | 12 | Visual Polish (Sprites/Art) | [`visual-polish.md`](visual-polish.md) | MEDIUM | Proposal |
 | 13 | Pathfinding Upgrade (A*) | [`pathfinding-upgrade.md`](pathfinding-upgrade.md) | MEDIUM-LOW | Proposal |
 | 14 | Web Build & Distribution | [`web-build-distribution.md`](web-build-distribution.md) | MEDIUM-LOW | Proposal |

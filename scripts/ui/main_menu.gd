@@ -2,9 +2,9 @@ extends Control
 class_name MainMenu
 ## MainMenu - Title screen.
 ##
-## Six actions only: Start New Game (company setup → world map), Quick Start
-## (default options → world map), Continue (newest save), Load Game, Settings
-## and Quit.
+## Seven actions: Start New Game (company setup → world map), Quick Start
+## (default options → world map), Continue (newest save), Load Game, Golfer
+## Skins (the skin studio), Settings and Quit.
 ##
 ## The old screen was one centred column of six identical buttons with a
 ## "Design. Build. Manage." tagline under the title. The tagline is gone and
@@ -14,8 +14,9 @@ class_name MainMenu
 ##    one line saying what it does.
 ##  * Continue is a card carrying the newest save (course, day, slot), so a
 ##    returning player can see what they are about to resume.
-##  * Load Game, Settings and Quit are compact tiles, kept together at the
-##    quiet end of the layout so Quit never sits beside a primary action.
+##  * Load Game, Golfer Skins, Settings and Quit are compact tiles, kept
+##    together at the quiet end of the layout so Quit never sits beside a
+##    primary action.
 ##
 ## The screen rebuilds itself when the window crosses a layout breakpoint
 ## (see layout_mode_for), so the same six actions use the space well at every
@@ -43,6 +44,7 @@ signal start_new_game_requested()
 signal quick_start_requested()
 signal continue_requested(save_name: String)
 signal load_game_requested()
+signal edit_golfer_skins_requested()
 signal settings_requested()
 signal quit_requested()
 
@@ -337,7 +339,7 @@ func _build_phone() -> void:
 	column.add_child(_make_quick_card(hero_height, hero_font, caption_font))
 	column.add_child(_make_continue_card(clampf(view.y * 0.110, 78.0, 104.0), hero_font - 1, caption_font))
 	column.add_child(_make_phone_utility_row(clampf(view.y * 0.085, 54.0, 76.0), hero_font - 2))
-	column.add_child(_make_quit_tile(clampf(view.y * 0.065, 46.0, 62.0), hero_font - 3, 0))
+	column.add_child(_make_phone_extra_row(clampf(view.y * 0.072, 50.0, 68.0), hero_font - 3, 0))
 	column.add_child(_make_status_line(true, caption_font))
 
 # =============================================================================
@@ -519,13 +521,15 @@ func _make_continue_card(height: float, title_font: int, caption_font: int) -> B
 	button.pressed.connect(func(): continue_requested.emit(continue_save_name()))
 	return button
 
-## Load Game / Settings / Quit: side by side when the row is roomy, stacked
-## down the rail when it is not. `caption_font` 0 leaves the tiles as plain
-## labels (the squat-window layout, where a caption would only be truncated).
+## Load Game / Golfer Skins / Settings / Quit: side by side when the row is
+## roomy, stacked down the rail when it is not. `caption_font` 0 leaves the
+## tiles as plain labels (the squat-window layout, where a caption would only
+## be truncated).
 func _make_utility_rows(height: float, title_font: int, caption_font: int,
 		stacked: bool) -> Control:
 	var tiles: Array[Button] = [
 		_make_load_tile(height, title_font, caption_font),
+		_make_golfer_skins_tile(height, title_font, caption_font),
 		_make_settings_tile(height, title_font, caption_font),
 		_make_quit_tile(height, title_font, caption_font),
 	]
@@ -556,6 +560,17 @@ func _make_phone_utility_row(height: float, title_font: int) -> HBoxContainer:
 	row.add_child(_make_settings_tile(height, title_font, 0))
 	return row
 
+## Phone second utility row: Golfer Skins and Quit. Both are the quiet end of
+## the menu, so they share a line rather than pushing the hero cards off it.
+func _make_phone_extra_row(height: float, title_font: int, caption_font: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "UtilityRows"
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 12)
+	row.add_child(_make_golfer_skins_tile(height, title_font, caption_font))
+	row.add_child(_make_quit_tile(height, title_font, caption_font))
+	return row
+
 func _make_load_tile(height: float, title_font: int, caption_font: int) -> Button:
 	var caption := "No saved courses yet"
 	if not _saves.is_empty():
@@ -568,6 +583,16 @@ func _make_load_tile(height: float, title_font: int, caption_font: int) -> Butto
 		button.tooltip_text = "No saved games yet"
 	_load_button = button
 	button.pressed.connect(func(): load_game_requested.emit())
+	return button
+
+## Golfer Skins: the studio where the player paints the golfers' shirts, caps,
+## hair and everything else a skin re-colours.
+func _make_golfer_skins_tile(height: float, title_font: int, caption_font: int) -> Button:
+	var button := _make_tile("Golfer Skins", "Paint what the golfers wear",
+		"Create and edit golfer skins and the Re-color Groups they are painted with",
+		height, title_font, caption_font, ACCENT_SECONDARY)
+	button.name = "GolferSkinsButton"
+	button.pressed.connect(func(): edit_golfer_skins_requested.emit())
 	return button
 
 func _make_settings_tile(height: float, title_font: int, caption_font: int) -> Button:

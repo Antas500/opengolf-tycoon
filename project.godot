@@ -35,6 +35,7 @@ UIConstants="*res://scripts/autoload/ui_constants.gd"
 TooltipManager="*res://scripts/autoload/tooltip_manager.gd"
 SoundManager="*res://scripts/autoload/sound_manager.gd"
 EventFeedManager="*res://scripts/managers/event_feed_manager.gd"
+GolferSkins="*res://scripts/autoload/golfer_skins.gd"
 
 [display]
 
