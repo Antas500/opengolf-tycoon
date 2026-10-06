@@ -17,10 +17,15 @@ class_name EditGolferSkinsScreen
 ##  * PHONE  - one scrolling column: the studio first, then the groups and the
 ##             skins, every control a thumb-sized target.
 ##
-## The tools: left-click paints a pixel with the selected Re-color Group,
-## right-click frees it, alt-click picks up the group a pixel already belongs to,
-## and the Fill switch gives every pixel of the run a click lands in to the
-## selected group - the whole of a shirt in one click.
+## The studio has two sides, switched by Edit:
+##
+##  * PIXELS - the sprite's own artwork: a colour picker and a brush paint the
+##             pixels the golfer is drawn with, right-click erases one, and
+##             alt-click picks up the colour already on one.
+##  * GROUPS - the Re-color Groups: the same brush gives the pixels it covers to
+##             the selected group, the Fill switch gives it a whole run of them
+##             at once, and the groups are created, renamed, re-coloured and
+##             deleted alongside.
 ##
 ## Nothing is written to disk until Save Skins is pressed, so an experiment can
 ## be abandoned. A built-in skin is copied to the player's own folder the first
@@ -45,6 +50,8 @@ const MAX_PAGE_WIDTH := 1960.0
 const SIDE_COLUMN_WIDTH := 300.0
 const THUMB_SIZE := 42
 const GROUP_ROW_HEIGHT := 30
+## The brush widths the studio offers, in sprite pixels.
+const BRUSH_SIZES: Array[int] = [1, 3, 5, 7]
 
 const TITLE_TEXT := "Edit Golfer Skins"
 const IDLE_HINT := "The layers are editable text files - Save Skins writes them to user://golfer_skins"
@@ -69,8 +76,13 @@ var _active_group: int = GolferSkinLayer.NO_GROUP
 var _animation: String = "idle"
 var _direction: String = "south"
 var _frame_index: int = 0
-var _show_recolor: bool = true
+## Show the sprite the way the skin draws it (Pixels mode): off, the canvas shows
+## the artwork as painted, which is what the brush is changing.
+var _show_recolor: bool = false
 var _show_grid: bool = true
+## The colour the Pixels side's brush paints with, and how wide it is.
+var _pixel_color: Color = Color.WHITE
+var _brush_size: int = 1
 ## Fill gives the whole run of pixels a click lands in to the active group,
 ## rather than that one pixel (see _paint_cell).
 var _fill: bool = false
@@ -96,7 +108,10 @@ var _group_name_edit: LineEdit = null
 var _group_delete_button: Button = null
 var _group_color_button: Button = null
 var _group_shade_label: Label = null
+var _palette_row: HBoxContainer = null
 var _palette: HBoxContainer = null
+var _pixel_color_button: ColorPickerButton = null
+var _brush_picker: OptionButton = null
 var _animation_picker: OptionButton = null
 var _direction_picker: OptionButton = null
 var _frame_strip: HBoxContainer = null
@@ -457,6 +472,43 @@ func _make_group_editor() -> Control:
 	header.add_child(create)
 	column.add_child(header)
 
+	# The brush gives the pixels it covers to one group: this is where that
+	# group is chosen, and Fill says whether it takes the whole run it lands in.
+	_palette_row = HBoxContainer.new()
+	_palette_row.name = "PaletteRow"
+	_palette_row.add_theme_constant_override("separation", 8)
+	_palette_row.add_child(_make_field_label("Paint with"))
+	_palette = HBoxContainer.new()
+	_palette.name = "Palette"
+	_palette.add_theme_constant_override("separation", 4)
+	_palette_row.add_child(_palette)
+	column.add_child(_palette_row)
+
+	_fill_check = CheckBox.new()
+	_fill_check.name = "FillCheck"
+	_fill_check.text = "Fill"
+	_fill_check.tooltip_text = "Fill gives every pixel of the run you click to the group being painted with"
+	_fill_check.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	_fill_check.button_pressed = _fill
+	_fill_check.toggled.connect(_on_fill_toggled)
+
+	# Fill rides with the hint rather than the palette row: a phone cannot fit
+	# the swatches, the label and the switch on one line.
+	var hint_row := HBoxContainer.new()
+	hint_row.name = "GroupHintRow"
+	hint_row.add_theme_constant_override("separation", 8)
+	hint_row.add_child(_fill_check)
+	var group_hint := Label.new()
+	group_hint.name = "GroupHint"
+	group_hint.text = "Brush pixels into the selected group: left-click gives them to it, right-click frees them, alt-click picks the group already on a pixel."
+	group_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	group_hint.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	group_hint.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
+	group_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	group_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_row.add_child(group_hint)
+	column.add_child(hint_row)
+
 	var scroll := ScrollContainer.new()
 	scroll.name = "GroupScroll"
 	scroll.custom_minimum_size = Vector2(0, 140)
@@ -558,21 +610,23 @@ func _make_studio(expand: bool) -> Control:
 	_grid_check.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
 	_grid_check.button_pressed = _show_grid
 	_grid_check.toggled.connect(_on_grid_toggled)
-	_fill_check = CheckBox.new()
-	_fill_check.name = "FillCheck"
-	_fill_check.text = "Fill"
-	_fill_check.tooltip_text = "Fill gives every pixel of the run you click to the group being painted with"
-	_fill_check.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	_fill_check.button_pressed = _fill
-	_fill_check.toggled.connect(_on_fill_toggled)
+	_brush_picker = OptionButton.new()
+	_brush_picker.name = "BrushSizePicker"
+	_brush_picker.tooltip_text = "How wide the brush is: Pixels paints the artwork with it, Groups gives the pixels it covers to the selected Re-color Group"
+	_brush_picker.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	for brush in BRUSH_SIZES:
+		_brush_picker.add_item("Brush %d" % brush)
+	_brush_picker.select(clampi(BRUSH_SIZES.find(_brush_size), 0, BRUSH_SIZES.size() - 1))
+	_brush_picker.item_selected.connect(_on_brush_size_selected)
 	if compact:
 		# The views go on a row of their own rather than squeezing the pickers.
 		var views := HBoxContainer.new()
 		views.name = "StudioViews"
 		views.add_theme_constant_override("separation", 8)
-		views.add_child(_recolor_check)
+		# The Re-coloured switch rides with the Pixels block, so only the grid
+		# and the brush go on this row.
 		views.add_child(_grid_check)
-		views.add_child(_fill_check)
+		views.add_child(_brush_picker)
 		var header_column := VBoxContainer.new()
 		header_column.name = "StudioHeader"
 		header_column.add_theme_constant_override("separation", 6)
@@ -581,9 +635,8 @@ func _make_studio(expand: bool) -> Control:
 		column.add_child(header_column)
 	else:
 		header.add_child(_spacer())
-		header.add_child(_recolor_check)
+		header.add_child(_brush_picker)
 		header.add_child(_grid_check)
-		header.add_child(_fill_check)
 		column.add_child(header)
 
 	# The pixels block holds everything the painting side shows: the strip, the
@@ -595,6 +648,24 @@ func _make_studio(expand: bool) -> Control:
 	pixels.add_theme_constant_override("separation", 8)
 	_pixel_block = pixels
 	column.add_child(pixels)
+
+	var colour_row := HBoxContainer.new()
+	colour_row.name = "PixelColourRow"
+	colour_row.add_theme_constant_override("separation", 8)
+	colour_row.add_child(_make_field_label("Pixel colour"))
+	_pixel_color_button = ColorPickerButton.new()
+	_pixel_color_button.name = "PixelColourButton"
+	_pixel_color_button.text = "Colour"
+	_pixel_color_button.tooltip_text = "The colour the brush paints the sprite's pixels with"
+	_pixel_color_button.edit_alpha = false
+	_pixel_color_button.custom_minimum_size = Vector2(96, 32)
+	_pixel_color_button.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	_pixel_color_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_pixel_color_button.color_changed.connect(_on_pixel_color_chosen)
+	colour_row.add_child(_pixel_color_button)
+	colour_row.add_child(_spacer())
+	colour_row.add_child(_recolor_check)
+	pixels.add_child(colour_row)
 
 	_frame_strip = HBoxContainer.new()
 	_frame_strip.name = "FrameStrip"
@@ -612,15 +683,6 @@ func _make_studio(expand: bool) -> Control:
 	_canvas.cell_picked.connect(_on_cell_picked)
 	column.add_child(_canvas)
 
-	var palette_row := HBoxContainer.new()
-	palette_row.name = "PaletteRow"
-	palette_row.add_theme_constant_override("separation", 8)
-	palette_row.add_child(_make_field_label("Paint with"))
-	_palette = HBoxContainer.new()
-	_palette.name = "Palette"
-	_palette.add_theme_constant_override("separation", 4)
-	palette_row.add_child(_palette)
-
 	_frame_label = Label.new()
 	_frame_label.name = "FrameLabel"
 	_frame_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
@@ -633,10 +695,6 @@ func _make_studio(expand: bool) -> Control:
 	_play_button.pressed.connect(_on_play_pressed)
 
 	if compact:
-		# The palette keeps a row of its own on a phone, with the frame and the
-		# play button on the next one down.
-		palette_row.add_child(_spacer())
-		pixels.add_child(palette_row)
 		var controls := HBoxContainer.new()
 		controls.name = "StudioControls"
 		controls.add_theme_constant_override("separation", 8)
@@ -648,7 +706,6 @@ func _make_studio(expand: bool) -> Control:
 		var footer := HBoxContainer.new()
 		footer.name = "StudioFooter"
 		footer.add_theme_constant_override("separation", 8)
-		footer.add_child(palette_row)
 		footer.add_child(_spacer())
 		footer.add_child(_frame_label)
 		footer.add_child(_play_button)
@@ -664,7 +721,7 @@ func _make_studio(expand: bool) -> Control:
 	preview_row.add_child(_preview_holder)
 	var hint := Label.new()
 	hint.name = "PreviewHint"
-	hint.text = "Your golfer wearing this skin. Left-click paints a pixel with the selected group, right-click frees it, alt-click picks up the group already on it."
+	hint.text = "Your golfer wearing this skin. Left-click paints the sprite with the picked colour, right-click erases a pixel, alt-click picks up the colour already there."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -685,19 +742,19 @@ func _make_studio(expand: bool) -> Control:
 # =============================================================================
 
 ## The Pixels / Groups switch that decides which side of the studio is open.
-## Pixels paints one sprite (palette, fill, preview); Groups edits the groups the
-## skin carries (list, name, colour, delete) over the same canvas, which then
-## shows the group wash and picks the group a click lands on.
+## Pixels edits the sprite's own artwork (colour picker, brush, re-coloured
+## preview); Groups edits the Re-color Groups (list, name, colour, delete) and
+## gives pixels to one of them with the same brush.
 func _make_mode_switch() -> Control:
 	var row := HBoxContainer.new()
 	row.name = "ModeSwitch"
 	row.add_theme_constant_override("separation", 6)
 	row.add_child(_make_section_label("Edit"))
 	var group := ButtonGroup.new()
-	_pixels_mode_button = _make_button("Pixels", "Paint this sprite's pixels with the selected Re-color Group",
+	_pixels_mode_button = _make_button("Pixels", "Paint the sprite's own pixels with a colour and a brush",
 		UIConstants.COLOR_TEXT, 92)
 	_pixels_mode_button.name = "PixelsModeButton"
-	_groups_mode_button = _make_button("Groups", "Create, rename, re-colour and delete the Re-color Groups",
+	_groups_mode_button = _make_button("Groups", "Brush pixels into the Re-color Groups, and create, rename, re-colour and delete them",
 		UIConstants.COLOR_TEXT, 92)
 	_groups_mode_button.name = "GroupsModeButton"
 	for button in [_pixels_mode_button, _groups_mode_button]:
@@ -766,9 +823,9 @@ func _set_mode(mode: int) -> void:
 	_refresh_all()
 
 
-## Show the block the mode asks for and point the canvas at it. The canvas stays
-## up in both: in Groups mode it is the group wash, and a click picks the group
-## the pixel belongs to instead of painting it (see _on_cell_painted).
+## Show the block the mode asks for and point the canvas at it. The canvas and
+## the brush stay up in both: Pixels paints the artwork, Groups gives the pixels
+## the brush covers to the selected Re-color Group (see _on_cell_painted).
 func _sync_mode() -> void:
 	if _pixels_mode_button != null:
 		_pixels_mode_button.set_pressed_no_signal(_mode == Mode.PIXELS)
@@ -780,11 +837,10 @@ func _sync_mode() -> void:
 		_group_block.visible = _mode == Mode.GROUPS
 	if _canvas == null:
 		return
-	# The Re-coloured and Fill switches belong to the painting side.
+	# The Re-coloured switch belongs to the Pixels side (Fill sits in the group
+	# sheet, so it follows that block on its own).
 	if _recolor_check != null:
 		_recolor_check.visible = _mode == Mode.PIXELS
-	if _fill_check != null:
-		_fill_check.visible = _mode == Mode.PIXELS
 	_canvas.show_recolor = _show_recolor and _mode == Mode.PIXELS
 	_canvas.queue_redraw()
 
@@ -1029,6 +1085,7 @@ func _refresh_canvas() -> void:
 	_canvas.set_layer(_skin.layer(key))
 	_canvas.group_colors = _skin.effective_colors({})
 	_canvas.active_group = _active_group
+	_canvas.brush_size = _brush_size
 	_canvas.show_recolor = _show_recolor and _mode == Mode.PIXELS
 	_canvas.show_grid = _show_grid
 	_canvas.queue_redraw()
@@ -1147,6 +1204,9 @@ func _select_skin(skin: GolferSkin) -> void:
 		_sprite_id = GolferSkinLibrary.DEFAULT_SPRITE_ID
 	_worn_by = skin.worn_by.duplicate()
 	_active_group = _active_group_for(skin)
+	var first := skin.group_by_id(_active_group)
+	if not first.is_empty():
+		_on_pixel_color_chosen(first.get("color", Color.WHITE))
 	_frame_index = 0
 	_dirty = false
 	_status = ""
@@ -1329,33 +1389,122 @@ func _on_group_color_chosen(color: Color) -> void:
 	_refresh_frame_strip()
 
 
+## The colour the Pixels side's brush paints with.
+func _on_pixel_color_chosen(color: Color) -> void:
+	_pixel_color = color
+	if _pixel_color_button != null and _pixel_color_button.color != color:
+		_pixel_color_button.set_pick_color(color)
+
+
+## Which brush width the studio paints and groups with.
+func _on_brush_size_selected(index: int) -> void:
+	if index < 0 or index >= BRUSH_SIZES.size():
+		return
+	_brush_size = BRUSH_SIZES[index]
+	if _canvas != null:
+		_canvas.brush_size = _brush_size
+		_canvas.queue_redraw()
+
+
 # ── Painting ──────────────────────────────────────────────────────────────
 
-## A click on the sprite: in Pixels mode it paints with the active group (or,
-## with Fill, the whole run it lands in); in Groups mode it selects the group the
-## pixel already belongs to, which is how the groups are read off the sprite.
+## A click on the sprite: on the Pixels side the brush paints the artwork itself
+## with the picked colour; on the Groups side it gives the pixels it covers to
+## the selected Re-color Group (or, with Fill, the whole run it lands in).
 func _on_cell_painted(cell: Vector2i) -> void:
-	if _mode == Mode.GROUPS:
-		_on_cell_picked(cell)
+	if _mode == Mode.PIXELS:
+		_paint_art(cell, _pixel_color)
 		return
 	_paint_cell(cell, _active_group, _fill)
 
 
+## Right-click: erase pixels of the artwork (Pixels) or free them from their
+## group (Groups).
 func _on_cell_erased(cell: Vector2i) -> void:
-	if _mode == Mode.GROUPS:
-		_on_cell_picked(cell)
+	if _mode == Mode.PIXELS:
+		_paint_art(cell, Color(0, 0, 0, 0))
 		return
 	_paint_cell(cell, GolferSkinLayer.NO_GROUP, _fill)
 
 
+## Alt-click: Pixels picks up the colour already on the pixel (an eyedropper into
+## the picker); Groups selects the group the pixel belongs to, which is how the
+## grouping is read off the sprite.
 func _on_cell_picked(cell: Vector2i) -> void:
 	if _skin == null:
+		return
+	if _mode == Mode.PIXELS:
+		_pick_pixel_color(cell)
 		return
 	_active_group = _skin.layer(_current_key()).get_cell(cell.x, cell.y)
 	_refresh_groups()
 	if _canvas != null:
 		_canvas.active_group = _active_group
 		_canvas.queue_redraw()
+
+
+## Paint the sprite's own pixels with the brush: the colour picked for the
+## Pixels side, or - with a transparent colour - erase them, which is what the
+## right button does. A painted pixel is the artwork's own colour, so it stops
+## belonging to whatever Re-color Group owned it: the Groups side is what colours
+## it again.
+func _paint_art(cell: Vector2i, color: Color) -> void:
+	if _skin == null:
+		return
+	var key := _current_key()
+	var sprite_layer := _skin.layer(key)
+	if not sprite_layer.contains(cell.x, cell.y):
+		return
+	sprite_layer.begin_art(_shipped_art(key))
+	var changed := false
+	for target in sprite_layer.brush_cells(cell.x, cell.y, _brush_size):
+		if sprite_layer.set_cell(target.x, target.y, GolferSkinLayer.NO_GROUP):
+			changed = true
+		if sprite_layer.set_art_pixel(target.x, target.y, color):
+			changed = true
+	if not changed:
+		return
+	_after_art_edit(key, sprite_layer)
+
+
+## Push an artwork edit through the skin: the group's shade is the brightness of
+## its brightest pixel, so a pixel painted in a new colour re-reads it and the
+## colour the player picked survives the re-color exactly.
+func _after_art_edit(key: String, sprite_layer: GolferSkinLayer) -> void:
+	var art := sprite_layer.art_image()
+	if art != null:
+		_skin.refresh_shades_from(art, key, true)
+	_skin.mark_layer_dirty(key)
+	_dirty = true
+	_mark_dirty("Sprite pixels painted - Save Skins to write them out")
+	# Only the sprite on screen and the numbers change: rebuilding the group
+	# rows or the whole frame strip for every pixel of a drag would not keep up.
+	_refresh_canvas_artwork()
+
+
+## Take the colour already on a pixel into the picker, so the player can paint
+## with a colour the artwork uses.
+func _pick_pixel_color(cell: Vector2i) -> void:
+	var sprite_layer := _skin.layer(_current_key())
+	var color := sprite_layer.art_pixel(cell.x, cell.y)
+	if not sprite_layer.has_art():
+		var image := _shipped_art(_current_key())
+		if image != null and not image.is_empty() and sprite_layer.contains(cell.x, cell.y):
+			color = image.get_pixel(cell.x, cell.y)
+	if color.a <= 0.0:
+		return
+	_on_pixel_color_chosen(color)
+	if _pixel_color_button != null:
+		_pixel_color_button.set_pick_color(color)
+	_refresh_status()
+
+
+## The artwork a sprite ships with, before anything is painted on it.
+func _shipped_art(key: String) -> Image:
+	if _skin == null:
+		return null
+	var texture := library.texture_for(_skin, key)
+	return texture.get_image() if texture != null else null
 
 
 ## Give one pixel of the sprite on the canvas to a group (NO_GROUP frees it).
@@ -1365,9 +1514,15 @@ func _paint_cell(cell: Vector2i, group_id: int, fill: bool = false) -> void:
 	if _skin == null:
 		return
 	var sprite_layer := _skin.layer(_current_key())
-	var cells: Array[Vector2i] = [cell]
+	var cells: Array[Vector2i] = []
 	if fill:
-		cells = sprite_layer.flood_cells(cell.x, cell.y, _canvas.image if _canvas != null else null)
+		cells = sprite_layer.flood_cells(cell.x, cell.y, _shipped_art(_current_key()))
+	elif _brush_size > 1:
+		# The brush covers a footprint of pixels, not just the one clicked.
+		for target in sprite_layer.brush_cells(cell.x, cell.y, _brush_size):
+			cells.append(target)
+	else:
+		cells.append(cell)
 	var changed := false
 	for painted: Vector2i in cells:
 		if sprite_layer.get_cell(painted.x, painted.y) == group_id:
@@ -1382,13 +1537,13 @@ func _paint_cell(cell: Vector2i, group_id: int, fill: bool = false) -> void:
 	_refresh_canvas_artwork()
 
 
-## Painting only re-colours the sprite on the canvas and updates the numbers:
+## Painting only re-draws the sprite on the canvas and updates the numbers:
 ## rebuilding the whole studio for every pixel of a drag would not keep up.
 func _refresh_canvas_artwork() -> void:
 	if _canvas == null or _skin == null:
 		return
 	var key := _current_key()
-	_canvas.set_preview(_skin_frame_image(key, true))
+	_canvas.set_artwork(_skin_frame_image(key, false), _skin_frame_image(key, true))
 	_canvas.set_layer(_skin.layer(key))
 	_canvas.queue_redraw()
 	var counts := _group_pixel_counts()
@@ -1432,7 +1587,7 @@ func _skin_frame_image(key: String, recolored: bool) -> Image:
 	if image == null or image.is_empty():
 		return null
 	if not recolored:
-		return image
+		return _skin.edited_image(image, key)
 	return _skin.recolor_image(image, key)
 
 

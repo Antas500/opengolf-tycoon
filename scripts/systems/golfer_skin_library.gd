@@ -43,6 +43,8 @@ var sprite_root: String = SPRITE_ROOT
 var _skins: Dictionary = {}
 var _order: Array[String] = []
 var _raw_frames: Dictionary = {}
+## skin id|key -> the sprite as the skin holds it (painted pixels and all).
+var _edited_textures: Dictionary = {}
 var _recolored_frames: Dictionary = {}
 var _textures: Dictionary = {}
 
@@ -66,6 +68,7 @@ func reload() -> void:
 	_order.clear()
 	_raw_frames.clear()
 	_recolored_frames.clear()
+	_edited_textures.clear()
 	for root in [built_in_root, user_root]:
 		for folder in _skin_folders(root):
 			var skin := _read_skin(folder, folder.begins_with(user_root))
@@ -505,7 +508,7 @@ func _build_frames(skin: GolferSkin, overrides: Dictionary, recolor: bool) -> Sp
 				if recolor and not skin.layer(key).is_empty():
 					texture = _recolored_texture(skin, key, colors, shades, recolored)
 				else:
-					texture = texture_for(skin, key)
+					texture = edited_texture(skin, key)
 				if texture != null:
 					frames.add_frame(animation_name, texture)
 					built = true
@@ -535,7 +538,7 @@ func _recolored_texture(skin: GolferSkin, key: String, colors: Dictionary,
 
 ## The recolored copy of one sprite, for the editor's preview.
 func recolor_texture(skin: GolferSkin, key: String, overrides: Dictionary = {}) -> Texture2D:
-	var texture := texture_for(skin, key)
+	var texture := edited_texture(skin, key)
 	if texture == null:
 		return null
 	var image := texture.get_image()
@@ -546,6 +549,24 @@ func recolor_texture(skin: GolferSkin, key: String, overrides: Dictionary = {}) 
 	for group in skin.group_list():
 		shades[int(group.get("id", 0))] = maxf(float(group.get("shade", 1.0)), 0.01)
 	return ImageTexture.create_from_image(skin.layer(key).recolor(image, colors, shades))
+
+
+## The sprite as the skin holds it: the layer's own painted pixels when the
+## player has painted any, else the artwork that ships with the game.
+func edited_texture(skin: GolferSkin, key: String) -> Texture2D:
+	if skin == null:
+		return null
+	var cache_key := "%s|%s" % [skin.id, key]
+	if _edited_textures.has(cache_key):
+		return _edited_textures[cache_key]
+	var texture := texture_for(skin, key)
+	var sprite_layer := skin.layer(key)
+	if texture != null and sprite_layer != null and sprite_layer.has_art():
+		var art := sprite_layer.art_image()
+		if art != null:
+			texture = ImageTexture.create_from_image(art)
+	_edited_textures[cache_key] = texture
+	return texture
 
 
 ## The sprite itself, straight off disk (cached).
@@ -611,8 +632,12 @@ func invalidate(skin_id: String = "") -> void:
 	if skin_id.is_empty():
 		_raw_frames.clear()
 		_recolored_frames.clear()
+		_edited_textures.clear()
 		return
 	_raw_frames.erase(skin_id)
 	for key in _recolored_frames.keys():
 		if str(key).begins_with(skin_id + "|"):
 			_recolored_frames.erase(key)
+	for key in _edited_textures.keys():
+		if str(key).begins_with(skin_id + "|"):
+			_edited_textures.erase(key)

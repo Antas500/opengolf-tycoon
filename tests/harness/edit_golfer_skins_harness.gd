@@ -7,6 +7,10 @@ extends Node
 ## leaves the painting surface big enough to paint on, keeps the studio's
 ## controls where the player can reach them, and comes back to the menu.
 ##
+## Both sides of the studio are worked: Pixels (a colour picker and a brush paint
+## the sprite's own artwork) and Groups (the same brush gives pixels to the
+## Re-color Groups).
+##
 ## Where the unit tests check what painting does, this checks that it can be
 ## done at all: a canvas a few pixels wide, a Save button pushed off the window
 ## or hidden under another control would pass every unit test and still be
@@ -89,8 +93,9 @@ func _run() -> void:
 	_check(screen._layout_mode == EditGolferSkinsScreen.Layout.WIDE,
 		"1600x1000 uses the wide arrangement (got %d)" % screen._layout_mode)
 	await _check_studio(screen, 1600.0, 1000.0)
-	_check_paint(screen, "desktop")
+	_check_art(screen, "desktop")
 	await _check_mode_switch(screen)
+	_check_paint(screen, "desktop")
 	await _check_groups(screen)
 	_check_open_skin(screen)
 
@@ -102,6 +107,7 @@ func _run() -> void:
 	_check(screen._layout_mode == EditGolferSkinsScreen.Layout.TABLET,
 		"1024x768 uses the tablet arrangement (got %d)" % screen._layout_mode)
 	await _check_studio(screen, 1024.0, 768.0)
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
 	_check_paint(screen, "tablet")
 
 	# ------------------------------------------------------------------
@@ -117,6 +123,8 @@ func _run() -> void:
 	var scroll := screen.get_node_or_null("Scroll")
 	_check(scroll == null or not scroll.get_h_scroll_bar().visible,
 		"the studio scrolls down, never sideways")
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
+	_check_art(screen, "phone")
 	_check_paint(screen, "phone")
 
 	await _set_window(844, 390)
@@ -238,7 +246,64 @@ func _check_studio(screen: EditGolferSkinsScreen, width: float, height: float) -
 
 
 ## Painting through the screen at the size the window gives the canvas.
+## The Pixels side: the colour picker and the brush paint the sprite's own
+## artwork, and it is the artwork the golfer is drawn with.
+func _check_art(screen: EditGolferSkinsScreen, tag: String) -> void:
+	screen._set_mode(EditGolferSkinsScreen.Mode.PIXELS)
+	var layer: GolferSkinLayer = screen._canvas.layer
+	_check(not layer.has_art(), "%s: the sprite starts as the artwork that ships" % tag)
+	var drawn := _drawn_cell(screen)
+	_check(drawn.x >= 0, "%s: the sprite has a pixel to paint" % tag)
+	if drawn.x < 0:
+		return
+	var brush_color := Color8(240, 51, 102)
+	screen._on_pixel_color_chosen(brush_color)
+	screen._on_cell_painted(drawn)
+	_check(layer.has_art(), "%s: painting with the brush takes the artwork into the layer" % tag)
+	_check(layer.art_pixel(drawn.x, drawn.y) == brush_color,
+		"%s: the pixel takes the colour the picker shows" % tag)
+	_check(screen._canvas.image.get_pixel(drawn.x, drawn.y) == brush_color,
+		"%s: and the canvas shows it painted" % tag)
+	_check(layer.get_cell(drawn.x, drawn.y) == GolferSkinLayer.NO_GROUP,
+		"%s: a painted pixel is the artwork's own colour, so it leaves its group" % tag)
+
+	# The brush covers a footprint, and erases it again.
+	var brush := EditGolferSkinsScreen.BRUSH_SIZES.find(3)
+	screen._on_brush_size_selected(brush)
+	_check(screen._canvas.brush_size == 3, "%s: the brush picker resizes the canvas brush" % tag)
+	var spot := _central_cell(screen)
+	screen._on_cell_painted(spot)
+	var footprint := layer.brush_cells(spot.x, spot.y, 3)
+	_check(footprint.size() > 1, "%s: a 3-wide brush covers %d pixels" % [tag, footprint.size()])
+	var painted := 0
+	for covered in footprint:
+		if layer.art_pixel(covered.x, covered.y) == brush_color:
+			painted += 1
+	_check(painted == footprint.size(), "%s: every pixel of the footprint is painted" % tag)
+
+	# Alt-click is the eyedropper: it takes the colour already on a pixel.
+	screen._on_group_row_pressed(GolferSkinLayer.NO_GROUP)
+	screen._on_pixel_color_chosen(Color.WHITE)
+	screen._on_cell_picked(spot)
+	_check(screen._pixel_color == brush_color,
+		"%s: alt-click picks the colour already on a pixel up" % tag)
+
+	screen._on_brush_size_selected(EditGolferSkinsScreen.BRUSH_SIZES.find(1))
+	screen._on_cell_erased(spot)
+	_check(layer.art_pixel(spot.x, spot.y).a <= 0.0, "%s: right-click erases the artwork" % tag)
+	var still_painted := 0
+	for covered in footprint:
+		if layer.art_pixel(covered.x, covered.y) == brush_color:
+			still_painted += 1
+	_check(still_painted > 0, "%s: a one-pixel brush leaves the rest of the run alone" % tag)
+
+
 func _check_paint(screen: EditGolferSkinsScreen, tag: String) -> void:
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
+	# An earlier check may have left the palette on None: the brush needs a group
+	# to give pixels to.
+	if screen._canvas.active_group == GolferSkinLayer.NO_GROUP:
+		screen._on_group_row_pressed(int(screen._skin.group_list()[0].get("id", 0)))
 	var layer: GolferSkinLayer = screen._canvas.layer
 	var cell := _free_cell(screen)
 	_check(cell.x >= 0, "%s: the sprite has a pixel to paint" % tag)
@@ -250,6 +315,19 @@ func _check_paint(screen: EditGolferSkinsScreen, tag: String) -> void:
 	_check(layer.get_cell(cell.x, cell.y) == GolferSkinLayer.NO_GROUP,
 		"%s: right-clicking frees it again" % tag)
 	screen._on_cell_painted(cell)
+	# The brush gives every pixel it covers to the group, not just the one clicked.
+	var brush_cell := _free_cell(screen)
+	screen._on_brush_size_selected(EditGolferSkinsScreen.BRUSH_SIZES.find(3))
+	screen._on_brush_size_selected(EditGolferSkinsScreen.BRUSH_SIZES.find(3))
+	var footprint := layer.brush_cells(brush_cell.x, brush_cell.y, 3)
+	screen._on_cell_painted(brush_cell)
+	var grouped := 0
+	for covered in footprint:
+		if layer.get_cell(covered.x, covered.y) == group:
+			grouped += 1
+	_check(grouped == footprint.size(),
+		"%s: the brush gives all %d pixels it covers to the group" % [tag, footprint.size()])
+	screen._on_brush_size_selected(EditGolferSkinsScreen.BRUSH_SIZES.find(1))
 	# One click with the Fill tool takes the whole run of pixels it lands in.
 	var filled_from := _cell_of_another_group(screen, group)
 	if filled_from.x >= 0:
@@ -281,8 +359,10 @@ func _check_mode_switch(screen: EditGolferSkinsScreen) -> void:
 	screen._set_mode(EditGolferSkinsScreen.Mode.PIXELS)
 	_check(screen._pixel_block.visible and not screen._group_block.visible,
 		"Pixels mode shows the painting controls and hides the group editor")
-	_check(screen._recolor_check.visible and screen._fill_check.visible,
-		"with the Re-coloured and Fill switches on hand")
+	_check(screen._recolor_check.visible and screen._pixel_color_button.visible,
+		"with the colour picker and the Re-coloured switch on hand")
+	_check(not screen._fill_check.is_visible_in_tree(),
+		"and Fill with the group editor it belongs to")
 	_check(screen._groups_mode_button != null and not screen._groups_mode_button.button_pressed,
 		"and the Pixels switch lit")
 
@@ -291,8 +371,11 @@ func _check_mode_switch(screen: EditGolferSkinsScreen) -> void:
 		"clicking the Groups switch changes mode")
 	_check(screen._group_block.visible and not screen._pixel_block.visible,
 		"Groups mode shows the group editor and hides the painting controls")
-	_check(not screen._recolor_check.visible and not screen._fill_check.visible,
-		"the painting switches stand down")
+	_check(screen._fill_check.is_visible_in_tree(), "with Fill beside the group it fills with")
+	_check(not screen._recolor_check.is_visible_in_tree(),
+		"the Re-coloured switch stands down with the painting controls")
+	_check(screen._palette.is_visible_in_tree(),
+		"and the group palette is there to choose what the brush gives pixels to")
 	_check(screen._group_rows.get_child_count() == screen._skin.group_count(),
 		"every Re-color Group still has a row")
 	_check(not screen._canvas.show_recolor,
@@ -310,8 +393,8 @@ func _check_mode_switch(screen: EditGolferSkinsScreen) -> void:
 
 	await _click(screen._pixels_mode_button)
 	_check(screen._mode == EditGolferSkinsScreen.Mode.PIXELS, "clicking Pixels comes back")
-	_check(screen._pixel_block.visible and screen._canvas.show_recolor,
-		"and the painting surface is back to the re-coloured sprite")
+	_check(screen._pixel_block.visible and screen._canvas.show_recolor == screen._show_recolor,
+		"and the painting surface is back to the artwork the brush edits")
 
 
 ## The Colour button opens a picker (it is a ColorPickerButton, which brings its
@@ -404,6 +487,19 @@ func _drawn_cell(screen: EditGolferSkinsScreen) -> Vector2i:
 			if color.a > 0.2 and maxf(color.r, maxf(color.g, color.b)) > 0.15:
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
+
+
+## A drawn pixel away from the edges, so a brush centred on it lies inside the
+## sprite and its footprint is the whole shape.
+func _central_cell(screen: EditGolferSkinsScreen) -> Vector2i:
+	var fallback := Vector2i(-1, -1)
+	for y in range(12, 36):
+		for x in range(12, 36):
+			if fallback.x < 0:
+				fallback = Vector2i(x, y)
+			if screen._canvas.image.get_pixel(x, y).a > 0.2:
+				return Vector2i(x, y)
+	return fallback
 
 
 ## The first pixel of the sprite that belongs to no group.

@@ -360,19 +360,22 @@ Skins** rather than by a hard-coded tier → folder table:
   Groups are **per skin** and can be created, renamed, re-coloured and deleted
   by the player.
 - **Editable text files**: a skin is a folder of them - `skin.txt` (manifest)
-  and `layers/<animation>/<direction>/frame_NNN.layer.txt` (grid). Shipped
+  and `layers/<animation>/<direction>/frame_NNN.layer.txt` (the group grid and,
+  once the sprite is painted, its own pixels as hex tokens). Shipped
   skins live in `data/golfer_skins/` (regenerate with
   `tools/generate_golfer_skin_layers.gd`), the player's own in
   `user://golfer_skins/`, where a copy shadows the shipped skin of the same id
   until it is reverted.
 - **Edit Golfer Skins** (`scripts/ui/edit_golfer_skins_screen.gd`), opened from
-  the title screen: pick a skin, paint its layers with the group palette
-  (left-click paints, right-click frees, alt-click picks), switch between
-  editing the sprite's **Pixels** and its **Re-color Groups** (in Groups mode a
-  click on the canvas selects the group under the pixel), create/rename/
-  re-colour/delete groups, change the name and tiers, **Save Skins** to write
-  it all out, **Wear This** to dress the player's own golfer,
-  Duplicate/Revert/Delete to manage a skin. The skin owns its colours, so the
+  the title screen: pick a skin and work its two sides. **Pixels** edits the
+  sprite's own artwork - a colour picker and a brush (right-click erases,
+  alt-click picks a colour up), which is what the golfer is drawn with; a
+  painted pixel is the artwork's colour and so leaves its group. **Groups**
+  gives the pixels the brush covers to a Re-color Group (left-click groups,
+  right-click frees, alt-click picks the group under a pixel) and edits the
+  groups themselves: create/rename/re-colour/delete. Either way, change the
+  name and tiers, **Save Skins** to write it all out, **Wear This** to dress the
+  player's own golfer, Duplicate/Revert/Delete to manage a skin. The skin owns its colours, so the
   palette of a group called Shirt/Pants/Cap/Hair/Skin is the owner's
   shirt/pants/cap/hair/skin choice (`GolferSkin.profile_key_for_group` keeps
   `PlayerGolferProfile.COLORS` in step), and a group of the player's own is

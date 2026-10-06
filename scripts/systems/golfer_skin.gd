@@ -470,6 +470,18 @@ static func profile_color(profile: PlayerGolferProfile, group_name: String) -> C
 
 ## A re-coloured copy of one sprite image. Returns the image untouched when the
 ## sprite has no layer or the layer names no group.
+## The sprite as this skin holds it: the layer's own painted pixels when the
+## player has painted any, else the artwork that ships with the game. What the
+## golfer is drawn with before any group colour is applied.
+func edited_image(image: Image, key: String) -> Image:
+	var sprite_layer := layer(key)
+	if sprite_layer != null and sprite_layer.has_art():
+		var art := sprite_layer.art_image()
+		if art != null:
+			return art
+	return image
+
+
 func recolor_image(image: Image, key: String, overrides: Dictionary = {}) -> Image:
 	if image == null or image.is_empty():
 		return image

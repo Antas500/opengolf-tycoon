@@ -123,7 +123,8 @@ func test_layer_survives_a_round_trip_through_its_text_file() -> void:
 	var symbols := {1: "A", 2: "B"}
 	var legend := {1: "Shirt", 2: "Pants"}
 	var text := layer.serialize(symbols, legend)
-	assert_true(text.contains("golfer-skin-layer 1"), "The file names its format and version")
+	assert_true(text.contains("golfer-skin-layer %d" % GolferSkinLayer.FORMAT_VERSION),
+		"The file names its format and version")
 	assert_true(text.contains("size 4 2"), "The grid is written down")
 	assert_true(text.contains("cells"), "and says where the pixels start")
 	assert_true(text.contains("# legend: A = Shirt, B = Pants"), "Groups are named for the reader")
@@ -135,9 +136,65 @@ func test_layer_survives_a_round_trip_through_its_text_file() -> void:
 	assert_eq(reloaded.height, 2)
 	assert_true(reloaded.equals(layer), "The grid comes back exactly as it was written")
 	assert_eq(reloaded.warnings.size(), 0)
+	assert_false(reloaded.has_art(), "A layer without painted pixels leaves the artwork alone")
 
 	# Renaming a group never rewrites a grid: the symbols are unchanged.
 	assert_eq(reloaded.serialize(symbols, {1: "Sleeves", 2: "Pants"}).contains("A = Sleeves"), true)
+
+
+## A layer that has been painted carries the sprite's own pixels, in the same
+## editable text file as the group grid.
+func test_painted_pixels_survive_the_round_trip_through_the_layer_file() -> void:
+	var layer := GolferSkinLayer.create(3, 2)
+	layer.set_cell(1, 0, 1)
+	var art := Image.create(3, 2, false, Image.FORMAT_RGBA8)
+	art.fill(Color(0, 0, 0, 0))
+	art.set_pixel(0, 0, Color("ff3366"))
+	art.set_pixel(1, 0, Color(0.9, 0.9, 0.9))
+	art.set_pixel(2, 1, Color("123456"))
+	layer.begin_art(art)
+	assert_true(layer.has_art(), "Taking the artwork in is what painting does first")
+	assert_eq(layer.art_pixel(0, 0), Color("ff3366"))
+	assert_eq(layer.art_pixel(1, 1).a, 0.0, "and the pixels the art leaves empty stay empty")
+
+	var text := layer.serialize({1: "A"})
+	assert_true(text.contains("art"), "The file says where the painted pixels start")
+	assert_true(text.contains("ff3366"), "and writes them as hex")
+	assert_true(text.contains("------"), "with a token for a transparent pixel")
+	var reloaded := GolferSkinLayer.parse(text, {"A": 1})
+	assert_eq(reloaded.warnings.size(), 0, str(reloaded.warnings))
+	assert_true(reloaded.equals(layer), "The painted sprite comes back exactly as it was written")
+	assert_eq(reloaded.art_pixel(2, 1), Color("123456"))
+
+	# The painted pixels are what the golfer is drawn with: the re-color starts
+	# from them, not from the art that ships with the game.
+	var shipped := Image.create(3, 2, false, Image.FORMAT_RGBA8)
+	shipped.fill(Color(0.9, 0.9, 0.9))
+	var recoloured := reloaded.recolor(shipped, {1: Color("00ff00")}, {1: 0.9})
+	assert_eq(recoloured.get_pixel(0, 0), Color("ff3366"),
+		"A painted pixel outside every group keeps the colour it was painted")
+	assert_eq(recoloured.get_pixel(2, 1), Color("123456"))
+	assert_gt(recoloured.get_pixel(1, 0).g, recoloured.get_pixel(1, 0).r,
+		"and a grouped pixel is re-coloured as ever")
+
+
+## The brush covers a disc of pixels, so a round brush stays round on the sprite.
+func test_the_brush_covers_a_disc_of_pixels() -> void:
+	var layer := GolferSkinLayer.create(9, 9)
+	assert_eq(layer.brush_cells(4, 4, 1), [Vector2i(4, 4)] as Array[Vector2i],
+		"A one-pixel brush is the pixel itself")
+	assert_eq(layer.brush_cells(4, 4, 2).size(), 4, "a two-wide brush covers four pixels")
+	var wide := layer.brush_cells(4, 4, 5)
+	assert_gt(wide.size(), 13, "a five-wide brush covers more than the cross")
+	for cell in wide:
+		assert_lt(absf(Vector2(cell - Vector2i(4, 4)).length()), 2.5, "%s is inside the disc" % cell)
+	# A brush at the edge of the grid reports only the pixels that exist.
+	var corner := layer.brush_cells(0, 0, 5)
+	assert_lt(corner.size(), wide.size(), "a corner brush is clipped to the sprite: %s" % str(corner))
+	for cell in corner:
+		assert_true(layer.contains(cell.x, cell.y), "%s is on the grid" % cell)
+	assert_eq(GolferSkinLayer.create(2, 2).brush_cells(-1, 0, 3), [] as Array[Vector2i],
+		"and a click off the grid paints nothing")
 
 
 func test_layer_file_reports_what_it_cannot_read_instead_of_failing() -> void:

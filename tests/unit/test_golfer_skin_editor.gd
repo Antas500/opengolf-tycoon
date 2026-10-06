@@ -167,6 +167,11 @@ func test_the_studio_opens_on_a_skin_with_every_part_of_it_showing() -> void:
 	assert_eq(screen._frame_strip.get_child_count(), 4, "one tile per frame")
 	assert_eq(screen._group_rows.get_child_count(), skin.group_count(), "one row per group")
 	assert_eq(screen._palette.get_child_count(), skin.group_count() + 1, "a swatch per group, plus None")
+	assert_not_null(screen._pixel_color_button, "the Pixels side has a colour picker to paint with")
+	assert_not_null(screen._brush_picker, "and a brush to paint with")
+	assert_eq(screen._brush_size, 1, "one pixel wide until the player asks for more")
+	assert_false(screen._canvas.show_recolor,
+		"the canvas opens on the artwork the brush is changing")
 	assert_eq(screen._skin_name_edit.text, "Casual")
 	assert_eq(screen._active_group, int(skin.group_list()[0].get("id")), "The first group starts selected")
 	assert_not_null(screen._preview_golfer, "the golfer wearing the skin is previewed")
@@ -177,6 +182,7 @@ func test_the_studio_opens_on_a_skin_with_every_part_of_it_showing() -> void:
 
 func test_painting_marks_the_skin_unsaved_and_saving_writes_it_out() -> void:
 	var screen := _studio()
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
 	var key := screen._current_key()
 	var layer := screen._skin.layer(key)
 	var empty := _first_free_cell(layer)
@@ -209,8 +215,40 @@ func test_painting_marks_the_skin_unsaved_and_saving_writes_it_out() -> void:
 		"the pixel is drawn in the new colour")
 
 
+## Painted pixels and grouped pixels both go into the skin's own editable text
+## files, and a skin saved that way is the skin that is drawn.
+func test_painted_pixels_are_saved_and_read_back() -> void:
+	var screen := _studio()
+	var key := screen._current_key()
+	var spot := Vector2i(24, 21)
+	screen._set_mode(EditGolferSkinsScreen.Mode.PIXELS)
+	screen._on_pixel_color_chosen(Color8(240, 51, 102))
+	screen._on_cell_painted(spot)
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
+	var cap := int(screen._skin.group_by_name("Cap").get("id"))
+	screen._on_group_row_pressed(cap)
+	screen._on_cell_painted(Vector2i(24, 9))
+	screen._on_save_pressed()
+	assert_false(screen._dirty)
+
+	# The file says what was painted, in a layer a person could edit.
+	var text := FileAccess.get_file_as_string(GolferSkin.layer_path(TEST_ROOT.path_join("casual"), key))
+	assert_true(text.contains("art"), "the layer file carries the painted pixels")
+	assert_true(text.contains("f03366"), "written as hex")
+	var reloaded := _library().get_skin("casual").layer(key)
+	assert_true(reloaded.has_art())
+	assert_eq(reloaded.art_pixel(spot.x, spot.y), Color8(240, 51, 102), "and they come back")
+	assert_eq(reloaded.get_cell(24, 9), cap, "along with the group the other pixel was given to")
+
+	# And that is what the golfer is drawn with.
+	var frames := _library().recolored_frames(_library().get_skin("casual"))
+	assert_eq(frames.get_frame_texture("idle_south", 0).get_image().get_pixel(spot.x, spot.y),
+		Color8(240, 51, 102), "the golfer wears the painted pixel")
+
+
 func test_the_canvas_never_reports_a_cell_outside_the_grid() -> void:
 	var screen := _studio()
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
 	var layer := screen._skin.layer(screen._current_key())
 	var before := layer.count(screen._active_group)
 	screen._on_cell_painted(Vector2i(-1, 5))
@@ -218,10 +256,17 @@ func test_the_canvas_never_reports_a_cell_outside_the_grid() -> void:
 	screen._on_cell_painted(Vector2i(5, 99))
 	assert_eq(layer.count(screen._active_group), before, "Off the grid nothing changes")
 	assert_false(screen._dirty)
+	# And the same with the brush on the Pixels side.
+	screen._set_mode(EditGolferSkinsScreen.Mode.PIXELS)
+	screen._on_cell_painted(Vector2i(-1, 5))
+	screen._on_cell_painted(Vector2i(48, 5))
+	assert_false(layer.has_art(), "painting off the grid does not even take the artwork in")
+	assert_false(screen._dirty)
 
 
 func test_erasers_and_pickers_reach_the_layer() -> void:
 	var screen := _studio()
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
 	var layer := screen._skin.layer(screen._current_key())
 	var cell := Vector2i(24, 21)
 	assert_ne(layer.get_cell(cell.x, cell.y), GolferSkinLayer.NO_GROUP, "A shirt pixel to work with")
@@ -244,6 +289,7 @@ func test_erasers_and_pickers_reach_the_layer() -> void:
 
 func test_the_fill_tool_gives_a_whole_run_of_pixels_to_the_active_group() -> void:
 	var screen := _studio()
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
 	var layer := screen._skin.layer(screen._current_key())
 	var clicked := Vector2i(24, 21)
 	var shirt := layer.get_cell(clicked.x, clicked.y)
@@ -264,6 +310,79 @@ func test_the_fill_tool_gives_a_whole_run_of_pixels_to_the_active_group() -> voi
 		"the row's pixel count is updated with it")
 	assert_eq(layer.count(shirt), shirt_before - run.size(), "and the old group is that much smaller")
 	assert_true(screen._dirty, "One click is one edit")
+
+
+## The Pixels side: a colour and a brush paint the sprite's own pixels - what
+## the golfer is drawn with - and the colour comes from the picker.
+func test_the_pixel_brush_paints_the_artwork_with_the_picked_colour() -> void:
+	var screen := _studio()
+	var key := screen._current_key()
+	var layer := screen._skin.layer(key)
+	screen._set_mode(EditGolferSkinsScreen.Mode.PIXELS)
+	assert_false(layer.has_art(), "an untouched skin draws the artwork that ships with it")
+
+	var spot := Vector2i(24, 21)
+	screen._on_pixel_color_chosen(Color("ff3366"))
+	screen._on_cell_painted(spot)
+	assert_true(layer.has_art(), "painting takes the sprite's artwork into the layer")
+	assert_eq(layer.art_pixel(spot.x, spot.y), Color("ff3366"), "and the pixel takes the picked colour")
+	assert_eq(layer.get_cell(spot.x, spot.y), GolferSkinLayer.NO_GROUP,
+		"a painted pixel is the artwork's own colour, so it leaves its Re-color Group")
+	assert_true(screen._dirty, "the edit is unsaved")
+	assert_eq(screen._canvas.image.get_pixel(spot.x, spot.y), Color("ff3366"),
+		"the canvas shows the pixel as painted")
+
+	# The brush covers its footprint, not just the pixel clicked.
+	screen._on_brush_size_selected(EditGolferSkinsScreen.BRUSH_SIZES.find(5))
+	assert_eq(screen._canvas.brush_size, 5, "the brush picker sets the canvas brush too")
+	var middle := Vector2i(10, 10)
+	screen._on_cell_painted(middle)
+	var footprint := layer.brush_cells(middle.x, middle.y, 5)
+	assert_gt(footprint.size(), 1, "a 5-wide brush covers %d pixels" % footprint.size())
+	for spot2 in footprint:
+		assert_eq(layer.art_pixel(spot2.x, spot2.y), Color("ff3366"),
+			"%s is painted by the brush" % spot2)
+
+	# Right-click erases the pixels the brush covers, and alt-click picks up a
+	# colour already on the sprite.
+	screen._on_cell_erased(middle)
+	var erased := 0
+	for spot3 in footprint:
+		if layer.art_pixel(spot3.x, spot3.y).a <= 0.0:
+			erased += 1
+	assert_eq(erased, footprint.size(), "right-click empties the whole footprint")
+	screen._on_group_row_pressed(GolferSkinLayer.NO_GROUP)
+	screen._on_cell_picked(spot)
+	assert_eq(screen._pixel_color, Color("ff3366"), "alt-click picks up the colour already on a pixel")
+
+	# The painted pixel reaches the golfer: the frames are built from the layer.
+	var frames := _library().recolored_frames(screen._skin)
+	assert_eq(frames.get_frame_texture("idle_south", 0).get_image().get_pixel(spot.x, spot.y),
+		Color("ff3366"), "the golfer is drawn with the painted pixel")
+
+
+## The Groups side: the same brush gives the pixels it covers to the selected
+## Re-color Group.
+func test_the_group_brush_gives_a_footprint_of_pixels_to_the_selected_group() -> void:
+	var screen := _studio()
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
+	var layer := screen._skin.layer(screen._current_key())
+	var cap := int(screen._skin.group_by_name("Cap").get("id"))
+	screen._on_group_row_pressed(cap)
+	assert_eq(screen._active_group, cap, "the group list selects what the brush gives pixels to")
+
+	var spot := Vector2i(24, 21)
+	screen._on_brush_size_selected(EditGolferSkinsScreen.BRUSH_SIZES.find(3))
+	screen._on_cell_painted(spot)
+	for covered in layer.brush_cells(spot.x, spot.y, 3):
+		assert_eq(layer.get_cell(covered.x, covered.y), cap, "%s belongs to the Cap group" % covered)
+	assert_false(layer.has_art(), "grouping pixels does not touch the artwork")
+
+	# Right-click frees the footprint again.
+	screen._on_cell_erased(spot)
+	for covered in layer.brush_cells(spot.x, spot.y, 3):
+		assert_eq(layer.get_cell(covered.x, covered.y), GolferSkinLayer.NO_GROUP,
+			"%s is free again" % covered)
 
 
 func test_groups_can_be_created_renamed_and_deleted_in_the_studio() -> void:
@@ -345,14 +464,17 @@ func test_the_frames_strip_follows_the_animation_and_direction_pickers() -> void
 	assert_eq(screen._canvas.layer, screen._skin.layer("idle/north/frame_002"))
 
 
-func test_the_canvas_switches_between_the_recolored_sprite_and_the_group_wash() -> void:
+func test_the_canvas_switches_between_the_artwork_and_the_recolored_sprite() -> void:
 	var screen := _studio()
-	assert_true(screen._canvas.show_recolor)
-	screen._on_recolor_toggled(false)
-	assert_false(screen._canvas.show_recolor, "The canvas can show the artwork under the group wash")
-	assert_false(screen._show_recolor)
+	assert_false(screen._canvas.show_recolor, "Pixels mode paints the artwork itself, so that is what shows")
+	screen._on_recolor_toggled(true)
+	assert_true(screen._canvas.show_recolor, "and the Re-coloured switch previews how the golfer is drawn")
+	assert_true(screen._show_recolor)
 	screen._on_grid_toggled(false)
 	assert_false(screen._canvas.show_grid)
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
+	assert_false(screen._canvas.show_recolor, "the Groups side always shows the artwork under its washes")
+	assert_false(screen._canvas.show_grid, "and the grid switch is shared, so it stays off")
 
 
 func test_the_layout_breakpoints_cover_the_three_arrangements() -> void:

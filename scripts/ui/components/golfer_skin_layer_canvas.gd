@@ -3,11 +3,15 @@ class_name GolferSkinLayerCanvas
 ## The painting surface of the Edit Golfer Skins screen: one animation sprite
 ## blown up to whole pixels, with its Re-color Layer drawn over it.
 ##
-## Left-click or drag gives the pixel under the pointer to the active Re-color
-## Group, right-click (or shift-click) frees it, and alt-click takes the group
-## the pixel already belongs to. The canvas does not edit anything itself - it
-## reports the pixel and the screen decides - so the same control can be driven
-## by a test without a mouse.
+## Left-click or drag reports the pixel under the pointer to the screen, which
+## paints it: with the Re-color Group the player selected (Groups side) or with
+## the colour and brush size the player picked (Pixels side). Right-click frees
+## the pixel, and alt-click picks up what is already on it. The canvas does not
+## edit anything itself - it reports the pixel and the screen decides - so the
+## same control can be driven by a test without a mouse.
+##
+## The pointer carries a brush footprint (see brush_size), drawn as an outline
+## so the player sees what a click will reach before making it.
 ##
 ## Two views: "Re-color" shows the sprite the way the golfer is drawn with the
 ## skin's colours, and "Groups" shows the plain artwork under a wash of every
@@ -37,6 +41,8 @@ var layer: GolferSkinLayer = null
 var group_colors: Dictionary = {}
 ## The group a left-click paints with (0 frees the pixel).
 var active_group: int = 0
+## How many sprite pixels across the brush is (1 = a single pixel).
+var brush_size: int = 1
 ## Draw the re-coloured sprite (true) or the artwork under group washes.
 var show_recolor: bool = true
 var show_grid: bool = true
@@ -150,8 +156,9 @@ func _draw() -> void:
 		_draw_grid(rect, cell)
 	draw_rect(rect, BORDER, false, 1.0)
 	if layer != null and hover_cell.x >= 0:
-		draw_rect(Rect2(rect.position + Vector2(hover_cell) * cell, Vector2(cell, cell)),
-			HOVER_LINE, false, 2.0)
+		for spot in brush_cells(hover_cell):
+			draw_rect(Rect2(rect.position + Vector2(spot) * cell, Vector2(cell, cell)),
+				HOVER_LINE, false, 2.0)
 
 
 func _draw_checkerboard(rect: Rect2) -> void:
@@ -188,6 +195,13 @@ func _draw_groups(rect: Rect2, cell: float) -> void:
 				alpha = 0.85 if group_id == active_group else 0.45
 			draw_rect(Rect2(rect.position + Vector2(x, y) * cell, Vector2(cell, cell)),
 				Color(color.r, color.g, color.b, alpha), true)
+
+
+## The pixels a click at this cell reaches (see brush_size).
+func brush_cells(cell: Vector2i) -> Array[Vector2i]:
+	if layer != null:
+		return layer.brush_cells(cell.x, cell.y, brush_size)
+	return [cell] as Array[Vector2i]
 
 
 func _draw_grid(rect: Rect2, cell: float) -> void:
