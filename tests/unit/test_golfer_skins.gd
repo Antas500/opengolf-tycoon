@@ -320,26 +320,23 @@ func _count_files(path: String) -> int:
 # THE PLAYER'S OWN GOLFER
 # =============================================================================
 
-func test_profile_colors_take_over_the_groups_the_profile_names() -> void:
+## A group called Shirt, Pants, Cap, Hair or Skin is the one the player's own
+## appearance has a field for; the Edit Player page writes a colour picked for
+## one of them back to the profile (see PlayerRoundManager).
+func test_group_names_map_onto_the_profile_appearance() -> void:
+	assert_eq(GolferSkin.profile_key_for_group("Shirt"), "shirt_color")
+	assert_eq(GolferSkin.profile_key_for_group("pants"), "pants_color")
+	assert_eq(GolferSkin.profile_key_for_group(" Cap "), "cap_color")
+	assert_eq(GolferSkin.profile_key_for_group("Hair"), "hair_color")
+	assert_eq(GolferSkin.profile_key_for_group("Skin"), "skin_tone")
+	assert_eq(GolferSkin.profile_key_for_group("Trim"), "", "a group of the player's own names no field")
+	assert_eq(GolferSkin.profile_key_for_group(""), "")
+
 	var profile := PlayerGolferProfile.new()
-	profile.appearance = {"shirt_color": "2878d0", "pants_color": "2e9f55",
-		"cap_color": "ecd247", "hair_color": "b34725", "skin_tone": "76c4a1"}
-	var overrides := GolferSkin.overrides_for_profile(profile)
-	assert_eq(overrides.size(), 5)
-	assert_eq(overrides["shirt"], Color("2878d0"))
-	assert_eq(overrides["skin"], Color("76c4a1"), "The skin tone is the skin group's colour")
-
-	var skin := _test_skin()
-	var shirt := int(skin.group_by_name("Shirt").get("id"))
-	var cap := int(skin.group_by_name("Cap").get("id"))
-	assert_eq(skin.color_for_group(shirt, overrides), Color("2878d0"))
-	assert_eq(skin.color_for_group(cap, overrides), Color("ecd247"))
-	assert_eq(skin.color_for_group(shirt), skin.group_by_id(shirt).get("color"),
-		"Without a profile the skin's own colour stands")
-
-	var custom := skin.create_group("Trim")
-	assert_eq(skin.color_for_group(custom, overrides), skin.group_by_id(custom).get("color"),
-		"A group the profile does not name keeps its own colour")
+	profile.appearance = {"shirt_color": "2878d0", "skin_tone": "76c4a1"}
+	assert_eq(GolferSkin.profile_color(profile, "Shirt"), Color("2878d0"))
+	assert_eq(GolferSkin.profile_color(profile, "Skin"), Color("76c4a1"))
+	assert_eq(GolferSkin.profile_color(null, "Shirt"), Color.WHITE)
 
 
 func test_a_recorded_skin_recolors_one_sprite_through_its_layers() -> void:
@@ -625,31 +622,52 @@ func test_saving_a_skin_redresses_the_golfers_already_on_the_course() -> void:
 	assert_gt(restored.r, restored.g, "and a revert puts the old colour back")
 
 
-func test_the_owners_profile_colours_are_drawn_through_the_skins_groups() -> void:
+## The owner's own golfer wears the skin they chose, in the colours that skin
+## carries - the Edit Player page and the Edit Golfer Skins screen both edit
+## those, and that is what the course draws.
+func test_the_owner_wears_the_colours_of_the_skin_they_chose() -> void:
+	# The golfer asks GolferSkins (the autoload) which skin to wear, so point that
+	# at the test folder for the length of the test.
+	var previous_library := GolferSkins.library
+	var library := _library()
+	GolferSkins.library = library
+	var mine := library.duplicate_skin(library.get_skin("casual"), "Sunday Best")
+	var shirt := int(mine.group_by_name("Shirt").get("id"))
+	assert_true(mine.set_group_color(shirt, Color("00ff00")))
+	assert_true(library.save_skin(mine))
+
 	var golfer: Golfer = add_child_autofree(load("res://scenes/entities/golfer.tscn").instantiate())
 	var profile := PlayerGolferProfile.new()
 	profile.appearance = {"shirt_color": "2878d0", "pants_color": "2e9f55",
 		"cap_color": "ecd247", "hair_color": "b34725", "skin_tone": "76c4a1"}
+	var previous := GameManager.player_skin_id
+	GameManager.player_skin_id = mine.id
+	# The owner's golfer carries the profile (that is what makes it the owner's),
+	# and is dressed in the chosen skin (see PlayerRoundManager._start_embedded).
+	golfer.player_profile = profile
 	golfer.apply_player_appearance(profile)
 	await get_tree().process_frame
-	assert_true(golfer._use_sprites, "The owner keeps the pixel renderer")
-	var image := golfer.sprite_node().sprite_frames.get_frame_texture("idle_south", 0).get_image()
-	var shirt := image.get_pixel(24, 21)
-	var cap := image.get_pixel(24, 9)
-	var skin := image.get_pixel(24, 15)
-	var pants := image.get_pixel(24, 31)
-	assert_gt(shirt.b, shirt.r, "The Shirt group takes the selected blue")
-	assert_gt(cap.r, cap.b, "The Cap group takes the selected yellow")
-	assert_gt(skin.g, skin.r, "The Skin group takes its selected tone")
-	assert_gt(pants.g, pants.r, "The Pants group takes its selected green")
 
-	# A group the profile does not name keeps the skin's own colour.
-	var custom := golfer.skin().create_group("Trim")
-	golfer.skin().set_group_shade(custom, 1.0)
-	golfer.skin().set_group_color(custom, Color("ff00ff"))
-	var key := GolferSkin.layer_key("idle", "south", 0)
+	assert_true(golfer._use_sprites, "The owner keeps the pixel renderer")
+	assert_eq(golfer.skin().id, mine.id, "in the skin they picked")
+	var image := golfer.sprite_node().sprite_frames.get_frame_texture("idle_south", 0) \
+		.get_image()
+	var shirt_pixel := image.get_pixel(24, 21)
+	assert_gt(shirt_pixel.g, shirt_pixel.r, "and the shirt takes the skin's green, not the profile's blue")
+	assert_gt(shirt_pixel.g, shirt_pixel.b, "the blue in the profile does not win")
+
+	# A group of the player's own is drawn in its own colour too.
+	var custom := mine.create_group("Trim")
+	assert_true(mine.set_group_color(custom, Color("ff00ff")))
+	assert_true(mine.set_group_shade(custom, 1.0))
 	var cell := Vector2i(23, 20)
-	golfer.skin().layer(key).set_cell(cell.x, cell.y, custom)
-	var overrides := GolferSkin.overrides_for_profile(profile)
-	assert_eq(golfer.skin().color_for_group(custom, overrides), Color("ff00ff"),
-		"The profile only overrides the groups it names")
+	mine.layer(GolferSkin.layer_key("idle", "south", 0)).set_cell(cell.x, cell.y, custom)
+	mine.mark_layer_dirty(GolferSkin.layer_key("idle", "south", 0))
+	library.invalidate(mine.id)
+	golfer.refresh_skin_sprites()
+	var trimmed := golfer.sprite_node().sprite_frames.get_frame_texture("idle_south", 0) \
+		.get_image().get_pixelv(cell)
+	assert_gt(trimmed.r, trimmed.g, "A group the profile never heard of is painted by the skin")
+
+	GameManager.player_skin_id = previous
+	GolferSkins.library = previous_library

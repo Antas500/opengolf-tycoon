@@ -347,12 +347,12 @@ Four tier characters were not drawn; two were (**Beginner** and **Casual**), and
 everything the spec asked the sprite folders to do is now driven by **Golfer
 Skins** rather than by a hard-coded tier → folder table:
 
-- **A skin** (`scripts/systems/golfer_skin.gd`) is a sprite set plus the
-  **Re-color Groups** it is painted with, and the tiers that wear it
-  (`worn_by`). Only `beginner` and `casual` art exists, so serious and pro
-  visitors wear whatever the player dresses them in - the Casual skin by
-  default - and no visitor ever falls back to the polygon stick figure unless a
-  skin folder has gone missing.
+- **A skin** (`scripts/systems/golfer_skin.gd`) names the sprite set it is
+  painted over, carries the **Re-color Groups** and their colours, and lists
+  the tiers that wear it (`worn_by`). Only `beginner` and `casual` art exists,
+  so serious and pro visitors wear whatever the player dresses them in - the
+  Casual skin by default - and no visitor ever falls back to the polygon stick
+  figure unless a skin folder has gone missing.
 - **Re-color Layers** (`golfer_skin_layer.gd`): one grid per animation sprite,
   each pixel belonging to a group or to none. Grouped pixels are drawn in the
   group's colour with the artwork's own shading (the group's `shade` is the
@@ -367,16 +367,20 @@ Skins** rather than by a hard-coded tier → folder table:
   until it is reverted.
 - **Edit Golfer Skins** (`scripts/ui/edit_golfer_skins_screen.gd`), opened from
   the title screen: pick a skin, paint its layers with the group palette
-  (left-click paints, right-click frees, alt-click picks), create/rename/
-  re-colour/delete groups, change the name, sprite set and tiers, **Save
-  Skins** to write it all out, **Wear This** to dress the player's own golfer,
-  Duplicate/Revert/Delete to manage a skin. The owner's profile colours
-  (`PlayerGolferProfile.COLORS`) still override the groups of the same name, so
-  the player's own shirt/cap/hair/skin choices keep winning on their golfer.
+  (left-click paints, right-click frees, alt-click picks), switch between
+  editing the sprite's **Pixels** and its **Re-color Groups** (in Groups mode a
+  click on the canvas selects the group under the pixel), create/rename/
+  re-colour/delete groups, change the name and tiers, **Save Skins** to write
+  it all out, **Wear This** to dress the player's own golfer,
+  Duplicate/Revert/Delete to manage a skin. The skin owns its colours, so the
+  palette of a group called Shirt/Pants/Cap/Hair/Skin is the owner's
+  shirt/pants/cap/hair/skin choice (`GolferSkin.profile_key_for_group` keeps
+  `PlayerGolferProfile.COLORS` in step), and a group of the player's own is
+  drawn in its own colour with no profile field behind it.
 - **The fourth character is still open**: drawing `serious` and `pro` art sets
-  needs nothing but the folders (a new sprite set shows up in the studio's
-  Sprite set picker and gets its own layer files), and the tier → skin table
-  is data (`worn_by`), not code.
+  needs nothing but the folders (a sprite set is named by the skin that was
+  painted over it - `sprite_id`, with its own layer files - and the tier → skin
+  table is data (`worn_by`), not code).
 
 ---
 

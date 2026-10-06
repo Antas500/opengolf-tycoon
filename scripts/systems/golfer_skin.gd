@@ -440,20 +440,32 @@ func effective_colors(overrides: Dictionary = {}) -> Dictionary:
 
 
 ## The owner profile's colours as group-name overrides.
-static func overrides_for_profile(profile: PlayerGolferProfile) -> Dictionary:
-	var overrides := {}
+## The PlayerGolferProfile appearance key a group's name stands for, or "" for
+## a group the player's own appearance has no field for. Shirt/Pants/Cap/Hair/
+## Skin map onto the profile's five colours, so a colour picked for one of those
+## groups can be written back to the player's own appearance (see
+## PlayerRoundManager's Edit Player page).
+static func profile_key_for_group(group_name: String) -> String:
+	var role := group_name.strip_edges().to_lower()
+	if role.is_empty() or not ROLE_NAMES.has(role):
+		return ""
+	return "skin_tone" if role == "skin" else role + "_color"
+
+
+## The colour the profile's appearance gives one of those roles, or Color.WHITE
+## with `found` false when it names none.
+static func profile_color(profile: PlayerGolferProfile, group_name: String) -> Color:
 	if profile == null:
-		return overrides
-	for role in ROLE_NAMES:
-		var key := "skin_tone" if role == "skin" else role + "_color"
-		var raw: Variant = profile.appearance.get(key, null)
-		if raw == null:
-			continue
-		if raw is String:
-			overrides[role] = Color.from_string(str(raw), Color.WHITE)
-		elif raw is Color:
-			overrides[role] = raw
-	return overrides
+		return Color.WHITE
+	var key := profile_key_for_group(group_name)
+	if key.is_empty():
+		return Color.WHITE
+	var raw: Variant = profile.appearance.get(key, null)
+	if raw is String:
+		return Color.from_string(str(raw), Color.WHITE)
+	if raw is Color:
+		return raw
+	return Color.WHITE
 
 
 ## A re-coloured copy of one sprite image. Returns the image untouched when the

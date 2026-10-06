@@ -233,8 +233,8 @@ var _group_badge: Label = null
 ## Sprite-based rendering (replaces polygon visuals when available)
 var _animated_sprite: AnimatedSprite2D = null
 ## The Golfer Skin this golfer is drawn in, and the untouched artwork of that
-## skin. Unmodified art is retained so profile changes always re-color from the
-## original palette rather than accumulating tinting across edits.
+## skin (kept so a re-color always starts from the art as it ships rather than
+## from the last colours drawn).
 var _skin: GolferSkin = null
 var _base_sprite_frames: SpriteFrames = null
 var _use_sprites: bool = false
@@ -379,7 +379,7 @@ func _setup_sprite_animations() -> bool:
 	var worn := GolferSkins.skin_for_golfer(self)
 	if worn == null:
 		return false
-	var frames := GolferSkins.library.recolored_frames(worn, GolferSkins.overrides_for_golfer(self))
+	var frames := GolferSkins.library.recolored_frames(worn)
 	if frames == null or frames.get_animation_names().is_empty():
 		return false
 	_skin = worn
@@ -545,32 +545,30 @@ func _randomize_appearance() -> void:
 
 ## Apply appearance colors to visual components.
 ##
-## The owner uses the same pixel-art frames as visiting golfers. The profile's
-## colours are applied through the Re-color Groups of the skin the owner wears
-## whose names match them - Shirt, Pants, Cap, Hair and Skin (see GolferSkin) -
-## so a profile change re-colours the sprite it is drawn with instead of
-## switching the owner back to the older polygon model.
+## The owner uses the same pixel-art frames as visiting golfers - the colours
+## of the Golfer Skin they wear. The profile still drives the polygon golfer
+## underneath (the fall-back when a skin has no art) and records the owner's
+## Shirt/Pants/Cap/Hair/Skin choices; the Re-color Groups of the same names are
+## those choices on the sprite (see GolferSkin.profile_key_for_group).
 func apply_player_appearance(profile: PlayerGolferProfile) -> void:
 	if profile == null:
 		return
 	for key in PlayerGolferProfile.COLORS:
 		set(key, Color(profile.appearance.get(key, "ffffff")))
 	_apply_appearance()
-	refresh_skin_sprites(profile)
+	refresh_skin_sprites()
 
 ## Dress the golfer in its Golfer Skin again: the frames of that skin, with the
-## owner's profile colours over the groups they name. The frames themselves are
-## shared between every golfer wearing the same skin (see GolferSkinLibrary), so
-## this is a lookup rather than a re-color. `profile` is the appearance to draw
-## (the golfer's own when it is left out).
-func refresh_skin_sprites(profile: PlayerGolferProfile = null) -> void:
+## colours the skin carries (see GolferSkin). The frames themselves are shared
+## between every golfer wearing the same skin (see GolferSkinLibrary), so this is
+## a lookup rather than a re-color.
+func refresh_skin_sprites() -> void:
 	if _animated_sprite == null:
 		return
 	var worn := GolferSkins.skin_for_golfer(self)
 	if worn == null:
 		return
-	var overrides := GolferSkin.overrides_for_profile(profile if profile != null else player_profile)
-	var frames := GolferSkins.library.recolored_frames(worn, overrides)
+	var frames := GolferSkins.library.recolored_frames(worn)
 	if frames == null or frames.get_animation_names().is_empty():
 		return
 	_skin = worn

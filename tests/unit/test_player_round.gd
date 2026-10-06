@@ -64,6 +64,27 @@ func after_each() -> void:
 	GameManager.set_mode(saved.mode)
 	GameManager.set_speed(saved.speed)
 
+## A folder of the test's own for the skins a test writes out.
+const TEST_SKIN_ROOT := "user://test_player_round_skins"
+
+
+## Remove a folder under user:// and everything in it.
+func _remove_tree(path: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if dir.current_is_dir():
+			_remove_tree(path.path_join(entry))
+		else:
+			DirAccess.remove_absolute(path.path_join(entry))
+		entry = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(path)
+
+
 func _start(kind: int) -> void:
 	rounds.open_setup()
 	for i in 10:
@@ -535,6 +556,86 @@ func _assert_shelf_fits(shelf: HBoxContainer) -> void:
 		if control.is_visible_in_tree() and not control is Popup:
 			assert_lte(control.get_global_rect().end.y, scroll.get_global_rect().position.y + available + 1,
 				"%s stays inside the shelf" % control.get_class())
+
+## The Edit Player page edits the Golfer Skin the owner wears and the colour of
+## each Re-color Group it carries - including while the round is running, since
+## it only ever changes how a golfer is drawn.
+func test_edit_player_page_changes_the_golfer_skin_and_its_group_colours() -> void:
+	# Editing a group colour writes the skin out, so point the library the page
+	# reads at a folder of the test's own: the player's skins are left alone.
+	var previous_library := GolferSkins.library
+	var previous_skin_id := GameManager.player_skin_id
+	_remove_tree(TEST_SKIN_ROOT)
+	GolferSkins.library = GolferSkinLibrary.new(GolferSkinLibrary.BUILT_IN_ROOT, TEST_SKIN_ROOT)
+	var toolbar := _embedded_toolbar()
+	var tab := toolbar.player_tab
+	tab.select(PlayerTab.PAGE_EDIT)
+	await wait_frames(5)
+
+	assert_not_null(rounds._skin_picker, "The Edit Player page picks a Golfer Skin")
+	assert_gt(rounds._skin_picker.item_count, 0, "from the skins the game knows")
+	assert_not_null(rounds._skin_preview, "and previews the golfer wearing it")
+	assert_eq(rounds._skin_preview.skin().id, GolferSkins.player_skin().id)
+
+	# Pick a different skin: the owner's golfer is dressed in it at once.
+	var swapped := -1
+	for index in rounds._skin_picker.item_count:
+		if str(rounds._skin_picker.get_item_metadata(index)) != GolferSkins.player_skin().id:
+			swapped = index
+			break
+	if swapped == -1:
+		GameManager.player_skin_id = previous_skin_id
+		GolferSkins.library = previous_library
+		_remove_tree(TEST_SKIN_ROOT)
+		pending("only one Golfer Skin on this machine - nothing to switch to")
+		return
+	var wanted := str(rounds._skin_picker.get_item_metadata(swapped))
+	rounds._skin_picker.item_selected.emit(swapped)
+	assert_eq(GameManager.player_skin_id, wanted, "the picker sets the skin the owner wears")
+	assert_eq(rounds._skin_preview.skin().id, wanted, "the preview follows")
+
+	# One colour button per Re-color Group of that skin, each writing the skin.
+	var swatches := rounds._skin_controls.find_children("SkinGroupColor*", "ColorPickerButton", true, false)
+	var worn := GolferSkins.player_skin()
+	assert_eq(swatches.size(), worn.group_count(),
+		"a colour button per Re-color Group of the chosen skin")
+	var group_id := int(worn.group_list()[0].get("id", 0))
+	var before := GolferSkins.skins_changed.get_connections().size()
+	rounds._on_skin_group_color_changed(Color("00ff00"), group_id)
+	assert_eq(worn.group_by_id(group_id).get("color"), Color("00ff00"),
+		"the swatch re-colours the group")
+	assert_eq(GolferSkins.skins_changed.get_connections().size(), before,
+		"and tells the course to redraw the golfers wearing it")
+	# The profile keeps up for the groups it names, so Save player stays true.
+	var key := GolferSkin.profile_key_for_group(str(worn.group_by_id(group_id).get("name", "")))
+	if not key.is_empty():
+		assert_eq(rounds.draft.appearance.get(key), "00ff00",
+			"the profile's own colour for %s follows the skin" % key)
+		assert_true(worn.is_user_skin, "the skin became the player's own, so the shipped one is untouched")
+
+	GameManager.player_skin_id = previous_skin_id
+	GolferSkins.set_player_skin(previous_library.player_skin(previous_skin_id))
+	GolferSkins.library = previous_library
+	_remove_tree(TEST_SKIN_ROOT)
+
+
+## Everything on the Edit Player page is locked during a round except the Golfer
+## Skin controls, which the player is meant to reach while playing.
+func test_the_round_locks_the_page_but_not_the_skin_controls() -> void:
+	_embedded_toolbar()
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+	await wait_frames(2)
+	assert_true(rounds.active, "the round is running")
+	assert_true(rounds.name_edit.editable == false, "the name field is locked while playing")
+	assert_false(rounds._skin_picker.disabled, "the Golfer Skin picker stays live")
+	for swatch in rounds._skin_controls.find_children("SkinGroupColor*", "ColorPickerButton", true, false):
+		assert_false((swatch as ColorPickerButton).disabled, "and so do the group colours")
+	rounds.leave_round()
+
 
 func test_embedded_pages_fit_toolbar_and_overflow_horizontally() -> void:
 	var toolbar := _embedded_toolbar()

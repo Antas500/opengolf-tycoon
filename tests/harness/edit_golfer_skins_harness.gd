@@ -8,8 +8,9 @@ extends Node
 ## controls where the player can reach them, and comes back to the menu.
 ##
 ## Where the unit tests check what painting does, this checks that it can be
-## done at all: a canvas a few pixels wide, or a Save button pushed off the
-## window, would pass every unit test and still be useless.
+## done at all: a canvas a few pixels wide, a Save button pushed off the window
+## or hidden under another control would pass every unit test and still be
+## useless. It hit-tests the buttons the way a click would (see _topmost).
 ##
 ## Prints one PASS/FAIL line per check and exits non-zero on any failure.
 
@@ -21,6 +22,8 @@ const HARNESS_ROOT := "user://harness_golfer_skins"
 
 var main: Node
 var failures := 0
+## The messages the studio's confirmation dialog was asked to show.
+var _prompts: PackedStringArray = PackedStringArray()
 
 func _check(ok: bool, description: String) -> void:
 	if not ok:
@@ -34,6 +37,24 @@ func _frames(count: int) -> void:
 func _set_window(width: int, height: int) -> void:
 	get_window().size = Vector2i(width, height)
 	await _frames(4)
+
+## Click a control with a real mouse event, exactly as the player would: the
+## viewport does the hit-testing, so this only reaches the button when nothing
+## is drawn over it.
+func _click(control: Control) -> void:
+	if control == null:
+		_check(false, "a control to click exists")
+		return
+	var at := control.get_global_rect().get_center()
+	for pressed in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = pressed
+		event.position = at
+		event.global_position = at
+		get_viewport().push_input(event)
+		await _frames(1)
+	await _frames(1)
 
 func _ready() -> void:
 	_run.call_deferred()
@@ -67,8 +88,10 @@ func _run() -> void:
 	# ------------------------------------------------------------------
 	_check(screen._layout_mode == EditGolferSkinsScreen.Layout.WIDE,
 		"1600x1000 uses the wide arrangement (got %d)" % screen._layout_mode)
-	_check_studio(screen, 1600.0, 1000.0)
+	await _check_studio(screen, 1600.0, 1000.0)
 	_check_paint(screen, "desktop")
+	await _check_mode_switch(screen)
+	await _check_groups(screen)
 	_check_open_skin(screen)
 
 	# ------------------------------------------------------------------
@@ -78,7 +101,7 @@ func _run() -> void:
 	await _frames(4)
 	_check(screen._layout_mode == EditGolferSkinsScreen.Layout.TABLET,
 		"1024x768 uses the tablet arrangement (got %d)" % screen._layout_mode)
-	_check_studio(screen, 1024.0, 768.0)
+	await _check_studio(screen, 1024.0, 768.0)
 	_check_paint(screen, "tablet")
 
 	# ------------------------------------------------------------------
@@ -88,7 +111,7 @@ func _run() -> void:
 	await _frames(4)
 	_check(screen._layout_mode == EditGolferSkinsScreen.Layout.PHONE,
 		"390x844 uses the phone arrangement (got %d)" % screen._layout_mode)
-	_check_studio(screen, 390.0, 844.0)
+	await _check_studio(screen, 390.0, 844.0)
 	_check(not _overflows_horizontally(screen),
 		"nothing in the phone column is wider than the window")
 	var scroll := screen.get_node_or_null("Scroll")
@@ -110,7 +133,9 @@ func _run() -> void:
 	var skin: GolferSkin = screen._skin
 	screen._on_cell_painted(_free_cell(screen))
 	_check(screen._dirty, "painting leaves the skin unsaved")
-	screen._on_save_pressed()
+	var save_button := _find_button(screen, "SaveSkinsButton")
+	_check(save_button != null and not save_button.disabled, "Save Skins is live with changes to write")
+	await _click(save_button)
 	_check(not screen._dirty, "Save writes the skin out (status: %s)" % screen._status)
 	_check(screen.library.has_skin(skin.id), "the studio's skin is in the library")
 	_check(screen._skin.dir.begins_with(HARNESS_ROOT),
@@ -129,7 +154,7 @@ func _run() -> void:
 	var back := _find_button(screen, "BackButton")
 	_check(back != null, "the studio has a Back action")
 	if back != null:
-		back.emit_signal("pressed")
+		await _click(back)
 	await _frames(4)
 	_check(main.get_node_or_null("UI/HUD/EditGolferSkinsScreen") == null,
 		"Back closes the studio")
@@ -184,6 +209,33 @@ func _check_studio(screen: EditGolferSkinsScreen, width: float, height: float) -
 	_check(screen._save_button.get_global_rect().size.x >= 40.0, "Save is a real button")
 	_check(screen._canvas.active_group > 0, "a group is selected to paint with")
 
+	# The buttons the player cannot do without have to be the control a click
+	# lands on - not just to exist and to sit inside the window.
+	var tag := "%dx%d" % [int(width), int(height)]
+	var save := _find_button(screen, "SaveSkinsButton")
+	await _check_reachable(screen, _find_button(screen, "BackButton"), "Back", tag)
+	_check(save != null and save.is_visible_in_tree(), "%s: Save Skins is on the screen" % tag)
+	await _check_reachable(screen, _find_button(screen, "PixelsModeButton"), "the Pixels switch", tag)
+	await _check_reachable(screen, _find_button(screen, "GroupsModeButton"), "the Groups switch", tag)
+	# The Colour picker and the group buttons live in the other half of the
+	# studio: reach for them there, then come back to Pixels. The layout needs a
+	# frame to settle after the switch.
+	var mode := screen._mode
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
+	await _frames(2)
+	await _check_reachable(screen, screen._group_color_button, "the Colour picker", tag)
+	await _check_reachable(screen, _find_button(screen, "NewGroupButton"), "New Group", tag)
+	screen._set_mode(mode)
+	await _frames(2)
+	# The Sprite Set picker was removed: no picker, no row for it.
+	_check(screen.find_children("SpritePicker*", "", true, false).is_empty(),
+		"%s: there is no Sprite Set picker" % tag)
+	var sprite_labels := 0
+	for label in screen.find_children("*", "Label", true, false):
+		if (label as Label).text.to_lower().contains("sprite set"):
+			sprite_labels += 1
+	_check(sprite_labels == 0, "%s: and no Sprite Set row" % tag)
+
 
 ## Painting through the screen at the size the window gives the canvas.
 func _check_paint(screen: EditGolferSkinsScreen, tag: String) -> void:
@@ -220,6 +272,101 @@ func _check_paint(screen: EditGolferSkinsScreen, tag: String) -> void:
 	var painted := screen._canvas.preview_image.get_pixel(marked.x, marked.y)
 	_check(painted.g > painted.r and painted.g > painted.b,
 		"%s: the re-coloured sprite shows the group's new colour" % tag)
+
+
+## Pixels mode and Groups mode are two sides of the same studio: the pixel
+## controls give way to the group editor, the canvas stays up to show and pick
+## the groups, and the switch goes back and forth.
+func _check_mode_switch(screen: EditGolferSkinsScreen) -> void:
+	screen._set_mode(EditGolferSkinsScreen.Mode.PIXELS)
+	_check(screen._pixel_block.visible and not screen._group_block.visible,
+		"Pixels mode shows the painting controls and hides the group editor")
+	_check(screen._recolor_check.visible and screen._fill_check.visible,
+		"with the Re-coloured and Fill switches on hand")
+	_check(screen._groups_mode_button != null and not screen._groups_mode_button.button_pressed,
+		"and the Pixels switch lit")
+
+	await _click(screen._groups_mode_button)
+	_check(screen._mode == EditGolferSkinsScreen.Mode.GROUPS,
+		"clicking the Groups switch changes mode")
+	_check(screen._group_block.visible and not screen._pixel_block.visible,
+		"Groups mode shows the group editor and hides the painting controls")
+	_check(not screen._recolor_check.visible and not screen._fill_check.visible,
+		"the painting switches stand down")
+	_check(screen._group_rows.get_child_count() == screen._skin.group_count(),
+		"every Re-color Group still has a row")
+	_check(not screen._canvas.show_recolor,
+		"the canvas drops the re-colour wash so the groups are read off the artwork")
+
+	# A click on the sprite in Groups mode picks the group the pixel belongs to,
+	# which is how the player reads which group a part of the sprite is.
+	var picked := _cell_of_another_group(screen, screen._canvas.active_group)
+	if picked.x >= 0:
+		var owned_by := screen._skin.layer(screen._current_key()).get_cell(picked.x, picked.y)
+		screen._on_cell_picked(picked)
+		_check(screen._canvas.active_group == owned_by,
+			"clicking the sprite selects the group under the pixel")
+		_check(screen._group_rows.get_child_count() > 0, "and the row list follows the selection")
+
+	await _click(screen._pixels_mode_button)
+	_check(screen._mode == EditGolferSkinsScreen.Mode.PIXELS, "clicking Pixels comes back")
+	_check(screen._pixel_block.visible and screen._canvas.show_recolor,
+		"and the painting surface is back to the re-coloured sprite")
+
+
+## The Colour button opens a picker (it is a ColorPickerButton, which brings its
+## own popup) and the colour is written to the group of the open skin.
+func _check_groups(screen: EditGolferSkinsScreen) -> void:
+	_check(screen._group_color_button is ColorPickerButton,
+		"the Colour button is a picker that opens its own popup")
+	screen._set_mode(EditGolferSkinsScreen.Mode.GROUPS)
+	var group := screen._active_group
+	if group == GolferSkinLayer.NO_GROUP:
+		for entry in screen._skin.group_list():
+			group = int(entry.get("id", 0))
+			break
+	_check(group != GolferSkinLayer.NO_GROUP, "a Re-color Group is selected to edit")
+	if group == GolferSkinLayer.NO_GROUP:
+		return
+	screen._on_group_row_pressed(group)
+	# Clicking Colour opens a real picker (the old ColorPicker.popup() call was
+	# what broke this), and the colour it hands back reaches the group.
+	await _click(screen._group_color_button)
+	var picker := (screen._group_color_button as ColorPickerButton).get_popup()
+	_check(picker != null and picker.visible, "clicking Colour opens the colour picker")
+	if picker != null:
+		picker.hide()
+		await _frames(1)
+	var wanted := Color(0.2, 0.6, 0.9)
+	screen._on_group_color_chosen(wanted)
+	_check(screen._skin.group_by_id(group).get("color").is_equal_approx(wanted),
+		"picking a colour re-colours the group")
+	_check(screen._dirty, "and leaves the skin to be saved")
+	var swatch := screen._group_color_button as ColorPickerButton
+	_check(swatch.color.is_equal_approx(wanted), "and the picker shows the group's colour")
+
+	# New group, rename it, then delete it again: the three group actions.
+	var before := screen._skin.group_count()
+	screen._on_new_group_pressed()
+	_check(screen._skin.group_count() == before + 1, "New Group adds a Re-color Group")
+	var added := screen._skin.group_list()[screen._skin.group_count() - 1]
+	var id := int(added.get("id"))
+	screen._active_group = id
+	screen._on_group_name_submitted("Collars")
+	_check(str(screen._skin.group_by_id(id).get("name")) == "Collars", "the name field renames it")
+	screen._active_group = id
+	# Deleting a group asks first (see _confirm): answer the dialog and check it
+	# warned about the pixels it would free.
+	screen.confirm_callback = func(message: String, _confirm_text: String) -> bool:
+		_prompts.append(message)
+		return true
+	_prompts.clear()
+	screen._on_delete_group_pressed()
+	screen.confirm_callback = Callable()
+	_check(_prompts.size() == 1 and _prompts[0].contains("Collars"),
+		"Delete asks before freeing a group's pixels (got %s)" % str(_prompts))
+	_check(screen._skin.group_by_id(id).is_empty(), "and removes it once confirmed")
+	screen._set_mode(EditGolferSkinsScreen.Mode.PIXELS)
 
 
 ## Opening the shipped skins and the player's own, as the list does.
@@ -297,6 +444,73 @@ func _inside_scroll(node: Node) -> bool:
 			return true
 		parent = parent.get_parent()
 	return false
+
+## True when a click at the button's centre would land on the button (or one of
+## its own children) rather than on something drawn over it. A button below the
+## fold of a scrolling column is reachable: the harness scrolls to it first, the
+## way the player would.
+func _check_reachable(root: Control, button: Button, description: String, tag: String) -> void:
+	if button == null:
+		_check(false, "%s: %s is on the screen" % [tag, description])
+		return
+	_check(button.is_visible_in_tree() and not button.disabled,
+		"%s: %s is enabled and shown" % [tag, description])
+	await _scroll_into_view(button)
+	var rect := button.get_global_rect()
+	var centre := rect.position + rect.size * 0.5
+	var hit := _topmost(root, centre)
+	# _topmost returns "<name>:<class>"; the click reaches the button when the
+	# winner is the button itself or a control inside it (a picker draws its own
+	# swatch, so the hit may be a child of the button).
+	var owner_name := hit.split(":")[0]
+	var landed := owner_name == str(button.name)
+	if not landed and button.is_ancestor_of(_find_node_named(root, owner_name)):
+		landed = true
+	_check(landed, "%s: a click at %s lands on %s (got %s)" % [
+		tag, centre.round(), description, hit])
+
+
+## Put a control inside the window by scrolling every column above it, then give
+## the layout a frame to settle before it is hit-tested.
+func _scroll_into_view(control: Control) -> void:
+	var parent := control.get_parent()
+	while parent != null:
+		if parent is ScrollContainer:
+			(parent as ScrollContainer).ensure_control_visible(control)
+		parent = parent.get_parent()
+	await _frames(2)
+
+
+func _find_node_named(root: Node, wanted: String) -> Node:
+	for node in root.find_children(wanted, "", true, false):
+		return node
+	return null
+
+
+## The topmost Control that would receive a click at this global point, walking
+## the tree in reverse draw order (last child on top) and honouring clipping.
+func _topmost(root: Control, global_point: Vector2) -> String:
+	var clip := root.get_global_rect()
+	var children := root.get_children()
+	for i in range(children.size() - 1, -1, -1):
+		var child := children[i]
+		if not (child is Control) or not child.is_visible_in_tree():
+			continue
+		var control := child as Control
+		var rect: Rect2 = control.get_global_rect()
+		var allowed := clip.intersection(rect) if control.clip_contents else clip
+		if not (allowed.has_point(global_point) and rect.has_point(global_point)):
+			continue
+		var deeper := _topmost(control, global_point)
+		if not deeper.is_empty():
+			return deeper
+		if control.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			return "%s:%s" % [control.name, control.get_class()]
+	if root.get_global_rect().has_point(global_point) \
+			and root.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		return "%s:self" % root.name
+	return ""
+
 
 func _find_button(root: Node, button_name: String) -> Button:
 	for node in root.find_children(button_name, "", true, false):

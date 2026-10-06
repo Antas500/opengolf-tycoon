@@ -51,15 +51,19 @@ Theme selection happens on the main menu before starting a new game. Themes affe
   animation sprite at a time. Every pixel of a sprite can belong to a
   **Re-color Group** - Shirt, Pants, Cap, Hair, Skin, or any group you make,
   rename, re-colour or delete - and grouped pixels are drawn in the group's
-  colour with the artwork's own shading.
+  colour with the artwork's own shading. **Edit** switches between painting the
+  sprite's **Pixels** and editing its **Re-color Groups** - in Groups mode a
+  click on the sprite selects the group that pixel belongs to.
 - Skins are **editable text files**: `skin.txt` for the groups and
   `layers/<animation>/<direction>/frame_NNN.layer.txt` for each sprite's grid,
   so a skin can also be drawn by hand. Save copies a built-in skin into
   `user://golfer_skins` (Revert puts the shipped one back), New Skin starts one
   of your own, and Duplicate copies groups and layers together.
 - Choose which tiers of visiting golfer wear a skin, and press **Wear This** to
-  put it on your own golfer: their profile colours still win for the groups
-  named Shirt, Pants, Cap, Hair and Skin.
+  put it on your own golfer. The skin carries the colours, so re-colouring a
+  group called Shirt, Pants, Cap, Hair or Skin is how you change your golfer's
+  shirt, trousers, cap, hair and skin tone - from the studio, or from the
+  **Edit Player** tab while a round is running.
 
 ### Golfer Simulation
 

@@ -29,6 +29,9 @@ class_name EditGolferSkinsScreen
 signal back_requested()
 
 enum Layout { WIDE, TABLET, PHONE }
+## The two sides of the studio: painting a sprite's pixels, or editing the skin's
+## Re-color Groups. See _set_mode.
+enum Mode { PIXELS, GROUPS }
 
 ## Window widths at which the three arrangements start.
 const WIDE_MIN_WIDTH := 1080.0
@@ -56,7 +59,9 @@ var confirm_callback: Callable = Callable()
 var _skin: GolferSkin = null
 ## Editable copies of the manifest fields, so a rebuild never loses an edit.
 var _skin_name: String = ""
-var _sprite_id: String = ""
+## The artwork a skin is drawn over. Fixed when the skin is made: a skin's layers
+## only mean anything over the sprite set they were painted on.
+var _sprite_id: String = GolferSkinLibrary.DEFAULT_SPRITE_ID
 var _worn_by: Array[int] = []
 ## The group the canvas paints with (NO_GROUP frees pixels).
 var _active_group: int = GolferSkinLayer.NO_GROUP
@@ -69,6 +74,8 @@ var _show_grid: bool = true
 ## Fill gives the whole run of pixels a click lands in to the active group,
 ## rather than that one pixel (see _paint_cell).
 var _fill: bool = false
+## Which side of the studio is open (see Mode).
+var _mode: int = Mode.PIXELS
 var _status: String = ""
 var _error: bool = false
 var _dirty: bool = false
@@ -78,7 +85,6 @@ var _built_size := Vector2.ZERO
 # ── Controls the refreshes talk to ────────────────────────────────────────
 var _skin_list: ItemList = null
 var _skin_name_edit: LineEdit = null
-var _sprite_picker: OptionButton = null
 var _tier_checks: Array[CheckBox] = []
 var _wear_button: Button = null
 var _revert_button: Button = null
@@ -97,6 +103,11 @@ var _frame_strip: HBoxContainer = null
 ## The frame tiles' textures, updated as the sprite is painted.
 var _frame_icons: Array[TextureRect] = []
 var _canvas: GolferSkinLayerCanvas = null
+## The painting side of the studio and the Re-color Group editor it swaps with.
+var _pixel_block: Control = null
+var _group_block: Control = null
+var _pixels_mode_button: Button = null
+var _groups_mode_button: Button = null
 var _recolor_check: CheckBox = null
 var _grid_check: CheckBox = null
 var _fill_check: CheckBox = null
@@ -176,12 +187,17 @@ func _build() -> void:
 		_:
 			_build_phone(page)
 
+	_sync_mode()
 	_refresh_all()
 	_rebuild_preview()
 
 
 
-func _make_page() -> MarginContainer:
+## The scrolling page: the header pinned at its own height on top, the studio
+## and the skin list under it. Deliberately a VBoxContainer: a panel container
+## would stretch the header down the whole window, which would put its buttons
+## (Back, Save) under the studio where they cannot be clicked.
+func _make_page() -> VBoxContainer:
 	var view := _window_size()
 	var pad := int(clampf(view.x * 0.020, 10.0, 28.0))
 	var scroll := ScrollContainer.new()
@@ -200,11 +216,18 @@ func _make_page() -> MarginContainer:
 	scroll.add_child(margin)
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, pad)
-	return margin
+
+	var column := VBoxContainer.new()
+	column.name = "PageColumn"
+	column.add_theme_constant_override("separation", 12)
+	margin.add_child(column)
+	var header := _make_header()
+	header.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	column.add_child(header)
+	return column
 
 
-func _build_wide(page: MarginContainer) -> void:
-	page.add_child(_make_header())
+func _build_wide(page: VBoxContainer) -> void:
 	var row := HBoxContainer.new()
 	row.name = "Columns"
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -218,40 +241,23 @@ func _build_wide(page: MarginContainer) -> void:
 	var skins := _make_skins_panel()
 	skins.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	side.add_child(skins)
-	var groups := _make_groups_panel()
-	groups.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_child(groups)
 	row.add_child(side)
 	row.add_child(_make_studio(true))
 
 
-func _build_tablet(page: MarginContainer) -> void:
-	page.add_child(_make_header())
-	var column := VBoxContainer.new()
-	column.name = "Columns"
-	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", 12)
-	page.add_child(_frame(column))
-	var row := HBoxContainer.new()
-	row.name = "Lists"
-	row.add_theme_constant_override("separation", 12)
-	row.add_child(_make_skins_panel())
-	row.add_child(_make_groups_panel())
-	column.add_child(row)
-	column.add_child(_make_studio(false))
+func _build_tablet(page: VBoxContainer) -> void:
+	# The skin list is a band across the top, the studio gets the whole width
+	# under it, so the canvas stays as large as the tablet allows.
+	var band := _make_skins_panel()
+	band.name = "SkinBand"
+	page.add_child(band)
+	page.add_child(_make_studio(true))
 
 
-func _build_phone(page: MarginContainer) -> void:
-	page.add_child(_make_header())
-	var column := VBoxContainer.new()
-	column.name = "Columns"
-	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", 12)
-	page.add_child(_frame(column))
-	column.add_child(_make_studio(true))
-	column.add_child(_make_groups_panel())
-	column.add_child(_make_skins_panel())
+func _build_phone(page: VBoxContainer) -> void:
+	page.add_child(_make_studio(true))
+	page.add_child(_make_skins_panel())
+
 
 
 ## Keep a wide layout from stretching across a very wide window.
@@ -363,17 +369,6 @@ func _make_skins_panel() -> Control:
 	_skin_name_edit.text_changed.connect(_on_skin_name_changed)
 	column.add_child(_skin_name_edit)
 
-	column.add_child(_make_field_label("Sprite set"))
-	_sprite_picker = OptionButton.new()
-	_sprite_picker.name = "SpritePicker"
-	_sprite_picker.tooltip_text = "The artwork this skin is drawn over"
-	_sprite_picker.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
-	for sprite_id in library.sprite_sets():
-		_sprite_picker.add_item(sprite_id.capitalize())
-		_sprite_picker.set_item_metadata(_sprite_picker.item_count - 1, sprite_id)
-	_sprite_picker.item_selected.connect(_on_sprite_selected)
-	column.add_child(_sprite_picker)
-
 	column.add_child(_make_field_label("Worn by visiting golfers"))
 	var tier_row := HBoxContainer.new()
 	tier_row.name = "TierRow"
@@ -437,8 +432,17 @@ func _make_skins_panel() -> Control:
 # RE-COLOR GROUPS PANEL
 # =============================================================================
 
-func _make_groups_panel() -> Control:
-	var panel := _make_sheet("GroupsSheet")
+## The Re-color Group editor: what the Groups side of the studio shows. The
+## panel keeps its own name so the layout and the tests can find it, but it is a
+## child of the studio rather than a sheet of its own - the mode switch is what
+## brings it on screen.
+func _make_group_editor() -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "GroupsSheet"
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", MenuStyle.flat(
+		MenuStyle.with_alpha(MenuStyle.INSET_BG, 0.55), Color(0, 0, 0, 0), 0, 10, 8, 8, 8))
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 8)
 	panel.add_child(column)
@@ -469,7 +473,7 @@ func _make_groups_panel() -> Control:
 	_group_name_edit = LineEdit.new()
 	_group_name_edit.name = "GroupNameEdit"
 	_group_name_edit.max_length = GolferSkin.MAX_GROUP_NAME_LENGTH
-	_group_name_edit.tooltip_text = "Rename the selected group. Groups called Shirt, Pants, Cap, Hair or Skin also take the colours of the player's own golfer."
+	_group_name_edit.tooltip_text = "Rename the selected group. Shirt, Pants, Cap, Hair and Skin are the names the Edit Player page knows."
 	_group_name_edit.text_submitted.connect(_on_group_name_submitted)
 	_group_name_edit.focus_exited.connect(func(): _on_group_name_submitted(_group_name_edit.text))
 	column.add_child(_group_name_edit)
@@ -477,10 +481,15 @@ func _make_groups_panel() -> Control:
 	var color_row := HBoxContainer.new()
 	color_row.name = "GroupColorRow"
 	color_row.add_theme_constant_override("separation", 8)
-	_group_color_button = _make_button("Colour", "Pick the colour this group is drawn in",
-		UIConstants.COLOR_TEXT, 84)
+	_group_color_button = ColorPickerButton.new()
 	_group_color_button.name = "GroupColorButton"
-	_group_color_button.pressed.connect(_on_group_color_pressed)
+	_group_color_button.text = "Colour"
+	_group_color_button.tooltip_text = "Pick the colour this group is drawn in"
+	_group_color_button.edit_alpha = false
+	_group_color_button.custom_minimum_size = Vector2(96, 32)
+	_group_color_button.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+	_group_color_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_group_color_button.color_changed.connect(_on_group_color_chosen)
 	color_row.add_child(_group_color_button)
 	_group_shade_label = Label.new()
 	_group_shade_label.name = "GroupShade"
@@ -511,6 +520,7 @@ func _make_studio(expand: bool) -> Control:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 8)
 	panel.add_child(column)
+	column.add_child(_make_mode_switch())
 
 	var compact := _layout_mode == Layout.PHONE
 	var header := HBoxContainer.new()
@@ -576,10 +586,20 @@ func _make_studio(expand: bool) -> Control:
 		header.add_child(_fill_check)
 		column.add_child(header)
 
+	# The pixels block holds everything the painting side shows: the strip, the
+	# canvas, the palette and the preview. The elements every mode shows (the
+	# pickers, the canvas) live outside it.
+	var pixels := VBoxContainer.new()
+	pixels.name = "PixelControls"
+	pixels.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pixels.add_theme_constant_override("separation", 8)
+	_pixel_block = pixels
+	column.add_child(pixels)
+
 	_frame_strip = HBoxContainer.new()
 	_frame_strip.name = "FrameStrip"
 	_frame_strip.add_theme_constant_override("separation", 6)
-	column.add_child(_frame_strip)
+	pixels.add_child(_frame_strip)
 
 	_canvas = GolferSkinLayerCanvas.new()
 	_canvas.name = "LayerCanvas"
@@ -616,14 +636,14 @@ func _make_studio(expand: bool) -> Control:
 		# The palette keeps a row of its own on a phone, with the frame and the
 		# play button on the next one down.
 		palette_row.add_child(_spacer())
-		column.add_child(palette_row)
+		pixels.add_child(palette_row)
 		var controls := HBoxContainer.new()
 		controls.name = "StudioControls"
 		controls.add_theme_constant_override("separation", 8)
 		controls.add_child(_frame_label)
 		controls.add_child(_spacer())
 		controls.add_child(_play_button)
-		column.add_child(controls)
+		pixels.add_child(controls)
 	else:
 		var footer := HBoxContainer.new()
 		footer.name = "StudioFooter"
@@ -632,7 +652,7 @@ func _make_studio(expand: bool) -> Control:
 		footer.add_child(_spacer())
 		footer.add_child(_frame_label)
 		footer.add_child(_play_button)
-		column.add_child(footer)
+		pixels.add_child(footer)
 
 	var preview_row := HBoxContainer.new()
 	preview_row.name = "PreviewRow"
@@ -652,13 +672,45 @@ func _make_studio(expand: bool) -> Control:
 	hint.add_theme_color_override("font_color", UIConstants.COLOR_TEXT_MUTED)
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	preview_row.add_child(hint)
-	column.add_child(preview_row)
+	pixels.add_child(preview_row)
+
+	# The groups block, shown instead of the painting controls in Groups mode.
+	_group_block = _make_group_editor()
+	column.add_child(_group_block)
 	return panel
 
 
 # =============================================================================
 # SMALL WIDGETS
 # =============================================================================
+
+## The Pixels / Groups switch that decides which side of the studio is open.
+## Pixels paints one sprite (palette, fill, preview); Groups edits the groups the
+## skin carries (list, name, colour, delete) over the same canvas, which then
+## shows the group wash and picks the group a click lands on.
+func _make_mode_switch() -> Control:
+	var row := HBoxContainer.new()
+	row.name = "ModeSwitch"
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(_make_section_label("Edit"))
+	var group := ButtonGroup.new()
+	_pixels_mode_button = _make_button("Pixels", "Paint this sprite's pixels with the selected Re-color Group",
+		UIConstants.COLOR_TEXT, 92)
+	_pixels_mode_button.name = "PixelsModeButton"
+	_groups_mode_button = _make_button("Groups", "Create, rename, re-colour and delete the Re-color Groups",
+		UIConstants.COLOR_TEXT, 92)
+	_groups_mode_button.name = "GroupsModeButton"
+	for button in [_pixels_mode_button, _groups_mode_button]:
+		button.toggle_mode = true
+		button.button_group = group
+		button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(button)
+	_pixels_mode_button.pressed.connect(_set_mode.bind(Mode.PIXELS))
+	_groups_mode_button.pressed.connect(_set_mode.bind(Mode.GROUPS))
+	_pixels_mode_button.set_pressed_no_signal(_mode == Mode.PIXELS)
+	_groups_mode_button.set_pressed_no_signal(_mode == Mode.GROUPS)
+	return row
+
 
 func _make_sheet(node_name: String) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -703,6 +755,38 @@ func _spacer() -> Control:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return spacer
+
+
+## Open one side of the studio: the pixels, or the Re-color Groups.
+func _set_mode(mode: int) -> void:
+	if _mode == mode:
+		return
+	_mode = mode
+	_sync_mode()
+	_refresh_all()
+
+
+## Show the block the mode asks for and point the canvas at it. The canvas stays
+## up in both: in Groups mode it is the group wash, and a click picks the group
+## the pixel belongs to instead of painting it (see _on_cell_painted).
+func _sync_mode() -> void:
+	if _pixels_mode_button != null:
+		_pixels_mode_button.set_pressed_no_signal(_mode == Mode.PIXELS)
+	if _groups_mode_button != null:
+		_groups_mode_button.set_pressed_no_signal(_mode == Mode.GROUPS)
+	if _pixel_block != null:
+		_pixel_block.visible = _mode == Mode.PIXELS
+	if _group_block != null:
+		_group_block.visible = _mode == Mode.GROUPS
+	if _canvas == null:
+		return
+	# The Re-coloured and Fill switches belong to the painting side.
+	if _recolor_check != null:
+		_recolor_check.visible = _mode == Mode.PIXELS
+	if _fill_check != null:
+		_fill_check.visible = _mode == Mode.PIXELS
+	_canvas.show_recolor = _show_recolor and _mode == Mode.PIXELS
+	_canvas.queue_redraw()
 
 
 # =============================================================================
@@ -758,11 +842,6 @@ func _refresh_skin_fields() -> void:
 		return
 	if _skin_name_edit != null and _skin_name_edit.text != _skin_name:
 		_skin_name_edit.text = _skin_name
-	if _sprite_picker != null:
-		for index in _sprite_picker.item_count:
-			if str(_sprite_picker.get_item_metadata(index)) == _sprite_id:
-				_sprite_picker.select(index)
-				break
 	for tier in _tier_checks.size():
 		var check := _tier_checks[tier]
 		if check.button_pressed != _worn_by.has(tier):
@@ -861,9 +940,10 @@ func _refresh_groups() -> void:
 		_group_name_edit.editable = not active.is_empty()
 	if _group_color_button != null:
 		_group_color_button.disabled = active.is_empty()
-		var color: Color = active.get("color", Color.WHITE)
-		_group_color_button.add_theme_color_override("font_color",
-			color if not active.is_empty() else UIConstants.COLOR_TEXT_MUTED)
+		if not active.is_empty():
+			var color: Color = active.get("color", Color.WHITE)
+			if _group_color_button.color != color:
+				_group_color_button.set_pick_color(color)
 	if _group_delete_button != null:
 		_group_delete_button.disabled = active.is_empty()
 	if _group_shade_label != null:
@@ -949,7 +1029,7 @@ func _refresh_canvas() -> void:
 	_canvas.set_layer(_skin.layer(key))
 	_canvas.group_colors = _skin.effective_colors({})
 	_canvas.active_group = _active_group
-	_canvas.show_recolor = _show_recolor
+	_canvas.show_recolor = _show_recolor and _mode == Mode.PIXELS
 	_canvas.show_grid = _show_grid
 	_canvas.queue_redraw()
 	_refresh_frame_strip()
@@ -1099,7 +1179,9 @@ func _on_save_pressed() -> void:
 	_rebuild_preview()
 
 
-## Push the editable copies (name, sprite set, tiers) onto the skin itself.
+## Push the editable copies (name, tiers) onto the skin itself. The sprite set
+## is the artwork the skin was painted over: a copy of a skin keeps the set it
+## came from, and it is never picked in the studio (see New Skin).
 func _apply_fields_to_skin() -> bool:
 	var wanted_name := _skin_name.strip_edges().left(GolferSkin.MAX_SKIN_NAME_LENGTH)
 	if wanted_name.is_empty():
@@ -1116,28 +1198,6 @@ func _on_skin_name_changed(text: String) -> void:
 		return
 	_skin_name = text.strip_edges().left(GolferSkin.MAX_SKIN_NAME_LENGTH)
 	_mark_dirty("Name changed - Save Skins to keep it")
-
-
-## Change the artwork the skin is drawn over. The layers already read keep
-## their pixels; any that no longer fit the new sprite are dropped (see
-## GolferSkinLayer.resize).
-func _on_sprite_selected(index: int) -> void:
-	if _sprite_picker == null or index < 0 or index >= _sprite_picker.item_count:
-		return
-	var sprite_id := str(_sprite_picker.get_item_metadata(index))
-	if sprite_id.is_empty() or sprite_id == _sprite_id:
-		return
-	_sprite_id = sprite_id
-	if _skin != null:
-		var sprite_size := library.sprite_size_of(sprite_id)
-		_skin.sprite_size = sprite_size
-		_skin.art_root = GolferSkinLibrary.SPRITE_ROOT.path_join(sprite_id).path_join("animations")
-		for key in _skin.loaded_layer_keys():
-			_skin.layer(key).resize(sprite_size.x, sprite_size.y)
-	_frame_index = 0
-	_mark_dirty("Sprite set changed - Save Skins to write it out")
-	_refresh_canvas()
-	_rebuild_preview()
 
 
 func _on_tier_toggled(pressed: bool, tier: int) -> void:
@@ -1257,27 +1317,6 @@ func _on_delete_group_pressed() -> void:
 		_refresh_canvas())
 
 
-func _on_group_color_pressed() -> void:
-	if _skin == null or _active_group == GolferSkinLayer.NO_GROUP:
-		return
-	var group := _skin.group_by_id(_active_group)
-	if group.is_empty():
-		return
-	_open_color_picker(group.get("color", Color.WHITE), _on_group_color_chosen)
-
-
-## Show a colour picker at a fixed spot; the callback gets the chosen colour.
-func _open_color_picker(color: Color, on_chosen: Callable) -> void:
-	var picker := ColorPicker.new()
-	picker.name = "SkinColorPicker"
-	picker.color = color
-	picker.edit_alpha = false
-	picker.color_changed.connect(func(value: Color): on_chosen.call(value))
-	add_child(picker)
-	picker.position = Vector2(120.0, 160.0)
-	picker.popup()
-
-
 func _on_group_color_chosen(color: Color) -> void:
 	if _skin == null or _active_group == GolferSkinLayer.NO_GROUP:
 		return
@@ -1292,11 +1331,20 @@ func _on_group_color_chosen(color: Color) -> void:
 
 # ── Painting ──────────────────────────────────────────────────────────────
 
+## A click on the sprite: in Pixels mode it paints with the active group (or,
+## with Fill, the whole run it lands in); in Groups mode it selects the group the
+## pixel already belongs to, which is how the groups are read off the sprite.
 func _on_cell_painted(cell: Vector2i) -> void:
+	if _mode == Mode.GROUPS:
+		_on_cell_picked(cell)
+		return
 	_paint_cell(cell, _active_group, _fill)
 
 
 func _on_cell_erased(cell: Vector2i) -> void:
+	if _mode == Mode.GROUPS:
+		_on_cell_picked(cell)
+		return
 	_paint_cell(cell, GolferSkinLayer.NO_GROUP, _fill)
 
 
@@ -1415,7 +1463,7 @@ func _on_frame_tile_pressed(index: int) -> void:
 func _on_recolor_toggled(pressed: bool) -> void:
 	_show_recolor = pressed
 	if _canvas != null:
-		_canvas.show_recolor = pressed
+		_canvas.show_recolor = pressed and _mode == Mode.PIXELS
 		_canvas.queue_redraw()
 
 

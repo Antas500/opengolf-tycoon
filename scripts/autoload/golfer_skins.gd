@@ -48,16 +48,17 @@ func set_player_skin(skin: GolferSkin) -> void:
 	SaveManager.set_user_preference("gameplay", "player_skin", wanted)
 
 
-## The animation frames a golfer is drawn with: the skin's own colours, with
-## the owner's profile colours over the groups they name (Shirt, Pants, Cap,
-## Hair, Skin). Null when the golfer's tier has no skin to wear.
+## The animation frames a golfer is drawn with: the colours the golfer's skin
+## carries (see GolferSkin), not the owner's profile - the player edits a skin's
+## Re-color Groups to change how the golfers wearing it look. Null when the
+## golfer's tier has no skin to wear.
 func frames_for_golfer(golfer: Golfer) -> SpriteFrames:
 	if golfer == null:
 		return null
 	var skin := skin_for_golfer(golfer)
 	if skin == null:
 		return null
-	return library.recolored_frames(skin, overrides_for_golfer(golfer))
+	return library.recolored_frames(skin)
 
 
 ## The untouched artwork of a golfer's skin - what the re-color layers are
@@ -67,11 +68,6 @@ func raw_frames_for_golfer(golfer: Golfer) -> SpriteFrames:
 		return null
 	return library.raw_frames(skin_for_golfer(golfer))
 
-
-func overrides_for_golfer(golfer: Golfer) -> Dictionary:
-	if golfer == null or golfer.player_profile == null:
-		return {}
-	return GolferSkin.overrides_for_profile(golfer.player_profile)
 
 
 ## Forget the frames built for a skin so the next golfer drawn picks up new
