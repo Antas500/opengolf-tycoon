@@ -17,6 +17,10 @@ Formats:
 - **Practice round:** owner only.
 - **Play vs a Pro:** choose Alex, Morgan or Riley (each uses the Pro skill tier).
 
+Skill points are allocated on the **Player Skills** page. The button that leads
+there badges how many are still unspent, and a round can be started without
+spending them — the points stay banked for a later reallocation.
+
 A hosted tournament is a different thing: it starts on the click, and the owner is in
 the field as a competitor (see [Tournament System](tournament-system.md)). Because
 that pairing is already out on the course, starting an owner round is refused while
@@ -59,12 +63,18 @@ takes over, with no click required.
 
 ### Persistent skills
 
-`PlayerGolferProfile` stores ten integer point counts (0–99). The first round
-requires spending exactly ten points; every point is a **10 percentage-point
-bonus** (0% starting bonus, maximum 990%). Points save automatically whenever
-they are changed and take effect immediately for the player's next shot, with no
-Save Skills button required. Points can be reallocated across skills at any time
-(including during an active round). Name and appearance also remain editable.
+`PlayerGolferProfile` stores ten integer point counts (0–99). Every point is a
+**10 percentage-point bonus** (0% starting bonus, maximum 990%), out of a
+ten-point budget. Points save automatically whenever they are changed and take
+effect immediately for the player's next shot, with no Save Skills button
+required. **Spending the budget is optional:** a Practice Round or Play vs Pro
+round starts with any number of points unspent, and no starter diverts to the
+Player Skills page when points are waiting. What the removed gate leaves behind
+is a badge: the **Player Skills** navigation button carries the number of unspent
+points (`PlayerTab.set_unused_skill_points`, refreshed by
+`PlayerRoundManager._refresh_skills` and on every page switch) and hides it at
+zero. Points can be reallocated across skills at any time (including during an
+active round). Name and appearance also remain editable.
 
 The profile is saved under `player_golfer`; older saves receive a fresh profile.
 New games reset it. Active rounds are transient, like visitor rounds, and are

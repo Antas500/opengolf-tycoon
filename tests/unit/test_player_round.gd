@@ -108,7 +108,7 @@ func _set_lie(lie: int) -> void:
 
 func test_setup_cancel_does_not_spend_points() -> void:
 	rounds.open_setup()
-	assert_true(rounds.start_button.disabled)
+	assert_false(rounds.start_button.disabled, "Ten unspent points do not hold the tee off")
 	rounds.draft.allocate(0, 1)
 	rounds.leave_round()
 	assert_false(GameManager.player_profile.initialized)
@@ -472,6 +472,50 @@ func test_embedded_player_navigation_and_setup() -> void:
 			assert_eq(tab.pages[page].get_parent().visible, page == index)
 		assert_false(tab.aim_scroll.visible, "The aiming view stays hidden outside a round")
 
+## The Player Skills navigation button wears the number of points still to spend;
+## zero points means no badge.
+func test_player_skills_button_badges_unspent_points() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	var button := tab.buttons[PlayerTab.PAGE_SKILLS]
+	var badge := tab.skill_badge
+	assert_not_null(badge, "The Player Skills button carries a badge")
+	assert_eq(badge.get_parent(), button)
+	assert_eq(button.text, "Player Skills", "The badge is not part of the button's own label")
+	assert_true(badge.visible)
+	assert_eq(badge.text, "10", "All ten points are still unspent")
+
+	# It sits in the button's top-right corner, clear of the centered label.
+	tab.size = Vector2(720, 160)
+	await wait_frames(2)
+	assert_almost_eq(badge.position.x + badge.size.x, button.size.x - PlayerTab.BADGE_INSET, 1.0,
+		"The badge is pinned to the button's right edge")
+	assert_almost_eq(badge.position.y, PlayerTab.BADGE_INSET, 1.0, "and to its top edge")
+	assert_lte(badge.position.x + badge.size.x, button.size.x, "The badge stays inside the button")
+	assert_between(badge.size.x, 14.0, 30.0, "The badge is a small pill, not a second label")
+	assert_between(badge.size.y, 12.0, 24.0)
+
+	# Spending keeps it in step, both while points remain and once they are gone.
+	assert_true(rounds.allocate_skill(0, 1))
+	assert_eq(badge.text, "9")
+	for i in range(1, 10):
+		rounds.allocate_skill(i, 1)
+	assert_false(badge.visible, "A fully allocated golfer wears no badge")
+	assert_true(rounds.allocate_skill(0, -1), "A point can be taken back")
+	assert_true(badge.visible, "Refunding a point brings the badge back")
+	assert_eq(badge.text, "1")
+
+	# A page switch and the toolbar's periodic refresh both re-read the profile.
+	tab.set_unused_skill_points(4)
+	assert_eq(badge.text, "4")
+	tab.select(PlayerTab.PAGE_EDIT)
+	assert_eq(badge.text, "1", "Selecting a page refreshes the badge")
+	for i in PlayerGolferProfile.SKILLS.size():
+		GameManager.player_profile.points[i] = 0
+	tab.refresh_skill_badge()
+	assert_eq(badge.text, "10", "A refresh reads the profile rather than the last count it was told")
+
 func test_player_skills_use_two_four_four_columns() -> void:
 	var tab := PlayerTab.new()
 	fixture.add_child(tab)
@@ -519,13 +563,19 @@ func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 			starters += 1
 	assert_eq(starters, 2, "Rebuilding does not duplicate round-start buttons")
 
-func test_embedded_round_requires_skill_allocation() -> void:
+## Unspent skill points are a nudge, not a gate: the round starts, and the play
+## page (not Player Skills) is what comes up.
+func test_embedded_round_starts_with_unspent_skill_points() -> void:
 	var tab := PlayerTab.new()
 	fixture.add_child(tab)
 	rounds.attach_player_tab(tab)
 	rounds._start_embedded(0)
+	assert_eq(rounds.draft.remaining(), 10, "The ten points are still there to spend later")
+	assert_true(rounds.busy, "Practice starts without spending them")
+	assert_true(rounds.active)
+	assert_eq(tab.selected, PlayerTab.PAGE_PLAY, "The round does not divert to the Player Skills page")
+	rounds.leave_round()
 	assert_false(rounds.busy)
-	assert_eq(tab.selected, PlayerTab.PAGE_SKILLS)
 
 ## The shot-type buttons are separate buttons running along the top of the Play
 ## Course page, one per shot type, above the aiming columns — no drop-down.

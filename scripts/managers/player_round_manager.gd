@@ -566,8 +566,10 @@ func _refresh_skills() -> void:
 	for i in skill_labels.size():
 		if i < PlayerGolferProfile.SKILLS.size():
 			skill_labels[i].text = "%s: %d%%" % [PlayerGolferProfile.SKILLS[i], draft.points[i] * 10]
-	if is_instance_valid(start_button):
-		start_button.disabled = draft.remaining() != 0
+	# Unspent points never hold a round up, so the badge on the Player Skills
+	# button is what tells the owner points are still waiting to be allocated.
+	if is_instance_valid(player_tab):
+		player_tab.refresh_skill_badge()
 
 func _start_embedded(kind: int) -> void:
 	if busy or GameManager.is_paused:
@@ -579,10 +581,6 @@ func _start_embedded(kind: int) -> void:
 	if GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress():
 		EventBus.notify("Tournament running - Play It Out on the Tournament shelf first.", "warning")
 		return
-	if draft.remaining() != 0:
-		EventBus.notify("Allocate all 10 points in Player Skills first.", "info")
-		player_tab.select(PlayerTab.PAGE_SKILLS)
-		return
 	busy = true
 	previous_mode = GameManager.current_mode
 	previous_speed = GameManager.current_speed
@@ -592,8 +590,6 @@ func _start_embedded(kind: int) -> void:
 	start_round()
 
 func start_round() -> void:
-	if draft.remaining() != 0:
-		return
 	if GameManager.get_open_hole_count() == 0:
 		return
 	draft.golfer_name = name_edit.text.strip_edges()

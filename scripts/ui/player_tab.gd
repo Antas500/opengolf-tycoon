@@ -12,9 +12,17 @@ const PAGE_EDIT := 1
 const PAGE_SKILLS := 2
 ## Meta flag for Play Course nodes that survive setup rebuilds.
 const PERSISTENT_META := "player_tab_persistent"
+## Gap between the skill-point badge and the Player Skills button's top-right
+## corner, and the smallest the badge is drawn.
+const BADGE_INSET := 4.0
+const BADGE_MIN_SIZE := 16.0
 
 var pages: Array[HBoxContainer] = []
 var buttons: Array[Button] = []
+## The Player Skills button's badge: the number of skill points the owner has
+## not spent yet. It is a child of the button rather than part of its text, so
+## the navigation label stays "Player Skills" (see set_unused_skill_points).
+var skill_badge: Label = null
 ## The aiming view for a round in progress: the shot-type row pinned along the
 ## top, with the scrolling control columns under it.
 var aim_view: VBoxContainer
@@ -48,6 +56,7 @@ func _ready() -> void:
 		navigation.add_child(button)
 		buttons.append(button)
 		pages.append(_make_page(body))
+	skill_badge = _attach_skill_badge(buttons[PAGE_SKILLS])
 	# Alternate view for the Play Course page: the aiming HUD during a round.
 	# The shot-type buttons run along its top; the control columns scroll under
 	# them, so the whole shot set stays readable no matter how far the shelf
@@ -93,6 +102,65 @@ func select(index: int) -> void:
 		pages[i].get_parent().visible = i == index
 		buttons[i].set_pressed_no_signal(i == index)
 	_sync_aim_view()
+	refresh_skill_badge()
+
+## Keep the Player Skills badge on the number of points still to spend. Called
+## whenever the page changes and whenever a point is allocated, so it reads the
+## profile rather than being told what to show.
+func refresh_skill_badge() -> void:
+	var profile: PlayerGolferProfile = GameManager.player_profile
+	set_unused_skill_points(profile.remaining() if profile != null else 0)
+
+## Write the badge. Nothing left to allocate means no badge at all: it is a nudge
+## to spend points, not a counter that sits at zero. Spending is never required
+## to start a round - the badge is the only thing that says points are waiting.
+func set_unused_skill_points(points: int) -> void:
+	if skill_badge == null:
+		return
+	skill_badge.text = str(maxi(points, 0))
+	skill_badge.visible = points > 0
+	_place_skill_badge()
+
+## A gold pill in the Player Skills button's corner, drawn as a Label with its own
+## background so it sizes itself to the number it shows.
+func _attach_skill_badge(button: Button) -> Label:
+	var badge := Label.new()
+	badge.name = "SkillPointBadge"
+	badge.visible = false
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.custom_minimum_size = Vector2(BADGE_MIN_SIZE, BADGE_MIN_SIZE)
+	badge.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+	badge.add_theme_color_override("font_color", UIConstants.COLOR_BG_DARK)
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# The badge ignores the mouse, so the explanation rides on the button it
+	# decorates: a round can be started with any number of points unspent.
+	button.tooltip_text = "Assign skill points to your golfer. Unspent points never block a round."
+	var pill := StyleBoxFlat.new()
+	pill.bg_color = UIConstants.COLOR_GOLD
+	pill.border_color = UIConstants.COLOR_BG_DARK
+	pill.set_border_width_all(1)
+	pill.set_corner_radius_all(int(BADGE_MIN_SIZE * 0.5))
+	pill.content_margin_left = 5.0
+	pill.content_margin_right = 5.0
+	pill.content_margin_top = 2.0
+	pill.content_margin_bottom = 2.0
+	badge.add_theme_stylebox_override("normal", pill)
+	button.add_child(badge)
+	button.resized.connect(_place_skill_badge)
+	return badge
+
+## The nav column lays out the buttons, not their children, so the badge is
+## placed by hand: pinned to the top-right corner inside the button's rect, where
+## the button's own centered text cannot reach it.
+func _place_skill_badge() -> void:
+	if skill_badge == null or not is_instance_valid(skill_badge.get_parent()):
+		return
+	var button := skill_badge.get_parent() as Button
+	if button == null:
+		return
+	skill_badge.reset_size()
+	skill_badge.position = Vector2(button.size.x - skill_badge.size.x - BADGE_INSET, BADGE_INSET)
 
 ## While playing, the Play Course page shows the aiming HUD instead of the
 ## combined round-setup sections.
