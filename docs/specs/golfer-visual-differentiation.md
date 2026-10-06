@@ -109,6 +109,10 @@ Show golfer name and tier on mouse hover without clicking:
 
 ### 3. Group Number Badge
 
+*Dropped.* The label above a golfer shows their name instead (`Golfer._refresh_name_label`),
+so golfers in a group are told apart by name rather than by a badge. The sketch below is
+kept only as the original proposal:
+
 Small badge showing group number for multi-golfer groups:
 
 **Badge display:**

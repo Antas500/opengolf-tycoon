@@ -491,10 +491,6 @@ func _spawn_next_group() -> void:
 				if is_instance_valid(_aim_controller):
 					golfer.player_profile = GameManager.player_profile
 					_aim_controller.begin_tournament_aim(golfer)
-			# Update the visual name label (set once in _ready, must refresh manually)
-			if golfer.name_label:
-				golfer.name_label.text = sg.name
-
 			_tournament_golfer_ids.append(golfer.golfer_id)
 			var avg_skill = (sg.driving_skill + sg.accuracy_skill + sg.putting_skill + sg.recovery_skill) / 4.0
 			_tournament_scores[golfer.golfer_id] = {

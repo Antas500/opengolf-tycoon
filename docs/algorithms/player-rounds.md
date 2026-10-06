@@ -29,7 +29,10 @@ groups on the course. They observe standard golf etiquette managed by `GolferMan
 - The honor system on tee boxes (lowest score on prior hole, or lowest golfer ID on hole 1).
 - The away rule through the green (furthest golfer from the pin hits next).
 - Clearing etiquette (waiting for groups ahead to clear landing areas or par-3 greens).
-- Group badges identifying their group number.
+- A name label above every golfer, so the group is told apart by name rather than
+  by a badge (`Golfer._refresh_name_label`). Score, hole and group are not drawn
+  on the course: the owner's scorecard, the tournament leaderboard and the
+  click-through golfer popup carry them.
 
 Opponents play in real time alongside the player; their completed-hole scores appear
 in the player HUD scorecard. Lowest total wins; equal scores are a tie. Results include

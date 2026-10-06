@@ -288,8 +288,8 @@ This document reviews the current game state and proposes specs that should be w
 
 **What the spec should cover:**
 - Tier-based color coding: Beginner=green shirt, Casual=blue, Serious=red, Pro=gold/black
-- Name labels visible on hover (currently requires click)
-- Group number indicator (small badge)
+- Name labels: every golfer now wears their name above their head; hovering adds the tier
+- Group number indicator (small badge) — dropped: groups are told apart by name
 - "Regular" golfers: named golfers who return if satisfaction was high, building course familiarity over time
 - Visual state indicators: fatigue (slouching when low energy), hunger (thought bubble near snack bar), frustration (red tint when angry)
 - Tournament golfer differentiation: special appearance or badge during tournament play
