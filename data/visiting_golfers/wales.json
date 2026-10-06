@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Ivy Jones",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "2c3e50",
+   "Cap": "292b2c",
+   "Hair": "8b7355",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Mitch Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "283747",
+   "Cap": "27ae60",
+   "Hair": "d2691e",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Penny Jones",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "616a6b",
+   "Cap": "6c3483",
+   "Hair": "d2b48c",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Hal Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "616a6b",
+   "Cap": "e67e22",
+   "Hair": "5c3a1e",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Pete Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "283747",
+   "Cap": "1a1a2e",
+   "Hair": "2c1a0e",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Heath Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "2c3e50",
+   "Cap": "5bc0de",
+   "Hair": "8b4513",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Fiona Jones",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "5bc0de",
+   "Pants": "4a235a",
+   "Cap": "1b4f72",
+   "Hair": "2c1a0e",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Ace Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "d5d8dc",
+   "Cap": "e67e22",
+   "Hair": "2f1b0e",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Corey Jones",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "d5d8dc",
+   "Cap": "d9534f",
+   "Hair": "2c1a0e",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Harry Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "4a235a",
+   "Cap": "292b2c",
+   "Hair": "d2b48c",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Pat Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "566573",
+   "Cap": "5cb85c",
+   "Hair": "8b4513",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "April Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "808b96",
+   "Cap": "d9534f",
+   "Hair": "8b7355",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Ada Jones",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "1b2631",
+   "Cap": "e67e22",
+   "Hair": "8b7355",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Wade Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "4a235a",
+   "Cap": "b9770e",
+   "Hair": "2f1b0e",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Riley Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1a1a2e",
+   "Cap": "c0392b",
+   "Hair": "5c3a1e",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Nia Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "1c2833",
+   "Cap": "1b4f72",
+   "Hair": "8b7355",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Hugh Jones",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "2c3e50",
+   "Cap": "e67e22",
+   "Hair": "d2b48c",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Rae Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "d5d8dc",
+   "Cap": "292b2c",
+   "Hair": "6b4423",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Rosa Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "283747",
+   "Cap": "f0ad4e",
+   "Hair": "6b4423",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Rocky Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1e8449",
+   "Pants": "2c3e50",
+   "Cap": "e8e8e8",
+   "Hair": "704214",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Ellie Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "7d6608",
+   "Cap": "1e8449",
+   "Hair": "483c32",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Jake Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "7d6608",
+   "Cap": "5cb85c",
+   "Hair": "d4a76a",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Julie Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "bdc3c7",
+   "Cap": "d9534f",
+   "Hair": "b8860b",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Wyatt Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "5b2c6f",
+   "Cap": "e8e8e8",
+   "Hair": "6b4423",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Joy Jones",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "d5d8dc",
+   "Cap": "5bc0de",
+   "Hair": "3b2f1a",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Josh Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "566573",
+   "Cap": "1b4f72",
+   "Hair": "5c3a1e",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Pam Jones",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "2c3e50",
+   "Cap": "6c3483",
+   "Hair": "2c1a0e",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Finn Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "2c3e50",
+   "Cap": "cb4335",
+   "Hair": "6b4423",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Gavin Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "4a235a",
+   "Cap": "6c3483",
+   "Hair": "d2691e",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Rose Jones",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "d5d8dc",
+   "Cap": "b9770e",
+   "Hair": "2c1a0e",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Jasmine Jones",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "1b2631",
+   "Cap": "c0392b",
+   "Hair": "c0c0c0",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Heather Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "1a1a2e",
+   "Cap": "27ae60",
+   "Hair": "8b7355",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Jess Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "4a235a",
+   "Cap": "ecf0f1",
+   "Hair": "8b4513",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Jolene Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "34495e",
+   "Cap": "8e44ad",
+   "Hair": "6b4423",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Ali Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "2c3e50",
+   "Cap": "e8e8e8",
+   "Hair": "a9a9a9",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Brooke Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "34495e",
+   "Cap": "1a1a2e",
+   "Hair": "d2691e",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Toni Jones",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1e8449",
+   "Pants": "4a235a",
+   "Cap": "cb4335",
+   "Hair": "a9a9a9",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Marie Jones",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1b2631",
+   "Cap": "4a90d9",
+   "Hair": "d4a76a",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Demi Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1e8449",
+   "Pants": "5b2c6f",
+   "Cap": "d4ac0d",
+   "Hair": "3b2f1a",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Emily Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "1c2833",
+   "Cap": "2c3e50",
+   "Hair": "2f1b0e",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Shane Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1e8449",
+   "Pants": "5b2c6f",
+   "Cap": "5bc0de",
+   "Hair": "d4a76a",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Dale Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "6e2c00",
+   "Pants": "283747",
+   "Cap": "1b4f72",
+   "Hair": "bc8f8f",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Bo Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "283747",
+   "Cap": "d4ac0d",
+   "Hair": "a9a9a9",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Piper Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "1b2631",
+   "Cap": "8e44ad",
+   "Hair": "d2b48c",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Stella Jones",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "1a1a2e",
+   "Cap": "cb4335",
+   "Hair": "b8860b",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Henry Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "1a1a2e",
+   "Cap": "c0392b",
+   "Hair": "1a1a1a",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Noelle Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "bdc3c7",
+   "Cap": "1a1a2e",
+   "Hair": "f5deb3",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Tracy Jones",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "bdc3c7",
+   "Cap": "1e8449",
+   "Hair": "2c1a0e",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Charlie Jones",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "4a235a",
+   "Cap": "c0392b",
+   "Hair": "2f1b0e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Sara Jones",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "2e4053",
+   "Cap": "b9770e",
+   "Hair": "1a1a1a",
+   "Skin": "8d6e4c"
+  }
+ }
+]

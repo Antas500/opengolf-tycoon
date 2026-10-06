@@ -691,6 +691,7 @@ func _show_main_menu() -> void:
 	main_menu.quick_start_requested.connect(_on_menu_quick_start)
 	main_menu.continue_requested.connect(_on_menu_continue)
 	main_menu.load_game_requested.connect(_on_main_menu_load)
+	main_menu.edit_golfer_skins_requested.connect(_on_menu_edit_golfer_skins)
 	main_menu.settings_requested.connect(_on_main_menu_settings)
 	main_menu.quit_requested.connect(_on_quit_pressed)
 	$UI/HUD.add_child(main_menu)
@@ -928,6 +929,19 @@ func _on_main_menu_load() -> void:
 	if not EventBus.load_completed.is_connected(_on_main_menu_load_completed):
 		EventBus.load_completed.connect(_on_main_menu_load_completed)
 
+## Edit Golfer Skins: the skin studio, opened from the title screen. It writes
+## its skins to user://golfer_skins (see GolferSkins) and hands every golfer on
+## the course their new colours as soon as one is saved.
+func _on_menu_edit_golfer_skins() -> void:
+	_hide_main_menu()
+	var screen := EditGolferSkinsScreen.new()
+	screen.name = "EditGolferSkinsScreen"
+	screen.back_requested.connect(func():
+		screen.queue_free()
+		_show_main_menu())
+	$UI/HUD.add_child(screen)
+	_set_gameplay_ui_visible(false)
+
 func _on_main_menu_settings() -> void:
 	"""Show settings from main menu."""
 	var settings = SettingsMenu.new()
@@ -955,7 +969,7 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "StartNewGameScreen", "WorldMapScreen", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
+	var popup_panels = ["MainMenu", "StartNewGameScreen", "EditGolferSkinsScreen", "WorldMapScreen", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:

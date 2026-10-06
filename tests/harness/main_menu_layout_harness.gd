@@ -3,7 +3,7 @@ extends Node
 ##
 ## Drives the real title screen through phone, tablet, rotated-phone and
 ## desktop window sizes and checks that each of the four arrangements (see
-## MainMenu.layout_mode_for) places all six actions on screen, keeps them
+## MainMenu.layout_mode_for) places all seven actions on screen, keeps them
 ## apart, and keeps them tappable. Also checks the two things the redesign is
 ## about: no tagline under the title any more, and a drawn backdrop behind the
 ## menu instead of a flat colour.
@@ -99,16 +99,17 @@ func _run() -> void:
 	print("MAIN_MENU: %d failures" % failures)
 	get_tree().quit(0 if failures == 0 else 1)
 
-## Everything that has to hold for the six actions at one window size.
+## Everything that has to hold for the seven actions at one window size.
 func _check_screen(tag: String, width: float, height: float, min_height: float) -> void:
 	var menu: Control = main.main_menu
 	var buttons: Array = _find_buttons(menu)
-	_check(buttons.size() == 6, "%s: six actions (got %d)" % [tag, buttons.size()])
+	_check(buttons.size() == 7, "%s: seven actions (got %d)" % [tag, buttons.size()])
 
 	var labels: Array = []
 	for button in buttons:
 		labels.append(button.text)
-	for expected in ["Start New Game", "Quick Start", "Continue", "Load Game", "Settings", "Quit"]:
+	for expected in ["Start New Game", "Quick Start", "Continue", "Load Game", "Golfer Skins",
+			"Settings", "Quit"]:
 		_check(expected in labels, "%s: has a %s action" % [tag, expected])
 
 	var view := Rect2(0.0, 0.0, width, height)
@@ -167,7 +168,7 @@ func _scrolls(menu: Control) -> bool:
 			return true
 	return false
 
-## On a wide window the six actions should not be a narrow centre strip: the
+## On a wide window the seven actions should not be a narrow centre strip: the
 ## leftmost and rightmost actions have to be far apart.
 func _uses_side_space(menu: Control, width: float) -> bool:
 	var buttons: Array = _find_buttons(menu)

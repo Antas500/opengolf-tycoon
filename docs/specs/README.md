@@ -23,7 +23,7 @@ This document reviews the current game state and proposes specs that should be w
 | 8 | Notification & Event Feed | [`completed/notification-event-feed.md`](completed/notification-event-feed.md) | MEDIUM | Completed |
 | 9 | Expanded Decorations & Aesthetics | [`completed/expanded-decorations-aesthetic-rating.md`](completed/expanded-decorations-aesthetic-rating.md) | MEDIUM | Completed |
 | 10 | Course Scorecard & Hole Handicaps | [`completed/course-scorecard-hole-handicaps.md`](completed/course-scorecard-hole-handicaps.md) | MEDIUM | Completed |
-| 11 | Golfer Visual Differentiation | [`golfer-visual-differentiation.md`](golfer-visual-differentiation.md) | MEDIUM | Proposal |
+| 11 | Golfer Visual Differentiation | [`golfer-visual-differentiation.md`](golfer-visual-differentiation.md) | MEDIUM | Phase 5 shipped (Golfer Skins + Re-color Layers + the Edit Golfer Skins studio); the Serious/Pro art sets are still open |
 | 12 | Visual Polish (Sprites/Art) | [`visual-polish.md`](visual-polish.md) | MEDIUM | Proposal |
 | 13 | Pathfinding Upgrade (A*) | [`pathfinding-upgrade.md`](pathfinding-upgrade.md) | MEDIUM-LOW | Proposal |
 | 14 | Web Build & Distribution | [`web-build-distribution.md`](web-build-distribution.md) | MEDIUM-LOW | Proposal |
@@ -288,8 +288,8 @@ This document reviews the current game state and proposes specs that should be w
 
 **What the spec should cover:**
 - Tier-based color coding: Beginner=green shirt, Casual=blue, Serious=red, Pro=gold/black
-- Name labels visible on hover (currently requires click)
-- Group number indicator (small badge)
+- Name labels: every golfer now wears their name above their head; hovering adds the tier
+- Group number indicator (small badge) — dropped: groups are told apart by name
 - "Regular" golfers: named golfers who return if satisfaction was high, building course familiarity over time
 - Visual state indicators: fatigue (slouching when low energy), hunger (thought bubble near snack bar), frustration (red tint when angry)
 - Tournament golfer differentiation: special appearance or badge during tournament play

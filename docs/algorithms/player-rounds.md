@@ -17,6 +17,10 @@ Formats:
 - **Practice round:** owner only.
 - **Play vs a Pro:** choose Alex, Morgan or Riley (each uses the Pro skill tier).
 
+Skill points are allocated on the **Player Skills** page. The button that leads
+there badges how many are still unspent, and a round can be started without
+spending them — the points stay banked for a later reallocation.
+
 A hosted tournament is a different thing: it starts on the click, and the owner is in
 the field as a competitor (see [Tournament System](tournament-system.md)). Because
 that pairing is already out on the course, starting an owner round is refused while
@@ -29,7 +33,10 @@ groups on the course. They observe standard golf etiquette managed by `GolferMan
 - The honor system on tee boxes (lowest score on prior hole, or lowest golfer ID on hole 1).
 - The away rule through the green (furthest golfer from the pin hits next).
 - Clearing etiquette (waiting for groups ahead to clear landing areas or par-3 greens).
-- Group badges identifying their group number.
+- A name label above every golfer, so the group is told apart by name rather than
+  by a badge (`Golfer._refresh_name_label`). Score, hole and group are not drawn
+  on the course: the owner's scorecard, the tournament leaderboard and the
+  click-through golfer popup carry them.
 
 Opponents play in real time alongside the player; their completed-hole scores appear
 in the player HUD scorecard. Lowest total wins; equal scores are a tie. Results include
@@ -56,12 +63,18 @@ takes over, with no click required.
 
 ### Persistent skills
 
-`PlayerGolferProfile` stores ten integer point counts (0–99). The first round
-requires spending exactly ten points; every point is a **10 percentage-point
-bonus** (0% starting bonus, maximum 990%). Points save automatically whenever
-they are changed and take effect immediately for the player's next shot, with no
-Save Skills button required. Points can be reallocated across skills at any time
-(including during an active round). Name and appearance also remain editable.
+`PlayerGolferProfile` stores ten integer point counts (0–99). Every point is a
+**10 percentage-point bonus** (0% starting bonus, maximum 990%), out of a
+ten-point budget. Points save automatically whenever they are changed and take
+effect immediately for the player's next shot, with no Save Skills button
+required. **Spending the budget is optional:** a Practice Round or Play vs Pro
+round starts with any number of points unspent, and no starter diverts to the
+Player Skills page when points are waiting. What the removed gate leaves behind
+is a badge: the **Player Skills** navigation button carries the number of unspent
+points (`PlayerTab.set_unused_skill_points`, refreshed by
+`PlayerRoundManager._refresh_skills` and on every page switch) and hides it at
+zero. Points can be reallocated across skills at any time (including during an
+active round). Name and appearance also remain editable.
 
 The profile is saved under `player_golfer`; older saves receive a fresh profile.
 New games reset it. Active rounds are transient, like visitor rounds, and are

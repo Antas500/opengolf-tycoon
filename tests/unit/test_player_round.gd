@@ -64,6 +64,27 @@ func after_each() -> void:
 	GameManager.set_mode(saved.mode)
 	GameManager.set_speed(saved.speed)
 
+## A folder of the test's own for the skins a test writes out.
+const TEST_SKIN_ROOT := "user://test_player_round_skins"
+
+
+## Remove a folder under user:// and everything in it.
+func _remove_tree(path: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if dir.current_is_dir():
+			_remove_tree(path.path_join(entry))
+		else:
+			DirAccess.remove_absolute(path.path_join(entry))
+		entry = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(path)
+
+
 func _start(kind: int) -> void:
 	rounds.open_setup()
 	for i in 10:
@@ -87,7 +108,7 @@ func _set_lie(lie: int) -> void:
 
 func test_setup_cancel_does_not_spend_points() -> void:
 	rounds.open_setup()
-	assert_true(rounds.start_button.disabled)
+	assert_false(rounds.start_button.disabled, "Ten unspent points do not hold the tee off")
 	rounds.draft.allocate(0, 1)
 	rounds.leave_round()
 	assert_false(GameManager.player_profile.initialized)
@@ -103,7 +124,7 @@ func test_practice_waits_for_input_and_restores_visitors() -> void:
 	assert_eq(rounds.participants.size(), 1)
 	assert_true(rounds.player.awaits_player_shot())
 	assert_eq(rounds.player.golfer_name, "Test Owner")
-	assert_false(rounds.player._use_sprites)
+	assert_true(rounds.player._use_sprites, "The owner uses the Casual pixel-art sprite during a round")
 	assert_eq(rounds.player.body.color, Color(GameManager.player_profile.appearance.shirt_color))
 	assert_eq(visitor.process_mode, Node.PROCESS_MODE_INHERIT, "Visitors are not disabled during round")
 	assert_true(rounds.hud.visible, "Management HUD remains visible during play")
@@ -245,24 +266,57 @@ func test_concurrent_visitors_and_player_group() -> void:
 	assert_true(is_instance_valid(v1), "Visitor 1 is still valid")
 	assert_true(is_instance_valid(v2), "Visitor 2 is still valid")
 
-func test_group_badges_on_player_group() -> void:
+func test_name_labels_on_player_group() -> void:
 	rounds.open_setup()
 	for i in 10:
 		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
 	rounds.mode_picker.select(1) # Vs Pro (group size 2)
 	rounds.start_round()
 	rounds._process(0.0)
 
 	var p := rounds.player
 	var pro := rounds.participants[1]
-	var badge_p := p.get_node_or_null("InfoContainer/GroupBadge") as Label
-	var badge_pro := pro.get_node_or_null("InfoContainer/GroupBadge") as Label
-	assert_not_null(badge_p, "Player has group badge node")
-	assert_not_null(badge_pro, "Pro has group badge node")
-	assert_true(badge_p.visible, "Player group badge is visible for multi-player group")
-	assert_true(badge_pro.visible, "Pro group badge is visible for multi-player group")
-	assert_eq(badge_p.text, "Group %d" % (p.group_id + 1), "Badge displays correct group number")
-	assert_eq(badge_pro.text, badge_p.text, "Both golfers display the same group badge text")
+	var label_p := p.get_node_or_null("InfoContainer/NameLabel") as Label
+	var label_pro := pro.get_node_or_null("InfoContainer/NameLabel") as Label
+	assert_not_null(label_p, "Player has a name label node")
+	assert_not_null(label_pro, "Pro has a name label node")
+
+	# Every golfer wears their name above them, and it is always on screen.
+	assert_true(label_p.visible, "Player name is visible without hovering")
+	assert_true(label_pro.visible, "Pro name is visible without hovering")
+	assert_eq(label_p.text, "Test Owner", "Player label shows the owner's name")
+	assert_eq(label_pro.text, "Pro Alex", "Opponent label shows their own name")
+	assert_ne(label_p.text, label_pro.text, "Golfers in one group are told apart by name")
+
+	# Group, score and hole are gone from above the golfers: the scorecard
+	# panels and the click-through popup carry them now.
+	assert_null(p.get_node_or_null("InfoContainer/ScoreLabel"), "No score/hole label above the golfer")
+	assert_null(p.get_node_or_null("InfoContainer/GroupBadge"), "No group badge above the golfer")
+	assert_false(label_p.text.contains("Group"), "Name label carries no group number")
+	assert_false(label_p.text.contains("Hole"), "Name label carries no hole number")
+
+	# Hovering swaps in the tier, and leaving restores the plain name.
+	p._on_mouse_entered()
+	assert_true(label_p.text.ends_with("Test Owner"), "Hovering keeps the name and adds the tier")
+	assert_false(label_p.text.contains("Group"), "Hover copy carries no group number")
+	p._on_mouse_exited()
+	assert_eq(label_p.text, "Test Owner", "Leaving the golfer restores the plain name")
+
+	# It is drawn above the golfer's head, centred on them.
+	await get_tree().process_frame
+	var rect := label_p.get_global_rect()
+	assert_almost_eq(rect.get_center().x, p.global_position.x, 1.0, "Name label is centred on the golfer")
+	assert_lt(rect.get_center().y, p.global_position.y - 20.0, "Name label sits above the golfer")
+
+	# Renaming a golfer after they spawn follows them, and a name too long for
+	# the label's box grows it both ways so it stays centred on the golfer.
+	p.golfer_name = "Bartholomew Mandeville"
+	await get_tree().process_frame
+	assert_eq(label_p.text, "Bartholomew Mandeville", "Renaming the golfer updates their label")
+	var long_rect := label_p.get_global_rect()
+	assert_gt(long_rect.size.x, 80.0, "A long name widens the label")
+	assert_almost_eq(long_rect.get_center().x, p.global_position.x, 1.0, "A long name stays centred on the golfer")
 
 	rounds.leave_round()
 
@@ -382,9 +436,31 @@ func test_embedded_player_navigation_and_setup() -> void:
 	assert_eq(tab.buttons[PlayerTab.PAGE_SKILLS].text, "Player Skills")
 	assert_false(rounds.busy, "Editing a player does not reserve a round")
 	assert_null(rounds.overlay, "Embedded setup creates no floating overlay")
-	assert_true(tab.pages[PlayerTab.PAGE_EDIT].is_ancestor_of(rounds.name_edit))
+	var edit_page := tab.pages[PlayerTab.PAGE_EDIT]
+	assert_true(edit_page.is_ancestor_of(rounds.name_edit))
+	assert_true(edit_page.is_ancestor_of(rounds._skin_picker))
+	assert_eq(rounds.name_edit.get_parent(), rounds._skin_picker.get_parent(),
+		"The player name and Golfer Skin selector share one column")
+	var preview_column := edit_page.get_child(0) as VBoxContainer
+	assert_true(preview_column.is_ancestor_of(rounds._skin_preview_box),
+		"The animated golfer preview leads the Edit Player columns")
+	assert_eq(rounds._skin_preview_box.size_flags_vertical, Control.SIZE_EXPAND_FILL,
+		"The preview fills the height of its first column")
 	assert_true(tab.pages[PlayerTab.PAGE_SKILLS].is_ancestor_of(rounds.points_label))
+	for label in edit_page.find_children("*", "Label", true, false):
+		assert_ne(label.text, "PLAY YOUR COURSE", "The old Edit Player heading is gone")
+	for button in edit_page.find_children("*", "Button", true, false):
+		assert_ne(button.text, "Save player", "Player edits save without a button")
+	assert_eq(rounds._skin_controls.find_children("SkinGroupName*", "Label", true, false).size(),
+		GolferSkins.player_skin().group_count(), "Every color column displays its group name")
+	for group_column in rounds._skin_group_columns.get_children():
+		assert_eq(group_column.size_flags_vertical, Control.SIZE_EXPAND_FILL,
+			"Every group color column fills the available height")
 	assert_true(tab.pages[PlayerTab.PAGE_PLAY].is_ancestor_of(rounds.pro_picker))
+	rounds.name_edit.text = "Auto-saved Owner"
+	rounds.name_edit.text_changed.emit(rounds.name_edit.text)
+	assert_eq(GameManager.player_profile.golfer_name, "Auto-saved Owner",
+		"The player name persists immediately without a Save player button")
 	var starters := 0
 	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
@@ -395,6 +471,71 @@ func test_embedded_player_navigation_and_setup() -> void:
 		for page in 3:
 			assert_eq(tab.pages[page].get_parent().visible, page == index)
 		assert_false(tab.aim_scroll.visible, "The aiming view stays hidden outside a round")
+
+## The Player Skills navigation button wears the number of points still to spend;
+## zero points means no badge.
+func test_player_skills_button_badges_unspent_points() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+	var button := tab.buttons[PlayerTab.PAGE_SKILLS]
+	var badge := tab.skill_badge
+	assert_not_null(badge, "The Player Skills button carries a badge")
+	assert_eq(badge.get_parent(), button)
+	assert_eq(button.text, "Player Skills", "The badge is not part of the button's own label")
+	assert_true(badge.visible)
+	assert_eq(badge.text, "10", "All ten points are still unspent")
+
+	# It sits in the button's top-right corner, clear of the centered label.
+	tab.size = Vector2(720, 160)
+	await wait_frames(2)
+	assert_almost_eq(badge.position.x + badge.size.x, button.size.x - PlayerTab.BADGE_INSET, 1.0,
+		"The badge is pinned to the button's right edge")
+	assert_almost_eq(badge.position.y, PlayerTab.BADGE_INSET, 1.0, "and to its top edge")
+	assert_lte(badge.position.x + badge.size.x, button.size.x, "The badge stays inside the button")
+	assert_between(badge.size.x, 14.0, 30.0, "The badge is a small pill, not a second label")
+	assert_between(badge.size.y, 12.0, 24.0)
+
+	# Spending keeps it in step, both while points remain and once they are gone.
+	assert_true(rounds.allocate_skill(0, 1))
+	assert_eq(badge.text, "9")
+	for i in range(1, 10):
+		rounds.allocate_skill(i, 1)
+	assert_false(badge.visible, "A fully allocated golfer wears no badge")
+	assert_true(rounds.allocate_skill(0, -1), "A point can be taken back")
+	assert_true(badge.visible, "Refunding a point brings the badge back")
+	assert_eq(badge.text, "1")
+
+	# A page switch and the toolbar's periodic refresh both re-read the profile.
+	tab.set_unused_skill_points(4)
+	assert_eq(badge.text, "4")
+	tab.select(PlayerTab.PAGE_EDIT)
+	assert_eq(badge.text, "1", "Selecting a page refreshes the badge")
+	for i in PlayerGolferProfile.SKILLS.size():
+		GameManager.player_profile.points[i] = 0
+	tab.refresh_skill_badge()
+	assert_eq(badge.text, "10", "A refresh reads the profile rather than the last count it was told")
+
+func test_player_skills_use_two_four_four_columns() -> void:
+	var tab := PlayerTab.new()
+	fixture.add_child(tab)
+	rounds.attach_player_tab(tab)
+
+	var first_column := rounds.skill_labels[0].get_parent().get_parent()
+	var second_column := rounds.skill_labels[2].get_parent().get_parent()
+	var third_column := rounds.skill_labels[6].get_parent().get_parent()
+
+	for i in range(0, 2):
+		assert_eq(rounds.skill_labels[i].get_parent().get_parent(), first_column,
+			"The first Player Skills column contains skills 1–2")
+	for i in range(2, 6):
+		assert_eq(rounds.skill_labels[i].get_parent().get_parent(), second_column,
+			"The second Player Skills column contains skills 3–6")
+	for i in range(6, 10):
+		assert_eq(rounds.skill_labels[i].get_parent().get_parent(), third_column,
+			"The third Player Skills column contains skills 7–10")
+	assert_ne(first_column, second_column)
+	assert_ne(second_column, third_column)
 
 func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 	var tab := PlayerTab.new()
@@ -422,13 +563,19 @@ func test_embedded_round_uses_aim_page_and_returns_to_setup() -> void:
 			starters += 1
 	assert_eq(starters, 2, "Rebuilding does not duplicate round-start buttons")
 
-func test_embedded_round_requires_skill_allocation() -> void:
+## Unspent skill points are a nudge, not a gate: the round starts, and the play
+## page (not Player Skills) is what comes up.
+func test_embedded_round_starts_with_unspent_skill_points() -> void:
 	var tab := PlayerTab.new()
 	fixture.add_child(tab)
 	rounds.attach_player_tab(tab)
 	rounds._start_embedded(0)
+	assert_eq(rounds.draft.remaining(), 10, "The ten points are still there to spend later")
+	assert_true(rounds.busy, "Practice starts without spending them")
+	assert_true(rounds.active)
+	assert_eq(tab.selected, PlayerTab.PAGE_PLAY, "The round does not divert to the Player Skills page")
+	rounds.leave_round()
 	assert_false(rounds.busy)
-	assert_eq(tab.selected, PlayerTab.PAGE_SKILLS)
 
 ## The shot-type buttons are separate buttons running along the top of the Play
 ## Course page, one per shot type, above the aiming columns — no drop-down.
@@ -536,6 +683,96 @@ func _assert_shelf_fits(shelf: HBoxContainer) -> void:
 			assert_lte(control.get_global_rect().end.y, scroll.get_global_rect().position.y + available + 1,
 				"%s stays inside the shelf" % control.get_class())
 
+## The Edit Player page edits the Golfer Skin the owner wears and the colour of
+## each Re-color Group it carries - including while the round is running, since
+## it only ever changes how a golfer is drawn.
+func test_edit_player_page_changes_the_golfer_skin_and_its_group_colours() -> void:
+	# Editing a group colour writes the skin out, so point the library the page
+	# reads at a folder of the test's own: the player's skins are left alone.
+	var previous_library := GolferSkins.library
+	var previous_skin_id := GameManager.player_skin_id
+	_remove_tree(TEST_SKIN_ROOT)
+	GolferSkins.library = GolferSkinLibrary.new(GolferSkinLibrary.BUILT_IN_ROOT, TEST_SKIN_ROOT)
+	var toolbar := _embedded_toolbar()
+	var tab := toolbar.player_tab
+	tab.select(PlayerTab.PAGE_EDIT)
+	await wait_frames(5)
+
+	assert_not_null(rounds._skin_picker, "The Edit Player page picks a Golfer Skin")
+	assert_gt(rounds._skin_picker.item_count, 0, "from the skins the game knows")
+	assert_not_null(rounds._skin_preview, "and previews the golfer wearing it")
+	assert_eq(rounds._skin_preview.skin().id, GolferSkins.player_skin().id)
+	assert_true(rounds._skin_preview.sprite_node().is_playing(), "The first-column sprite animates")
+	assert_gt(rounds._skin_preview.scale.y, 1.0, "The preview sprite is scaled up to fill the column")
+
+	# Pick a different skin: the owner's golfer is dressed in it at once.
+	var swapped := -1
+	for index in rounds._skin_picker.item_count:
+		if str(rounds._skin_picker.get_item_metadata(index)) != GolferSkins.player_skin().id:
+			swapped = index
+			break
+	if swapped == -1:
+		GameManager.player_skin_id = previous_skin_id
+		GolferSkins.library = previous_library
+		_remove_tree(TEST_SKIN_ROOT)
+		pending("only one Golfer Skin on this machine - nothing to switch to")
+		return
+	var wanted := str(rounds._skin_picker.get_item_metadata(swapped))
+	rounds._skin_picker.item_selected.emit(swapped)
+	assert_eq(GameManager.player_skin_id, wanted, "the picker sets the skin the owner wears")
+	assert_eq(rounds._skin_preview.skin().id, wanted, "the preview follows")
+
+	# One colour button per Re-color Group of that skin, each writing the skin.
+	var swatches := rounds._skin_controls.find_children("SkinGroupColor*", "ColorPickerButton", true, false)
+	var worn := GolferSkins.player_skin()
+	assert_eq(swatches.size(), worn.group_count(),
+		"a colour button per Re-color Group of the chosen skin")
+	for group in worn.group_list():
+		var id := int(group.get("id", 0))
+		var labels := rounds._skin_controls.find_children("SkinGroupName%d" % id, "Label", true, false)
+		var color_buttons := rounds._skin_controls.find_children("SkinGroupColor%d" % id, "ColorPickerButton", true, false)
+		assert_eq(labels.size(), 1, "Each selector has a visible group name")
+		assert_eq(color_buttons.size(), 1, "Each group name has its own color selector")
+		assert_eq(labels[0].get_parent(), color_buttons[0].get_parent(),
+			"The group name sits next to its color selector")
+	var group_id := int(worn.group_list()[0].get("id", 0))
+	var before := GolferSkins.skins_changed.get_connections().size()
+	rounds._on_skin_group_color_changed(Color("00ff00"), group_id)
+	assert_eq(worn.group_by_id(group_id).get("color"), Color("00ff00"),
+		"the swatch re-colours the group")
+	assert_eq(GolferSkins.skins_changed.get_connections().size(), before,
+		"and tells the course to redraw the golfers wearing it")
+	# The profile keeps up for the groups it names as the skin is re-coloured.
+	var key := GolferSkin.profile_key_for_group(str(worn.group_by_id(group_id).get("name", "")))
+	if not key.is_empty():
+		assert_eq(rounds.draft.appearance.get(key), "00ff00",
+			"the profile's own colour for %s follows the skin" % key)
+		assert_true(worn.is_user_skin, "the skin became the player's own, so the shipped one is untouched")
+
+	GameManager.player_skin_id = previous_skin_id
+	GolferSkins.set_player_skin(previous_library.player_skin(previous_skin_id))
+	GolferSkins.library = previous_library
+	_remove_tree(TEST_SKIN_ROOT)
+
+
+## Everything on the Edit Player page is locked during a round except the Golfer
+## Skin controls, which the player is meant to reach while playing.
+func test_the_round_locks_the_page_but_not_the_skin_controls() -> void:
+	_embedded_toolbar()
+	for i in 10:
+		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
+	rounds._start_embedded(0)
+	rounds._process(0.0)
+	await wait_frames(2)
+	assert_true(rounds.active, "the round is running")
+	assert_true(rounds.name_edit.editable == false, "the name field is locked while playing")
+	assert_false(rounds._skin_picker.disabled, "the Golfer Skin picker stays live")
+	for swatch in rounds._skin_controls.find_children("SkinGroupColor*", "ColorPickerButton", true, false):
+		assert_false((swatch as ColorPickerButton).disabled, "and so do the group colours")
+	rounds.leave_round()
+
+
 func test_embedded_pages_fit_toolbar_and_overflow_horizontally() -> void:
 	var toolbar := _embedded_toolbar()
 	var tab := toolbar.player_tab
@@ -546,6 +783,16 @@ func test_embedded_pages_fit_toolbar_and_overflow_horizontally() -> void:
 			await wait_frames(5)
 			assert_eq(toolbar.size.y, float(UIConstants.BOTTOM_BAR_HEIGHT), "Switching pages never grows the bar")
 			_assert_shelf_fits(tab.pages[index])
+			if index == PlayerTab.PAGE_EDIT:
+				assert_gt(rounds._skin_preview_box.size.y, 72.0,
+					"The animated preview uses most of the Edit Player page height")
+				for group_column in rounds._skin_group_columns.get_children():
+					assert_gt(group_column.size.y, 72.0,
+						"Each group color column uses most of the page height")
+					var swatch := group_column.find_child("SkinGroupColor*", true, false) as ColorPickerButton
+					assert_not_null(swatch)
+					assert_gt(swatch.size.y, 72.0,
+						"The color selector stretches with its column")
 			if width == 600:
 				var scroll := tab.pages[index].get_parent() as ScrollContainer
 				assert_true(scroll.get_h_scroll_bar().visible, "Narrow pages scroll sideways")

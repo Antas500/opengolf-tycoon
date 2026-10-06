@@ -76,10 +76,32 @@ const REST_SOLVE_BISECTIONS: int = 14
 ## this much closer to it (tiles).
 const CLUB_SWITCH_MARGIN: float = 0.05
 
-## Golfer identification
-@export var golfer_name: String = "Golfer"
+## Golfer identification. The setter keeps the name label above the golfer in
+## step with renames that happen after spawn (the owner round renames its
+## participants once they exist).
+@export var golfer_name: String = "Golfer":
+	set(value):
+		golfer_name = value
+		_refresh_name_label()
 @export var golfer_id: int = -1
 @export var group_id: int = -1  # Which group this golfer belongs to
+## The Golfer Skin this golfer wears when one is picked for them by name.
+## Empty leaves it to GolferSkins: the skin for their tier, or the one the
+## player's own golfer is dressed in. Naming a skin after the golfer is on the
+## course dresses them in it straight away (see refresh_skin_sprites).
+@export var skin_id: String = "":
+	set(value):
+		if skin_id == value:
+			return
+		skin_id = value
+		if is_node_ready() and _use_sprites:
+			refresh_skin_sprites()
+
+## Per-group colour overrides for visiting golfers. Maps group name → Color
+## (e.g. {"Shirt": Color("4a90d9")}). When set, these colours replace the
+## skin's own group colours through GolferSkin.color_for_group(); the normal
+## player-profile role-key overrides still take priority when both exist.
+var group_color_overrides: Dictionary = {}
 
 ## Golfer tier (Beginner, Casual, Serious, Pro)
 var golfer_tier: int = GolferTier.Tier.CASUAL
@@ -216,22 +238,16 @@ const TIER_RING_COLORS = {
 ## Hover state for name label
 var _is_hovered: bool = false
 
-## Group badge label
-var _group_badge: Label = null
-
 ## Sprite-based rendering (replaces polygon visuals when available)
 var _animated_sprite: AnimatedSprite2D = null
+## The Golfer Skin this golfer is drawn in, and the untouched artwork of that
+## skin (kept so a re-color always starts from the art as it ships rather than
+## from the last colours drawn).
+var _skin: GolferSkin = null
+var _base_sprite_frames: SpriteFrames = null
 var _use_sprites: bool = false
 var _swing_tween: Tween  # Active procedural swing tween (see _start_swing_tween)
 var _current_direction: String = "south"  # south, east, north, west + diagonals
-
-## Tier-to-sprite-folder mapping
-const TIER_SPRITE_FOLDERS = {
-	GolferTier.Tier.BEGINNER: "beginner",
-	GolferTier.Tier.CASUAL: "casual",
-	GolferTier.Tier.SERIOUS: "serious",
-	GolferTier.Tier.PRO: "pro",
-}
 
 ## Walk animation state
 var _walk_frame: int = 0  # 0 or 1, alternates for leg swap
@@ -260,7 +276,6 @@ var SHOES_FRAME_1 := PackedVector2Array([
 ## Visual components
 @onready var visual: Node2D = $Visual if has_node("Visual") else null
 @onready var name_label: Label = $InfoContainer/NameLabel if has_node("InfoContainer/NameLabel") else null
-@onready var score_label: Label = $InfoContainer/ScoreLabel if has_node("InfoContainer/ScoreLabel") else null
 @onready var head: Polygon2D = $Visual/Head if has_node("Visual/Head") else null
 @onready var body: Polygon2D = $Visual/Body if has_node("Visual/Body") else null
 @onready var arms: Polygon2D = $Visual/Arms if has_node("Visual/Arms") else null
@@ -319,13 +334,14 @@ func _ready() -> void:
 	input_pickable = true
 	input_event.connect(_on_click_area_input_event)
 
-	# Set up labels with tier-colored name, ensure they render above trees
+	# Set up the name label above the golfer (always visible, tier-colored),
+	# and make sure it renders above trees
 	var info_container = get_node_or_null("InfoContainer")
 	if info_container:
 		info_container.z_index = 10
 	if name_label:
-		name_label.text = golfer_name
 		_apply_tier_name_color()
+		_refresh_name_label()
 
 	# Create highlight ring for active golfer indication
 	_create_highlight_ring()
@@ -333,14 +349,9 @@ func _ready() -> void:
 	# Create tier-colored ring (always visible)
 	_create_tier_ring()
 
-	# Create group badge (visible for groups of 2+)
-	_create_group_badge()
-
-	# Enable hover detection for name label
+	# Hovering the golfer adds their tier to the name label
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
-	if name_label:
-		name_label.visible = false  # Show on hover only
 
 	# Connect to green fee payment signal
 	EventBus.green_fee_paid.connect(_on_green_fee_paid)
@@ -349,7 +360,6 @@ func _ready() -> void:
 	_setup_sprite_animations()
 
 	_update_visual()
-	_update_score_display()
 
 	if visual:
 		_expression = GolferExpression.new()
@@ -358,74 +368,30 @@ func _ready() -> void:
 		_expression.initialize(self, visual)
 
 
-## Set up AnimatedSprite2D with PixelLab-generated frames
-func _setup_sprite_animations() -> void:
-	# Try tier-specific path first, then fall back to generic path
-	var tier_folder = TIER_SPRITE_FOLDERS.get(golfer_tier, "casual")
-	var base_path = "res://assets/sprites/golfer/%s/animations/" % tier_folder
-	var test_file = base_path + "idle/south/frame_000.png"
-	if not ResourceLoader.exists(test_file):
-		# Fall back to generic (non-tier) path for backwards compatibility
-		base_path = "res://assets/sprites/golfer/animations/"
-		test_file = base_path + "idle/south/frame_000.png"
-		if not ResourceLoader.exists(test_file):
-			return
-
-	var sprite_frames = SpriteFrames.new()
-	if sprite_frames.has_animation("default"):
-		sprite_frames.remove_animation("default")
-
-	var anim_types = {
-		"idle": {"path": "idle", "fps": 4.0, "loop": true},
-		"walk": {"path": "walk", "fps": 8.0, "loop": true},
-		"swing": {"path": "swing", "fps": 10.0, "loop": false},
-	}
-	# 8 directions with fallback mapping for missing diagonals
-	var directions = ["south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west"]
-	# Fallback: diagonal → nearest cardinal if diagonal frames don't exist
-	var diagonal_fallbacks = {
-		"south-east": "south", "north-east": "east",
-		"north-west": "north", "south-west": "west",
-	}
-
-	var has_any_animation = false
-	for anim_name in anim_types:
-		var anim_info = anim_types[anim_name]
-		for dir in directions:
-			var full_name = "%s_%s" % [anim_name, dir]
-			var dir_path = base_path + "%s/%s/" % [anim_info["path"], dir]
-
-			# Check if directory has frames; try fallback for diagonals
-			var frame_path = dir_path + "frame_000.png"
-			if not ResourceLoader.exists(frame_path):
-				var fallback = diagonal_fallbacks.get(dir, "")
-				if fallback != "":
-					dir_path = base_path + "%s/%s/" % [anim_info["path"], fallback]
-					frame_path = dir_path + "frame_000.png"
-					if not ResourceLoader.exists(frame_path):
-						continue
-				else:
-					continue
-
-			sprite_frames.add_animation(full_name)
-			sprite_frames.set_animation_speed(full_name, anim_info["fps"])
-			sprite_frames.set_animation_loop(full_name, anim_info["loop"])
-
-			for i in range(16):
-				var fpath = dir_path + "frame_%03d.png" % i
-				if not ResourceLoader.exists(fpath):
-					break
-				var texture = load(fpath)
-				if texture:
-					sprite_frames.add_frame(full_name, texture)
-					has_any_animation = true
-
-	if not has_any_animation:
-		return
+## Set up the AnimatedSprite2D the golfer is drawn with.
+##
+## The frames come from the golfer's Golfer Skin: the sprite set the skin names
+## (assets/sprites/golfer/<set>/animations), eight directions with the diagonals
+## falling back to the nearest cardinal, re-coloured through the skin's
+## Re-color Layers. A golfer with no skin to wear - only possible when a skin
+## folder is missing - keeps the polygon golfer, as it always has.
+func _setup_sprite_animations() -> bool:
+	if visual == null:
+		return false
+	var worn := GolferSkins.skin_for_golfer(self)
+	if worn == null:
+		return false
+	var frames := GolferSkins.library.recolored_frames(worn, group_color_overrides)
+	if frames == null or frames.get_animation_names().is_empty():
+		return false
+	_skin = worn
+	_base_sprite_frames = GolferSkins.library.raw_frames(worn)
+	if _base_sprite_frames == null:
+		_base_sprite_frames = frames
 
 	_animated_sprite = AnimatedSprite2D.new()
 	_animated_sprite.name = "GolferSprite"
-	_animated_sprite.sprite_frames = sprite_frames
+	_animated_sprite.sprite_frames = frames
 	_animated_sprite.centered = true
 	_animated_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_animated_sprite.position = Vector2(0, -8)
@@ -439,6 +405,22 @@ func _setup_sprite_animations() -> void:
 
 	if _animated_sprite.sprite_frames.has_animation("idle_south"):
 		_animated_sprite.play("idle_south")
+	return true
+
+## Build the sprite renderer for a golfer that was not instantiated from the
+## golfer scene - the skin editor's preview. Returns whether the golfer is drawn
+## with skin sprites afterwards.
+func use_skin_sprites() -> bool:
+	if visual == null:
+		visual = Node2D.new()
+		visual.name = "Visual"
+		add_child(visual)
+	_setup_sprite_animations()
+	return _use_sprites
+
+## The AnimatedSprite2D this golfer is drawn with, if any.
+func sprite_node() -> AnimatedSprite2D:
+	return _animated_sprite
 
 ## Get direction from movement vector (8-direction when sprites support it)
 func _get_direction_from_velocity(vel: Vector2) -> String:
@@ -563,18 +545,50 @@ func _randomize_appearance() -> void:
 	]
 	skin_tone = skin_tones[randi() % skin_tones.size()]
 
-## Apply appearance colors to visual components
+## Apply appearance colors to visual components.
+##
+## The owner uses the same pixel-art frames as visiting golfers - the colours
+## of the Golfer Skin they wear. The profile still drives the polygon golfer
+## underneath (the fall-back when a skin has no art) and records the owner's
+## Shirt/Pants/Cap/Hair/Skin choices; the Re-color Groups of the same names are
+## those choices on the sprite (see GolferSkin.profile_key_for_group).
 func apply_player_appearance(profile: PlayerGolferProfile) -> void:
-	# Pre-rendered tier sprites cannot represent the five customizable colors.
-	# Use the existing procedural golfer renderer for the owner instead.
-	_use_sprites = false
-	if visual:
-		for child in visual.get_children():
-			if child is CanvasItem:
-				child.visible = child != _animated_sprite
+	if profile == null:
+		return
 	for key in PlayerGolferProfile.COLORS:
-		set(key, Color(profile.appearance[key]))
+		set(key, Color(profile.appearance.get(key, "ffffff")))
 	_apply_appearance()
+	refresh_skin_sprites()
+
+## Dress the golfer in its Golfer Skin again: the frames of that skin, with the
+## colours the skin carries (see GolferSkin). Visiting golfers carry
+## `group_color_overrides` which replace the skin's default group colours;
+## the frames are cached per colour fingerprint so each visitor draws correctly.
+func refresh_skin_sprites() -> void:
+	if _animated_sprite == null:
+		return
+	var worn := GolferSkins.skin_for_golfer(self)
+	if worn == null:
+		return
+	var frames := GolferSkins.library.recolored_frames(worn, group_color_overrides)
+	if frames == null or frames.get_animation_names().is_empty():
+		return
+	_skin = worn
+	var old_animation := _animated_sprite.animation
+	var old_frame := _animated_sprite.frame
+	var was_playing := _animated_sprite.is_playing()
+	_animated_sprite.sprite_frames = frames
+	if frames.has_animation(old_animation):
+		_animated_sprite.play(old_animation)
+		_animated_sprite.frame = mini(old_frame, frames.get_frame_count(old_animation) - 1)
+	elif frames.has_animation("idle_south"):
+		_animated_sprite.play("idle_south")
+	if not was_playing:
+		_animated_sprite.pause()
+
+## The Golfer Skin this golfer is drawn in, if any.
+func skin() -> GolferSkin:
+	return _skin
 
 func _apply_appearance() -> void:
 	if body:
@@ -590,6 +604,10 @@ func _apply_appearance() -> void:
 		hair.color = hair_color
 	if head:
 		head.color = skin_tone
+	if arms:
+		arms.color = skin_tone
+	if hands:
+		hands.color = skin_tone
 
 ## Synchronize driving, accuracy, putting and recovery skills from the owner profile.
 func sync_player_profile_skills() -> void:
@@ -683,8 +701,25 @@ func initialize_from_tier(tier: int) -> void:
 	# Apply tier-based visual differentiation
 	_apply_tier_visuals(tier)
 
+	# A tier decides which Golfer Skin a golfer wears, and every visitor is
+	# given their tier after they spawn, so dress them again here.
+	_apply_tier_skin()
+
 	# Update tier ring color to match new tier
 	_update_tier_ring_color()
+
+	# Re-colour the name label too: visitors are given their tier after _ready
+	_apply_tier_name_color()
+
+## Dress a golfer in the skin their new tier calls for. Golfers wearing a skin
+## picked by name, or playing as the owner, keep the one they have.
+func _apply_tier_skin() -> void:
+	if not _use_sprites or not skin_id.is_empty() or player_profile != null:
+		return
+	var wanted := GolferSkins.skin_for_golfer(self)
+	if wanted == null or wanted == _skin:
+		return
+	refresh_skin_sprites()
 
 func _apply_tier_visuals(tier: int) -> void:
 	if not visual:
@@ -780,7 +815,6 @@ func _process(delta: float) -> void:
 		return
 	_update_highlight_ring()
 	_update_tier_ring()
-	_update_group_badge()
 	_update_mood_visuals()
 
 	# The round is over: this golfer is walking home and visiting the
@@ -1100,7 +1134,6 @@ func start_hole(hole_number: int, tee_position: Vector2i) -> void:
 	global_position = screen_pos
 
 	EventBus.golfer_started_hole.emit(golfer_id, hole_number)
-	_update_score_display()
 	_change_state(State.PREPARING_SHOT)
 
 func awaits_player_shot() -> bool:
@@ -1734,7 +1767,6 @@ func finish_hole(par: int) -> void:
 	EventBus.golfer_finished_hole.emit(golfer_id, _hole_number, current_strokes, par)
 	hole_completed.emit(current_strokes, par)
 
-	_update_score_display()
 	_change_state(State.IDLE)
 	if _expression:
 		_expression.react_to_score(current_strokes - par)
@@ -3134,53 +3166,28 @@ func _update_tier_ring_color() -> void:
 	if _tier_ring:
 		_tier_ring.color = TIER_RING_COLORS.get(golfer_tier, Color(0.5, 0.5, 0.5))
 
-## Hover detection — show name label on mouse hover
-func _on_mouse_entered() -> void:
-	_is_hovered = true
-	if name_label:
+## Write the name label above the golfer: their name, always, plus their tier
+## while the mouse is over them. The label is the only text a golfer carries —
+## score and hole live in the scorecard panels and the click-through popup.
+func _refresh_name_label() -> void:
+	if not name_label:
+		return
+	if _is_hovered:
 		var tier_name = GolferTier.TIER_DATA.get(golfer_tier, {}).get("name", "")
 		var stars = "★".repeat(golfer_tier + 1)
 		name_label.text = "%s %s %s" % [stars, tier_name, golfer_name]
-		name_label.visible = true
+	else:
+		name_label.text = golfer_name
+	name_label.visible = true
+
+## Hover detection — add the golfer's tier to the name label they always wear
+func _on_mouse_entered() -> void:
+	_is_hovered = true
+	_refresh_name_label()
 
 func _on_mouse_exited() -> void:
 	_is_hovered = false
-	if name_label:
-		name_label.visible = false
-
-## Create group number badge inside InfoContainer (above score label)
-func _create_group_badge() -> void:
-	var info_container = get_node_or_null("InfoContainer")
-	if not info_container:
-		return
-	_group_badge = Label.new()
-	_group_badge.name = "GroupBadge"
-	_group_badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_group_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_group_badge.add_theme_font_size_override("font_size", 10)
-	_group_badge.add_theme_constant_override("outline_size", 4)
-	_group_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
-	_group_badge.visible = false
-	info_container.add_child(_group_badge)
-	# Set after add_child so the container applies its layout. The raw layout
-	# value has no matching enum constant, so silence the enum warnings here.
-	@warning_ignore_start("int_as_enum_without_cast", "int_as_enum_without_match")
-	_group_badge.layout_mode = 2
-	@warning_ignore_restore("int_as_enum_without_cast", "int_as_enum_without_match")
-	info_container.move_child(_group_badge, 0)  # Place above score label
-
-## Update group badge (no position tracking needed — VBoxContainer handles layout)
-func _update_group_badge() -> void:
-	pass
-
-## Set group badge text and color (called by GolferManager after group assignment)
-func set_group_badge(gid: int, _group_size: int) -> void:
-	if not _group_badge:
-		return
-	_group_badge.text = "Group %d" % (gid + 1)
-	var hue = fmod(gid * 0.618033988749895, 1.0)
-	_group_badge.add_theme_color_override("font_color", Color.from_hsv(hue, 0.6, 0.9))
-	_group_badge.visible = true
+	_refresh_name_label()
 
 ## Update visual modulate based on mood state
 func _update_mood_visuals() -> void:
@@ -3286,29 +3293,6 @@ func _update_visual() -> void:
 			# Dim the golfer slightly when finished
 			if body:
 				body.modulate = Color(0.85, 0.85, 0.85, 1)
-
-## Update score display
-func _update_score_display() -> void:
-	if not score_label:
-		return
-
-	# Calculate score relative to par using actual accumulated par values
-	var score_relative_to_par = total_strokes - total_par
-	var score_text = ""
-
-	if total_par == 0:
-		score_text = "E"  # No holes completed yet
-	elif score_relative_to_par == 0:
-		score_text = "E"  # Even
-	elif score_relative_to_par > 0:
-		score_text = "+%d" % score_relative_to_par  # Over par
-	else:
-		score_text = "%d" % score_relative_to_par  # Under par (shows negative)
-
-	# Show current hole
-	var hole_text = "Hole %d" % (current_hole + 1)
-
-	score_label.text = "%s, %s" % [score_text, hole_text]
 
 ## Handle green fee payment notification
 func _on_green_fee_paid(paid_golfer_id: int, _paid_golfer_name: String, amount: int) -> void:
@@ -3558,7 +3542,7 @@ func _on_click_area_input_event(_viewport: Node, event: InputEvent, _shape_idx: 
 
 ## Serialize golfer state
 func serialize() -> Dictionary:
-	return {
+	var data := {
 		"golfer_id": golfer_id,
 		"golfer_name": golfer_name,
 		"group_id": group_id,
@@ -3579,8 +3563,16 @@ func serialize() -> Dictionary:
 		"current_state": current_state,
 		"ball_position": {"x": ball_position.x, "y": ball_position.y},
 		"ball_position_precise": {"x": ball_position_precise.x, "y": ball_position_precise.y},
-		"position": {"x": global_position.x, "y": global_position.y}
+		"position": {"x": global_position.x, "y": global_position.y},
 	}
+	if not skin_id.is_empty():
+		data["skin_id"] = skin_id
+	if not group_color_overrides.is_empty():
+		var color_data := {}
+		for key in group_color_overrides:
+			color_data[key] = (group_color_overrides[key] as Color).to_html(false)
+		data["group_color_overrides"] = color_data
+	return data
 
 ## Deserialize golfer state
 func deserialize(data: Dictionary) -> void:
@@ -3601,6 +3593,12 @@ func deserialize(data: Dictionary) -> void:
 	total_par = data.get("total_par", 0)
 	previous_hole_strokes = data.get("previous_hole_strokes", 0)
 	current_mood = data.get("current_mood", 0.5)
+	skin_id = data.get("skin_id", "")
+	# Restore visiting golfer colour overrides.
+	var saved_overrides: Dictionary = data.get("group_color_overrides", {})
+	group_color_overrides.clear()
+	for key in saved_overrides:
+		group_color_overrides[key] = Color.from_string(str(saved_overrides[key]), Color.WHITE)
 	# Always restore to IDLE state so golfer can resume cleanly
 	# The current_strokes and ball_position tell us where they are in the hole
 	current_state = State.IDLE
@@ -3618,4 +3616,6 @@ func deserialize(data: Dictionary) -> void:
 		global_position = Vector2(pos_data.get("x", 0), pos_data.get("y", 0))
 
 	_update_visual()
-	_update_score_display()
+	# The saved tier decides the name colour
+	_apply_tier_name_color()
+	_refresh_name_label()

@@ -45,6 +45,28 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Undo/redo** — 50-action stack covering terrain changes and entity placement, with cost refunds on undo
 - **OB markers** — Automatic white-stake placement at out-of-bounds boundaries
 
+### Golfer Skins
+
+- **Edit Golfer Skins** on the title screen: paint what the golfers wear, one
+  animation sprite at a time. **Edit** switches between the two sides of the
+  studio. **Pixels** edits the sprite's own artwork with a colour picker and a
+  brush (right-click erases, alt-click picks a colour up); **Groups** gives the
+  pixels the brush covers to a **Re-color Group** - Shirt, Pants, Cap, Hair,
+  Skin, or any group you make, rename, re-colour or delete - and grouped pixels
+  are drawn in the group's colour with the artwork's own shading. In Groups mode
+  a click on the sprite selects the group that pixel belongs to.
+- Skins are **editable text files**: `skin.txt` for the groups and
+  `layers/<animation>/<direction>/frame_NNN.layer.txt` for each sprite - the
+  group grid and, once pixels are painted, the sprite's own pixels as hex - so a
+  skin can also be drawn by hand. Save copies a built-in skin into
+  `user://golfer_skins` (Revert puts the shipped one back), New Skin starts one
+  of your own, and Duplicate copies groups and layers together.
+- Choose which tiers of visiting golfer wear a skin, and press **Wear This** to
+  put it on your own golfer. The skin carries the colours, so re-colouring a
+  group called Shirt, Pants, Cap, Hair or Skin is how you change your golfer's
+  shirt, trousers, cap, hair and skin tone - from the studio, or from the
+  **Edit Player** tab while a round is running.
+
 ### Golfer Simulation
 
 - **AI golfers** — Skill-tiered (Beginner / Casual / Serious / Pro) with animated walking and swing cycles

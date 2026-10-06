@@ -219,8 +219,6 @@ var _active_golfers_box: HBoxContainer = null  # Shelf of columns, four golfers 
 var _recent_rounds_box: HBoxContainer = null  # Shelf of columns, six rounds deep
 var _recent_rounds: Array[Dictionary] = []
 var player_tab: PlayerTab
-var _skill_labels: Array[Label] = []
-var _player_points_label: Label = null
 var _building_registry: Dictionary = {}
 var _building_shelf: TileHoneycomb = null
 var _decoration_registry: Dictionary = {}
@@ -1601,16 +1599,12 @@ func _on_golfer_row_pressed(golfer_id: int) -> void:
 # Player tab
 # =============================================================================
 
+## The Player tab's skill readout belongs to PlayerRoundManager's Player Skills
+## page; all the toolbar keeps in step is the badge on the Player Skills button,
+## which counts the points still to spend.
 func _refresh_player_skills() -> void:
-	if _player_points_label == null:
-		return
-	var profile: PlayerGolferProfile = GameManager.player_profile
-	if profile == null:
-		return
-	for i in _skill_labels.size():
-		if i < PlayerGolferProfile.SKILLS.size():
-			_skill_labels[i].text = "%s %d%%" % [PlayerGolferProfile.SKILLS[i], profile.points[i] * 10]
-	_player_points_label.text = "%d of 10 pts remaining" % profile.remaining()
+	if is_instance_valid(player_tab):
+		player_tab.refresh_skill_badge()
 
 # =============================================================================
 # Tool selection

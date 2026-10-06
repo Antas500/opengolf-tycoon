@@ -670,6 +670,18 @@ func _apply_controls_settings(config: ConfigFile) -> void:
 
 func _apply_gameplay_settings(config: ConfigFile) -> void:
 	GameManager.multi_tee_enabled = config.get_value("gameplay", "multi_tee_enabled", false)
+	# The Golfer Skin the owner's golfer wears belongs to the player, not to a
+	# save (see GolferSkins.set_player_skin).
+	GameManager.player_skin_id = config.get_value("gameplay", "player_skin", "")
+
+## Write one preference that belongs to the player rather than to a save -
+## audio and display settings, the golfer skin the owner wears. Sections the
+## caller does not touch are left as they were.
+func set_user_preference(section: String, key: String, value: Variant) -> void:
+	var config := ConfigFile.new()
+	config.load(SETTINGS_PATH)
+	config.set_value(section, key, value)
+	config.save(SETTINGS_PATH)
 
 func save_user_settings() -> void:
 	var config := ConfigFile.new()

@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Nash Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "2c3e50",
+   "Cap": "2c3e50",
+   "Hair": "b8860b",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Ben Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "1a1a2e",
+   "Cap": "cb4335",
+   "Hair": "bc8f8f",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Allie Karoo",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "d5d8dc",
+   "Cap": "c0392b",
+   "Hair": "483c32",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Seth Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "f7f9f9",
+   "Cap": "292b2c",
+   "Hair": "d4a76a",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Nick Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "4a235a",
+   "Cap": "1a1a2e",
+   "Hair": "704214",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Max Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "4a235a",
+   "Cap": "b9770e",
+   "Hair": "1a1a1a",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Ellie Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "616a6b",
+   "Cap": "d4ac0d",
+   "Hair": "2f1b0e",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Riley Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "1c2833",
+   "Cap": "1b4f72",
+   "Hair": "b8860b",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Linda Karoo",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "808b96",
+   "Cap": "d9534f",
+   "Hair": "2f1b0e",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Jonah Karoo",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "f7f9f9",
+   "Cap": "f0ad4e",
+   "Hair": "d2691e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Jim Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "bdc3c7",
+   "Cap": "1b4f72",
+   "Hair": "a0522d",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Kate Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "1b2631",
+   "Cap": "5cb85c",
+   "Hair": "d2691e",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Hazel Karoo",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "bdc3c7",
+   "Cap": "5bc0de",
+   "Hair": "c0c0c0",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Vince Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "34495e",
+   "Cap": "e67e22",
+   "Hair": "2c1a0e",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Mike Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "5b2c6f",
+   "Cap": "d9534f",
+   "Hair": "d2691e",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Deb Karoo",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "5b2c6f",
+   "Cap": "d9534f",
+   "Hair": "d2b48c",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Faye Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "808b96",
+   "Cap": "4a90d9",
+   "Hair": "6b4423",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Skip Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "1b2631",
+   "Cap": "c0392b",
+   "Hair": "5c3a1e",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Ike Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "4a235a",
+   "Cap": "e8e8e8",
+   "Hair": "f5deb3",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Maya Karoo",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "1a1a2e",
+   "Cap": "292b2c",
+   "Hair": "5c3a1e",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Tracy Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "5bc0de",
+   "Pants": "2c3e50",
+   "Cap": "cb4335",
+   "Hair": "bc8f8f",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Whitney Karoo",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "f7f9f9",
+   "Cap": "1b4f72",
+   "Hair": "d4a76a",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Jack Karoo",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "2c3e50",
+   "Cap": "2c3e50",
+   "Hair": "704214",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Jen Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "4a235a",
+   "Cap": "b9770e",
+   "Hair": "c0c0c0",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Nina Karoo",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "2c3e50",
+   "Cap": "6c3483",
+   "Hair": "2f1b0e",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Lane Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "d5d8dc",
+   "Cap": "292b2c",
+   "Hair": "2f1b0e",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Raven Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "ecf0f1",
+   "Cap": "2c3e50",
+   "Hair": "d2b48c",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Ali Karoo",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "e67e22",
+   "Pants": "1b2631",
+   "Cap": "ecf0f1",
+   "Hair": "8b4513",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Rich Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "d5d8dc",
+   "Cap": "27ae60",
+   "Hair": "cd853f",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Sean Karoo",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "d5d8dc",
+   "Cap": "d4ac0d",
+   "Hair": "d2b48c",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Ashley Karoo",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "4a235a",
+   "Cap": "c0392b",
+   "Hair": "1a1a1a",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Shannon Karoo",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "1b2631",
+   "Cap": "c0392b",
+   "Hair": "483c32",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Dawn Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "f7f9f9",
+   "Cap": "6c3483",
+   "Hair": "a0522d",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Linc Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "4a235a",
+   "Cap": "1b4f72",
+   "Hair": "f5deb3",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Casey Karoo",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "1e8449",
+   "Pants": "2c3e50",
+   "Cap": "5bc0de",
+   "Hair": "a9a9a9",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Pat Karoo",
+  "skin_id": "beginner",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "7d6608",
+   "Cap": "1e8449",
+   "Hair": "483c32",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Rita Karoo",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "616a6b",
+   "Cap": "4a90d9",
+   "Hair": "bc8f8f",
+   "Skin": "f0c8a0"
+  }
+ },
+ {
+  "name": "Nate Karoo",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "f7f9f9",
+   "Cap": "c0392b",
+   "Hair": "f5deb3",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Sally Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "34495e",
+   "Cap": "e67e22",
+   "Hair": "8b4513",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Dave Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "4a235a",
+   "Cap": "d9534f",
+   "Hair": "8b7355",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Carol Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "2c3e50",
+   "Cap": "e8e8e8",
+   "Hair": "8b4513",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Luna Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "5b2c6f",
+   "Cap": "5bc0de",
+   "Hair": "2c1a0e",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Buck Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "2e4053",
+   "Cap": "b9770e",
+   "Hair": "a9a9a9",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Leah Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "2471a3",
+   "Pants": "1a1a2e",
+   "Cap": "292b2c",
+   "Hair": "bc8f8f",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Donna Karoo",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "566573",
+   "Cap": "d4ac0d",
+   "Hair": "704214",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Ted Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "4a235a",
+   "Cap": "5cb85c",
+   "Hair": "d4a76a",
+   "Skin": "f2d5b0"
+  }
+ },
+ {
+  "name": "Corey Karoo",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "2c3e50",
+   "Cap": "e8e8e8",
+   "Hair": "8b4513",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Chris Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "4a235a",
+   "Cap": "2c3e50",
+   "Hair": "2f1b0e",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Wade Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "5b2c6f",
+   "Cap": "6c3483",
+   "Hair": "5c3a1e",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Julie Karoo",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "1a1a2e",
+   "Cap": "5cb85c",
+   "Hair": "483c32",
+   "Skin": "d2a67a"
+  }
+ }
+]

@@ -1,0 +1,602 @@
+[
+ {
+  "name": "Ron Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "8e44ad",
+   "Pants": "283747",
+   "Cap": "cb4335",
+   "Hair": "d2b48c",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Tony Moreno",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "1a1a2e",
+   "Cap": "cb4335",
+   "Hair": "a0522d",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Tina Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "5b2c6f",
+   "Cap": "d4ac0d",
+   "Hair": "1a1a1a",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Hugh Moreno",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "7d6608",
+   "Cap": "8e44ad",
+   "Hair": "8b4513",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Owen Moreno",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "0b5345",
+   "Pants": "34495e",
+   "Cap": "cb4335",
+   "Hair": "b8860b",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Liz Moreno",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1b2631",
+   "Pants": "2e4053",
+   "Cap": "1e8449",
+   "Hair": "8b4513",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Mel Moreno",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1a1a2e",
+   "Cap": "cb4335",
+   "Hair": "d2b48c",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Cam Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "1a5276",
+   "Pants": "7d6608",
+   "Cap": "e8e8e8",
+   "Hair": "1a1a1a",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Vera Moreno",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "1a1a2e",
+   "Cap": "5cb85c",
+   "Hair": "2c1a0e",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Roy Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a90d9",
+   "Pants": "1a1a2e",
+   "Cap": "cb4335",
+   "Hair": "d2b48c",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Jess Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "4a235a",
+   "Pants": "1a1a2e",
+   "Cap": "2c3e50",
+   "Hair": "483c32",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Brooks Moreno",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "bdc3c7",
+   "Cap": "292b2c",
+   "Hair": "cd853f",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Wendy Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "a04000",
+   "Pants": "1a1a2e",
+   "Cap": "1a1a2e",
+   "Hair": "2f1b0e",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Tara Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "2c3e50",
+   "Cap": "ecf0f1",
+   "Hair": "d2b48c",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Val Moreno",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "34495e",
+   "Cap": "2c3e50",
+   "Hair": "d2691e",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Kate Moreno",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c0392b",
+   "Pants": "4a235a",
+   "Cap": "1b4f72",
+   "Hair": "2f1b0e",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Luke Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "b9770e",
+   "Pants": "283747",
+   "Cap": "5cb85c",
+   "Hair": "bc8f8f",
+   "Skin": "8b5e3c"
+  }
+ },
+ {
+  "name": "Clay Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "616a6b",
+   "Cap": "e8e8e8",
+   "Hair": "d2691e",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Nancy Moreno",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "d5d8dc",
+   "Cap": "1e8449",
+   "Hair": "2f1b0e",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Marc Moreno",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "283747",
+   "Cap": "1b4f72",
+   "Hair": "d2b48c",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Chloe Moreno",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "5b2c6f",
+   "Cap": "1e8449",
+   "Hair": "c0c0c0",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Kai Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "1a1a2e",
+   "Cap": "1e8449",
+   "Hair": "d4a76a",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Rose Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "292b2c",
+   "Pants": "1a1a2e",
+   "Cap": "c0392b",
+   "Hair": "8b4513",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Allie Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "145a32",
+   "Pants": "1a1a2e",
+   "Cap": "8e44ad",
+   "Hair": "483c32",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Eli Moreno",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "cb4335",
+   "Pants": "4a235a",
+   "Cap": "f0ad4e",
+   "Hair": "2c1a0e",
+   "Skin": "f5d6b8"
+  }
+ },
+ {
+  "name": "Flo Moreno",
+  "skin_id": "beginner",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "117a65",
+   "Pants": "4a235a",
+   "Cap": "2c3e50",
+   "Hair": "a0522d",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Chelsea Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "34495e",
+   "Cap": "5cb85c",
+   "Hair": "1a1a1a",
+   "Skin": "deb887"
+  }
+ },
+ {
+  "name": "Riley Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "1a1a2e",
+   "Cap": "5cb85c",
+   "Hair": "1a1a1a",
+   "Skin": "b5875a"
+  }
+ },
+ {
+  "name": "Kira Moreno",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "2c3e50",
+   "Cap": "8e44ad",
+   "Hair": "d2691e",
+   "Skin": "6b4423"
+  }
+ },
+ {
+  "name": "Glen Moreno",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "34495e",
+   "Pants": "4a235a",
+   "Cap": "ecf0f1",
+   "Hair": "d2691e",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Will Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "7d6608",
+   "Cap": "8e44ad",
+   "Hair": "8b7355",
+   "Skin": "c68642"
+  }
+ },
+ {
+  "name": "Ellie Moreno",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "5cb85c",
+   "Pants": "4a235a",
+   "Cap": "f0ad4e",
+   "Hair": "6b4423",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Kara Moreno",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "e8e8e8",
+   "Pants": "ecf0f1",
+   "Cap": "4a90d9",
+   "Hair": "b8860b",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Al Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "bdc3c7",
+   "Cap": "ecf0f1",
+   "Hair": "bc8f8f",
+   "Skin": "dbb98f"
+  }
+ },
+ {
+  "name": "Chase Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "34495e",
+   "Cap": "2c3e50",
+   "Hair": "d2b48c",
+   "Skin": "8d6e4c"
+  }
+ },
+ {
+  "name": "Dave Moreno",
+  "skin_id": "beginner",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "f0ad4e",
+   "Pants": "4a235a",
+   "Cap": "cb4335",
+   "Hair": "483c32",
+   "Skin": "a07850"
+  }
+ },
+ {
+  "name": "Lily Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "f7f9f9",
+   "Cap": "f0ad4e",
+   "Hair": "483c32",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Bobby Moreno",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "4a235a",
+   "Cap": "1a1a2e",
+   "Hair": "d2b48c",
+   "Skin": "7c5c3e"
+  }
+ },
+ {
+  "name": "Jade Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "7b241c",
+   "Pants": "283747",
+   "Cap": "d4ac0d",
+   "Hair": "d2691e",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Zane Moreno",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "2c3e50",
+   "Cap": "8e44ad",
+   "Hair": "d2691e",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Ashley Moreno",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "27ae60",
+   "Pants": "7d6608",
+   "Cap": "e67e22",
+   "Hair": "2f1b0e",
+   "Skin": "d2a67a"
+  }
+ },
+ {
+  "name": "Claire Moreno",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "76448a",
+   "Pants": "283747",
+   "Cap": "292b2c",
+   "Hair": "a0522d",
+   "Skin": "a67c52"
+  }
+ },
+ {
+  "name": "Kirk Moreno",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "7d6608",
+   "Pants": "1c2833",
+   "Cap": "1a1a2e",
+   "Hair": "cd853f",
+   "Skin": "e5c9a3"
+  }
+ },
+ {
+  "name": "Cody Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "d9534f",
+   "Pants": "4a235a",
+   "Cap": "1b4f72",
+   "Hair": "704214",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Henry Moreno",
+  "skin_id": "casual",
+  "tier": 1,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "2c3e50",
+   "Cap": "6c3483",
+   "Hair": "b8860b",
+   "Skin": "e8be93"
+  }
+ },
+ {
+  "name": "Dawn Moreno",
+  "skin_id": "casual",
+  "tier": 3,
+  "group_colors": {
+   "Shirt": "6c3483",
+   "Pants": "7d6608",
+   "Cap": "ecf0f1",
+   "Hair": "d4a76a",
+   "Skin": "c49a6c"
+  }
+ },
+ {
+  "name": "Alex Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "1b4f72",
+   "Pants": "1c2833",
+   "Cap": "d4ac0d",
+   "Hair": "d2691e",
+   "Skin": "e0b687"
+  }
+ },
+ {
+  "name": "Holly Moreno",
+  "skin_id": "casual",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "922b21",
+   "Pants": "4a235a",
+   "Cap": "4a90d9",
+   "Hair": "5c3a1e",
+   "Skin": "c8a27c"
+  }
+ },
+ {
+  "name": "Vince Moreno",
+  "skin_id": "casual",
+  "tier": 0,
+  "group_colors": {
+   "Shirt": "1a1a2e",
+   "Pants": "1c2833",
+   "Cap": "1a1a2e",
+   "Hair": "d4a76a",
+   "Skin": "9e7b5a"
+  }
+ },
+ {
+  "name": "Molly Moreno",
+  "skin_id": "beginner",
+  "tier": 2,
+  "group_colors": {
+   "Shirt": "c9302c",
+   "Pants": "d5d8dc",
+   "Cap": "d9534f",
+   "Hair": "b8860b",
+   "Skin": "d2a67a"
+  }
+ }
+]

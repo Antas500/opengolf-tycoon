@@ -26,6 +26,14 @@ var status: Label
 var shot_bar: ShotTypeBar
 var draft: PlayerGolferProfile
 var name_edit: LineEdit
+## The Edit Player page's Re-color Group section. Its titled column contains a
+## row of one tall, named color selector per group; the row is rebuilt when the
+## owner chooses another skin.
+var _skin_controls: VBoxContainer = null
+var _skin_group_columns: HBoxContainer = null
+var _skin_picker: OptionButton = null
+var _skin_preview: Golfer = null
+var _skin_preview_box: Control = null
 var mode_picker: OptionButton
 var pro_picker: OptionButton
 var skill_labels: Array[Label] = []
@@ -100,6 +108,250 @@ func _make_panel(full_screen: bool) -> void:
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(content)
 
+## The Edit Player page's skin selector and Re-color Group controls. The skin
+## selector lives with the player's name; the group section is the next column
+## and gives each group a full-height, named color selector.
+func _build_skin_controls() -> void:
+	_label("Golfer skin")
+	_skin_picker = OptionButton.new()
+	_skin_picker.name = "GolferSkinPicker"
+	_skin_picker.tooltip_text = "Which Golfer Skin your golfer wears. The Edit Golfer Skins screen paints them."
+	_skin_picker.custom_minimum_size = Vector2(180, 28)
+	_skin_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_skin_picker.set_meta("editable_while_playing", true)
+	_skin_picker.item_selected.connect(_on_golfer_skin_selected)
+	content.add_child(_skin_picker)
+
+	_skin_controls = VBoxContainer.new()
+	_skin_controls.name = "SkinGroupControls"
+	_skin_controls.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_skin_controls.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_skin_controls.add_theme_constant_override("separation", 4)
+	player_tab.pages[PlayerTab.PAGE_EDIT].add_child(_skin_controls)
+
+	var heading := Label.new()
+	heading.text = "Group colours"
+	heading.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_MD)
+	_skin_controls.add_child(heading)
+
+	_skin_group_columns = HBoxContainer.new()
+	_skin_group_columns.name = "SkinGroupColumns"
+	_skin_group_columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_skin_group_columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_skin_group_columns.add_theme_constant_override("separation", 6)
+	_skin_controls.add_child(_skin_group_columns)
+	_refresh_skin_controls()
+
+
+## Fill the picker and rebuild the named columns for the skin the owner wears.
+## Every group gets a tall color button beside its name; the page scrolls
+## horizontally if a skin has more groups than fit in the toolbar.
+func _refresh_skin_controls() -> void:
+	if _skin_picker == null or _skin_controls == null or _skin_group_columns == null:
+		return
+	var skins := GolferSkins.library.skins()
+	_skin_picker.clear()
+	for index in skins.size():
+		_skin_picker.add_item(skins[index].display_name)
+		_skin_picker.set_item_metadata(index, skins[index].id)
+	var worn := GolferSkins.player_skin()
+	for index in skins.size():
+		if worn != null and skins[index].id == worn.id:
+			_skin_picker.select(index)
+	for child in _skin_group_columns.get_children():
+		_skin_group_columns.remove_child(child)
+		child.queue_free()
+	if worn == null:
+		return
+
+	for group in worn.group_list():
+		var group_id := int(group.get("id", 0))
+		var group_name := str(group.get("name", "Group"))
+		var group_column := VBoxContainer.new()
+		group_column.name = "SkinGroupColumn%d" % group_id
+		group_column.custom_minimum_size.x = 116
+		group_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		group_column.set_meta("skin_group_column", true)
+		_skin_group_columns.add_child(group_column)
+
+		var color_row := HBoxContainer.new()
+		color_row.name = "SkinGroupRow%d" % group_id
+		color_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		color_row.add_theme_constant_override("separation", 4)
+		group_column.add_child(color_row)
+
+		var name_label := Label.new()
+		name_label.name = "SkinGroupName%d" % group_id
+		name_label.text = group_name
+		name_label.custom_minimum_size.x = 52
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		name_label.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_SM)
+		color_row.add_child(name_label)
+
+		var swatch := ColorPickerButton.new()
+		swatch.name = "SkinGroupColor%d" % group_id
+		swatch.text = str(group.get("symbol", ""))
+		swatch.color = group.get("color", Color.WHITE)
+		swatch.edit_alpha = false
+		swatch.custom_minimum_size = Vector2(44, 72)
+		swatch.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		swatch.add_theme_font_size_override("font_size", UIConstants.FONT_SIZE_XS)
+		swatch.tooltip_text = "The colour %s is drawn in on this skin" % group_name
+		swatch.set_meta("editable_while_playing", true)
+		swatch.color_changed.connect(_on_skin_group_color_changed.bind(group_id))
+		color_row.add_child(swatch)
+	_refresh_skin_preview()
+
+
+## The first column is a scaled pixel-art golfer rather than a tiny picker icon.
+## Its Control provides the available rectangle; the Node2D preview is centered
+## and scaled to use most of that height without cropping the sprite.
+func _build_skin_preview(edit_page: HBoxContainer) -> void:
+	content = PlayerTab.add_column(edit_page, 116)
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_skin_preview_box = Control.new()
+	_skin_preview_box.name = "SkinPreview"
+	_skin_preview_box.custom_minimum_size = Vector2(100, 108)
+	_skin_preview_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_skin_preview_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_skin_preview_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_skin_preview_box.clip_contents = true
+	content.add_child(_skin_preview_box)
+
+	_skin_preview = Golfer.new()
+	_skin_preview.name = "SkinPreviewGolfer"
+	_skin_preview.set_physics_process(false)
+	_skin_preview_box.add_child(_skin_preview)
+	_skin_preview_box.resized.connect(_layout_skin_preview)
+
+
+func _refresh_skin_preview() -> void:
+	if _skin_preview == null or _skin_preview_box == null:
+		return
+	_skin_preview.player_profile = draft
+	if not _skin_preview.use_skin_sprites():
+		return
+	# The preview is not part of GolferManager's live-golfer list, so refresh it
+	# explicitly when the player switches skins or changes one of their colours.
+	_skin_preview.refresh_skin_sprites()
+	var sprite := _skin_preview.sprite_node()
+	if sprite != null and sprite.sprite_frames.has_animation("idle_south"):
+		sprite.play("idle_south")
+	_layout_skin_preview()
+
+
+func _layout_skin_preview() -> void:
+	if not is_instance_valid(_skin_preview) or not is_instance_valid(_skin_preview_box):
+		return
+	var available := _skin_preview_box.size - Vector2(12, 12)
+	if available.x <= 0.0 or available.y <= 0.0:
+		return
+	var sprite := _skin_preview.sprite_node()
+	var sprite_size := Vector2(48, 48)
+	if sprite != null and sprite.sprite_frames != null:
+		var animation: StringName = sprite.animation
+		if sprite.sprite_frames.has_animation("idle_south"):
+			animation = &"idle_south"
+		if sprite.sprite_frames.has_animation(animation) and sprite.sprite_frames.get_frame_count(animation) > 0:
+			var texture: Texture2D = sprite.sprite_frames.get_frame_texture(animation, 0)
+			if texture != null:
+				sprite_size = texture.get_size()
+	if sprite_size.x <= 0.0 or sprite_size.y <= 0.0:
+		return
+	var scale_factor := minf(available.x / sprite_size.x, available.y / sprite_size.y)
+	_skin_preview.scale = Vector2.ONE * scale_factor
+	# Golfer sprites sit eight source pixels above the golfer's origin.
+	_skin_preview.position = Vector2(_skin_preview_box.size.x * 0.5,
+		_skin_preview_box.size.y * 0.5 + 8.0 * scale_factor)
+
+
+## Wear one of the Golfer Skins: it belongs to the player rather than to the
+## round, so GolferSkins writes the choice to the user settings at once.
+func _on_golfer_skin_selected(index: int) -> void:
+	if _skin_picker == null or index < 0 or index >= _skin_picker.item_count:
+		return
+	var chosen := GolferSkins.library.get_skin(str(_skin_picker.get_item_metadata(index)))
+	if chosen == null:
+		return
+	GolferSkins.set_player_skin(chosen)
+	for group in chosen.group_list():
+		var key := GolferSkin.profile_key_for_group(str(group.get("name", "")))
+		if not key.is_empty():
+			var group_color: Color = group.get("color", Color.WHITE)
+			draft.appearance[key] = group_color.to_html(false)
+	_persist_player_profile()
+	GolferSkins.skins_changed.emit()
+	_refresh_skin_controls()
+
+
+## Re-colour one Re-color Group of the skin the owner wears. The skin is the
+## player's own from here on (a shipped skin is copied to user://golfer_skins
+## first), and the profile's matching appearance key keeps up with it.
+func _on_skin_group_color_changed(color: Color, group_id: int) -> void:
+	var skin := GolferSkins.player_skin()
+	if skin == null:
+		return
+	if not GolferSkins.library.ensure_editable(skin):
+		return
+	if not skin.set_group_color(group_id, color):
+		return
+	GolferSkins.library.save_skin(skin)
+	GolferSkins.skins_changed.emit()
+	var key := GolferSkin.profile_key_for_group(str(skin.group_by_id(group_id).get("name", "")))
+	if not key.is_empty():
+		draft.appearance[key] = color.to_html(false)
+	_persist_player_profile()
+	_refresh_skin_preview()
+
+
+## With the Save player button removed, player details and fallback appearance
+## colours persist as they are edited. During a round GameManager already holds
+## the live draft, so keep that object in place for the golfer using it.
+func _on_player_name_changed(_value: String) -> void:
+	_persist_player_profile()
+
+
+func _on_profile_color_changed(color: Color, key: String) -> void:
+	if draft == null or not draft.appearance.has(key):
+		return
+	draft.appearance[key] = color.to_html(false)
+	_persist_player_profile()
+
+
+func _persist_player_profile() -> void:
+	if draft == null:
+		return
+	if is_instance_valid(name_edit):
+		var edited_name := name_edit.text.strip_edges()
+		draft.golfer_name = edited_name if not edited_name.is_empty() else "Course Owner"
+	if busy:
+		GameManager.player_profile = draft
+	else:
+		GameManager.player_profile = PlayerGolferProfile.from_data(draft.serialize())
+
+
+## The PlayerGolferProfile colour keys the Golfer Skin the owner wears does not
+## name as a Re-color Group: those are the player's own colours, with no sprite
+## to change.
+func _standalone_profile_colors() -> Array:
+	var worn := GolferSkins.player_skin()
+	if worn == null:
+		return PlayerGolferProfile.COLORS.duplicate()
+	var named := []
+	for group in worn.group_list():
+		var key := GolferSkin.profile_key_for_group(str(group.get("name", "")))
+		if not key.is_empty():
+			named.append(key)
+	var remaining := []
+	for key in PlayerGolferProfile.COLORS:
+		if not named.has(key):
+			remaining.append(key)
+	return remaining
+
+
 func _label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
@@ -171,6 +423,7 @@ func _build_setup() -> void:
 	# one left on the card.
 	if is_instance_valid(scores):
 		scores.dismiss()
+	var edit_page: HBoxContainer = null
 	if is_instance_valid(player_tab):
 		player_tab.set_playing(false)
 		for index in [PlayerTab.PAGE_EDIT, PlayerTab.PAGE_SKILLS]:
@@ -178,19 +431,33 @@ func _build_setup() -> void:
 		player_tab.clear_aim_page()
 		# The management tournament panel survives on the Play Course page.
 		player_tab.clear_play_page()
-		content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_EDIT])
+		edit_page = player_tab.pages[PlayerTab.PAGE_EDIT]
+		_build_skin_preview(edit_page)
+		content = PlayerTab.add_column(edit_page, 200)
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	else:
 		_make_panel(true)
-	_label("PLAY YOUR COURSE")
-	_label("Your golfer")
+
+	_label("Player Name")
 	name_edit = LineEdit.new()
+	name_edit.name = "PlayerName"
 	name_edit.max_length = 32
 	name_edit.text = draft.golfer_name
+	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_edit.text_changed.connect(_on_player_name_changed)
 	content.add_child(name_edit)
 	if is_instance_valid(player_tab):
-		_button("Save player", _save_player)
+		# The golfer's skin and the colours of its Re-color Groups. These stay
+		# editable during a round - dressing the owner is not part of the play
+		# loop being protected (see start_round).
+		_build_skin_controls()
+	# The player's own colours. The five the Golfer Skins name - Shirt, Pants,
+	# Cap, Hair, Skin - are the colours of that skin's Re-color Groups and are
+	# edited above (they follow into these fields); what is left here is the
+	# appearance the polygon golfer falls back on when a skin has no sprites.
+	var standalone := _standalone_profile_colors()
 	var color_index := 0
-	for key in PlayerGolferProfile.COLORS:
+	for key in standalone:
 		if is_instance_valid(player_tab) and color_index % 3 == 0:
 			content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_EDIT], 260)
 		color_index += 1
@@ -205,7 +472,7 @@ func _build_setup() -> void:
 		color.color = Color(draft.appearance[key])
 		color.edit_alpha = false
 		color.custom_minimum_size = Vector2(100, 28)
-		color.color_changed.connect(func(value: Color): draft.appearance[key] = value.to_html(false))
+		color.color_changed.connect(_on_profile_color_changed.bind(str(key)))
 		row.add_child(color)
 	if is_instance_valid(player_tab):
 		# Short round-choice sections share one horizontally scrolling shelf.
@@ -247,7 +514,9 @@ func _build_setup() -> void:
 	_label("Each point adds 10% bonus. Maximum per skill: 990%.")
 	skill_labels.clear()
 	for i in PlayerGolferProfile.SKILLS.size():
-		if is_instance_valid(player_tab) and i % 3 == 0:
+		# Keep the allocation summary with the first two skills, then distribute
+		# the remaining skills evenly across the next two shelf columns (2 / 4 / 4).
+		if is_instance_valid(player_tab) and (i == 2 or i == 6):
 			content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_SKILLS], 290)
 		var row := HBoxContainer.new()
 		content.add_child(row)
@@ -297,16 +566,10 @@ func _refresh_skills() -> void:
 	for i in skill_labels.size():
 		if i < PlayerGolferProfile.SKILLS.size():
 			skill_labels[i].text = "%s: %d%%" % [PlayerGolferProfile.SKILLS[i], draft.points[i] * 10]
-	if is_instance_valid(start_button):
-		start_button.disabled = draft.remaining() != 0
-
-func _save_player() -> void:
-	if busy:
-		return
-	draft.golfer_name = name_edit.text.strip_edges()
-	if draft.golfer_name.is_empty():
-		draft.golfer_name = "Course Owner"
-	GameManager.player_profile = PlayerGolferProfile.from_data(draft.serialize())
+	# Unspent points never hold a round up, so the badge on the Player Skills
+	# button is what tells the owner points are still waiting to be allocated.
+	if is_instance_valid(player_tab):
+		player_tab.refresh_skill_badge()
 
 func _start_embedded(kind: int) -> void:
 	if busy or GameManager.is_paused:
@@ -318,10 +581,6 @@ func _start_embedded(kind: int) -> void:
 	if GameManager.tournament_manager and GameManager.tournament_manager.is_tournament_in_progress():
 		EventBus.notify("Tournament running - Play It Out on the Tournament shelf first.", "warning")
 		return
-	if draft.remaining() != 0:
-		EventBus.notify("Allocate all 10 points in Player Skills first.", "info")
-		player_tab.select(PlayerTab.PAGE_SKILLS)
-		return
 	busy = true
 	previous_mode = GameManager.current_mode
 	previous_speed = GameManager.current_speed
@@ -331,8 +590,6 @@ func _start_embedded(kind: int) -> void:
 	start_round()
 
 func start_round() -> void:
-	if draft.remaining() != 0:
-		return
 	if GameManager.get_open_hole_count() == 0:
 		return
 	draft.golfer_name = name_edit.text.strip_edges()
@@ -344,8 +601,12 @@ func start_round() -> void:
 	var opponent := pro_picker.selected
 	active = true
 	if is_instance_valid(player_tab):
-		# Lock the Edit Player page while the round runs.
+		# Lock the Edit Player page while the round runs - except the Golfer
+		# Skin controls, which the player is meant to be able to reach during a
+		# round (they only ever change how a golfer is drawn).
 		for control in player_tab.pages[PlayerTab.PAGE_EDIT].find_children("*", "Control", true, false):
+			if control.has_meta("editable_while_playing"):
+				continue
 			if control is BaseButton:
 				control.disabled = true
 			elif control is LineEdit:
