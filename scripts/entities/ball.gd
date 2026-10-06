@@ -10,6 +10,19 @@ enum BallState {
 	OUT_OF_BOUNDS # Ball is OB
 }
 
+## The one size a golf ball is drawn at, in screen pixels. Every state (at rest,
+## in flight, in water, out of bounds) draws off this so the ball keeps a single
+## silhouette — and the cup cut under the flag is sized from it too, so the hole
+## in the ground is exactly as wide as the ball that drops into it
+## (see CupOverlay.hole_radius()).
+const BALL_RADIUS: float = 2.5
+## Airborne the ball is drawn a touch larger so it stays visible against the sky;
+## the flight depth scale multiplies this, never BALL_RADIUS.
+const FLIGHT_RADIUS: float = 3.2
+## How many sides the ball's polygon gets. A dozen looked fine at the old size
+## but reads as a chunky dodecagon once the ball is small.
+const BALL_SEGMENTS: int = 16
+
 var golfer_id: int = -1
 var grid_position: Vector2i = Vector2i.ZERO
 var ball_state: BallState = BallState.AT_REST
@@ -265,79 +278,68 @@ func _update_visual() -> void:
 		BallState.OUT_OF_BOUNDS:
 			_draw_ball_out_of_bounds(visual)
 
+## Round polygon of the given screen radius, centred on the node's origin.
+## Shared by every ball state so one constant decides how big a ball is.
+static func ball_polygon(radius: float, segments: int = BALL_SEGMENTS) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(segments):
+		var angle := (float(i) / float(segments)) * TAU
+		points.append(Vector2(cos(angle), sin(angle)) * radius)
+	return points
+
+## Flat ellipse (a round shape seen in the isometric view), given as half-widths.
+static func ellipse_polygon(radii: Vector2, segments: int = 8) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(segments):
+		var angle := (float(i) / float(segments)) * TAU
+		points.append(Vector2(cos(angle) * radii.x, sin(angle) * radii.y))
+	return points
+
 func _draw_ball_at_rest(visual: Node2D) -> void:
 	# White golf ball
 	var ball = Polygon2D.new()
 	ball.color = Color.WHITE
-	var points = PackedVector2Array()
-	for i in range(12):
-		var angle = (i / 12.0) * TAU
-		var x = cos(angle) * 4
-		var y = sin(angle) * 4
-		points.append(Vector2(x, y))
-	ball.polygon = points
+	ball.polygon = ball_polygon(BALL_RADIUS)
 	visual.add_child(ball)
 
-	# Shadow
+	# Shadow, scaled with the ball so it stays under it at any size
 	var shadow = Polygon2D.new()
 	shadow.color = Color(0, 0, 0, 0.3)
-	shadow.position = Vector2(2, 3)
-	var shadow_points = PackedVector2Array()
-	for i in range(8):
-		var angle = (i / 8.0) * TAU
-		var x = cos(angle) * 3
-		var y = sin(angle) * 1.5
-		shadow_points.append(Vector2(x, y))
-	shadow.polygon = shadow_points
+	shadow.position = Vector2(BALL_RADIUS * 0.5, BALL_RADIUS * 0.75)
+	shadow.polygon = ellipse_polygon(Vector2(BALL_RADIUS * 0.75, BALL_RADIUS * 0.375))
 	visual.add_child(shadow)
 
 func _draw_ball_in_flight(visual: Node2D) -> void:
 	# Slightly larger for visibility
 	var ball = Polygon2D.new()
 	ball.color = Color.WHITE
-	var points = PackedVector2Array()
-	for i in range(12):
-		var angle = (i / 12.0) * TAU
-		var x = cos(angle) * 5
-		var y = sin(angle) * 5
-		points.append(Vector2(x, y))
-	ball.polygon = points
+	ball.polygon = ball_polygon(FLIGHT_RADIUS)
 	visual.add_child(ball)
 
 	# Add motion blur effect
 	var blur = Polygon2D.new()
 	blur.color = Color(1, 1, 1, 0.3)
-	blur.position = Vector2(-3, 1)
-	var blur_points = PackedVector2Array()
-	for i in range(8):
-		var angle = (i / 8.0) * TAU
-		var x = cos(angle) * 4
-		var y = sin(angle) * 4
-		blur_points.append(Vector2(x, y))
-	blur.polygon = blur_points
+	blur.position = Vector2(-FLIGHT_RADIUS * 0.6, FLIGHT_RADIUS * 0.2)
+	blur.polygon = ball_polygon(FLIGHT_RADIUS * 0.8)
 	visual.add_child(blur)
 
 func _draw_ball_in_water(visual: Node2D) -> void:
 	# Semi-transparent ball in water
 	var ball = Polygon2D.new()
 	ball.color = Color(1, 1, 1, 0.5)
-	var points = PackedVector2Array()
-	for i in range(12):
-		var angle = (i / 12.0) * TAU
-		var x = cos(angle) * 4
-		var y = sin(angle) * 4
-		points.append(Vector2(x, y))
-	ball.polygon = points
+	ball.polygon = ball_polygon(BALL_RADIUS)
 	visual.add_child(ball)
 
-	# Water splash effect
+	# Water splash effect, drawn in ball radii so it shrinks with the ball
 	var splash = Polygon2D.new()
 	splash.color = Color(0.3, 0.5, 0.8, 0.6)
-	var splash_points = PackedVector2Array([
-		Vector2(-6, 0), Vector2(-3, -4), Vector2(0, -2),
-		Vector2(3, -4), Vector2(6, 0), Vector2(3, 2),
-		Vector2(0, 4), Vector2(-3, 2)
-	])
+	var splash_points = PackedVector2Array()
+	for point in [
+		Vector2(-1.5, 0.0), Vector2(-0.75, -1.0), Vector2(0.0, -0.5),
+		Vector2(0.75, -1.0), Vector2(1.5, 0.0), Vector2(0.75, 0.5),
+		Vector2(0.0, 1.0), Vector2(-0.75, 0.5),
+	]:
+		splash_points.append(point * BALL_RADIUS)
 	splash.polygon = splash_points
 	visual.add_child(splash)
 
@@ -345,13 +347,7 @@ func _draw_ball_out_of_bounds(visual: Node2D) -> void:
 	# Red X over ball
 	var ball = Polygon2D.new()
 	ball.color = Color.GRAY
-	var points = PackedVector2Array()
-	for i in range(12):
-		var angle = (i / 12.0) * TAU
-		var x = cos(angle) * 4
-		var y = sin(angle) * 4
-		points.append(Vector2(x, y))
-	ball.polygon = points
+	ball.polygon = ball_polygon(BALL_RADIUS)
 	visual.add_child(ball)
 
 func get_ball_info() -> Dictionary:
