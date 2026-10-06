@@ -321,11 +321,6 @@ func _update_golfers(delta: float) -> void:
 		_cached_sorted_group_ids = _cached_groups.keys()
 		_cached_sorted_group_ids.sort()
 		_groups_dirty = false
-		# Update group badges on all golfers
-		for gid in _cached_sorted_group_ids:
-			var group = _cached_groups[gid]
-			for golfer in group:
-				golfer.set_group_badge(gid, group.size())
 
 	# Process groups in deterministic order (sorted by group_id)
 	for group_id in _cached_sorted_group_ids:

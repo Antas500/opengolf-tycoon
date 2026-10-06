@@ -76,8 +76,13 @@ const REST_SOLVE_BISECTIONS: int = 14
 ## this much closer to it (tiles).
 const CLUB_SWITCH_MARGIN: float = 0.05
 
-## Golfer identification
-@export var golfer_name: String = "Golfer"
+## Golfer identification. The setter keeps the name label above the golfer in
+## step with renames that happen after spawn (the owner round renames its
+## participants once they exist).
+@export var golfer_name: String = "Golfer":
+	set(value):
+		golfer_name = value
+		_refresh_name_label()
 @export var golfer_id: int = -1
 @export var group_id: int = -1  # Which group this golfer belongs to
 ## The Golfer Skin this golfer wears when one is picked for them by name.
@@ -233,9 +238,6 @@ const TIER_RING_COLORS = {
 ## Hover state for name label
 var _is_hovered: bool = false
 
-## Group badge label
-var _group_badge: Label = null
-
 ## Sprite-based rendering (replaces polygon visuals when available)
 var _animated_sprite: AnimatedSprite2D = null
 ## The Golfer Skin this golfer is drawn in, and the untouched artwork of that
@@ -274,7 +276,6 @@ var SHOES_FRAME_1 := PackedVector2Array([
 ## Visual components
 @onready var visual: Node2D = $Visual if has_node("Visual") else null
 @onready var name_label: Label = $InfoContainer/NameLabel if has_node("InfoContainer/NameLabel") else null
-@onready var score_label: Label = $InfoContainer/ScoreLabel if has_node("InfoContainer/ScoreLabel") else null
 @onready var head: Polygon2D = $Visual/Head if has_node("Visual/Head") else null
 @onready var body: Polygon2D = $Visual/Body if has_node("Visual/Body") else null
 @onready var arms: Polygon2D = $Visual/Arms if has_node("Visual/Arms") else null
@@ -333,13 +334,14 @@ func _ready() -> void:
 	input_pickable = true
 	input_event.connect(_on_click_area_input_event)
 
-	# Set up labels with tier-colored name, ensure they render above trees
+	# Set up the name label above the golfer (always visible, tier-colored),
+	# and make sure it renders above trees
 	var info_container = get_node_or_null("InfoContainer")
 	if info_container:
 		info_container.z_index = 10
 	if name_label:
-		name_label.text = golfer_name
 		_apply_tier_name_color()
+		_refresh_name_label()
 
 	# Create highlight ring for active golfer indication
 	_create_highlight_ring()
@@ -347,14 +349,9 @@ func _ready() -> void:
 	# Create tier-colored ring (always visible)
 	_create_tier_ring()
 
-	# Create group badge (visible for groups of 2+)
-	_create_group_badge()
-
-	# Enable hover detection for name label
+	# Hovering the golfer adds their tier to the name label
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
-	if name_label:
-		name_label.visible = false  # Show on hover only
 
 	# Connect to green fee payment signal
 	EventBus.green_fee_paid.connect(_on_green_fee_paid)
@@ -363,7 +360,6 @@ func _ready() -> void:
 	_setup_sprite_animations()
 
 	_update_visual()
-	_update_score_display()
 
 	if visual:
 		_expression = GolferExpression.new()
@@ -712,6 +708,9 @@ func initialize_from_tier(tier: int) -> void:
 	# Update tier ring color to match new tier
 	_update_tier_ring_color()
 
+	# Re-colour the name label too: visitors are given their tier after _ready
+	_apply_tier_name_color()
+
 ## Dress a golfer in the skin their new tier calls for. Golfers wearing a skin
 ## picked by name, or playing as the owner, keep the one they have.
 func _apply_tier_skin() -> void:
@@ -816,7 +815,6 @@ func _process(delta: float) -> void:
 		return
 	_update_highlight_ring()
 	_update_tier_ring()
-	_update_group_badge()
 	_update_mood_visuals()
 
 	# The round is over: this golfer is walking home and visiting the
@@ -1136,7 +1134,6 @@ func start_hole(hole_number: int, tee_position: Vector2i) -> void:
 	global_position = screen_pos
 
 	EventBus.golfer_started_hole.emit(golfer_id, hole_number)
-	_update_score_display()
 	_change_state(State.PREPARING_SHOT)
 
 func awaits_player_shot() -> bool:
@@ -1770,7 +1767,6 @@ func finish_hole(par: int) -> void:
 	EventBus.golfer_finished_hole.emit(golfer_id, _hole_number, current_strokes, par)
 	hole_completed.emit(current_strokes, par)
 
-	_update_score_display()
 	_change_state(State.IDLE)
 	if _expression:
 		_expression.react_to_score(current_strokes - par)
@@ -3170,53 +3166,28 @@ func _update_tier_ring_color() -> void:
 	if _tier_ring:
 		_tier_ring.color = TIER_RING_COLORS.get(golfer_tier, Color(0.5, 0.5, 0.5))
 
-## Hover detection — show name label on mouse hover
-func _on_mouse_entered() -> void:
-	_is_hovered = true
-	if name_label:
+## Write the name label above the golfer: their name, always, plus their tier
+## while the mouse is over them. The label is the only text a golfer carries —
+## score and hole live in the scorecard panels and the click-through popup.
+func _refresh_name_label() -> void:
+	if not name_label:
+		return
+	if _is_hovered:
 		var tier_name = GolferTier.TIER_DATA.get(golfer_tier, {}).get("name", "")
 		var stars = "★".repeat(golfer_tier + 1)
 		name_label.text = "%s %s %s" % [stars, tier_name, golfer_name]
-		name_label.visible = true
+	else:
+		name_label.text = golfer_name
+	name_label.visible = true
+
+## Hover detection — add the golfer's tier to the name label they always wear
+func _on_mouse_entered() -> void:
+	_is_hovered = true
+	_refresh_name_label()
 
 func _on_mouse_exited() -> void:
 	_is_hovered = false
-	if name_label:
-		name_label.visible = false
-
-## Create group number badge inside InfoContainer (above score label)
-func _create_group_badge() -> void:
-	var info_container = get_node_or_null("InfoContainer")
-	if not info_container:
-		return
-	_group_badge = Label.new()
-	_group_badge.name = "GroupBadge"
-	_group_badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_group_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_group_badge.add_theme_font_size_override("font_size", 10)
-	_group_badge.add_theme_constant_override("outline_size", 4)
-	_group_badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
-	_group_badge.visible = false
-	info_container.add_child(_group_badge)
-	# Set after add_child so the container applies its layout. The raw layout
-	# value has no matching enum constant, so silence the enum warnings here.
-	@warning_ignore_start("int_as_enum_without_cast", "int_as_enum_without_match")
-	_group_badge.layout_mode = 2
-	@warning_ignore_restore("int_as_enum_without_cast", "int_as_enum_without_match")
-	info_container.move_child(_group_badge, 0)  # Place above score label
-
-## Update group badge (no position tracking needed — VBoxContainer handles layout)
-func _update_group_badge() -> void:
-	pass
-
-## Set group badge text and color (called by GolferManager after group assignment)
-func set_group_badge(gid: int, _group_size: int) -> void:
-	if not _group_badge:
-		return
-	_group_badge.text = "Group %d" % (gid + 1)
-	var hue = fmod(gid * 0.618033988749895, 1.0)
-	_group_badge.add_theme_color_override("font_color", Color.from_hsv(hue, 0.6, 0.9))
-	_group_badge.visible = true
+	_refresh_name_label()
 
 ## Update visual modulate based on mood state
 func _update_mood_visuals() -> void:
@@ -3322,29 +3293,6 @@ func _update_visual() -> void:
 			# Dim the golfer slightly when finished
 			if body:
 				body.modulate = Color(0.85, 0.85, 0.85, 1)
-
-## Update score display
-func _update_score_display() -> void:
-	if not score_label:
-		return
-
-	# Calculate score relative to par using actual accumulated par values
-	var score_relative_to_par = total_strokes - total_par
-	var score_text = ""
-
-	if total_par == 0:
-		score_text = "E"  # No holes completed yet
-	elif score_relative_to_par == 0:
-		score_text = "E"  # Even
-	elif score_relative_to_par > 0:
-		score_text = "+%d" % score_relative_to_par  # Over par
-	else:
-		score_text = "%d" % score_relative_to_par  # Under par (shows negative)
-
-	# Show current hole
-	var hole_text = "Hole %d" % (current_hole + 1)
-
-	score_label.text = "%s, %s" % [score_text, hole_text]
 
 ## Handle green fee payment notification
 func _on_green_fee_paid(paid_golfer_id: int, _paid_golfer_name: String, amount: int) -> void:
@@ -3668,4 +3616,6 @@ func deserialize(data: Dictionary) -> void:
 		global_position = Vector2(pos_data.get("x", 0), pos_data.get("y", 0))
 
 	_update_visual()
-	_update_score_display()
+	# The saved tier decides the name colour
+	_apply_tier_name_color()
+	_refresh_name_label()

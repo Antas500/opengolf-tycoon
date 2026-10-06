@@ -266,24 +266,57 @@ func test_concurrent_visitors_and_player_group() -> void:
 	assert_true(is_instance_valid(v1), "Visitor 1 is still valid")
 	assert_true(is_instance_valid(v2), "Visitor 2 is still valid")
 
-func test_group_badges_on_player_group() -> void:
+func test_name_labels_on_player_group() -> void:
 	rounds.open_setup()
 	for i in 10:
 		rounds.draft.allocate(i, 1)
+	rounds.name_edit.text = "Test Owner"
 	rounds.mode_picker.select(1) # Vs Pro (group size 2)
 	rounds.start_round()
 	rounds._process(0.0)
 
 	var p := rounds.player
 	var pro := rounds.participants[1]
-	var badge_p := p.get_node_or_null("InfoContainer/GroupBadge") as Label
-	var badge_pro := pro.get_node_or_null("InfoContainer/GroupBadge") as Label
-	assert_not_null(badge_p, "Player has group badge node")
-	assert_not_null(badge_pro, "Pro has group badge node")
-	assert_true(badge_p.visible, "Player group badge is visible for multi-player group")
-	assert_true(badge_pro.visible, "Pro group badge is visible for multi-player group")
-	assert_eq(badge_p.text, "Group %d" % (p.group_id + 1), "Badge displays correct group number")
-	assert_eq(badge_pro.text, badge_p.text, "Both golfers display the same group badge text")
+	var label_p := p.get_node_or_null("InfoContainer/NameLabel") as Label
+	var label_pro := pro.get_node_or_null("InfoContainer/NameLabel") as Label
+	assert_not_null(label_p, "Player has a name label node")
+	assert_not_null(label_pro, "Pro has a name label node")
+
+	# Every golfer wears their name above them, and it is always on screen.
+	assert_true(label_p.visible, "Player name is visible without hovering")
+	assert_true(label_pro.visible, "Pro name is visible without hovering")
+	assert_eq(label_p.text, "Test Owner", "Player label shows the owner's name")
+	assert_eq(label_pro.text, "Pro Alex", "Opponent label shows their own name")
+	assert_ne(label_p.text, label_pro.text, "Golfers in one group are told apart by name")
+
+	# Group, score and hole are gone from above the golfers: the scorecard
+	# panels and the click-through popup carry them now.
+	assert_null(p.get_node_or_null("InfoContainer/ScoreLabel"), "No score/hole label above the golfer")
+	assert_null(p.get_node_or_null("InfoContainer/GroupBadge"), "No group badge above the golfer")
+	assert_false(label_p.text.contains("Group"), "Name label carries no group number")
+	assert_false(label_p.text.contains("Hole"), "Name label carries no hole number")
+
+	# Hovering swaps in the tier, and leaving restores the plain name.
+	p._on_mouse_entered()
+	assert_true(label_p.text.ends_with("Test Owner"), "Hovering keeps the name and adds the tier")
+	assert_false(label_p.text.contains("Group"), "Hover copy carries no group number")
+	p._on_mouse_exited()
+	assert_eq(label_p.text, "Test Owner", "Leaving the golfer restores the plain name")
+
+	# It is drawn above the golfer's head, centred on them.
+	await get_tree().process_frame
+	var rect := label_p.get_global_rect()
+	assert_almost_eq(rect.get_center().x, p.global_position.x, 1.0, "Name label is centred on the golfer")
+	assert_lt(rect.get_center().y, p.global_position.y - 20.0, "Name label sits above the golfer")
+
+	# Renaming a golfer after they spawn follows them, and a name too long for
+	# the label's box grows it both ways so it stays centred on the golfer.
+	p.golfer_name = "Bartholomew Mandeville"
+	await get_tree().process_frame
+	assert_eq(label_p.text, "Bartholomew Mandeville", "Renaming the golfer updates their label")
+	var long_rect := label_p.get_global_rect()
+	assert_gt(long_rect.size.x, 80.0, "A long name widens the label")
+	assert_almost_eq(long_rect.get_center().x, p.global_position.x, 1.0, "A long name stays centred on the golfer")
 
 	rounds.leave_round()
 
