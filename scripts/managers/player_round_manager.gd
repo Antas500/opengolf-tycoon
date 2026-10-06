@@ -514,7 +514,9 @@ func _build_setup() -> void:
 	_label("Each point adds 10% bonus. Maximum per skill: 990%.")
 	skill_labels.clear()
 	for i in PlayerGolferProfile.SKILLS.size():
-		if is_instance_valid(player_tab) and i % 3 == 0:
+		# Keep the allocation summary with the first two skills, then distribute
+		# the remaining skills evenly across the next two shelf columns (2 / 4 / 4).
+		if is_instance_valid(player_tab) and (i == 2 or i == 6):
 			content = PlayerTab.add_column(player_tab.pages[PlayerTab.PAGE_SKILLS], 290)
 		var row := HBoxContainer.new()
 		content.add_child(row)
