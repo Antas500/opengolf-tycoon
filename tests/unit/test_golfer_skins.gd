@@ -294,7 +294,7 @@ func test_deleting_a_group_reaches_layers_that_were_never_loaded() -> void:
 	var written := _test_skin()
 	assert_true(written.save_to(TEST_ROOT.path_join("later")))
 	var library := _library()
-	var skin := library.get_skin("later")
+	var skin := library.get_skin("casual")
 	var shirt := int(skin.group_by_name("Shirt").get("id"))
 	assert_eq(skin.loaded_layer_keys().size(), 0, "Nothing has been read off the disk yet")
 	var key := GolferSkin.layer_key("walk", "north", 1)
