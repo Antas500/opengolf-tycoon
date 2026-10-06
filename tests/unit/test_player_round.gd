@@ -403,9 +403,31 @@ func test_embedded_player_navigation_and_setup() -> void:
 	assert_eq(tab.buttons[PlayerTab.PAGE_SKILLS].text, "Player Skills")
 	assert_false(rounds.busy, "Editing a player does not reserve a round")
 	assert_null(rounds.overlay, "Embedded setup creates no floating overlay")
-	assert_true(tab.pages[PlayerTab.PAGE_EDIT].is_ancestor_of(rounds.name_edit))
+	var edit_page := tab.pages[PlayerTab.PAGE_EDIT]
+	assert_true(edit_page.is_ancestor_of(rounds.name_edit))
+	assert_true(edit_page.is_ancestor_of(rounds._skin_picker))
+	assert_eq(rounds.name_edit.get_parent(), rounds._skin_picker.get_parent(),
+		"The player name and Golfer Skin selector share one column")
+	var preview_column := edit_page.get_child(0) as VBoxContainer
+	assert_true(preview_column.is_ancestor_of(rounds._skin_preview_box),
+		"The animated golfer preview leads the Edit Player columns")
+	assert_eq(rounds._skin_preview_box.size_flags_vertical, Control.SIZE_EXPAND_FILL,
+		"The preview fills the height of its first column")
 	assert_true(tab.pages[PlayerTab.PAGE_SKILLS].is_ancestor_of(rounds.points_label))
+	for label in edit_page.find_children("*", "Label", true, false):
+		assert_ne(label.text, "PLAY YOUR COURSE", "The old Edit Player heading is gone")
+	for button in edit_page.find_children("*", "Button", true, false):
+		assert_ne(button.text, "Save player", "Player edits save without a button")
+	assert_eq(rounds._skin_controls.find_children("SkinGroupName*", "Label", true, false).size(),
+		GolferSkins.player_skin().group_count(), "Every color column displays its group name")
+	for group_column in rounds._skin_group_columns.get_children():
+		assert_eq(group_column.size_flags_vertical, Control.SIZE_EXPAND_FILL,
+			"Every group color column fills the available height")
 	assert_true(tab.pages[PlayerTab.PAGE_PLAY].is_ancestor_of(rounds.pro_picker))
+	rounds.name_edit.text = "Auto-saved Owner"
+	rounds.name_edit.text_changed.emit(rounds.name_edit.text)
+	assert_eq(GameManager.player_profile.golfer_name, "Auto-saved Owner",
+		"The player name persists immediately without a Save player button")
 	var starters := 0
 	for child in tab.pages[PlayerTab.PAGE_PLAY].find_children("*", "Button", true, false):
 		if child.has_meta("owner_round_start"):
@@ -576,6 +598,8 @@ func test_edit_player_page_changes_the_golfer_skin_and_its_group_colours() -> vo
 	assert_gt(rounds._skin_picker.item_count, 0, "from the skins the game knows")
 	assert_not_null(rounds._skin_preview, "and previews the golfer wearing it")
 	assert_eq(rounds._skin_preview.skin().id, GolferSkins.player_skin().id)
+	assert_true(rounds._skin_preview.sprite_node().is_playing(), "The first-column sprite animates")
+	assert_gt(rounds._skin_preview.scale.y, 1.0, "The preview sprite is scaled up to fill the column")
 
 	# Pick a different skin: the owner's golfer is dressed in it at once.
 	var swapped := -1
@@ -599,6 +623,14 @@ func test_edit_player_page_changes_the_golfer_skin_and_its_group_colours() -> vo
 	var worn := GolferSkins.player_skin()
 	assert_eq(swatches.size(), worn.group_count(),
 		"a colour button per Re-color Group of the chosen skin")
+	for group in worn.group_list():
+		var id := int(group.get("id", 0))
+		var labels := rounds._skin_controls.find_children("SkinGroupName%d" % id, "Label", true, false)
+		var color_buttons := rounds._skin_controls.find_children("SkinGroupColor%d" % id, "ColorPickerButton", true, false)
+		assert_eq(labels.size(), 1, "Each selector has a visible group name")
+		assert_eq(color_buttons.size(), 1, "Each group name has its own color selector")
+		assert_eq(labels[0].get_parent(), color_buttons[0].get_parent(),
+			"The group name sits next to its color selector")
 	var group_id := int(worn.group_list()[0].get("id", 0))
 	var before := GolferSkins.skins_changed.get_connections().size()
 	rounds._on_skin_group_color_changed(Color("00ff00"), group_id)
@@ -606,7 +638,7 @@ func test_edit_player_page_changes_the_golfer_skin_and_its_group_colours() -> vo
 		"the swatch re-colours the group")
 	assert_eq(GolferSkins.skins_changed.get_connections().size(), before,
 		"and tells the course to redraw the golfers wearing it")
-	# The profile keeps up for the groups it names, so Save player stays true.
+	# The profile keeps up for the groups it names as the skin is re-coloured.
 	var key := GolferSkin.profile_key_for_group(str(worn.group_by_id(group_id).get("name", "")))
 	if not key.is_empty():
 		assert_eq(rounds.draft.appearance.get(key), "00ff00",
@@ -647,6 +679,16 @@ func test_embedded_pages_fit_toolbar_and_overflow_horizontally() -> void:
 			await wait_frames(5)
 			assert_eq(toolbar.size.y, float(UIConstants.BOTTOM_BAR_HEIGHT), "Switching pages never grows the bar")
 			_assert_shelf_fits(tab.pages[index])
+			if index == PlayerTab.PAGE_EDIT:
+				assert_gt(rounds._skin_preview_box.size.y, 72.0,
+					"The animated preview uses most of the Edit Player page height")
+				for group_column in rounds._skin_group_columns.get_children():
+					assert_gt(group_column.size.y, 72.0,
+						"Each group color column uses most of the page height")
+					var swatch := group_column.find_child("SkinGroupColor*", true, false) as ColorPickerButton
+					assert_not_null(swatch)
+					assert_gt(swatch.size.y, 72.0,
+						"The color selector stretches with its column")
 			if width == 600:
 				var scroll := tab.pages[index].get_parent() as ScrollContainer
 				assert_true(scroll.get_h_scroll_bar().visible, "Narrow pages scroll sideways")
