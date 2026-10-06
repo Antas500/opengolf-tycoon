@@ -9,9 +9,13 @@ the management mode or hide the management HUD. The course simulation, clock,
 financials, and visitor golfers continue operating concurrently. Returning restores
 the camera and any prior tool states.
 
-The owner chooses a name and the existing shirt, pants, cap, hair and skin colors.
-Because baked tier sprites cannot display these colors, the owner uses the
-existing procedural golfer renderer. Opponents retain the tier sprites.
+The owner chooses a name and their look: a Golfer Skin (one of the seventeen
+shipped skins, or one they built themselves) plus the colours of that skin's
+parts. Every skin is drawn as pixel art with a part-and-shade record per pixel,
+so the owner's colours are applied by re-emitting the art from their ramps
+rather than by baking new sprites (see
+[Golfer Skins & the Skin Designer](golfer-skins.md)). Opponents wear the same
+kind of skins: their tier's art, or a themed skin that tier is allowed to wear.
 
 Formats:
 - **Practice round:** owner only.
@@ -56,12 +60,15 @@ takes over, with no click required.
 
 ### Persistent skills
 
-`PlayerGolferProfile` stores ten integer point counts (0–99). The first round
+`PlayerGolferProfile` stores ten integer point counts (0–99), the owner's
+`skin_id` and their own skin recipes (`custom_skins`). The first round
 requires spending exactly ten points; every point is a **10 percentage-point
 bonus** (0% starting bonus, maximum 990%). Points save automatically whenever
 they are changed and take effect immediately for the player's next shot, with no
 Save Skills button required. Points can be reallocated across skills at any time
-(including during an active round). Name and appearance also remain editable.
+(including during an active round). Name, skin and appearance also remain
+editable - the title screen's **Customise Golfer Skins** screen is always
+available, and the golfer wears an edit the moment it is made.
 
 The profile is saved under `player_golfer`; older saves receive a fresh profile.
 New games reset it. Active rounds are transient, like visitor rounds, and are

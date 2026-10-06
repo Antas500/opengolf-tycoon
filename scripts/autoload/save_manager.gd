@@ -368,8 +368,12 @@ func _apply_save_data(data: Dictionary) -> void:
 	GameManager.is_paused = false
 	GameManager._day_progress = 0.0
 
-	# Active owner rounds are transient, like visitor rounds.
+	# Active owner rounds are transient, like visitor rounds. The save's look
+	# wins, but any skin built from the title screen since then is kept.
+	var pending_profile = GameManager.player_profile
 	GameManager.player_profile = PlayerGolferProfile.from_data(data.get("player_golfer", {}))
+	GameManager.player_profile.merge_skins_from(pending_profile)
+	GolferSkinLibrary.invalidate_catalogue()
 
 	# Company world: which locations are owned, their prices and the courses
 	# stored for them. Older saves carry no world: give the company a matching
@@ -670,6 +674,22 @@ func _apply_controls_settings(config: ConfigFile) -> void:
 
 func _apply_gameplay_settings(config: ConfigFile) -> void:
 	GameManager.multi_tee_enabled = config.get_value("gameplay", "multi_tee_enabled", false)
+	_apply_golfer_settings(config)
+
+
+## The owner's look and their own skins live on the profile, and the profile is
+## saved with a game - but the Skin Designer can also be opened from the main
+## menu, where there is no game to save yet. The same data is kept in the user
+## settings file so a golfer built on the main menu survives a restart.
+func _apply_golfer_settings(config: ConfigFile) -> void:
+	if not config.has_section("golfer") or _is_loading:
+		return
+	var profile = GameManager.player_profile
+	if profile == null:
+		return
+	var stored = config.get_value("golfer", "profile", {})
+	if stored is Dictionary and not stored.is_empty():
+		GameManager.player_profile = PlayerGolferProfile.from_data(stored)
 
 func save_user_settings() -> void:
 	var config := ConfigFile.new()
@@ -679,6 +699,18 @@ func save_user_settings() -> void:
 		var audio_data := SoundManager.get_settings_data()
 		for key in audio_data:
 			config.set_value("audio", key, audio_data[key])
+	if GameManager.player_profile != null:
+		config.set_value("golfer", "profile", GameManager.player_profile.serialize())
+	config.save(SETTINGS_PATH)
+
+
+## Persist just the golfer profile (the Skin Designer calls this as it paints,
+## so a crash never costs the player their work).
+func save_golfer_profile() -> void:
+	var config := ConfigFile.new()
+	config.load(SETTINGS_PATH)
+	if GameManager.player_profile != null:
+		config.set_value("golfer", "profile", GameManager.player_profile.serialize())
 	config.save(SETTINGS_PATH)
 
 const HOLE_STAT_FIELDS := ["total_rounds", "total_strokes", "eagles", "birdies", "pars", "bogeys", "double_bogeys_plus", "holes_in_one", "best_score", "best_scorer_name"]

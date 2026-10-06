@@ -571,7 +571,11 @@ func reset_course_records() -> void:
 	course_records = CourseRecords.create_empty_records()
 
 func new_game(course_name_input: String = "New Course", theme: int = CourseTheme.Type.PARKLAND, difficulty: int = DifficultyPresets.Preset.NORMAL, options: Dictionary = {}) -> void:
+	# The owner's look and the skins they built are theirs across games; only
+	# their skills start over.
+	var previous_profile := player_profile
 	player_profile = PlayerGolferProfile.new()
+	player_profile.carry_over_from(previous_profile)
 	course_name = course_name_input
 	current_theme = theme
 	current_difficulty = difficulty

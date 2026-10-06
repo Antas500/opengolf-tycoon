@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "generated_by": "tools/generate_golfer_skins.py",
+  "canvas": [
+    48,
+    48
+  ],
+  "directions": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+  ],
+  "part_labels": {
+    "shirt": "Top",
+    "pants": "Trousers",
+    "cap": "Headwear",
+    "hair": "Hair / beard",
+    "skin": "Skin",
+    "shoes": "Footwear",
+    "accent": "Trim",
+    "gear": "Equipment",
+    "eye": "Eyes",
+    "shine": "Highlights"
+  },
+  "skins": [
+    {
+      "id": "casual",
+      "name": "Club Casual",
+      "description": "The original pixel golfer: red polo, soft cap and brown trousers.",
+      "root": "res://assets/sprites/golfer/casual",
+      "legacy": true,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin"
+      ],
+      "colors": {
+        "shirt": "b41929",
+        "pants": "8c6b5f",
+        "cap": "cccbe4",
+        "hair": "56261c",
+        "skin": "e6a38d",
+        "shoes": "2f1813",
+        "accent": "dddcee"
+      },
+      "spawn_tiers": [
+        "casual",
+        "beginner"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    },
+    {
+      "id": "beginner",
+      "name": "Weekend Beginner",
+      "description": "The beginner's look - no cap, plain kit, everything a bit loose.",
+      "root": "res://assets/sprites/golfer/beginner",
+      "legacy": true,
+      "customizable": [
+        "shirt",
+        "pants",
+        "cap",
+        "hair",
+        "skin"
+      ],
+      "colors": {
+        "shirt": "b41929",
+        "pants": "8c6b5f",
+        "cap": "cccbe4",
+        "hair": "56261c",
+        "skin": "e6a38d",
+        "shoes": "2f1813",
+        "accent": "dddcee"
+      },
+      "spawn_tiers": [
+        "beginner"
+      ],
+      "frames": {
+        "idle": 4,
+        "walk": 4,
+        "swing": 6
+      },
+      "directions": [
+        "south",
+        "south-east",
+        "east",
+        "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west"
+      ]
+    }
+  ]
+}

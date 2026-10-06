@@ -229,13 +229,12 @@ var _use_sprites: bool = false
 var _swing_tween: Tween  # Active procedural swing tween (see _start_swing_tween)
 var _current_direction: String = "south"  # south, east, north, west + diagonals
 
-## Tier-to-sprite-folder mapping
-const TIER_SPRITE_FOLDERS = {
-	GolferTier.Tier.BEGINNER: "beginner",
-	GolferTier.Tier.CASUAL: "casual",
-	GolferTier.Tier.SERIOUS: "serious",
-	GolferTier.Tier.PRO: "pro",
-}
+## Which Golfer Skin this golfer wears (see GolferSkinLibrary). Visitors get
+## one of the skins their tier may spawn with; the owner's comes from their
+## profile.
+var skin_id: String = GolferSkinLibrary.default_skin_id()
+## Part colours chosen on top of the skin's own palette (part -> Color).
+var skin_colors: Dictionary = {}
 
 ## Walk animation state
 var _walk_frame: int = 0  # 0 or 1, alternates for leg swap
@@ -362,88 +361,73 @@ func _ready() -> void:
 		_expression.initialize(self, visual)
 
 
-## Set up AnimatedSprite2D with PixelLab-generated frames
+## Build the AnimatedSprite2D for this golfer's skin.
+##
+## The skin's frames come from GolferSkinLibrary, which turns a skin (and the
+## colours picked for its parts) into SpriteFrames. Visitors wear the skin their
+## tier spawned with; the owner's golfer is switched to their own skin from
+## their profile (see apply_player_appearance).
 func _setup_sprite_animations() -> void:
-	# Try tier-specific path first, then fall back to generic path
-	var tier_folder = TIER_SPRITE_FOLDERS.get(golfer_tier, "casual")
-	var base_path = "res://assets/sprites/golfer/%s/animations/" % tier_folder
-	var test_file = base_path + "idle/south/frame_000.png"
-	if not ResourceLoader.exists(test_file):
-		# Fall back to generic (non-tier) path for backwards compatibility
-		base_path = "res://assets/sprites/golfer/animations/"
-		test_file = base_path + "idle/south/frame_000.png"
-		if not ResourceLoader.exists(test_file):
-			return
+	if not is_owner_round:
+		assign_visitor_skin()
+	_load_skin_frames()
 
-	var sprite_frames = SpriteFrames.new()
-	if sprite_frames.has_animation("default"):
-		sprite_frames.remove_animation("default")
+## Deal this visitor one of the skins their tier may spawn with. The tier's own
+## art keeps the old tier colour palettes; the themed skins wear their own.
+func assign_visitor_skin() -> void:
+	var picked := GolferSkinLibrary.random_skin_for_tier(golfer_tier)
+	if picked == null:
+		return
+	skin_id = picked.id
+	skin_colors = {}
+	if picked.legacy:
+		skin_colors = {"shirt": shirt_color, "pants": pants_color, "cap": cap_color,
+			"hair": hair_color, "skin": skin_tone}
 
-	var anim_types = {
-		"idle": {"path": "idle", "fps": 4.0, "loop": true},
-		"walk": {"path": "walk", "fps": 8.0, "loop": true},
-		"swing": {"path": "swing", "fps": 10.0, "loop": false},
-	}
-	# 8 directions with fallback mapping for missing diagonals
-	var directions = ["south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west"]
-	# Fallback: diagonal → nearest cardinal if diagonal frames don't exist
-	var diagonal_fallbacks = {
-		"south-east": "south", "north-east": "east",
-		"north-west": "north", "south-west": "west",
-	}
-
-	var has_any_animation = false
-	for anim_name in anim_types:
-		var anim_info = anim_types[anim_name]
-		for dir in directions:
-			var full_name = "%s_%s" % [anim_name, dir]
-			var dir_path = base_path + "%s/%s/" % [anim_info["path"], dir]
-
-			# Check if directory has frames; try fallback for diagonals
-			var frame_path = dir_path + "frame_000.png"
-			if not ResourceLoader.exists(frame_path):
-				var fallback = diagonal_fallbacks.get(dir, "")
-				if fallback != "":
-					dir_path = base_path + "%s/%s/" % [anim_info["path"], fallback]
-					frame_path = dir_path + "frame_000.png"
-					if not ResourceLoader.exists(frame_path):
-						continue
-				else:
-					continue
-
-			sprite_frames.add_animation(full_name)
-			sprite_frames.set_animation_speed(full_name, anim_info["fps"])
-			sprite_frames.set_animation_loop(full_name, anim_info["loop"])
-
-			for i in range(16):
-				var fpath = dir_path + "frame_%03d.png" % i
-				if not ResourceLoader.exists(fpath):
-					break
-				var texture = load(fpath)
-				if texture:
-					sprite_frames.add_frame(full_name, texture)
-					has_any_animation = true
-
-	if not has_any_animation or not visual:
+## (Re)build this golfer's sprite frames from the current skin and colours and
+## hand them to the AnimatedSprite2D.
+func _load_skin_frames() -> void:
+	var skin := GolferSkinLibrary.skin_by_id(skin_id)
+	if skin == null:
+		skin_id = GolferSkinLibrary.default_skin_id()
+		skin = GolferSkinLibrary.skin_by_id(skin_id)
+	if skin == null or skin.root.is_empty() and not skin.custom:
+		return
+	var frames := GolferSkinLibrary.frames_for(skin, skin_colors)
+	if frames == null or frames.get_animation_names().is_empty():
 		return
 
-	_base_sprite_frames = sprite_frames
-	_animated_sprite = AnimatedSprite2D.new()
-	_animated_sprite.name = "GolferSprite"
+	_base_sprite_frames = frames
+	if _animated_sprite == null:
+		if not visual:
+			return
+		_animated_sprite = AnimatedSprite2D.new()
+		_animated_sprite.name = "GolferSprite"
+		_animated_sprite.centered = true
+		_animated_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_animated_sprite.position = Vector2(0, -8)
+		visual.add_child(_animated_sprite)
+		for child in visual.get_children():
+			if child != _animated_sprite:
+				child.visible = false
 	_animated_sprite.sprite_frames = _base_sprite_frames
-	_animated_sprite.centered = true
-	_animated_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_animated_sprite.position = Vector2(0, -8)
-	visual.add_child(_animated_sprite)
-
-	for child in visual.get_children():
-		if child != _animated_sprite:
-			child.visible = false
-
 	_use_sprites = true
-
 	if _animated_sprite.sprite_frames.has_animation("idle_south"):
 		_animated_sprite.play("idle_south")
+
+## Switch this golfer to another skin, keeping their current colours where the
+## new skin still has that part.
+func set_skin(new_skin_id: String, colors: Dictionary = {}) -> void:
+	var skin := GolferSkinLibrary.skin_by_id(new_skin_id)
+	if skin == null:
+		return
+	skin_id = new_skin_id
+	skin_colors = {}
+	for part in colors:
+		if skin.is_customisable(part):
+			skin_colors[part] = colors[part]
+	_load_skin_frames()
+	_update_visual()
 
 ## Get direction from movement vector (8-direction when sprites support it)
 func _get_direction_from_velocity(vel: Vector2) -> String:
@@ -568,143 +552,24 @@ func _randomize_appearance() -> void:
 	]
 	skin_tone = skin_tones[randi() % skin_tones.size()]
 
-## Apply appearance colors to visual components.
-##
-## The player uses the same pixel-art Casual golfer frames as visitors. The
-## source art uses a consistent palette, so recolor those palette regions while
-## retaining each frame's pixel shading instead of switching the owner back to
-## the older polygon model.
+## Apply the owner's look: their chosen Golfer Skin and the colours they picked
+## for its parts. Visitors use the same pixel-art pipeline; the owner simply
+## names the skin instead of being dealt one.
 func apply_player_appearance(profile: PlayerGolferProfile) -> void:
 	if profile == null:
 		return
 	for key in PlayerGolferProfile.COLORS:
-		set(key, Color(profile.appearance.get(key, "ffffff")))
+		if profile.appearance.has(key):
+			set(key, Color(profile.appearance[key]))
+	var skin := profile.resolved_skin()
+	set_skin(skin.id if skin != null else skin_id, profile.skin_colors())
 	_apply_appearance()
-	if _use_sprites and _animated_sprite and _base_sprite_frames:
-		_apply_player_sprite_appearance()
 
+## Legacy hook kept for older code paths (tournaments, saves): the owner's
+## profile is the single source of truth for the look, so this now just rebuilds
+## the frames for the current skin and colours.
 func _apply_player_sprite_appearance() -> void:
-	if not _animated_sprite or not _base_sprite_frames:
-		return
-
-	var old_animation := _animated_sprite.animation
-	var old_frame := _animated_sprite.frame
-	var was_playing := _animated_sprite.is_playing()
-	var recolored_frames := SpriteFrames.new()
-	if recolored_frames.has_animation("default"):
-		recolored_frames.remove_animation("default")
-
-	for animation_name in _base_sprite_frames.get_animation_names():
-		recolored_frames.add_animation(animation_name)
-		recolored_frames.set_animation_speed(animation_name, _base_sprite_frames.get_animation_speed(animation_name))
-		recolored_frames.set_animation_loop(animation_name, _base_sprite_frames.get_animation_loop(animation_name))
-		var direction := animation_name.get_slice("_", 1)
-		for frame_index in _base_sprite_frames.get_frame_count(animation_name):
-			var source_texture := _base_sprite_frames.get_frame_texture(animation_name, frame_index)
-			var texture := _recolor_player_sprite_texture(source_texture, direction)
-			var duration := _base_sprite_frames.get_frame_duration(animation_name, frame_index)
-			recolored_frames.add_frame(animation_name, texture, duration)
-
-	_animated_sprite.sprite_frames = recolored_frames
-	if recolored_frames.has_animation(old_animation):
-		_animated_sprite.play(old_animation)
-		_animated_sprite.frame = mini(old_frame, recolored_frames.get_frame_count(old_animation) - 1)
-	else:
-		_animated_sprite.play("idle_south")
-	if not was_playing:
-		_animated_sprite.pause()
-
-func _recolor_player_sprite_texture(source_texture: Texture2D, direction: String) -> Texture2D:
-	if source_texture == null:
-		return source_texture
-	var image := source_texture.get_image()
-	if image == null or image.is_empty():
-		return source_texture
-	image.convert(Image.FORMAT_RGBA8)
-
-	var width := image.get_width()
-	var height := image.get_height()
-	for y in height:
-		for x in width:
-			var source_color := image.get_pixel(x, y)
-			var part := _classify_player_sprite_pixel(source_color, x, y, width, height, direction)
-			if part == SpriteColorPart.NONE:
-				continue
-			var replacement: Color
-			var reference_value: float
-			match part:
-				SpriteColorPart.CAP:
-					replacement = cap_color
-					reference_value = 0.93
-				SpriteColorPart.SHIRT:
-					replacement = shirt_color
-					reference_value = 0.71
-				SpriteColorPart.HAIR:
-					replacement = hair_color
-					reference_value = 0.45
-				SpriteColorPart.SKIN:
-					replacement = skin_tone
-					reference_value = 0.94
-				SpriteColorPart.PANTS:
-					replacement = pants_color
-					reference_value = 0.55
-			image.set_pixel(x, y, _shade_sprite_color(source_color, replacement, reference_value))
-
-	return ImageTexture.create_from_image(image)
-
-## Identify flat-color regions in the 48x48 Casual sprite. Their palette hues
-## are intentionally distinct (red shirt, cool light cap, warm skin/brown hair
-## and lower-body trousers); direction-aware checks separate the hair from
-## facial details and similarly shaded pants/shoes.
-func _classify_player_sprite_pixel(source: Color, x: int, y: int, width: int, height: int, direction: String) -> int:
-	if source.a <= 0.01:
-		return SpriteColorPart.NONE
-	var vertical := float(y) / float(maxi(height, 1))
-	var horizontal := float(x) / float(maxi(width, 1))
-
-	# The cap is a cool, near-white lavender in the stock Casual palette.
-	if vertical <= 0.34 and source.b > source.r * 1.025 and absf(source.r - source.g) < 0.18 and source.r > 0.30:
-		return SpriteColorPart.CAP
-
-	# The back-facing frame exposes more hair below the cap; side views keep it
-	# behind the face, while the south-facing frame stops above the eyes.
-	var hair_area := vertical <= 0.32
-	if direction.begins_with("north"):
-		hair_area = vertical <= 0.46
-	elif direction.contains("east"):
-		hair_area = vertical <= 0.44 and horizontal < 0.50
-	elif direction.contains("west"):
-		hair_area = vertical <= 0.44 and horizontal > 0.50
-	if hair_area and source.r > source.g * 1.08 and source.g > source.b * 1.01 \
-		and source.r >= 0.22 and source.r < 0.50:
-		return SpriteColorPart.HAIR
-
-	# Strong red separates the polo from skin and the dark-brown hair/shoes.
-	if source.r > source.g * 1.9 and source.r > source.b * 1.55:
-		return SpriteColorPart.SHIRT
-
-	var is_warm_skin := source.r > source.g and source.g > source.b \
-		and source.r > 0.42 and source.r - source.g > 0.045 \
-		and source.r - source.g < 0.48 and source.g - source.b > 0.015
-	var is_face_or_arm_area := vertical < 0.58 \
-		or (vertical < 0.72 and (horizontal < 0.40 or horizontal > 0.60))
-	if is_warm_skin and is_face_or_arm_area:
-		return SpriteColorPart.SKIN
-
-	# Pants fill the lower body; keep the shoes below them in their original
-	# dark leather palette. Skin has already been claimed above at the sides.
-	if vertical >= 0.58 and vertical < 0.83 and source.r > source.g * 1.04 \
-		and source.g >= source.b * 0.95 and source.r < 0.76:
-		return SpriteColorPart.PANTS
-
-	return SpriteColorPart.NONE
-
-## Recolor while retaining the source pixel's light/dark value as sprite shading.
-func _shade_sprite_color(source: Color, target: Color, reference_value: float) -> Color:
-	var source_value := maxf(source.r, maxf(source.g, source.b))
-	var shade := source_value / reference_value if reference_value > 0.0 else 1.0
-	return Color(minf(1.0, target.r * shade), minf(1.0, target.g * shade),
-		minf(1.0, target.b * shade), source.a)
+	_load_skin_frames()
 
 func _apply_appearance() -> void:
 	if body:
@@ -819,6 +684,12 @@ func initialize_from_tier(tier: int) -> void:
 
 	# Update tier ring color to match new tier
 	_update_tier_ring_color()
+
+	# The tier decides which skin this golfer wears; the tier is only known once
+	# the spawner calls this, after the node is in the tree (see GolferManager).
+	if not is_owner_round:
+		assign_visitor_skin()
+		_load_skin_frames()
 
 func _apply_tier_visuals(tier: int) -> void:
 	if not visual:

@@ -53,9 +53,9 @@ func _run() -> void:
 	_check(main.bottom_bar.offset_top <= -190.0, "bottom bar stays at its full height on phones")
 	_check(absf(main.hud_status_column.offset_right + 8.0) < 1.0, "status column stays in the corner")
 
-	# The main menu must fit (scrollable) with its six actions reachable.
+	# The main menu must fit (scrollable) with its seven actions reachable.
 	var menu_buttons: Array = _find_buttons(main.main_menu)
-	_check(menu_buttons.size() == 6, "main menu shows six actions on phones (got %d)" % menu_buttons.size())
+	_check(menu_buttons.size() == 7, "main menu shows seven actions on phones (got %d)" % menu_buttons.size())
 	var menu_fits := true
 	for button in menu_buttons:
 		var button_rect: Rect2 = button.get_global_rect()

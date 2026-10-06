@@ -44,6 +44,7 @@ signal quick_start_requested()
 signal continue_requested(save_name: String)
 signal load_game_requested()
 signal settings_requested()
+signal customise_skins_requested()
 signal quit_requested()
 
 # =============================================================================
@@ -100,6 +101,7 @@ const ACCENT_PRIMARY := MenuStyle.ACCENT_PRIMARY
 const ACCENT_SECONDARY := MenuStyle.ACCENT_SECONDARY
 const ACCENT_UTILITY := MenuStyle.ACCENT_UTILITY
 const ACCENT_QUIT := MenuStyle.ACCENT_QUIT
+const ACCENT_SKINS := MenuStyle.ACCENT_SKINS
 
 var _continue_button: Button = null
 var _load_button: Button = null
@@ -523,19 +525,27 @@ func _make_continue_card(height: float, title_font: int, caption_font: int) -> B
 ## down the rail when it is not. `caption_font` 0 leaves the tiles as plain
 ## labels (the squat-window layout, where a caption would only be truncated).
 func _make_utility_rows(height: float, title_font: int, caption_font: int,
-		stacked: bool) -> Control:
+		grid: bool) -> Control:
+	# The skins tile shortens its label in the squat strip, where a long title
+	# would be trimmed to an ellipsis anyway.
+	var short_label := caption_font <= 0
 	var tiles: Array[Button] = [
 		_make_load_tile(height, title_font, caption_font),
+		_make_skins_tile(height, title_font, caption_font, short_label),
 		_make_settings_tile(height, title_font, caption_font),
 		_make_quit_tile(height, title_font, caption_font),
 	]
-	if stacked:
-		var column := VBoxContainer.new()
-		column.name = "UtilityRows"
-		column.add_theme_constant_override("separation", 12)
+	if grid:
+		# Two rows of two: four tiles will not fit the rail side by side.
+		var grid_column := GridContainer.new()
+		grid_column.name = "UtilityRows"
+		grid_column.columns = 2
+		grid_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid_column.add_theme_constant_override("h_separation", 12)
+		grid_column.add_theme_constant_override("v_separation", 12)
 		for tile in tiles:
-			column.add_child(tile)
-		return column
+			grid_column.add_child(tile)
+		return grid_column
 
 	var row := HBoxContainer.new()
 	row.name = "UtilityRows"
@@ -545,14 +555,15 @@ func _make_utility_rows(height: float, title_font: int, caption_font: int,
 		row.add_child(tile)
 	return row
 
-## Phone utility row: Load and Settings share one line. No captions - the
-## column is only ~180 px wide, and the labels say it all at this size.
+## Phone utility row: Load, Skins and Settings share one line. No captions -
+## the column is only ~180 px wide, and the labels say it all at this size.
 func _make_phone_utility_row(height: float, title_font: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "UtilityRows"
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", 12)
 	row.add_child(_make_load_tile(height, title_font, 0))
+	row.add_child(_make_skins_tile(height, title_font, 0, true))
 	row.add_child(_make_settings_tile(height, title_font, 0))
 	return row
 
@@ -568,6 +579,19 @@ func _make_load_tile(height: float, title_font: int, caption_font: int) -> Butto
 		button.tooltip_text = "No saved games yet"
 	_load_button = button
 	button.pressed.connect(func(): load_game_requested.emit())
+	return button
+
+## The skin designer: painting and re-colouring the golfer art. Titled plainly,
+## because "Skins" alone reads like a display option.
+func _make_skins_tile(height: float, title_font: int, caption_font: int,
+		short_label: bool = false) -> Button:
+	var text := "Skins" if short_label else "Customise Golfer Skins"
+	var caption := "Paint the golfer art"
+	var button := _make_tile(text, caption,
+		"Edit the pixels and colours of every golfer skin", height,
+		title_font, caption_font, ACCENT_SKINS)
+	button.name = "CustomiseSkinsButton"
+	button.pressed.connect(func(): customise_skins_requested.emit())
 	return button
 
 func _make_settings_tile(height: float, title_font: int, caption_font: int) -> Button:

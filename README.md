@@ -58,6 +58,7 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 - **Personality traits** — Aggression (0.0–1.0) affects risk/reward club selection and target choice
 - **Green reading** — Putts account for slope break with skill-based accuracy
 - **Score tracking** — Per-hole scores, running total, displayed on course
+- **Golfer skins** — Looks to meet on the course: themed skins drawn pixel by pixel, each with idle, walk and swing animations in eight facings and every part re-colourable
 - **Play the Course** — Play your own round alongside the management sim, in a group with AI pros, with persistent skills, shot shapes (fade/draw/backspin/punch) and an aim guide that draws the intended flight arc and the roll that follows it
 
 ### Economy & Management
@@ -101,12 +102,13 @@ Theme selection happens on the main menu before starting a new game. Themes affe
 ### UI & Controls
 
 - **Isometric view** — 2:1 diamond terrain with SimGolf-style rotation: **Q** / **Shift+Q** rotate the course, **I** toggles isometric / top-down, plus W/A/S/D pan and mouse-wheel zoom
-- **Main menu** — six entries only: **Start New Game**, **Quick Start**, **Continue**, **Load Game**, **Settings**, **Quit**. The screen is laid out by weight rather than listed: Start New Game and Quick Start are hero cards, Continue is a card showing the newest save's course, day and slot, and the three utilities sit together at the quiet end. Behind it, a golf hole is drawn in code (sky, hills, fairway, green, flag and drifting clouds) — no texture assets
+- **Main menu** — seven entries only: **Start New Game**, **Quick Start**, **Continue**, **Load Game**, **Customise Golfer Skins**, **Settings**, **Quit**. The screen is laid out by weight rather than listed: Start New Game and Quick Start are hero cards, Continue is a card showing the newest save's course, day and slot, and the four utilities sit together at the quiet end. Behind it, a golf hole is drawn in code (sky, hills, fairway, green, flag and drifting clouds) — no texture assets
 - **Start New Game** — company name (or roll the die for a random one), difficulty (Easy/Normal/Hard, each card spelling out what it changes: upkeep, golfer numbers, building costs, reputation decay), starting money ($100K / $150K / $200K / Unlimited), generated holes for the first course (0/3/6/9/18, with the par for each) and the Weather / Wind / Seasons game features. A live plan of the course that will be generated redraws as you pick a hole count, a summary follows every choice, and **Choose Location** opens the World Map (Back or Esc returns to the title screen)
 - **Quick Start** — jumps straight to the World Map with defaults (random company name, Normal, $100,000, no generated holes, all features on)
 - **World Map** — a globe with a marker per destination, a list giving every location's name, theme, size and cost, Buy/Play actions, and **Reset World** to re-roll each location's unlocked land (and therefore its price); return from the pause menu at any time to buy more locations or swap the one you are playing
 - **Pause menu** — Escape key opens pause overlay with Resume, Settings, Save, and Quit options
 - **Camera while paused** — the game freezes but the camera stays controllable: pan with W/A/S/D or middle-mouse drag, zoom with the scroll wheel (also works from behind the pause and settings overlays)
+- **Customise Golfer Skins** — Paint the pixels and pick the colours of every golfer skin, frame by frame and facing by facing, with an eraser, zoom, an eyedropper and a live preview; **New Skin** forks the selected skin into one of your own to name, paint, wear and delete, and **Revert** puts an edited skin back to the shipped art. Changes save as they are made
 - **Settings menu** — Display, audio, and gameplay options
 - **Tool palette** — Terrain tools, object placement, hole creation, elevation tools
 - **Speed controls** — Pause / Play / Fast-forward; the single fast-forward button toggles between Fast (3x) and Ultra (8x), and Space pauses or resumes
@@ -172,7 +174,8 @@ simgolf-godot/
 ├── data/
 │   ├── buildings.json      # Building types, costs, revenue, upgrade tiers
 │   ├── terrain_types.json  # Terrain type definitions and properties
-│   └── golfer_traits.json  # Golfer archetypes, spawn weights, skill ranges
+│   ├── golfer_traits.json  # Golfer archetypes, spawn weights, skill ranges
+│   └── golfer_skins.json   # Skin catalogue: parts, palettes, tiers, frame layout
 ├── docs/
 │   └── algorithms/         # Detailed algorithm documentation with tuning levers
 ├── scenes/

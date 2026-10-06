@@ -11,6 +11,7 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 
 ### Core Golf Simulation
 - [Play the Course](player-rounds.md) — Owner customization, skills, interactive shots, opponents and round lifecycle
+- [Golfer Skins & the Skin Designer](golfer-skins.md) — skin catalogue, part ramps and re-colouring, painted pixels, the Customise Golfer Skins screen
 - [Group Turn Order & Ready Golf](group-turn-order.md) — Who plays next in a group, and why the group no longer waits for a partner to walk to their ball
 - [Shot Accuracy & Angular Dispersion](shot-accuracy.md) — How shots miss: gaussian angular error, hook/slice tendency, shanks, distance loss
 - [Putting System](putting-system.md) — Make rates (exponential decay), miss characteristics, green reading

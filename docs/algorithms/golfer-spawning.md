@@ -179,7 +179,17 @@ miss_tendency = magnitude * sign
 | Serious | 0.5–0.7 | 0.3–0.6 |
 | Pro | 0.6–0.9 (confident) | 0.2–0.5 (expects fast pace) |
 
-### 9. Group Size Distribution
+### 9. Spawn Skin
+
+Each guest is dealt a Golfer Skin from the ones their tier may wear
+(`GolferSkinLibrary.random_skin_for_tier`): the tier's own art about 55% of the
+time, otherwise one of the themed skins whose `spawn_tiers` lists that tier. A
+skin is a full animation set (idle / walk / swing, eight facings); the tier's
+hand-made art is re-coloured from the golfer's own `shirt_color`, `pants_color`,
+`cap_color`, `hair_color` and `skin_tone`, and themed skins are re-coloured from
+their part ramps. See [Golfer Skins & the Skin Designer](golfer-skins.md).
+
+### 10. Group Size Distribution
 
 | Fee Range | Singles | Pairs | Threesomes | Foursomes |
 | --------- | ------- | ----- | ---------- | --------- |
@@ -188,7 +198,7 @@ miss_tendency = magnitude * sign
 | $50–100 | 10% | 20% | 30% | 40% |
 | > $100 | 5% | 15% | 25% | 55% |
 
-### 10. Landing Zone Safety Check
+### 11. Landing Zone Safety Check
 
 Before spawning a new group, check the first tee's landing zone:
 
@@ -222,6 +232,7 @@ for each active golfer (from earlier groups):
 | Difficulty spawn multiplier | `golfer_manager.gd:89` | Easy 1.2x, Normal 1.0x, Hard 0.8x | Scales base modifier by difficulty preset |
 | Max golfers per hole | `golfer_manager.gd:98` | 4 | Higher = more crowded course |
 | Tier base weights | `golfer_tier.gd:16-60` | 0.35/0.40/0.20/0.05 | Base probability of each tier |
+| Tier-art share | `golfer_skin_library.gd::random_skin_for_tier` | 0.55 | How often a guest wears the tier art instead of a themed skin |
 | Tier skill ranges | `golfer_tier.gd:16-60` | See table | Skill bounds per tier |
 | Rating filter multiplier | `golfer_tier.gd:86` | 0.1 | Lower = harder to attract above-tier golfers |
 | Hole count filter | `golfer_tier.gd:91` | 0.05 | Lower = stricter hole count requirement |

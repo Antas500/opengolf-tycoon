@@ -692,6 +692,7 @@ func _show_main_menu() -> void:
 	main_menu.continue_requested.connect(_on_menu_continue)
 	main_menu.load_game_requested.connect(_on_main_menu_load)
 	main_menu.settings_requested.connect(_on_main_menu_settings)
+	main_menu.customise_skins_requested.connect(_on_main_menu_customise_skins)
 	main_menu.quit_requested.connect(_on_quit_pressed)
 	$UI/HUD.add_child(main_menu)
 	# Hide gameplay UI while in menu
@@ -936,6 +937,18 @@ func _on_main_menu_settings() -> void:
 	settings.close_requested.connect(func(): pass)
 	$UI/HUD.add_child(settings)
 
+## Open the golfer skin designer from the main menu. It writes the player's
+## skins onto their profile as they are painted, so closing it is all the
+## dismissal it needs.
+func _on_main_menu_customise_skins() -> void:
+	var designer := GolferSkinDesigner.new()
+	designer.name = "GolferSkinDesigner"
+	designer.close_requested.connect(func():
+		SaveManager.save_golfer_profile()
+		designer.queue_free())
+	$UI/HUD.add_child(designer)
+
+
 func _on_main_menu_load_panel_closed() -> void:
 	"""Save/load panel closed without loading — return to main menu."""
 	_disconnect_main_menu_load_signal()
@@ -955,7 +968,7 @@ func _disconnect_main_menu_load_signal() -> void:
 func _set_gameplay_ui_visible(visible_flag: bool) -> void:
 	# Toggle visibility of gameplay HUD elements
 	# Exclude popup panels that should remain hidden until explicitly toggled
-	var popup_panels = ["MainMenu", "StartNewGameScreen", "WorldMapScreen", "PauseMenu", "GameOverPanel", "SettingsMenu", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
+	var popup_panels = ["MainMenu", "StartNewGameScreen", "WorldMapScreen", "PauseMenu", "GameOverPanel", "SettingsMenu", "GolferSkinDesigner", "MilestonesPanel", "SeasonalCalendarPanel", "TournamentPanel", "FinancialPanel", "HoleStatsPanel", "SaveLoadPanel", "BuildingInfoPanel", "LandPanel", "MarketingPanel", "HotkeyPanel", "WeatherDebugPanel", "SeasonDebugPanel", "AnalyticsPanel", "GolferInfoPopup", "TournamentResultsPopup", "CourseRatingOverlay", "EventFeedPanel", "CourseScorecardPanel", "TileInspector"]
 	var hud = $UI/HUD
 	for child in hud.get_children():
 		if child.name not in popup_panels:

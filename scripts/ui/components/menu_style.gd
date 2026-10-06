@@ -27,6 +27,8 @@ const ACCENT_PRIMARY := UIConstants.COLOR_GOLD
 const ACCENT_SECONDARY := Color("7fb08a")
 const ACCENT_UTILITY := Color("6d8a76")
 const ACCENT_QUIT := UIConstants.COLOR_DANGER_MUTED
+## Golfer skin designer: a warmer green, distinct from the utility tiles.
+const ACCENT_SKINS := Color("9bbf7a")
 ## Dark ink for text sitting on a gold fill.
 const INK := Color("10241f")
 
