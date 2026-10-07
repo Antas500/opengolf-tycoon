@@ -442,7 +442,7 @@ func _make_rule(width: float, thickness: float, centered: bool, color: Color = A
 
 ## Version and save count - the quiet line that closes the layout.
 func _make_status_line(centered: bool, font_size: int) -> Control:
-	var version := str(ProjectSettings.get_setting("application/config/version", "0.4.9"))
+	var version := str(ProjectSettings.get_setting("application/config/version", "0.5.0"))
 	var text := "v%s" % version
 	if _saves.is_empty():
 		text += "  |  no saved courses yet"
