@@ -2657,9 +2657,13 @@ func _find_water_drop_position(entry_position: Vector2i) -> Vector2i:
 						score = 20.0
 					TerrainTypes.Type.POT_BUNKER:
 						score = 15.0
-					TerrainTypes.Type.TREES:
+					TerrainTypes.Type.TREES, TerrainTypes.Type.OAK, TerrainTypes.Type.PINE, \
+					TerrainTypes.Type.MAPLE, TerrainTypes.Type.BIRCH, TerrainTypes.Type.PALM, \
+					TerrainTypes.Type.CACTUS, TerrainTypes.Type.DEAD_TREE, TerrainTypes.Type.SHRUB, \
+					TerrainTypes.Type.FESCUE, TerrainTypes.Type.CATTAILS, TerrainTypes.Type.HEATHER:
 						score = 10.0
-					TerrainTypes.Type.BRUSH, TerrainTypes.Type.ROCKS:
+					TerrainTypes.Type.BRUSH, TerrainTypes.Type.ROCKS, \
+							TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
 						score = 5.0
 
 				# Prefer closer to the entry point (shorter walk)
@@ -2753,7 +2757,8 @@ func _path_crosses_obstacle(start: Vector2i, end: Vector2i, walking: bool) -> bo
 			# Ball flight: the ball flies through the air and clears water/OB below.
 			# Landing in water/OB is penalized by ShotAI terrain scoring.
 			# Trees block when the ball is low - use parabolic height model.
-			if terrain_type == TerrainTypes.Type.TREES:
+			# Every species tile is a wood, so the family answers, not one id.
+			if TerrainTypes.is_tree(terrain_type):
 				# Ball trajectory: parabolic arc with peak at midpoint
 				# At t=0.0 and t=1.0, ball is at ground level
 				# At t=0.5, ball is at maximum height (apex)
@@ -3387,7 +3392,7 @@ func _find_amenity_approach(amenity: Node2D) -> Vector2:
 			var tile: Vector2i = amenity.grid_position + Vector2i(x,y)
 			var clear := true
 			for p in TerrainBrush.centers(origin,tile):
-				if not grid.is_valid_position(p) or grid.get_tile(p) == TerrainTypes.Type.WATER or entities.is_tile_occupied_by_building(p) or entities.get_tree_at(p) or entities.get_rock_at(p):
+				if not grid.is_valid_position(p) or grid.get_tile(p) == TerrainTypes.Type.WATER or entities.is_tile_occupied_by_building(p):
 					clear = false
 					break
 			if not clear: continue

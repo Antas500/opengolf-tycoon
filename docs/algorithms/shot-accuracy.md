@@ -58,6 +58,7 @@ total_accuracy = base_accuracy * skill_accuracy * lie_modifier
 | Trees | 0.3 | 0.60 | |
 | Brush | 0.3 | 0.50 | ShotAI only takes a wedge |
 | Rocks | 0.25 | 0.50 | ShotAI only takes a wedge |
+| Small Boulders, Large Boulders | 0.25 | 0.50 | The same stone lie as Rocks |
 
 **Skill accuracy blending by club:**
 
@@ -184,7 +185,7 @@ Small per-shot variance representing natural swing inconsistency:
 
 Applied multiplicatively to the distance modifier:
 
-- **Terrain distance penalty**: Rough 0.85, Waste Bunker 0.85, Heavy Rough 0.70, Deep Rough 0.60, Bunker 0.75 (deep 0.60), Pot Bunker 0.45, Trees 0.60, Brush 0.50, Rocks 0.50
+- **Terrain distance penalty**: Rough 0.85, Waste Bunker 0.85, Heavy Rough 0.70, Deep Rough 0.60, Bunker 0.75 (deep 0.60), Pot Bunker 0.45, Trees 0.60, Brush 0.50, Rocks 0.50, Small Boulders 0.50, Large Boulders 0.50
 - **Wind**: headwind/tailwind modifier from `WindSystem.get_distance_modifier()` (see [wind-system.md](wind-system.md))
 - **Elevation**: `1.0 - (elevation_diff * 0.03)`, clamped to [0.75, 1.25] — ~3% per elevation unit
 

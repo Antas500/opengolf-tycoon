@@ -44,7 +44,7 @@ static func _get_premium_features(theme: int) -> Array:
 static func _get_elite_features(theme: int) -> Array:
 	"""Returns feature types appropriate for elite parcels of this theme."""
 	match theme:
-		CourseTheme.Type.DESERT:    return ["elevation", "rough", "rocks"]
+		CourseTheme.Type.DESERT:    return ["elevation", "rough", "trees"]
 		CourseTheme.Type.LINKS:     return ["elevation", "rough", "trees"]
 		CourseTheme.Type.MOUNTAIN:  return ["elevation", "trees", "water"]
 		CourseTheme.Type.WOODLAND:  return ["trees", "rough", "elevation"]
@@ -66,7 +66,6 @@ static func _generate_premium_features(
 			"trees":     _generate_scoped_tree_cluster(bounds, terrain_grid, entity_layer, rng, 4, 8)
 			"elevation": _generate_scoped_elevation(bounds, terrain_grid, rng, 2)
 			"rough":     _generate_scoped_rough(bounds, terrain_grid, rng, 1, 2)
-			"rocks":     _generate_scoped_rocks(bounds, terrain_grid, entity_layer, rng, 3, 6)
 
 
 static func _generate_elite_features(
@@ -82,7 +81,6 @@ static func _generate_elite_features(
 			"trees":     _generate_scoped_tree_cluster(bounds, terrain_grid, entity_layer, rng, 8, 16)
 			"elevation": _generate_scoped_elevation(bounds, terrain_grid, rng, 4)
 			"rough":     _generate_scoped_rough(bounds, terrain_grid, rng, 2, 4)
-			"rocks":     _generate_scoped_rocks(bounds, terrain_grid, entity_layer, rng, 6, 12)
 
 
 ## Generate a natural-looking pond within the parcel bounds.
@@ -118,13 +116,14 @@ static func _generate_scoped_pond(
 static func _generate_scoped_tree_cluster(
 	bounds: Rect2i,
 	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
+	_entity_layer: EntityLayer,
 	rng: RandomNumberGenerator,
 	min_trees: int,
 	max_trees: int
 ) -> void:
+	# A tree is a Course Terrain tile, so a parcel's copse is painted ground.
 	var tree_types := CourseTheme.get_tree_types(GameManager.current_theme)
-	var waterside_only: Array = ["cattails"]
+	var waterside_only: Array = [TerrainTypes.Type.CATTAILS]
 	tree_types = tree_types.filter(func(t): return t not in waterside_only)
 	if tree_types.is_empty():
 		return
@@ -132,7 +131,7 @@ static func _generate_scoped_tree_cluster(
 	var target_count := rng.randi_range(min_trees, max_trees)
 	var placed := 0
 	var attempts := 0
-	var dominant_type: String = tree_types[rng.randi_range(0, tree_types.size() - 1)]
+	var dominant_type: int = tree_types[rng.randi_range(0, tree_types.size() - 1)]
 
 	while placed < target_count and attempts < target_count * 5:
 		attempts += 1
@@ -145,14 +144,14 @@ static func _generate_scoped_tree_cluster(
 		var tile := terrain_grid.get_tile(pos)
 		if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.FLOWER_BED:
 			continue
-		if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
+		if TerrainTypes.is_tree(tile):
 			continue
 
 		var tree_type := dominant_type
 		if rng.randf() < 0.3:
 			tree_type = tree_types[rng.randi_range(0, tree_types.size() - 1)]
 
-		entity_layer.place_tree(pos, tree_type)
+		terrain_grid.set_tile_natural(pos, tree_type)
 		placed += 1
 
 
@@ -225,42 +224,3 @@ static func _generate_scoped_rough(
 						# Skip the no-op on a Rough base: only paint real changes.
 						if rough_type != tile:
 							terrain_grid.set_tile_natural(pos, rough_type)
-
-
-## Generate scattered rocks within the parcel bounds.
-static func _generate_scoped_rocks(
-	bounds: Rect2i,
-	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
-	rng: RandomNumberGenerator,
-	min_rocks: int,
-	max_rocks: int
-) -> void:
-	var target := rng.randi_range(min_rocks, max_rocks)
-	var placed := 0
-	var attempts := 0
-
-	while placed < target and attempts < target * 5:
-		attempts += 1
-		var x := rng.randi_range(bounds.position.x, bounds.end.x - 1)
-		var y := rng.randi_range(bounds.position.y, bounds.end.y - 1)
-		var pos := Vector2i(x, y)
-
-		if not terrain_grid.is_valid_position(pos):
-			continue
-		if terrain_grid.get_tile(pos) == TerrainTypes.Type.WATER:
-			continue
-		if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
-			continue
-
-		var size_roll := rng.randf()
-		var rock_size: String
-		if size_roll < 0.5:
-			rock_size = "small"
-		elif size_roll < 0.85:
-			rock_size = "medium"
-		else:
-			rock_size = "large"
-
-		entity_layer.place_rock(pos, rock_size)
-		placed += 1

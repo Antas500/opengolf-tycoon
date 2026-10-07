@@ -2,7 +2,7 @@
 
 ## Plain English
 
-Fast terrain drags paint continuous strokes. Round brushes form softer contours; square brushes preserve straight edges. One stroke records terrain, cleared trees and rocks, and the actual amount charged. Undo restores cleared objects and cash; redo checks affordability before consuming the redo action. Releasing over UI or cancelling closes the stroke. Terrain painting protects decorations as well as buildings and respects ownership.
+Fast terrain drags paint continuous strokes. Round brushes form softer contours; square brushes preserve straight edges. One stroke records terrain, cleared trees, and the actual amount charged. Undo restores cleared objects and cash; redo checks affordability before consuming the redo action. Releasing over UI or cancelling closes the stroke. Terrain painting protects decorations as well as buildings and respects ownership.
 
 Course Review translates observable conditions into actions: repair a tee/cup surface, improve an under-turfed direct corridor, review a low value rating, locate a tee lacking nearby food, or investigate an operating loss. Locate buttons focus the affected hole; finance and decoration actions open their panels. The end-of-day summary repeats a suggested next step.
 

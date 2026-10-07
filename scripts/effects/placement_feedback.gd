@@ -2,19 +2,6 @@ extends Node2D
 class_name PlacementFeedback
 ## PlacementFeedback - Particle effects and animations for entity placement
 
-# Particle colors by placement type
-const TREE_COLORS := [
-	Color(0.3, 0.7, 0.3),  # Green
-	Color(0.4, 0.6, 0.2),  # Yellow-green
-	Color(0.25, 0.5, 0.2), # Dark green
-]
-
-const ROCK_COLORS := [
-	Color(0.6, 0.6, 0.6),  # Gray
-	Color(0.5, 0.5, 0.5),  # Medium gray
-	Color(0.7, 0.65, 0.6), # Warm gray
-]
-
 const BUILDING_COLORS := [
 	Color(0.9, 0.8, 0.6),  # Sand
 	Color(0.8, 0.7, 0.5),  # Tan
@@ -69,10 +56,6 @@ func _start_effect(placement_type: String) -> void:
 
 	var colors: Array
 	match placement_type:
-		"tree":
-			colors = TREE_COLORS
-		"rock":
-			colors = ROCK_COLORS
 		"building":
 			colors = BUILDING_COLORS
 		_:

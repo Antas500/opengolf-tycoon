@@ -12,17 +12,19 @@ func test_bottom_bar_fits_two_rows_of_course_tiles() -> void:
 		"Toolbar content must fit inside the bottom bar")
 
 ## The Course Terrain tiles in reading order: the top row runs from the tee to
-## the water, the bottom row pairs each playing surface with its trouble tiles.
+## out of bounds, the bottom row pairs each playing surface with its trouble
+## tiles, ending with the two boulder grounds.
 const TOP_ROW := [TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN,
 	TerrainTypes.Type.BUNKER, TerrainTypes.Type.ROUGH, TerrainTypes.Type.POT_BUNKER,
-	TerrainTypes.Type.STREAM, TerrainTypes.Type.WATER]
+	TerrainTypes.Type.STREAM, TerrainTypes.Type.WATER, TerrainTypes.Type.OUT_OF_BOUNDS]
 const BOTTOM_ROW := [TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY,
 	TerrainTypes.Type.DEEP_ROUGH, TerrainTypes.Type.WASTE_BUNKER, TerrainTypes.Type.BRUSH,
-	TerrainTypes.Type.ROCKS, TerrainTypes.Type.OUT_OF_BOUNDS]
+	TerrainTypes.Type.ROCKS, TerrainTypes.Type.SMALL_BOULDERS,
+	TerrainTypes.Type.LARGE_BOULDERS]
 
 func test_course_tiles_share_one_group_in_top_and_bottom_rows() -> void:
 	var grid: TileHoneycomb = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent()
-	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
+	var landscape_count := 1 + CourseTheme.get_tree_types(GameManager.current_theme).size()
 	assert_eq(grid.columns, TOP_ROW.size() + ceili(float(landscape_count) / 2.0))
 	assert_eq(grid.flow_children().size(),
 		TOP_ROW.size() + BOTTOM_ROW.size() + landscape_count,
@@ -486,12 +488,9 @@ func test_every_course_terrain_tile_says_it_replaces_the_others() -> void:
 		var button: TerrainTileButton = toolbar._tool_buttons[tool_type]
 		assert_string_contains(button.tool_description, sentence,
 			"%s tells the player it replaces any other Course Terrain tile" % button.tool_name)
-	for key in ["boulder_small", "rock", "boulder_large"]:
-		assert_string_contains(toolbar._tool_buttons[key].tool_description, sentence,
-			"Boulder tiles replace any other Course Terrain tile")
 	for tree_type in CourseTheme.get_tree_types(GameManager.current_theme):
-		assert_string_contains(toolbar._tool_buttons["tree_" + str(tree_type)].tool_description, sentence,
-			"Tree tiles replace any other Course Terrain tile")
+		assert_string_contains(toolbar._tool_buttons[tree_type].tool_description, sentence,
+			"%s replaces any other Course Terrain tile" % TerrainTypes.get_type_name(tree_type))
 	# The Path tool is an improvement laid over ground, not a Course Terrain tile.
 	assert_false(toolbar._tool_buttons[TerrainTypes.Type.PATH].tool_description.contains(sentence),
 		"The walking path does not replace course terrain")
@@ -1057,12 +1056,11 @@ func test_action_signals() -> void:
 	toolbar._on_tool_button_pressed("open_hole")
 	assert_signal_emitted(toolbar, "open_hole_pressed")
 
-	toolbar._on_tool_button_pressed("tree")
-	assert_signal_emitted_with_parameters(toolbar, "tree_selected", [
-		CourseTheme.get_tree_types(GameManager.current_theme)[0]])
-
-	toolbar._on_tool_button_pressed("rock")
-	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["medium"])
+	# Woodland is ordinary paint terrain now: a species tile selects the terrain
+	# tool the way Rocks or Wild Flowers do, with no placement mode of its own.
+	var first_tree: int = CourseTheme.get_tree_types(GameManager.current_theme)[0]
+	toolbar._on_tool_button_pressed(first_tree)
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [first_tree])
 
 	toolbar._on_tool_button_pressed("building")
 	assert_signal_emitted(toolbar, "building_placement_pressed")
@@ -1179,34 +1177,33 @@ func test_flower_bed_boulders_and_trees_are_terrain_tiles_in_course_terrain_tab(
 	assert_eq(fb_btn.get_parent(), toolbar._course_tiles,
 		"Wild Flowers should live on the unified honeycomb in Course Terrain tab")
 
-	# Boulders are BoulderTileButtons (which inherit TerrainTileButton) in Course Terrain tab
-	for b_id in ["boulder_small", "rock", "boulder_large"]:
-		var b_btn: ToolButton = toolbar._tool_buttons[b_id]
-		assert_true(b_btn is BoulderTileButton, "%s should be a BoulderTileButton" % b_id)
-		assert_true(b_btn is TerrainTileButton, "%s should be a TerrainTileButton" % b_id)
+	# Small and Large Boulders are plain terrain tiles on the same honeycomb.
+	for b_type in [TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS]:
+		var b_btn: ToolButton = toolbar._tool_buttons[b_type]
+		assert_true(b_btn is TerrainTileButton,
+			"%s should be a TerrainTileButton" % TerrainTypes.get_type_name(b_type))
 		assert_eq(b_btn.get_parent(), toolbar._course_tiles,
-			"%s should live on the unified honeycomb in Course Terrain tab" % b_id)
+			"%s should live on the unified honeycomb in Course Terrain tab" % TerrainTypes.get_type_name(b_type))
 
-	assert_eq(toolbar._tool_buttons["boulder_small"].tool_name, "Small Boulder")
-	assert_eq(toolbar._tool_buttons["rock"].tool_name, "Boulders")
-	assert_eq(toolbar._tool_buttons["boulder_large"].tool_name, "Large Boulder")
+	assert_eq(toolbar._tool_buttons[TerrainTypes.Type.SMALL_BOULDERS].tool_name, "Small Boulders")
+	assert_eq(toolbar._tool_buttons[TerrainTypes.Type.LARGE_BOULDERS].tool_name, "Large Boulders")
 
-	# Theme Trees for default theme (PARKLAND) are TreeTileButtons in Course Terrain tab
+	# The theme's trees are ordinary paint tiles on the same honeycomb as the rest.
 	var theme_trees: Array = CourseTheme.get_tree_types(CourseTheme.Type.PARKLAND)
 	for tree_type in theme_trees:
-		var t_id: String = "tree_" + str(tree_type)
-		var t_btn: ToolButton = toolbar._tool_buttons[t_id]
-		assert_true(t_btn is TreeTileButton, "%s should be a TreeTileButton" % t_id)
-		assert_true(t_btn is TerrainTileButton, "%s should be a TerrainTileButton" % t_id)
+		var t_btn: ToolButton = toolbar._tool_buttons[tree_type]
+		assert_true(t_btn is TerrainTileButton,
+			"%s should be a TerrainTileButton" % TerrainTypes.get_type_name(tree_type))
+		assert_eq(t_btn.tool_type, tree_type, "The tile carries its own terrain id")
 		assert_eq(t_btn.get_parent(), toolbar._course_tiles,
-			"%s should live on the unified honeycomb in Course Terrain tab" % t_id)
+			"%s should live on the unified honeycomb in Course Terrain tab" % TerrainTypes.get_type_name(tree_type))
 
 	# The unified honeycomb itself sits inside Course Terrain page and has 2 interlocking rows
 	assert_not_null(toolbar._course_tiles)
 	assert_eq(toolbar._course_tiles.get_parent().get_parent(),
 		toolbar.page_content(TerrainToolbar.Tab.TERRAIN),
 		"Unified honeycomb should live in Course Terrain tab")
-	var total_landscape_tiles: int = 1 + 3 + theme_trees.size()
+	var total_landscape_tiles: int = 1 + theme_trees.size()
 	assert_eq(toolbar._course_tiles.columns, TOP_ROW.size() + ceili(float(total_landscape_tiles) / 2.0),
 		"Unified honeycomb should be laid out in two interlocking rows")
 	var course_group: Control = toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX].get_parent().get_parent()
@@ -1227,7 +1224,8 @@ func test_improvements_tab_holds_paths_and_every_decoration_tile() -> void:
 		tool_names.append(btn.tool_name)
 
 	assert_false(tool_names.has("Trees"), "Improvements tab must not contain Trees")
-	assert_false(tool_names.has("Boulders"), "Improvements tab must not contain Boulders")
+	assert_false(tool_names.has("Small Boulders"), "Improvements tab must not contain Small Boulders")
+	assert_false(tool_names.has("Large Boulders"), "Improvements tab must not contain Large Boulders")
 	assert_false(tool_names.has("Wild Flowers"), "Improvements tab must not contain Wild Flowers")
 	assert_true(tool_names.has("Path"), "Improvements tab should contain Path")
 	assert_false(tool_names.has("Decorations"),
@@ -1458,10 +1456,16 @@ func test_theme_change_updates_tree_tiles_in_course_terrain_tab() -> void:
 
 	var desert_trees: Array = CourseTheme.get_tree_types(CourseTheme.Type.DESERT)
 	for tree_type in desert_trees:
-		var t_id: String = "tree_" + str(tree_type)
-		assert_true(toolbar._tool_buttons.has(t_id),
-			"Course Terrain tab should contain Desert tree %s" % tree_type)
-		assert_true(toolbar._tool_buttons[t_id] is TreeTileButton)
+		assert_true(toolbar._tool_buttons.has(tree_type),
+			"Course Terrain tab should contain Desert %s" % TerrainTypes.get_type_name(tree_type))
+		assert_true(toolbar._tool_buttons[tree_type] is TerrainTileButton,
+			"%s is a paint tile like every other tile on the tab" % TerrainTypes.get_type_name(tree_type))
+	# A species the desert does not grow gives up its tile straight away.
+	for tree_type in CourseTheme.get_tree_types(CourseTheme.Type.PARKLAND):
+		if tree_type in desert_trees:
+			continue
+		assert_false(toolbar._tool_buttons.has(tree_type),
+			"%s is not on the tab in the desert" % TerrainTypes.get_type_name(tree_type))
 
 	# Reset theme back to PARKLAND
 	GameManager.current_theme = CourseTheme.Type.PARKLAND
@@ -1470,14 +1474,19 @@ func test_theme_change_updates_tree_tiles_in_course_terrain_tab() -> void:
 func test_tree_and_boulder_tile_selection_signals() -> void:
 	watch_signals(toolbar)
 
-	# Selecting a tree tile emits tree_selected with the tree type
-	toolbar._on_tool_button_pressed("tree_oak")
-	assert_signal_emitted_with_parameters(toolbar, "tree_selected", ["oak"])
+	# Selecting a tree tile emits tool_selected with its terrain id, as any other
+	# paint tile does.
+	toolbar._on_tool_button_pressed(TerrainTypes.Type.OAK)
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.OAK])
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.OAK)
 	assert_true(toolbar.has_selection())
 
-	# Selecting a boulder tile emits rock_selected with the boulder size
-	toolbar._on_tool_button_pressed("boulder_small")
-	assert_signal_emitted_with_parameters(toolbar, "rock_selected", ["small"])
+	# The boulder tiles are ordinary terrain tiles: they select the terrain tool.
+	toolbar._on_tool_button_pressed(TerrainTypes.Type.SMALL_BOULDERS)
+	assert_signal_emitted_with_parameters(toolbar, "tool_selected", [TerrainTypes.Type.SMALL_BOULDERS])
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.SMALL_BOULDERS)
+	toolbar._on_tool_button_pressed(TerrainTypes.Type.LARGE_BOULDERS)
+	assert_eq(toolbar.get_current_tool(), TerrainTypes.Type.LARGE_BOULDERS)
 	assert_true(toolbar.has_selection())
 
 	# Selecting Wild Flowers selects tool TerrainTypes.Type.FLOWER_BED
@@ -1495,14 +1504,14 @@ func test_theme_changes_keep_one_honeycomb_without_stale_tiles() -> void:
 		GameManager.current_theme = theme
 		EventBus.theme_changed.emit(theme)
 		var trees: Array = CourseTheme.get_tree_types(theme)
-		assert_eq(grid.flow_children().size(), 18 + trees.size(),
+		assert_eq(grid.flow_children().size(), 17 + trees.size(),
 			"Theme refresh must immediately remove old tiles, even within one frame")
 		assert_eq(grid.columns, ceili(float(grid.flow_children().size()) / 2.0))
 		assert_same(toolbar._tool_buttons[TerrainTypes.Type.TEE_BOX], tee,
 			"Theme changes must preserve course tile state")
 		for key in toolbar._tool_buttons:
-			if str(key).begins_with("tree_"):
-				assert_has(trees, str(key).trim_prefix("tree_"), "No stale tree tools")
+			if key is int and TerrainTypes.is_tree(key):
+				assert_has(trees, key, "No stale tree tools")
 		var tiles: Array[Control] = grid.flow_children()
 		for slot in BOTTOM_ROW.size():
 			assert_eq(tiles.find(toolbar._tool_buttons[BOTTOM_ROW[slot]]), grid.columns + slot)

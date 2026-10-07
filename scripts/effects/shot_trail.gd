@@ -48,7 +48,8 @@ func _get_trail_color(is_putt: bool, landing_terrain: int) -> Color:
 			return COLOR_GOOD
 		TerrainTypes.Type.ROUGH, TerrainTypes.Type.HEAVY_ROUGH, TerrainTypes.Type.DEEP_ROUGH, \
 				TerrainTypes.Type.BUNKER, TerrainTypes.Type.POT_BUNKER, TerrainTypes.Type.WASTE_BUNKER, \
-				TerrainTypes.Type.BRUSH, TerrainTypes.Type.ROCKS:
+				TerrainTypes.Type.BRUSH, TerrainTypes.Type.ROCKS, \
+				TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
 			return COLOR_OK
 		TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM, TerrainTypes.Type.OUT_OF_BOUNDS:
 			return COLOR_TROUBLE

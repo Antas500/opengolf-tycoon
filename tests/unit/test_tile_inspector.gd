@@ -53,17 +53,23 @@ func test_building_lookup_includes_entire_footprint_and_display_name() -> void:
 			assert_eq(TileInspector.describe_tile(grid, entities, TILE + Vector2i(x, y)).buildings, "Clubhouse")
 	assert_eq(TileInspector.describe_tile(grid, entities, TILE + Vector2i(3, 0)).buildings, "None")
 
-func test_trees_and_rocks_are_terrain_not_improvements() -> void:
-	var tree: TreeEntity = autofree(TreeEntity.new())
-	tree.tree_data = {"name": "Oak Tree"}
-	entities.trees[TILE] = tree
-	assert_string_contains(TileInspector.describe_tile(grid, entities, TILE).terrain, "Oak Tree")
-	assert_eq(TileInspector.describe_tile(grid, entities, TILE).improvements, "None")
-	entities.trees.clear()
-	var rock: Rock = autofree(Rock.new())
-	rock.rock_data = {"name": "Large Rock"}
-	entities.rocks[TILE] = rock
-	assert_string_contains(TileInspector.describe_tile(grid, entities, TILE).terrain, "Large Rock")
+func test_trees_are_terrain_not_improvements() -> void:
+	# A species tile is painted ground, so the inspector reads it as terrain and
+	# names the ground the tree stands on rather than listing an improvement.
+	for type in [TerrainTypes.Type.TREES, TerrainTypes.Type.OAK, TerrainTypes.Type.CATTAILS]:
+		grid.set_tile(TILE, type)
+		var details := TileInspector.describe_tile(grid, entities, TILE)
+		assert_string_contains(details.terrain, TerrainTypes.get_type_name(type))
+		assert_string_contains(details.terrain, TerrainTypes.get_tree_ground(type),
+			"%s reports the ground it paints" % TerrainTypes.get_type_name(type))
+		assert_eq(details.improvements, "None")
+
+func test_boulder_ground_reads_as_terrain_not_an_improvement() -> void:
+	for type in [TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS]:
+		grid.set_tile(TILE, type)
+		var details := TileInspector.describe_tile(grid, entities, TILE)
+		assert_string_contains(details.terrain, TerrainTypes.get_type_name(type))
+		assert_eq(details.improvements, "None")
 
 func test_invalid_tiles_have_no_details() -> void:
 	assert_eq(TileInspector.describe_tile(grid, entities, Vector2i(-1, 0)), {})

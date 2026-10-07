@@ -12,20 +12,6 @@ class_name CourseClubhouse
 
 const BUILDING_TYPE := "clubhouse"
 
-## Ground a clubhouse may be dropped on: all walkable, none of it a playing
-## surface. The same list the Buildings tab uses for optional buildings.
-const BUILDABLE_TERRAINS: Array = [
-	TerrainTypes.Type.GRASS,
-	TerrainTypes.Type.ROUGH,
-	TerrainTypes.Type.HEAVY_ROUGH,
-	TerrainTypes.Type.DEEP_ROUGH,
-	TerrainTypes.Type.FLOWER_BED,
-	TerrainTypes.Type.FIRM_FAIRWAY,
-	TerrainTypes.Type.PATH,
-	TerrainTypes.Type.BRUSH,
-	TerrainTypes.Type.TREES,
-	TerrainTypes.Type.ROCKS,
-]
 ## Terrain the search for a home for the clubhouse will not build over, even
 ## though a player may drop an optional building on the fairway: greens, tees,
 ## sand and water are the course, and a fairway is somebody's hole.
@@ -84,14 +70,9 @@ static func is_clubhouse(building) -> bool:
 static func front_tile(building: Building, terrain_grid, entity_layer) -> Vector2i:
 	if not is_clubhouse(building) or terrain_grid == null:
 		return Vector2i(-1, -1)
-	var candidates := _front_tiles(building)
-	# Prefer ground that is already clear, then settle for anywhere walkable: a
-	# clubhouse ringed by trees still needs a door its guests can use.
-	for tile in candidates:
-		if _is_walkable(tile, terrain_grid, entity_layer) \
-				and not _is_blocked_by_scenery(tile, entity_layer):
-			return tile
-	for tile in candidates:
+	# Any walkable tile beside the building will do: a tree is ground now, so
+	# the door no longer has to dodge anything standing in front of the house.
+	for tile in _front_tiles(building):
 		if _is_walkable(tile, terrain_grid, entity_layer):
 			return tile
 	return Vector2i(-1, -1)
@@ -136,10 +117,9 @@ static func ensure(terrain_grid, entity_layer, preferred: Vector2i = Vector2i(-1
 	for anchor in _search_seeds(terrain_grid, preferred):
 		var spot := _find_spot(terrain_grid, entity_layer, anchor, size)
 		if spot.x >= 0:
-			_prepare_ground(terrain_grid, entity_layer, spot, size)
+			_prepare_ground(terrain_grid, spot, size)
 			var building = entity_layer.place_building(BUILDING_TYPE, spot, {BUILDING_TYPE: data})
 			if building != null:
-				_clear_door(terrain_grid, entity_layer, building)
 				return building
 	return null
 
@@ -181,8 +161,6 @@ static func tile_error(tile: Vector2i, terrain_grid, entity_layer, moving: Build
 			return "Move the footprint clear of the other building."
 		if entity_layer.is_tile_occupied_by_decoration(tile):
 			return "Remove the decoration in this footprint first."
-		if entity_layer.get_tree_at(tile) != null or entity_layer.get_rock_at(tile) != null:
-			return "Clear the tree or rock first: paint another Course Terrain tile over it."
 	if not _terrain_ok(terrain_grid.get_tile(tile)):
 		return "Move it off the greens, tees, sand and water."
 	return ""
@@ -202,8 +180,6 @@ static func move_to(entity_layer, building: Building, target: Vector2i) -> bool:
 		return false
 	if not entity_layer.move_building(building, target):
 		return false
-	# The new doorstep gets the same tidy-up a freshly placed clubhouse gets.
-	_clear_door(terrain_grid, entity_layer, building)
 	return true
 
 
@@ -247,11 +223,6 @@ static func _middle_out(count: int) -> Array[int]:
 			right += 1
 	return order
 
-static func _is_blocked_by_scenery(tile: Vector2i, entity_layer) -> bool:
-	if entity_layer == null:
-		return false
-	return entity_layer.get_tree_at(tile) != null or entity_layer.get_rock_at(tile) != null
-
 static func _is_walkable(tile: Vector2i, terrain_grid, entity_layer) -> bool:
 	if not terrain_grid.is_valid_position(tile):
 		return false
@@ -279,9 +250,9 @@ static func _try_add_seed(seeds: Array[Vector2i], candidate: Vector2i, terrain_g
 
 ## Searches outward from the anchor in square rings and returns the first legal
 ## top-left corner, or (-1,-1) when nothing within SEARCH_RADIUS works. Ground
-## that needs no clearing wins ties: the clubhouse will clear its own plot of
-## trees and boulders (see _prepare_ground) but should not have to when there is
-## an open patch just as close.
+## that needs no clearing wins ties: the clubhouse will mow its own plot of
+## woodland and level stony ground (see _prepare_ground) but should not have to
+## when there is an open patch just as close.
 static func _find_spot(terrain_grid, entity_layer, anchor: Vector2i, size: Vector2i) -> Vector2i:
 	for distance in range(SEARCH_RADIUS + 1):
 		for require_clear in [true, false]:
@@ -322,29 +293,19 @@ static func _footprint_ok(terrain_grid, entity_layer, origin: Vector2i, size: Ve
 				return false
 			if entity_layer.is_tile_occupied_by_decoration(tile):
 				return false
-			if require_clear and _is_blocked_by_scenery(tile, entity_layer):
-				return false
 	return true
 
 ## Clears the footprint's scenery and lays the grounds the building stands on.
-static func _prepare_ground(terrain_grid, entity_layer, origin: Vector2i, size: Vector2i) -> void:
+static func _prepare_ground(terrain_grid, origin: Vector2i, size: Vector2i) -> void:
 	for x in range(size.x):
 		for y in range(size.y):
 			var tile: Vector2i = origin + Vector2i(x, y)
-			entity_layer.remove_tree(tile)
-			entity_layer.remove_rock(tile)
-			if terrain_grid.get_tile(tile) in [TerrainTypes.Type.TREES, TerrainTypes.Type.ROCKS,
-					TerrainTypes.Type.BRUSH]:
+			var ground: int = terrain_grid.get_tile(tile)
+			# Woodland and scrub are tiles, not things to clear away, so the
+			# plot is made by painting the lawn straight over them.
+			if TerrainTypes.is_tree(ground) or ground == TerrainTypes.Type.BRUSH \
+					or TerrainTypes.is_rocks(ground):
 				terrain_grid.set_tile_natural(tile, TerrainTypes.Type.GRASS)
-
-## Keep the doorstep clear so golfers have somewhere to stand as they come and
-## go, and so the walking-path overlay has ground to lay a trail on.
-static func _clear_door(terrain_grid, entity_layer, building: Building) -> void:
-	var door := front_tile(building, terrain_grid, entity_layer)
-	if door.x < 0:
-		return
-	entity_layer.remove_tree(door)
-	entity_layer.remove_rock(door)
 
 ## Ground a dropped clubhouse needs: the same list the Buildings tab allows,
 ## so a move never feels stricter than placing any other building.
@@ -362,8 +323,8 @@ static func _plain_ground_ok(tile_type: int) -> bool:
 ## The first pass of the search walks past these; the second takes them when
 ## nothing open is as close.
 static func _clearable_ground_ok(tile_type: int) -> bool:
-	return tile_type in [TerrainTypes.Type.TREES, TerrainTypes.Type.ROCKS,
-			TerrainTypes.Type.BRUSH]
+	return TerrainTypes.is_tree(tile_type) or TerrainTypes.is_rocks(tile_type) \
+			or tile_type == TerrainTypes.Type.BRUSH
 
 static func _is_owned(tile: Vector2i) -> bool:
 	var land_manager = GameManager.land_manager

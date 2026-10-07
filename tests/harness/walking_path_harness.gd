@@ -26,15 +26,6 @@ func _check(condition: bool, label: String) -> void:
 		failures += 1
 		printerr("HARNESS: FAIL: %s" % label)
 
-## The quick-start course scatters trees; drop any standing on a tile so the
-## trail test runs on bare ground (a reloaded tree would re-stamp its tile
-## TREES and muddy the assertions).
-func _clear_entity_at(pos: Vector2i) -> void:
-	if main.entity_layer.get_tree_at(pos):
-		main.entity_layer.remove_tree(pos)
-	if main.entity_layer.get_rock_at(pos):
-		main.entity_layer.remove_rock(pos)
-
 func _run() -> void:
 	await _frames(10)
 	print("HARNESS: quick-starting new game")
@@ -57,7 +48,6 @@ func _run() -> void:
 	# not player strokes).
 	main._suppress_tile_undo = true
 	for pos in trail:
-		_clear_entity_at(pos)
 		grid.set_tile(pos, TerrainTypes.Type.ROUGH)
 		_check(grid.is_valid_position(pos), "trail tile %s is on the course" % pos)
 		_check(GameManager.land_manager.is_tile_owned(pos), "trail tile %s is owned land" % pos)
@@ -81,7 +71,6 @@ func _run() -> void:
 	# Paint on unhostable ground must be refused (no path, no charge).
 	var money_now := GameManager.money
 	main._suppress_tile_undo = true
-	_clear_entity_at(Vector2i(49, 62))
 	grid.set_tile(Vector2i(49, 62), TerrainTypes.Type.FAIRWAY)
 	main._suppress_tile_undo = false
 	main._paint_walking_path_stamp(Vector2i(49, 62))
@@ -99,8 +88,6 @@ func _run() -> void:
 
 	# A disconnected trail within the owned plot stays dirt.
 	main._suppress_tile_undo = true
-	_clear_entity_at(Vector2i(60, 50))
-	_clear_entity_at(Vector2i(61, 50))
 	grid.set_tile(Vector2i(60, 50), TerrainTypes.Type.ROUGH)
 	grid.set_tile(Vector2i(61, 50), TerrainTypes.Type.ROUGH)
 	main._suppress_tile_undo = false

@@ -138,8 +138,6 @@ func play_placement_sound(placement_type: String) -> void:
 		return
 	var buffer: PackedVector2Array
 	match placement_type:
-		"tree", "rock":
-			buffer = ProceduralAudio.generate_impact(SAMPLE_RATE, 0.6, 0.3)
 		"building":
 			buffer = ProceduralAudio.generate_impact(SAMPLE_RATE, 0.3, 0.4)
 		"terrain":

@@ -40,19 +40,18 @@ func _ready() -> void:
 static func describe_tile(grid: TerrainGrid, entities: EntityLayer, tile: Vector2i) -> Dictionary:
 	if not grid.is_valid_position(tile):
 		return {}
-	var terrain := TerrainTypes.get_type_name(grid.get_tile(tile))
+	var ground: int = grid.get_tile(tile)
+	var terrain := TerrainTypes.get_type_name(ground)
+	# A woodland tile says what the species is planted in, since each one paints
+	# its own ground: litter, needles, sand, silt, peat or straw.
+	var planted := TerrainTypes.get_tree_ground(ground)
+	if not planted.is_empty():
+		terrain = "%s (%s)" % [terrain, planted]
 	var improvements: Array[String] = []
 	var buildings := "None"
 	if grid.has_walking_path(tile):
 		improvements.append("Walking Path")
 	if entities:
-		# Trees and boulders belong to Course Terrain, not Improvements.
-		var tree := entities.get_tree_at(tile)
-		var rock := entities.get_rock_at(tile)
-		if tree:
-			terrain += " (%s)" % tree.tree_data.get("name", tree.tree_type.capitalize())
-		if rock:
-			terrain += " (%s)" % rock.rock_data.get("name", "Rock")
 		var decoration := entities.get_decoration_at(tile)
 		if decoration:
 			improvements.append(decoration.decoration_data.get("name", decoration.decoration_type.capitalize()))

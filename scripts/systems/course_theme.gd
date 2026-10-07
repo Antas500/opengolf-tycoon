@@ -429,20 +429,39 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 	# Default fallback
 	return get_terrain_colors(Type.PARKLAND)
 
-## Tree/vegetation type distributions per theme
+## The woodland a theme plants: one Course Terrain tile per species, in the
+## order the Course Terrain tab shows them (see TerrainTypes for the rules they
+## all share and the art key each one draws under).
 static func get_tree_types(theme_type: int) -> Array:
 	match theme_type:
-		Type.PARKLAND: return ["oak", "pine", "maple", "birch", "bush", "cattails"]
-		Type.DESERT: return ["cactus", "dead_tree", "bush", "palm"]
-		Type.LINKS: return ["fescue", "heather", "bush", "pine"]
-		Type.MOUNTAIN: return ["pine", "birch", "bush", "heather"]
-		Type.CITY: return ["oak", "maple", "bush", "cattails"]
-		Type.RESORT: return ["palm", "oak", "cactus", "bush", "birch"]
-		Type.HEATHLAND: return ["pine", "birch", "heather", "bush", "fescue"]
-		Type.WOODLAND: return ["pine", "oak", "birch", "maple", "bush"]
-		Type.TROPICAL: return ["palm", "dead_tree", "bush", "oak", "cactus"]
-		Type.MARSHLAND: return ["oak", "pine", "cattails", "bush", "birch"]
-	return ["oak", "pine", "maple", "birch"]
+		Type.PARKLAND: return [TerrainTypes.Type.OAK, TerrainTypes.Type.PINE,
+				TerrainTypes.Type.MAPLE, TerrainTypes.Type.BIRCH,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.CATTAILS]
+		Type.DESERT: return [TerrainTypes.Type.CACTUS, TerrainTypes.Type.DEAD_TREE,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.PALM]
+		Type.LINKS: return [TerrainTypes.Type.FESCUE, TerrainTypes.Type.HEATHER,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.PINE]
+		Type.MOUNTAIN: return [TerrainTypes.Type.PINE, TerrainTypes.Type.BIRCH,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.HEATHER]
+		Type.CITY: return [TerrainTypes.Type.OAK, TerrainTypes.Type.MAPLE,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.CATTAILS]
+		Type.RESORT: return [TerrainTypes.Type.PALM, TerrainTypes.Type.OAK,
+				TerrainTypes.Type.CACTUS, TerrainTypes.Type.SHRUB,
+				TerrainTypes.Type.BIRCH]
+		Type.HEATHLAND: return [TerrainTypes.Type.PINE, TerrainTypes.Type.BIRCH,
+				TerrainTypes.Type.HEATHER, TerrainTypes.Type.SHRUB,
+				TerrainTypes.Type.FESCUE]
+		Type.WOODLAND: return [TerrainTypes.Type.PINE, TerrainTypes.Type.OAK,
+				TerrainTypes.Type.BIRCH, TerrainTypes.Type.MAPLE,
+				TerrainTypes.Type.SHRUB]
+		Type.TROPICAL: return [TerrainTypes.Type.PALM, TerrainTypes.Type.DEAD_TREE,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.OAK,
+				TerrainTypes.Type.CACTUS]
+		Type.MARSHLAND: return [TerrainTypes.Type.OAK, TerrainTypes.Type.PINE,
+				TerrainTypes.Type.CATTAILS, TerrainTypes.Type.SHRUB,
+				TerrainTypes.Type.BIRCH]
+	return [TerrainTypes.Type.OAK, TerrainTypes.Type.PINE,
+			TerrainTypes.Type.MAPLE, TerrainTypes.Type.BIRCH]
 
 ## Natural terrain generation parameters per theme
 static func get_generation_params(theme_type: int) -> Dictionary:
@@ -456,7 +475,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(80, 140),  # Lots of individual trees
 				"tree_cluster_radius": Vector2(10, 25), # Larger clusters
 				"tree_density": Vector2(0.25, 0.45),    # Denser within clusters
-				"rocks": Vector2i(40, 80),
 				"heavy_rough_patches": Vector2i(4, 8),  # Wild undergrowth
 				"flower_patches": Vector2i(3, 6),       # Wildflower meadows
 			}
@@ -469,7 +487,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(5, 15),
 				"tree_cluster_radius": Vector2(5, 12),
 				"tree_density": Vector2(0.10, 0.20),
-				"rocks": Vector2i(100, 180),            # Rocky desert landscape
 				"heavy_rough_patches": Vector2i(2, 4),   # Sparse brush
 				"flower_patches": Vector2i(0, 1),        # Rare desert blooms
 			}
@@ -484,7 +501,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(3, 10),
 				"tree_cluster_radius": Vector2(4, 10),
 				"tree_density": Vector2(0.10, 0.20),
-				"rocks": Vector2i(30, 60),
 				"heavy_rough_patches": Vector2i(8, 14), # Deep fescue dunes
 				"flower_patches": Vector2i(1, 3),       # Sea grass clumps
 			}
@@ -497,7 +513,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(100, 180),  # Heavily forested
 				"tree_cluster_radius": Vector2(12, 28), # Large forest areas
 				"tree_density": Vector2(0.30, 0.50),    # Very dense clusters
-				"rocks": Vector2i(80, 150),             # Rocky mountain terrain
 				"heavy_rough_patches": Vector2i(5, 10), # Dense undergrowth
 				"flower_patches": Vector2i(2, 5),        # Mountain wildflowers
 			}
@@ -510,7 +525,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(20, 40),
 				"tree_cluster_radius": Vector2(6, 14),
 				"tree_density": Vector2(0.15, 0.30),
-				"rocks": Vector2i(10, 25),
 				"heavy_rough_patches": Vector2i(2, 5),
 				"flower_patches": Vector2i(2, 4),        # Overgrown flower beds
 			}
@@ -525,7 +539,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(60, 120),
 				"tree_cluster_radius": Vector2(10, 22),
 				"tree_density": Vector2(0.25, 0.40),
-				"rocks": Vector2i(20, 40),
 				"heavy_rough_patches": Vector2i(3, 6),
 				"flower_patches": Vector2i(5, 10),       # Abundant tropical flowers
 			}
@@ -538,7 +551,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(15, 35),   # Open, not heavily wooded
 				"tree_cluster_radius": Vector2(6, 14),
 				"tree_density": Vector2(0.15, 0.30),
-				"rocks": Vector2i(30, 60),
 				"heavy_rough_patches": Vector2i(10, 18), # Dense gorse thickets
 				"flower_patches": Vector2i(4, 8),       # Heather blooms
 			}
@@ -551,7 +563,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(120, 200), # Heavily forested
 				"tree_cluster_radius": Vector2(12, 30), # Large forest blocks
 				"tree_density": Vector2(0.35, 0.55),   # Very dense within clusters
-				"rocks": Vector2i(30, 60),             # Forest floor rocks
 				"heavy_rough_patches": Vector2i(4, 8),  # Bracken/fern patches
 				"flower_patches": Vector2i(1, 3),       # Sparse forest wildflowers
 			}
@@ -566,7 +577,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(50, 100),
 				"tree_cluster_radius": Vector2(8, 20),
 				"tree_density": Vector2(0.25, 0.45),
-				"rocks": Vector2i(80, 140),            # Volcanic rock outcroppings
 				"heavy_rough_patches": Vector2i(5, 10), # Dense jungle
 				"flower_patches": Vector2i(4, 8),       # Tropical flowers
 			}
@@ -581,7 +591,6 @@ static func get_generation_params(theme_type: int) -> Dictionary:
 				"scattered_trees": Vector2i(30, 60),   # Spanish moss oaks
 				"tree_cluster_radius": Vector2(8, 18),
 				"tree_density": Vector2(0.20, 0.35),
-				"rocks": Vector2i(15, 30),             # Minimal rocks
 				"heavy_rough_patches": Vector2i(8, 14), # Dense reed beds
 				"flower_patches": Vector2i(2, 5),       # Marsh wildflowers
 			}

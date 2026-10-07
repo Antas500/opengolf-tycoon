@@ -44,6 +44,8 @@ const FALLBACK_TERRAIN_COLORS: Dictionary = {
 	17: Color(0.24, 0.40, 0.20),  # DEEP_ROUGH
 	18: Color(0.78, 0.70, 0.52),  # WASTE_BUNKER
 	19: Color(0.30, 0.38, 0.18),  # BRUSH
+	20: Color(0.58, 0.55, 0.51),  # SMALL_BOULDERS
+	21: Color(0.44, 0.41, 0.38),  # LARGE_BOULDERS
 }
 
 # Cached theme-aware terrain colors (rebuilt on theme change)
@@ -77,7 +79,16 @@ func _build_terrain_colors() -> void:
 		TerrainTypes.Type.DEEP_ROUGH: theme_colors.get("deep_rough", Color(0.24, 0.40, 0.20)),
 		TerrainTypes.Type.WASTE_BUNKER: theme_colors.get("waste_bunker", Color(0.78, 0.70, 0.52)),
 		TerrainTypes.Type.BRUSH: theme_colors.get("brush", Color(0.30, 0.38, 0.18)),
+		TerrainTypes.Type.SMALL_BOULDERS: theme_colors.get("rocks", Color(0.58, 0.55, 0.51)),
+		TerrainTypes.Type.LARGE_BOULDERS: theme_colors.get("rocks", Color(0.44, 0.41, 0.38)),
 	}
+
+## The map colour of one tile. Woodland is one colour whatever the species — at
+## this scale a pine and an oak are the same dark patch of trees — so every tree
+## tile reads the Trees row (see TerrainTypes.is_tree).
+func _terrain_color(terrain_type: int) -> Color:
+	var key: int = TerrainTypes.Type.TREES if TerrainTypes.is_tree(terrain_type) else terrain_type
+	return _terrain_colors.get(key, Color(0.3, 0.3, 0.3))
 
 # Land boundary colors
 const BOUNDARY_COLOR = Color(0.9, 0.6, 0.2, 1.0)  # Orange/gold property line
@@ -180,7 +191,7 @@ func _regenerate_map_texture() -> void:
 			var gy = int(float(py) / _map_size * grid_height)
 			var terrain_type = _terrain_grid.get_tile(Vector2i(gx, gy))
 
-			var color = _terrain_colors.get(terrain_type, Color(0.3, 0.3, 0.3))
+			var color = _terrain_color(terrain_type)
 			img.set_pixel(px, py, color)
 
 	_map_texture = ImageTexture.create_from_image(img)

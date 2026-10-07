@@ -31,10 +31,7 @@ func run() -> void:
 	assert(gm.money == protected_cash)
 	gm.land_manager = null
 	var pos := Vector2i(30,30)
-	main.entity_layer.remove_tree(pos)
-	main.entity_layer.remove_rock(pos)
-	main.terrain_grid.set_tile(pos, TerrainTypes.Type.GRASS)
-	main.entity_layer.place_tree(pos, "oak")
+	main.terrain_grid.set_tile(pos, TerrainTypes.Type.OAK)
 	var before_type: int = main.terrain_grid.get_tile(pos)
 	var cash: int = gm.money
 	main.undo_manager.clear()
@@ -44,25 +41,23 @@ func run() -> void:
 	main.is_painting = true
 	main._paint_terrain_stamp(pos)
 	main._cancel_action()
-	assert(main.entity_layer.get_tree_at(pos) == null)
+	assert(before_type == TerrainTypes.Type.OAK)
 	assert(main.terrain_grid.get_tile(pos) == TerrainTypes.Type.FAIRWAY)
 	var paid: int = cash - gm.money
 	assert(paid > 0)
 	main._perform_undo()
-	assert(main.entity_layer.get_tree_at(pos) != null)
+	# A wood is a tile now, so undo brings back its ground and its canopy as one.
 	assert(main.terrain_grid.get_tile(pos) == before_type)
 	assert(gm.money == cash)
 	gm.money = 0
 	main._perform_redo()
 	assert(main.undo_manager.can_redo())
-	assert(main.entity_layer.get_tree_at(pos) != null)
+	assert(main.terrain_grid.get_tile(pos) == TerrainTypes.Type.OAK)
 	gm.money = cash
 	main._perform_redo()
-	assert(main.entity_layer.get_tree_at(pos) == null)
+	assert(main.terrain_grid.get_tile(pos) == TerrainTypes.Type.FAIRWAY)
 	assert(gm.money == cash - paid)
 	var natural := Vector2i(31,31)
-	main.entity_layer.remove_tree(natural)
-	main.entity_layer.remove_rock(natural)
 	main.terrain_grid.set_tile(natural, TerrainTypes.Type.BUNKER)
 	main.terrain_grid._player_placed_tiles.erase(natural)
 	main.terrain_grid.set_bunker_depth(natural, 1)

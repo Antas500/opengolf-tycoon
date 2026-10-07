@@ -48,11 +48,11 @@ rings outward from a list of anchors and takes the first legal footprint:
 3. The centre of the owned land, then the centre of the course.
 
 Each anchor is searched in two passes: ground that needs no clearing first, then
-ground the clubhouse may clear for its own plot (trees, boulders, brush). The
+ground the clubhouse may clear for its own plot (trees, brush, stony ground). The
 footprint must be owned, free of buildings and decorations, and on buildable
 terrain — grass, rough (all three grades), deep rough, flower bed, firm fairway,
 path — and never on a green, tee, fairway, bunker, water, stream or out of
-bounds. The tree/boulder scenery inside the chosen footprint is cleared and
+bounds. Trees, brush and stony ground inside the chosen footprint are cleared and
 re-laid as grass as landscaping (not as a player edit: it never enters the undo
 history or the maintenance books), and the chosen door tile is cleared so guests
 have somewhere to stand.
@@ -62,8 +62,9 @@ have somewhere to stand.
 `CourseClubhouse.front_tile()` returns the tile the golfers use: the first
 walkable tile just outside the footprint, starting at the middle of the
 screen-facing (south) edge and fanning out to the corners, the flanks and
-finally the back. A tile shadowed by an obstacle is passed over in favour of an
-open one, but a clubhouse ringed by trees still gets a door. Golfers spawn on
+finally the back. Woodland is ground rather than something standing on it, so a
+clubhouse at the edge of a grove gets its doorstep as easily as one at the edge
+of a lawn. Golfers spawn on
 that tile, walk home to it, and the walking-path overlay paves up to it, so a
 moved clubhouse moves its doorstep and the paving follows.
 
@@ -78,7 +79,6 @@ click handler and any future UI all ask, so they can never disagree:
 | The whole footprint must be owned land | "Buy this land first — the whole footprint must be owned." |
 | No other building in the footprint | "Move the footprint clear of the other building." |
 | No decoration in the footprint | "Remove the decoration in this footprint first." |
-| No tree or boulder in the footprint | "Clear the tree or rock first: paint another Course Terrain tile over it." |
 | Buildable terrain only | "Move it off the greens, tees, sand and water." |
 | Already there | "The clubhouse is already there." |
 

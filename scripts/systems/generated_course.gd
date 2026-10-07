@@ -117,8 +117,6 @@ static func generate(
 		else:
 			push_warning("GeneratedCourse: could not open a hole from %s to %s" % [tee, green])
 
-	if entity_layer:
-		QuickStartCourse._clear_entities_on_course(terrain_grid, entity_layer)
 	_place_starter_amenity(terrain_grid, entity_layer, anchor)
 	if created > 0:
 		EventBus.notify("%d generated holes are ready to play — build the rest of the course around them." % created, "success")

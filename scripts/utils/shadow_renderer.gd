@@ -1,7 +1,7 @@
 extends RefCounted
 class_name ShadowRenderer
 ## Utility class for rendering consistent drop shadows and contact shadows (AO).
-## Used by all prop entities (trees, rocks, buildings, flags).
+## Used by all prop entities (trees, buildings, flags).
 
 ## Shadow configuration for an entity type
 class ShadowConfig:

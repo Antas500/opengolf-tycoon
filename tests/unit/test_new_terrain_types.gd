@@ -1,11 +1,11 @@
 extends GutTest
-## Firm Fairway, Pot Bunker, Stream, Deep Rough, Waste Bunker, Rocks and Brush:
-## save-compatible ids, terrain families, golf rules, roll-out, shot AI,
-## rendering data, the Course Terrain toolbar and boulder footprints.
+## Firm Fairway, Pot Bunker, Stream, Deep Rough, Waste Bunker, Rocks, Small
+## Boulders, Large Boulders and Brush: save-compatible ids, terrain families,
+## golf rules, roll-out, shot AI, rendering data and the Course Terrain toolbar.
 
 const T := TerrainTypes.Type
 const NEW_TYPES := [T.FIRM_FAIRWAY, T.POT_BUNKER, T.STREAM, T.DEEP_ROUGH,
-	T.WASTE_BUNKER, T.ROCKS, T.BRUSH]
+	T.WASTE_BUNKER, T.ROCKS, T.SMALL_BOULDERS, T.LARGE_BOULDERS, T.BRUSH]
 
 var _saved_terrain_grid
 var _saved_course_data
@@ -21,10 +21,16 @@ func after_each() -> void:
 	GameManager.course_data = _saved_course_data
 	GameManager.current_mode = _saved_mode
 
-func _grid(size: int = 16, fill: int = T.GRASS) -> TerrainGrid:
-	var grid: TerrainGrid = autofree(TerrainGrid.new())
+func _grid(size: int = 16, fill: int = T.GRASS, in_tree: bool = false) -> TerrainGrid:
+	var grid: TerrainGrid = TerrainGrid.new()
 	grid.grid_width = size
 	grid.grid_height = size
+	if in_tree:
+		# Some tests read what a live grid derives: the palette layer the surface
+		# shader samples, the overlays. Those need _ready(), so the grid goes in.
+		add_child_autofree(grid)
+	else:
+		autofree(grid)
 	for x in size:
 		for y in size:
 			grid._grid[Vector2i(x, y)] = fill
@@ -40,7 +46,11 @@ func test_new_ids_are_appended_so_saved_terrain_keeps_its_meaning() -> void:
 	assert_eq(T.DEEP_ROUGH, 17)
 	assert_eq(T.WASTE_BUNKER, 18)
 	assert_eq(T.BRUSH, 19)
-	assert_eq(T.values().size(), 20)
+	assert_eq(T.SMALL_BOULDERS, 20, "Small Boulders is appended after Brush")
+	assert_eq(T.LARGE_BOULDERS, 21, "Large Boulders is appended after Small Boulders")
+	assert_eq(T.OAK, 22, "The tree species are appended after the boulder fields")
+	assert_eq(T.HEATHER, 32, "Heather is the last appended id")
+	assert_eq(T.values().size(), 33)
 
 func test_every_type_has_properties_names_and_costs() -> void:
 	var names := {}
@@ -59,6 +69,8 @@ func test_every_type_has_properties_names_and_costs() -> void:
 	assert_eq(TerrainTypes.get_type_name(T.WASTE_BUNKER), "Waste Bunker")
 	assert_eq(TerrainTypes.get_type_name(T.ROCKS), "Rocks")
 	assert_eq(TerrainTypes.get_type_name(T.BRUSH), "Brush")
+	assert_eq(TerrainTypes.get_type_name(T.SMALL_BOULDERS), "Small Boulders")
+	assert_eq(TerrainTypes.get_type_name(T.LARGE_BOULDERS), "Large Boulders")
 
 func test_upkeep_and_hazard_flags() -> void:
 	assert_gt(TerrainTypes.get_maintenance_cost(T.POT_BUNKER), TerrainTypes.get_maintenance_cost(T.BUNKER),
@@ -73,6 +85,9 @@ func test_upkeep_and_hazard_flags() -> void:
 	assert_false(TerrainTypes.is_hazard(T.WASTE_BUNKER), "A waste bunker is not a hazard")
 	assert_false(TerrainTypes.is_playable(T.STREAM))
 	assert_lt(TerrainTypes.get_speed_modifier(T.BRUSH), 1.0, "Golfers wade slowly through brush")
+	for type in [T.ROCKS, T.SMALL_BOULDERS, T.LARGE_BOULDERS]:
+		assert_eq(TerrainTypes.get_maintenance_cost(type), 0,
+			"%s is never cut or raked" % TerrainTypes.get_type_name(type))
 
 func test_json_mirror_lists_every_type() -> void:
 	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/terrain_types.json"))
@@ -88,14 +103,34 @@ func test_json_mirror_lists_every_type() -> void:
 		"The mirror follows the Wild Flowers rename")
 
 func test_new_tiles_round_trip_through_a_save() -> void:
-	var grid := _grid(8)
+	var grid := _grid(16)
 	for i in NEW_TYPES.size():
 		grid.set_tile(Vector2i(i, 0), NEW_TYPES[i])
 	var saved := grid.serialize()
-	var loaded := _grid(8)
+	var loaded := _grid(16)
 	loaded.deserialize(saved)
 	for i in NEW_TYPES.size():
 		assert_eq(loaded.get_tile(Vector2i(i, 0)), NEW_TYPES[i])
+
+
+func test_loading_a_save_takes_every_standing_entity_down_first() -> void:
+	# Loading rebuilds the entity layer from an empty slate, and that sweep walks
+	# a copy of the keys. Emptying the decoration dictionary inside its own loop
+	# stopped the sweep after the first decoration and left the rest standing.
+	var grid := _grid(10)
+	var layer: EntityLayer = EntityLayer.new()
+	add_child_autofree(layer)
+	layer.set_terrain_grid(grid)
+	var registry: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string("res://data/decorations.json"))["decorations"]
+	var first = layer.place_decoration("park_bench", Vector2i(2, 2), registry)
+	var second = layer.place_decoration("park_bench", Vector2i(5, 5), registry)
+	assert_not_null(first)
+	assert_not_null(second)
+	layer.deserialize({})
+	assert_true(layer.decorations.is_empty(), "the layer holds no decoration afterwards")
+	assert_true(first.is_queued_for_deletion(), "the first bench was taken down")
+	assert_true(second.is_queued_for_deletion(), "and so was the second")
 
 # --- Families ------------------------------------------------------------------
 
@@ -110,10 +145,45 @@ func test_families_group_each_variant_with_its_parent() -> void:
 	assert_true(TerrainTypes.is_water(T.STREAM))
 	assert_true(TerrainTypes.is_out_of_play(T.STREAM))
 	assert_false(TerrainTypes.is_out_of_play(T.ROCKS))
+	assert_true(TerrainTypes.is_rocks(T.ROCKS))
+	assert_true(TerrainTypes.is_rocks(T.SMALL_BOULDERS))
+	assert_true(TerrainTypes.is_rocks(T.LARGE_BOULDERS))
+	assert_false(TerrainTypes.is_rocks(T.BRUSH), "Brush is scrub, not stone")
 	for type in NEW_TYPES:
 		assert_true(type in TerrainTypes.COURSE_PAINT_TYPES, "%s is a paintable course tile" % TerrainTypes.get_type_name(type))
+	assert_true(TerrainTypes.is_tree(T.TREES))
+	assert_false(TerrainTypes.is_tree(T.BRUSH), "Brush is scrub, not woodland")
+	# Every species plays exactly like the Trees tile it was cut from.
+	for species in TerrainTypes.TREE_SPECIES_TILES:
+		var label := TerrainTypes.get_type_name(species)
+		assert_true(TerrainTypes.is_tree(species), "%s is woodland" % label)
+		assert_eq(TerrainTypes.get_placement_cost(species), TerrainTypes.get_placement_cost(T.TREES),
+			"%s paints for what Trees paints for" % label)
+		assert_eq(TerrainTypes.get_maintenance_cost(species), 0, "%s is not maintained" % label)
+		assert_eq(float(TerrainTypes.PROPERTIES[species].get("shot_difficulty", -1.0)),
+			float(TerrainTypes.PROPERTIES[T.TREES].get("shot_difficulty", -2.0)), "%s is the same lie" % label)
+		assert_true(bool(TerrainTypes.PROPERTIES[species].get("blocks_shots", false)),
+			"%s blocks a shot, as Trees does" % label)
 
 # --- Golf rules ------------------------------------------------------------------
+
+func test_every_species_blocks_a_low_shot_as_trees_do() -> void:
+	# A wood is the only thing a ball cannot fly through at takeoff, and the
+	# family answers that question rather than the single Trees id.
+	var saved_grid = GameManager.terrain_grid
+	var grid := _grid(8)
+	GameManager.terrain_grid = grid
+	var golfer: Golfer = autofree(Golfer.new())
+	var woods: Array = [T.TREES]
+	woods.append_array(TerrainTypes.TREE_SPECIES_TILES)
+	for type in woods:
+		grid._grid[Vector2i(3, 4)] = type
+		assert_true(golfer._path_crosses_obstacle(Vector2i(3, 4), Vector2i(4, 4), false),
+			"%s is a wood the ball cannot fly through on the way up" % TerrainTypes.get_type_name(type))
+	grid._grid[Vector2i(3, 4)] = T.FAIRWAY
+	assert_false(golfer._path_crosses_obstacle(Vector2i(3, 4), Vector2i(4, 4), false),
+		"while the same shot flies from open fairway")
+	GameManager.terrain_grid = saved_grid if is_instance_valid(saved_grid) else null
 
 func test_stream_is_a_penalty_area_like_water() -> void:
 	assert_eq(GolfRules.get_penalty_strokes(T.STREAM), 1)
@@ -147,11 +217,19 @@ func test_firm_fairway_is_a_tight_full_distance_lie() -> void:
 	assert_lt(GolfRules.get_lie_modifier(T.FIRM_FAIRWAY, Golfer.Club.WEDGE), 1.0, "Little cushion for wedges")
 	assert_eq(GolfRules.get_terrain_distance_modifier(T.FIRM_FAIRWAY), 1.0)
 
-func test_brush_and_rocks_are_hack_outs() -> void:
+func test_brush_and_stony_ground_are_hack_outs() -> void:
 	assert_lte(GolfRules.get_lie_modifier(T.BRUSH, Golfer.Club.WEDGE), GolfRules.get_lie_modifier(T.TREES, Golfer.Club.WEDGE))
 	assert_eq(GolfRules.get_lie_modifier(T.ROCKS, Golfer.Club.WEDGE), 0.25, "Rocks keep their existing lie")
 	assert_eq(GolfRules.get_terrain_distance_modifier(T.ROCKS), 0.5)
 	assert_eq(GolfRules.get_terrain_distance_modifier(T.BRUSH), 0.5)
+	# Small and Large Boulders are the same stone lie as Rocks.
+	for type in [T.SMALL_BOULDERS, T.LARGE_BOULDERS]:
+		assert_eq(GolfRules.get_lie_modifier(type, Golfer.Club.WEDGE), 0.25,
+			"%s is a wedge-only hack out" % TerrainTypes.get_type_name(type))
+		assert_eq(GolfRules.get_lie_modifier(type, Golfer.Club.IRON), 0.25,
+			"The lie itself stays 0.25 for every club on %s; ShotAI is what bans the long clubs"
+			% TerrainTypes.get_type_name(type))
+		assert_eq(GolfRules.get_terrain_distance_modifier(type), 0.5)
 
 func test_roll_multipliers_keep_existing_values_and_rank_the_new_ground() -> void:
 	# Existing surfaces are unchanged by moving the table into GolfRules.
@@ -161,6 +239,8 @@ func test_roll_multipliers_keep_existing_values_and_rank_the_new_ground() -> voi
 	assert_eq(GolfRules.get_roll_multiplier(T.HEAVY_ROUGH), 0.12)
 	assert_eq(GolfRules.get_roll_multiplier(T.PATH), 1.4)
 	assert_eq(GolfRules.get_roll_multiplier(T.ROCKS), 0.15)
+	assert_eq(GolfRules.get_roll_multiplier(T.SMALL_BOULDERS), 0.15, "Boulder patches kill roll like Rocks")
+	assert_eq(GolfRules.get_roll_multiplier(T.LARGE_BOULDERS), 0.15)
 	assert_gt(GolfRules.get_roll_multiplier(T.FIRM_FAIRWAY), GolfRules.get_roll_multiplier(T.GREEN),
 		"Firm fairway is the fastest-running turf")
 	assert_lt(GolfRules.get_roll_multiplier(T.DEEP_ROUGH), GolfRules.get_roll_multiplier(T.HEAVY_ROUGH))
@@ -169,11 +249,13 @@ func test_roll_multipliers_keep_existing_values_and_rank_the_new_ground() -> voi
 func test_which_ground_stops_or_catches_the_ball() -> void:
 	for type in [T.WATER, T.STREAM, T.BUNKER, T.POT_BUNKER, T.OUT_OF_BOUNDS, T.FLOWER_BED]:
 		assert_true(GolfRules.stops_ball_on_landing(type), "%s stops a landing ball" % TerrainTypes.get_type_name(type))
-	for type in [T.WASTE_BUNKER, T.FIRM_FAIRWAY, T.DEEP_ROUGH, T.ROCKS, T.BRUSH]:
+	for type in [T.WASTE_BUNKER, T.FIRM_FAIRWAY, T.DEEP_ROUGH, T.ROCKS,
+			T.SMALL_BOULDERS, T.LARGE_BOULDERS, T.BRUSH]:
 		assert_false(GolfRules.stops_ball_on_landing(type))
 	for type in [T.STREAM, T.POT_BUNKER, T.DEEP_ROUGH, T.BRUSH]:
 		assert_true(GolfRules.catches_rolling_ball(type), "%s catches a rolling ball" % TerrainTypes.get_type_name(type))
-	for type in [T.FAIRWAY, T.FIRM_FAIRWAY, T.ROUGH, T.WASTE_BUNKER, T.GREEN]:
+	for type in [T.FAIRWAY, T.FIRM_FAIRWAY, T.ROUGH, T.WASTE_BUNKER, T.GREEN,
+			T.ROCKS, T.SMALL_BOULDERS, T.LARGE_BOULDERS]:
 		assert_false(GolfRules.catches_rolling_ball(type))
 
 # --- Roll-out on the course ----------------------------------------------------
@@ -241,12 +323,20 @@ func test_shot_ai_scores_every_terrain_type() -> void:
 	assert_gt(ShotAI.TERRAIN_SCORES[T.FIRM_FAIRWAY], ShotAI.TERRAIN_SCORES[T.ROUGH])
 
 func test_shot_ai_plays_recovery_from_the_trouble_lies() -> void:
-	for type in [T.POT_BUNKER, T.DEEP_ROUGH, T.ROCKS, T.BRUSH]:
+	for type in [T.POT_BUNKER, T.DEEP_ROUGH, T.ROCKS, T.SMALL_BOULDERS, T.LARGE_BOULDERS, T.BRUSH]:
 		assert_lt(ShotAI._assess_lie_quality(type), 0.4, "%s is a recovery lie" % TerrainTypes.get_type_name(type))
 	for type in [T.FIRM_FAIRWAY, T.WASTE_BUNKER]:
 		assert_gte(ShotAI._assess_lie_quality(type), 0.4, "%s plays a normal shot" % TerrainTypes.get_type_name(type))
 	assert_eq(ShotAI._get_recovery_clubs(T.POT_BUNKER), [Golfer.Club.WEDGE])
 	assert_eq(ShotAI._get_recovery_clubs(T.BRUSH), [Golfer.Club.WEDGE])
+	assert_eq(ShotAI._get_recovery_clubs(T.SMALL_BOULDERS), [Golfer.Club.WEDGE],
+		"Small Boulders are wedge-only, exactly like Rocks")
+	for species in TerrainTypes.TREE_SPECIES_TILES:
+		assert_eq(ShotAI._assess_lie_quality(species), ShotAI._assess_lie_quality(T.TREES),
+			"%s is buried in the roots exactly like Trees" % TerrainTypes.get_type_name(species))
+		assert_eq(ShotAI._get_recovery_clubs(species), ShotAI._get_recovery_clubs(T.TREES),
+			"%s punches out with the same clubs" % TerrainTypes.get_type_name(species))
+	assert_eq(ShotAI._get_recovery_clubs(T.LARGE_BOULDERS), [Golfer.Club.WEDGE])
 	assert_false(Golfer.Club.FAIRWAY_WOOD in ShotAI._get_recovery_clubs(T.DEEP_ROUGH))
 
 func test_hole_difficulty_counts_the_new_hazards() -> void:
@@ -263,187 +353,88 @@ func test_hole_difficulty_counts_the_new_hazards() -> void:
 	assert_almost_eq(DifficultyCalculator._calculate_hazard_difficulty(bunkers, grid), 0.6, 0.001,
 		"A stream tile weighs like a water tile")
 
-func test_hole_difficulty_ignores_lone_boulders_but_counts_painted_rocks() -> void:
+func test_hole_difficulty_counts_every_stony_tile() -> void:
 	var grid := _grid(10)
 	var tiles: Array = [Vector2i(3, 3)]
-	grid._grid[tiles[0]] = T.ROCKS
-	assert_gt(DifficultyCalculator._calculate_hazard_difficulty(tiles, grid), 0.0)
-	grid.set_object_footprint(tiles[0], true)
-	assert_eq(DifficultyCalculator._calculate_hazard_difficulty(tiles, grid), 0.0)
+	for type in [T.ROCKS, T.SMALL_BOULDERS, T.LARGE_BOULDERS]:
+		grid._grid[tiles[0]] = type
+		assert_gt(DifficultyCalculator._calculate_hazard_difficulty(tiles, grid), 0.0,
+			"%s is stony trouble and counts" % TerrainTypes.get_type_name(type))
 
-# --- Boulder footprints and the course surface ----------------------------------
+# --- Stony ground on the course surface -----------------------------------------
 
-func test_footprint_marks_clear_whenever_the_terrain_changes() -> void:
+func test_small_and_large_boulders_paint_as_stone_like_rocks() -> void:
+	var grid: TerrainGrid = TerrainGrid.new()
+	grid.grid_width = 8
+	grid.grid_height = 8
+	add_child_autofree(grid)
+	for type in [T.ROCKS, T.SMALL_BOULDERS, T.LARGE_BOULDERS]:
+		grid.set_tile(Vector2i(2, 2), type)
+		assert_eq(grid.get_tile(Vector2i(2, 2)), type)
+		assert_eq(roundi(grid._course_surface._data.get_pixel(2, 2).r * 255.0), type,
+			"%s writes its own shader id" % TerrainTypes.get_type_name(type))
+		assert_eq(grid._course_surface._data.get_pixel(2, 2).a, 1.0,
+			"%s is painted ground, not an object footprint" % TerrainTypes.get_type_name(type))
+		assert_eq(CourseSurface.PALETTE_KEYS[type], "rocks",
+			"%s wears the stone palette" % TerrainTypes.get_type_name(type))
+
+func test_small_and_large_boulder_patches_survive_a_save_round_trip() -> void:
 	var grid := _grid(8)
-	grid.set_tile(Vector2i(2, 2), T.ROCKS)
-	grid.set_object_footprint(Vector2i(2, 2), true)
-	assert_true(grid.is_object_footprint(Vector2i(2, 2)))
-	grid.set_tile(Vector2i(2, 2), T.ROUGH)
-	assert_false(grid.is_object_footprint(Vector2i(2, 2)), "Repainting drops the mark")
-	grid.set_tile(Vector2i(3, 3), T.ROCKS)
-	grid.set_object_footprint(Vector2i(3, 3), true)
-	var copy := grid.create_analysis_copy()
-	assert_true(copy.is_object_footprint(Vector2i(3, 3)), "Shot planning copies see the marks")
-	copy.free()
-	grid.deserialize(grid.serialize())
-	assert_false(grid.is_object_footprint(Vector2i(3, 3)), "Loading rebuilds marks from the entities")
-
-func test_boulders_keep_native_turf_but_painted_rocks_render_as_stone() -> void:
-	var grid: TerrainGrid = TerrainGrid.new()
-	grid.grid_width = 8
-	grid.grid_height = 8
-	add_child_autofree(grid)
-	var entities := EntityLayer.new()
-	entities.map_seed = 99
-	add_child_autofree(entities)
-	entities.set_terrain_grid(grid)
-
-	entities.place_rock(Vector2i(2, 2), "small")
-	assert_eq(grid.get_tile(Vector2i(2, 2)), T.ROCKS, "A boulder still plays as Rocks")
-	assert_true(grid.is_object_footprint(Vector2i(2, 2)))
-	assert_eq(grid._course_surface._data.get_pixel(2, 2).a, 0.0, "The surface draws native turf under it")
-
-	grid.set_tile(Vector2i(5, 5), T.ROCKS)
-	assert_eq(grid._course_surface._data.get_pixel(5, 5).a, 1.0, "Painted Rocks render as stony ground")
-	entities.place_rock(Vector2i(5, 5), "medium")
-	assert_false(grid.is_object_footprint(Vector2i(5, 5)), "A boulder on painted Rocks sits on the stones")
-
-	entities.remove_rock(Vector2i(2, 2))
-	assert_eq(grid.get_tile(Vector2i(2, 2)), T.GRASS)
-	assert_false(grid.is_object_footprint(Vector2i(2, 2)))
-	entities.remove_rock(Vector2i(5, 5))
-	assert_eq(grid.get_tile(Vector2i(5, 5)), T.ROCKS, "Removing it leaves the painted Rocks")
-
-func test_merging_a_boulder_footprint_into_painted_rocks_keeps_it_on_stone() -> void:
-	var grid: TerrainGrid = TerrainGrid.new()
-	grid.grid_width = 8
-	grid.grid_height = 8
-	add_child_autofree(grid)
-	var entities := EntityLayer.new()
-	add_child_autofree(entities)
-	entities.set_terrain_grid(grid)
-	entities.place_rock(Vector2i(4, 4), "large")
-	assert_true(entities.merge_rock_into_painted_rocks(Vector2i(4, 4)))
-	assert_false(grid.is_object_footprint(Vector2i(4, 4)))
-	assert_false(entities.merge_rock_into_painted_rocks(Vector2i(4, 4)), "Only once")
-	entities.remove_rock(Vector2i(4, 4))
-	assert_eq(grid.get_tile(Vector2i(4, 4)), T.ROCKS)
-
-func test_saved_boulders_reload_with_their_footprints() -> void:
-	var grid: TerrainGrid = TerrainGrid.new()
-	grid.grid_width = 8
-	grid.grid_height = 8
-	add_child_autofree(grid)
-	var entities := EntityLayer.new()
-	add_child_autofree(entities)
-	entities.set_terrain_grid(grid)
-	entities.place_rock(Vector2i(1, 1), "small")
-	grid.set_tile(Vector2i(3, 3), T.ROCKS)
-	entities.place_rock(Vector2i(3, 3), "small")
-	var terrain := grid.serialize()
-	var saved := entities.serialize()
-	grid.deserialize(terrain)
-	entities.deserialize(saved)
-	assert_true(grid.is_object_footprint(Vector2i(1, 1)), "The boulder on grass keeps its grass look")
-	assert_false(grid.is_object_footprint(Vector2i(3, 3)), "The boulder on painted Rocks stays on stone")
-
-	# An older save without original terrain: the boulder stood on native grass.
-	saved.erase("original_terrain")
-	grid.deserialize(terrain)
-	entities.deserialize(saved)
-	assert_true(grid.is_object_footprint(Vector2i(1, 1)))
-	entities.remove_rock(Vector2i(1, 1))
-	assert_eq(grid.get_tile(Vector2i(1, 1)), T.GRASS, "Removing it leaves grass, not a bare Rocks lie")
-
-func test_boulder_placement_rules() -> void:
-	var grid := _grid(8)
-	var placement := PlacementManager.new()
-	placement.start_rock_placement("medium")
-	grid._grid[Vector2i(1, 1)] = T.ROCKS
-	assert_true(placement._can_place_rock(Vector2i(1, 1), grid), "Boulders can sit on painted Rocks")
-	# A footprint mark alone is not a second boulder — the entity is what a
-	# different boulder replaces. Same-size refusal is covered below.
-	grid.set_object_footprint(Vector2i(1, 1), true)
-	assert_true(placement._can_place_rock(Vector2i(1, 1), grid),
-		"A boulder tile replaces rocky ground, footprint or not")
-	grid._grid[Vector2i(2, 2)] = T.DEEP_ROUGH
-	assert_true(placement._can_place_rock(Vector2i(2, 2), grid))
-	placement.start_tree_placement("oak")
-	assert_true(placement._can_place_tree(Vector2i(2, 2), grid))
-	for type in [T.WASTE_BUNKER, T.BRUSH, T.STREAM, T.POT_BUNKER, T.WATER,
-			T.GREEN, T.TEE_BOX, T.FLOWER_BED, T.OUT_OF_BOUNDS, T.BUNKER]:
-		grid._grid[Vector2i(3, 3)] = type
-		assert_true(placement._can_place_rock(Vector2i(3, 3), grid),
-			"A boulder replaces %s" % TerrainTypes.get_type_name(type))
-		assert_true(placement._can_place_tree(Vector2i(3, 3), grid),
-			"A tree replaces %s" % TerrainTypes.get_type_name(type))
+	grid.set_tile(Vector2i(1, 1), T.SMALL_BOULDERS)
+	grid.set_tile(Vector2i(2, 2), T.LARGE_BOULDERS)
+	var loaded := _grid(8)
+	loaded.deserialize(grid.serialize())
+	assert_eq(loaded.get_tile(Vector2i(1, 1)), T.SMALL_BOULDERS)
+	assert_eq(loaded.get_tile(Vector2i(2, 2)), T.LARGE_BOULDERS)
 
 func test_course_terrain_tiles_replace_each_other() -> void:
-	var grid := _grid(8)
-	var entities := EntityLayer.new()
-	add_child_autofree(entities)
-	entities.set_terrain_grid(grid)
-	var saved_entities = GameManager.entity_layer
-	var saved_land = GameManager.land_manager
-	GameManager.entity_layer = entities
-	GameManager.land_manager = null
-	var placement := PlacementManager.new()
+	var grid := _grid(8, T.GRASS, true)
+	var tiles := TerrainTypes.COURSE_PAINT_TYPES.duplicate()
+	tiles.append_array(TerrainTypes.TREE_SPECIES_TILES)
+	# A tree tile is ordinary ground: any tile on the tab replaces it and it
+	# replaces any of them, with no entity to clear and no fee beyond the tile.
+	for species in TerrainTypes.TREE_SPECIES_TILES:
+		for type in tiles:
+			if type == species:
+				continue
+			grid._grid[Vector2i(1, 1)] = type
+			grid.set_tile(Vector2i(1, 1), species)
+			assert_eq(grid.get_tile(Vector2i(1, 1)), species,
+				"%s grows on %s" % [TerrainTypes.get_type_name(species), TerrainTypes.get_type_name(type)])
+			grid._grid[Vector2i(1, 1)] = species
+			grid.set_tile(Vector2i(1, 1), type)
+			assert_eq(grid.get_tile(Vector2i(1, 1)), type,
+				"%s is replaced by %s" % [TerrainTypes.get_type_name(species), TerrainTypes.get_type_name(type)])
+	grid.set_tile(Vector2i(2, 2), T.PINE)
+	assert_eq(roundi(grid._course_surface._data.get_pixel(2, 2).r * 255.0), T.PINE,
+		"The surface is told which species it is, so it can paint that species' ground")
+	assert_eq(grid._course_surface._data.get_pixel(2, 2).a, 1.0,
+		"A wood is painted ground, not an object footprint")
 
-	# Every ground type on the tab, plus the tiles generation leaves behind.
-	for type in T.values():
-		grid._grid[Vector2i(1, 1)] = type
-		placement.start_tree_placement("pine")
-		assert_true(placement._can_place_tree(Vector2i(1, 1), grid),
-			"Pine replaces %s" % TerrainTypes.get_type_name(type))
-		placement.start_rock_placement("large")
-		assert_true(placement._can_place_rock(Vector2i(1, 1), grid),
-			"A large boulder replaces %s" % TerrainTypes.get_type_name(type))
-
-	entities.place_tree(Vector2i(2, 2), "oak")
-	placement.start_tree_placement("oak")
-	assert_false(placement._can_place_tree(Vector2i(2, 2), grid), "The same tree is already there")
-	assert_eq(placement.get_placement_error(Vector2i(2, 2), grid), "This tile is already that one.")
-	placement.start_tree_placement("pine")
-	assert_true(placement._can_place_tree(Vector2i(2, 2), grid), "A different tree replaces the oak")
-	placement.start_rock_placement("small")
-	assert_true(placement._can_place_rock(Vector2i(2, 2), grid), "A boulder replaces a tree")
-
-	entities.place_rock(Vector2i(4, 4), "medium")
-	placement.start_rock_placement("medium")
-	assert_false(placement._can_place_rock(Vector2i(4, 4), grid), "The same boulder is already there")
-	placement.start_rock_placement("large")
-	assert_true(placement._can_place_rock(Vector2i(4, 4), grid), "A larger boulder replaces it")
-	placement.start_tree_placement("oak")
-	assert_true(placement._can_place_tree(Vector2i(4, 4), grid), "A tree replaces a boulder")
-
-	# Improvements are not Course Terrain tiles.
-	var shed := entities.place_building("cart_shed", Vector2i(6, 6), {
-		"cart_shed": {"size": [1, 1], "cost": 10, "name": "Cart Shed"},
-	})
-	assert_not_null(shed, "The shed placed on open ground")
-	placement.start_tree_placement("oak")
-	assert_false(placement._can_place_tree(Vector2i(6, 6), grid), "A tree does not replace a building")
-	assert_string_contains(placement.get_placement_error(Vector2i(6, 6), grid), "Bulldoze the building")
-	placement.start_rock_placement("small")
-	assert_false(placement._can_place_rock(Vector2i(6, 6), grid), "A boulder does not replace a building")
-
-	# Lifting a boulder reports the ground it stood on and leaves the Rocks stamp
-	# so a paint can finish the replacement. Restoring puts the boulder back.
-	var taken := entities.take_course_terrain_entity(Vector2i(4, 4))
-	assert_eq(taken.get("type"), "rock")
-	assert_eq(taken.get("subtype"), "medium")
-	assert_eq(int(taken.get("original_terrain")), T.GRASS)
-	assert_null(entities.get_rock_at(Vector2i(4, 4)))
-	assert_eq(grid.get_tile(Vector2i(4, 4)), T.ROCKS, "The stamp stays until the new tile is painted")
-	assert_false(grid.is_object_footprint(Vector2i(4, 4)), "Painted Rocks, not a boulder footprint")
-	entities.restore_course_terrain_entity(Vector2i(4, 4), "rock", "medium", T.GRASS)
-	assert_not_null(entities.get_rock_at(Vector2i(4, 4)))
-	assert_true(grid.is_object_footprint(Vector2i(4, 4)), "The restored boulder keeps its turf look")
-	entities.remove_rock(Vector2i(4, 4))
-	assert_eq(grid.get_tile(Vector2i(4, 4)), T.GRASS, "Removing it still restores the ground it stood on")
-
-	GameManager.entity_layer = saved_entities
-	GameManager.land_manager = saved_land
+func test_each_species_paints_ground_of_its_own() -> void:
+	# The species share one canopy color for their art and swatches, and the
+	# surface works each one up into the ground it suits: litter, needles, sand,
+	# silt, peat or straw. Species sharing a ground share its edge as well.
+	var by_look := {}
+	for type in TerrainTypes.TREE_TERRAIN_TYPES:
+		var ground := TerrainTypes.get_tree_ground(type)
+		assert_ne(ground, "", "%s is planted in ground of its own" % TerrainTypes.get_type_name(type))
+		assert_eq(CourseSurface.PALETTE_KEYS[type], "trees",
+			"%s wears the theme's woodland color" % TerrainTypes.get_type_name(type))
+		if not by_look.has(ground):
+			by_look[ground] = []
+		by_look[ground].append(type)
+	assert_eq(by_look.keys().size(), 6, "Litter, needles, sand, silt, peat and straw")
+	assert_true(T.PINE in by_look["pine needles"], "Pine stands on needles")
+	assert_true(T.CATTAILS in by_look["waterlogged silt"], "Cattails stand in silt")
+	assert_true(T.HEATHER in by_look["acid peat"], "Heather grows on peat")
+	assert_true(T.FESCUE in by_look["dry straw"], "Fescue goes to straw")
+	for species in [T.CACTUS, T.PALM, T.DEAD_TREE]:
+		assert_eq(TerrainTypes.get_tree_ground(species), "bare sand",
+			"%s roots in bare sand" % TerrainTypes.get_type_name(species))
+	for type in [T.ROCKS, T.BRUSH, T.FAIRWAY, T.FLOWER_BED]:
+		assert_eq(TerrainTypes.get_tree_ground(type), "",
+			"%s is not woodland" % TerrainTypes.get_type_name(type))
 
 func test_every_theme_colors_every_palette_key() -> void:
 	assert_eq(CourseSurface.PALETTE_KEYS.size(), T.values().size(), "One palette entry per terrain id")
@@ -471,7 +462,7 @@ func test_toolbar_paints_all_course_tiles_in_two_rows() -> void:
 	var toolbar := TerrainToolbar.new()
 	add_child_autofree(toolbar)
 	var grid: TileHoneycomb = toolbar._tool_buttons[T.FAIRWAY].get_parent()
-	var landscape_count := 4 + CourseTheme.get_tree_types(GameManager.current_theme).size()
+	var landscape_count := 1 + CourseTheme.get_tree_types(GameManager.current_theme).size()
 	# The nestled Open Hole action is not a tile and takes no slot, so the flow
 	# children are exactly the course and landscape tiles.
 	var tiles: Array[Control] = grid.flow_children()
@@ -483,16 +474,19 @@ func test_toolbar_paints_all_course_tiles_in_two_rows() -> void:
 		assert_eq(tiles.find(button), slot, "%s sits in toolbar order" % TerrainTypes.get_type_name(type))
 		assert_eq(button.tool_name, TerrainTypes.get_type_name(type))
 		assert_eq(TerrainToolbar.TOOL_TAB_MAP[type], TerrainToolbar.Tab.TERRAIN)
+	assert_eq(TerrainTypes.COURSE_PAINT_TYPES.size(), 16, "Eight course tiles in each of the two rows")
 	# Two rows include both course and landscape tiles.
 	assert_eq(grid.columns, ceili(float(tiles.size()) / 2.0),
 		"The two rows hold every course and landscape tile")
-	for type in [T.TEE_BOX, T.GREEN, T.BUNKER, T.ROUGH, T.POT_BUNKER, T.STREAM, T.WATER]:
+	for type in [T.TEE_BOX, T.GREEN, T.BUNKER, T.ROUGH, T.POT_BUNKER, T.STREAM, T.WATER, T.OUT_OF_BOUNDS]:
 		assert_lt(tiles.find(toolbar._tool_buttons[type]), grid.columns,
 			"%s on the top row" % TerrainTypes.get_type_name(type))
-	for type in [T.FAIRWAY, T.FIRM_FAIRWAY, T.DEEP_ROUGH, T.WASTE_BUNKER, T.BRUSH, T.ROCKS, T.OUT_OF_BOUNDS]:
+	for type in [T.FAIRWAY, T.FIRM_FAIRWAY, T.DEEP_ROUGH, T.WASTE_BUNKER, T.BRUSH, T.ROCKS,
+			T.SMALL_BOULDERS, T.LARGE_BOULDERS]:
 		assert_gte(tiles.find(toolbar._tool_buttons[type]), grid.columns,
 			"%s on the bottom row" % TerrainTypes.get_type_name(type))
-	assert_eq(toolbar._tool_buttons["rock"].tool_name, "Boulders", "The boulder tool isn't a second 'Rocks'")
+	assert_eq(toolbar._tool_buttons[T.SMALL_BOULDERS].tool_name, "Small Boulders")
+	assert_eq(toolbar._tool_buttons[T.LARGE_BOULDERS].tool_name, "Large Boulders")
 
 func test_toolbar_hotkeys_select_the_new_tiles() -> void:
 	GameManager.current_mode = GameManager.GameMode.BUILDING
@@ -500,7 +494,8 @@ func test_toolbar_hotkeys_select_the_new_tiles() -> void:
 	add_child_autofree(toolbar)
 	var cases := [[KEY_9, false, T.FIRM_FAIRWAY], [KEY_0, false, T.WASTE_BUNKER],
 		[KEY_2, true, T.DEEP_ROUGH], [KEY_5, true, T.POT_BUNKER], [KEY_6, true, T.STREAM],
-		[KEY_7, true, T.ROCKS], [KEY_8, true, T.BRUSH], [KEY_5, false, T.BUNKER]]
+		[KEY_7, true, T.ROCKS], [KEY_8, true, T.BRUSH], [KEY_9, true, T.SMALL_BOULDERS],
+		[KEY_0, true, T.LARGE_BOULDERS], [KEY_5, false, T.BUNKER]]
 	for case in cases:
 		var event := InputEventKey.new()
 		event.keycode = case[0]
@@ -517,11 +512,20 @@ func test_tile_previews_show_a_flowing_stream_and_patches_of_scatter() -> void:
 	assert_eq(roundi(stream.get_pixel(0, 1).r * 255.0), T.STREAM, "The channel enters from one side")
 	assert_eq(roundi(stream.get_pixel(2, 1).r * 255.0), T.STREAM, "and leaves from the other")
 	assert_eq(roundi(stream.get_pixel(1, 0).r * 255.0), T.GRASS, "with grass banks")
-	for type in [T.ROCKS, T.BRUSH]:
+	for type in [T.ROCKS, T.SMALL_BOULDERS, T.LARGE_BOULDERS, T.BRUSH]:
 		var image: Image = toolbar._tool_buttons[type]._surface_material.get_shader_parameter("terrain_data").get_image()
 		assert_eq(roundi(image.get_pixel(0, 0).r * 255.0), type, "A patch, not a lone tile")
-		assert_eq(image.get_pixel(1, 1).a, 1.0, "Painted Rocks, not a boulder footprint")
+		assert_eq(image.get_pixel(1, 1).a, 1.0, "Painted stone, not an object footprint")
 	for type in [T.FIRM_FAIRWAY, T.POT_BUNKER, T.DEEP_ROUGH, T.WASTE_BUNKER]:
 		var image: Image = toolbar._tool_buttons[type]._surface_material.get_shader_parameter("terrain_data").get_image()
 		assert_eq(roundi(image.get_pixel(1, 1).r * 255.0), type)
 		assert_eq(roundi(image.get_pixel(0, 1).r * 255.0), T.GRASS)
+
+	# The theme's woodland tiles are on the same shelf and preview the same way:
+	# their own id across the diamond, so the surface paints that species' ground
+	# rather than an object standing on somebody else's.
+	for type in CourseTheme.get_tree_types(GameManager.current_theme):
+		var image: Image = toolbar._tool_buttons[type]._surface_material.get_shader_parameter("terrain_data").get_image()
+		assert_eq(roundi(image.get_pixel(1, 1).r * 255.0), type,
+			"%s previews as the tile it is" % TerrainTypes.get_type_name(type))
+		assert_eq(image.get_pixel(1, 1).a, 1.0, "and as painted ground, not an object footprint")

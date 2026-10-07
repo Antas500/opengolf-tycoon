@@ -19,6 +19,19 @@
     "stream": {"id": 16, "name": "Stream", "playable": false, "placement_cost": 15, "maintenance_cost": 0, "is_hazard": true, "penalty_strokes": 1},
     "deep_rough": {"id": 17, "name": "Deep Rough", "playable": true, "placement_cost": 1, "maintenance_cost": 0},
     "waste_bunker": {"id": 18, "name": "Waste Bunker", "playable": true, "placement_cost": 6, "maintenance_cost": 0},
-    "brush": {"id": 19, "name": "Brush", "playable": true, "placement_cost": 3, "maintenance_cost": 0}
+    "brush": {"id": 19, "name": "Brush", "playable": true, "placement_cost": 3, "maintenance_cost": 0},
+    "small_boulders": {"id": 20, "name": "Small Boulders", "playable": true, "placement_cost": 8},
+    "large_boulders": {"id": 21, "name": "Large Boulders", "playable": true, "placement_cost": 8},
+    "oak": {"id": 22, "name": "Oak Tree", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "pine": {"id": 23, "name": "Pine Tree", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "maple": {"id": 24, "name": "Maple Tree", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "birch": {"id": 25, "name": "Birch Tree", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "cactus": {"id": 26, "name": "Cactus", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "fescue": {"id": 27, "name": "Fescue Grass", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "cattails": {"id": 28, "name": "Cattails", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "bush": {"id": 29, "name": "Shrub", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "palm": {"id": 30, "name": "Palm Tree", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "dead_tree": {"id": 31, "name": "Dead Tree", "playable": true, "placement_cost": 10, "blocks_shots": true},
+    "heather": {"id": 32, "name": "Heather", "playable": true, "placement_cost": 10, "blocks_shots": true}
   }
 }

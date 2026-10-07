@@ -40,6 +40,11 @@ static func _calculate_hazard_difficulty(corridor_tiles: Array, terrain_grid: Te
 
 	for tile_pos in corridor_tiles:
 		var terrain_type = terrain_grid.get_tile(tile_pos)
+		# Every tree tile — the generic Trees one and each species — counts as
+		# woodland in the corridor, so a stand of pines rates like a stand of oaks.
+		if TerrainTypes.is_tree(terrain_type):
+			tree_count += 1
+			continue
 		match terrain_type:
 			TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 				water_count += 1
@@ -50,15 +55,14 @@ static func _calculate_hazard_difficulty(corridor_tiles: Array, terrain_grid: Te
 				bunker_difficulty += 0.3
 			TerrainTypes.Type.OUT_OF_BOUNDS:
 				ob_count += 1
-			TerrainTypes.Type.TREES:
-				tree_count += 1
 			TerrainTypes.Type.BRUSH:
 				trouble_difficulty += 0.08
 			TerrainTypes.Type.ROCKS:
-				# A lone boulder is already an obstacle sprite; only painted
-				# rocky ground adds hole difficulty.
-				if not terrain_grid.is_object_footprint(tile_pos):
-					trouble_difficulty += 0.08
+				trouble_difficulty += 0.08
+			TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
+				# Every boulder tile is painted ground now: the same 0.08 of
+				# trouble the Rocks tile carries.
+				trouble_difficulty += 0.08
 			TerrainTypes.Type.DEEP_ROUGH:
 				trouble_difficulty += 0.04
 			TerrainTypes.Type.WASTE_BUNKER:

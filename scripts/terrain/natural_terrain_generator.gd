@@ -4,7 +4,6 @@ class_name NaturalTerrainGenerator
 ## Creates realistic undeveloped land that requires clearing before course construction
 
 const DEFAULT_TREE_TYPES = ["oak", "pine", "maple", "birch"]
-const ROCK_SIZES = ["small", "medium", "large"]
 
 ## Generate natural terrain for a new course, using theme parameters
 static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_value: int = 0) -> void:
@@ -33,8 +32,6 @@ static func generate(terrain_grid: TerrainGrid, entity_layer: EntityLayer, seed_
 	# Generate waterside vegetation (cattails, reeds near water)
 	_generate_waterside_vegetation(terrain_grid, entity_layer, rng)
 
-	# Generate rocks
-	_generate_rocks(terrain_grid, entity_layer, rng)
 
 ## All naturally painted terrain passes through the Course Terrain inventory
 ## and zero-maintenance filter, even if a future generation pass adds a type.
@@ -353,15 +350,17 @@ static func _generate_flower_patches(terrain_grid: TerrainGrid, rng: RandomNumbe
 					if rng.randf() < 0.5:
 						_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.FLOWER_BED)
 
-static func _generate_trees(terrain_grid: TerrainGrid, entity_layer: EntityLayer, rng: RandomNumberGenerator) -> void:
+static func _generate_trees(terrain_grid: TerrainGrid, _entity_layer: EntityLayer, rng: RandomNumberGenerator) -> void:
 	## Generate scattered trees across the terrain
 	var width = terrain_grid.grid_width
 	var height = terrain_grid.grid_height
 
-	# Theme-aware tree generation — exclude waterside-only types from general placement
+	# Theme-aware tree generation — exclude waterside-only types from general
+	# placement. A tree is a Course Terrain tile, so a wood is painted ground:
+	# no entity to place, no cost, and any other tile replaces it later.
 	var params = CourseTheme.get_generation_params(GameManager.current_theme)
 	var all_tree_types = CourseTheme.get_tree_types(GameManager.current_theme)
-	var waterside_only: Array = ["cattails"]
+	var waterside_only: Array = [TerrainTypes.Type.CATTAILS]
 	var tree_types: Array = all_tree_types.filter(func(t): return t not in waterside_only)
 	if tree_types.is_empty():
 		return
@@ -394,8 +393,8 @@ static func _generate_trees(terrain_grid: TerrainGrid, entity_layer: EntityLayer
 				if tile_type == TerrainTypes.Type.WATER or tile_type == TerrainTypes.Type.FLOWER_BED:
 					continue
 
-				# Check if already has a tree or rock
-				if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
+				# A tile already wooded (or a playing surface) stays put.
+				if TerrainTypes.is_tree(tile_type):
 					continue
 
 				# Density falls off towards edges
@@ -406,7 +405,7 @@ static func _generate_trees(terrain_grid: TerrainGrid, entity_layer: EntityLayer
 					if rng.randf() < 0.3:
 						tree_type = tree_types[rng.randi_range(0, tree_types.size() - 1)]
 
-					entity_layer.place_tree(pos, tree_type)
+					_set_generated_tile(terrain_grid, pos, tree_type)
 
 	# Add scattered individual trees (theme-aware count)
 	var scatter_range: Vector2i = params.get("scattered_trees", Vector2i(30, 60))
@@ -419,74 +418,22 @@ static func _generate_trees(terrain_grid: TerrainGrid, entity_layer: EntityLayer
 		var tile_type = terrain_grid.get_tile(pos)
 		if tile_type == TerrainTypes.Type.WATER or tile_type == TerrainTypes.Type.FLOWER_BED:
 			continue
-
-		# Check if already has a tree or rock
-		if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
+		if TerrainTypes.is_tree(tile_type):
 			continue
 
 		# The open land is all Rough now, so scattered trees land anywhere on
 		# it; water, flowers and built tiles were filtered out above.
 		var tree_type = tree_types[rng.randi_range(0, tree_types.size() - 1)]
-		entity_layer.place_tree(pos, tree_type)
+		_set_generated_tile(terrain_grid, pos, tree_type)
 
-static func _generate_rocks(terrain_grid: TerrainGrid, entity_layer: EntityLayer, rng: RandomNumberGenerator) -> void:
-	## Generate scattered rocks, often near elevation changes
-	var width = terrain_grid.grid_width
-	var height = terrain_grid.grid_height
-
-	# Theme-aware rock count
-	var params = CourseTheme.get_generation_params(GameManager.current_theme)
-	var rock_range: Vector2i = params.get("rocks", Vector2i(40, 80))
-	var rock_count = rng.randi_range(rock_range.x, rock_range.y)
-	var attempts = 0
-	var placed = 0
-
-	while placed < rock_count and attempts < rock_count * 3:
-		attempts += 1
-
-		var x = rng.randi_range(3, width - 3)
-		var y = rng.randi_range(3, height - 3)
-		var pos = Vector2i(x, y)
-
-		var tile_type = terrain_grid.get_tile(pos)
-		if tile_type == TerrainTypes.Type.WATER:
-			continue
-
-		if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
-			continue
-
-		# Higher chance of rocks the further the ground sits from the flat base level
-		var relief: int = absi(terrain_grid.get_elevation(pos) - terrain_grid.BASE_ELEVATION)
-		var base_chance = 0.3
-		if relief >= 2:
-			base_chance = 0.7
-		elif relief >= 1:
-			base_chance = 0.5
-
-		if rng.randf() > base_chance:
-			continue
-
-		# Random rock size, with larger rocks being rarer
-		var size_roll = rng.randf()
-		var rock_size: String
-		if size_roll < 0.5:
-			rock_size = "small"
-		elif size_roll < 0.85:
-			rock_size = "medium"
-		else:
-			rock_size = "large"
-
-		entity_layer.place_rock(pos, rock_size)
-		placed += 1
-
-static func _generate_waterside_vegetation(terrain_grid: TerrainGrid, entity_layer: EntityLayer, rng: RandomNumberGenerator) -> void:
+static func _generate_waterside_vegetation(terrain_grid: TerrainGrid, _entity_layer: EntityLayer, rng: RandomNumberGenerator) -> void:
 	## Place cattails and reeds along the edges of water bodies
 	var width = terrain_grid.grid_width
 	var height = terrain_grid.grid_height
 	var tree_types = CourseTheme.get_tree_types(GameManager.current_theme)
 
 	# Only place waterside vegetation if the theme supports cattails
-	if "cattails" not in tree_types:
+	if TerrainTypes.Type.CATTAILS not in tree_types:
 		return
 
 	# Scan for water-adjacent tiles and place cattails along shorelines
@@ -516,13 +463,13 @@ static func _generate_waterside_vegetation(terrain_grid: TerrainGrid, entity_lay
 			if not adjacent_water:
 				continue
 
-			# Skip if already occupied
-			if entity_layer.get_tree_at(pos) != null or entity_layer.get_rock_at(pos) != null:
+			# Skip ground that is already planted
+			if TerrainTypes.is_tree(terrain_grid.get_tile(pos)):
 				continue
 
 			# 40% chance to place cattails on any water-adjacent tile
 			if rng.randf() < 0.4:
-				entity_layer.place_tree(pos, "cattails")
+				_set_generated_tile(terrain_grid, pos, TerrainTypes.Type.CATTAILS)
 				placed += 1
 
 		if placed >= max_cattails:

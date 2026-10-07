@@ -52,24 +52,6 @@ func test_theme_refresh_preserves_terrain_and_player_placement() -> void:
 		assert_eq(grid.serialize(), saved)
 		assert_eq(grid.serialize_player_placed(), placed)
 
-func test_quick_start_clearing_keeps_painted_surfaces_and_removes_water_trees() -> void:
-	var entities := EntityLayer.new()
-	entities.map_seed = 2417
-	add_child_autofree(entities)
-	entities.set_terrain_grid(grid)
-	entities.place_tree(Vector2i(2, 2), "oak")
-	entities.place_tree(Vector2i(3, 3), "oak")
-	entities.place_rock(Vector2i(4, 4), "small")
-	grid.set_tile(Vector2i(2, 2), TerrainTypes.Type.FAIRWAY)
-	grid.set_tile(Vector2i(3, 3), TerrainTypes.Type.WATER)
-	grid.set_tile(Vector2i(4, 4), TerrainTypes.Type.BUNKER)
-	QuickStartCourse._clear_entities_on_course(grid, entities)
-	assert_true(entities.trees.is_empty())
-	assert_true(entities.rocks.is_empty())
-	assert_eq(grid.get_tile(Vector2i(2, 2)), TerrainTypes.Type.FAIRWAY)
-	assert_eq(grid.get_tile(Vector2i(3, 3)), TerrainTypes.Type.WATER)
-	assert_eq(grid.get_tile(Vector2i(4, 4)), TerrainTypes.Type.BUNKER)
-
 func test_quick_start_paint_hole_replaces_generated_water_with_fairway() -> void:
 	for x in range(grid.grid_width):
 		for y in range(grid.grid_height):

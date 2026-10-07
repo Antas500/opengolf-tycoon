@@ -57,8 +57,6 @@ func run() -> void:
 
 	check(gm.current_course.holes.size() == 1, "First course opens one hole")
 	check(grid.get_tee_box_tiles().size() == 1, "First course leaves a tee box behind")
-	main.entity_layer.place_rock(Vector2i(58, 58), "medium")
-	check(main.entity_layer.rocks.has(Vector2i(58, 58)), "First course has a placed rock")
 	var sculpted := Vector2i(61, 61)
 	grid.set_vertex_elevation(sculpted, grid.MAX_ELEVATION)
 	check(grid.get_vertex_elevation(sculpted) == grid.MAX_ELEVATION,
@@ -87,12 +85,12 @@ func run() -> void:
 		TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN,
 		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.BUNKER,
 	]) == 0, "No built tile survives into the second course")
-	# Player-placed marks are not asserted here: natural tree and rock placement
-	# goes through set_tile() with player_placed=true, so every new game marks its
-	# own vegetation. reset_for_new_course() clearing them is covered in
+	# Player-placed marks are not asserted here: the course paints its own
+	# vegetation, woodland tiles included, with set_tile_natural(), so the only
+	# marks a generated course leaves are the ones its buildings set.
+	# reset_for_new_course() clearing them is covered in
 	# tests/unit/test_cup_tiles.gd, where the grid is not re-vegetated.
 	check(grid.serialize_bunker_depth().is_empty(), "No bunker depth survives")
-	check(not main.entity_layer.rocks.has(Vector2i(58, 58)), "The placed rock is gone")
 	check(main.hole_manager.get_all_hole_visualizers().is_empty(), "The old hole flag is gone")
 	check(not main.undo_manager.can_undo(), "Undo history does not cross into the second course")
 	check(main.golfer_manager.get_active_golfers().is_empty(), "No golfer survives into the second course")

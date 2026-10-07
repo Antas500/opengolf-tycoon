@@ -3,17 +3,25 @@ class_name CourseSurface
 ## Continuous, world-anchored terrain. Two textures feed the surface shader:
 ##   R = terrain ID / 255, G = bunker depth,
 ##   B = (tile elevation - MIN_ELEVATION) / (MAX_ELEVATION - MIN_ELEVATION),
-##   A = 0 on an object footprint (a boulder standing on other ground, which
-##       keeps the native turf look), otherwise 1.
+##   A = reserved (always 1).
 ## The vertex_elevation image packs levels the same way, so the shader's
 ## (tex - 0.5) * 10 decode turns BASE_ELEVATION (flat) back into 0.
 
 ## Palette color key for each terrain ID, indexed by TerrainTypes.Type. The
 ## shader reads the palette width, so appending a type only needs a key here.
+## The two boulder fields share the Rocks key: their ground is the same stony
+## surface, and only the stones drawn on it differ. Tree tiles share the
+## "trees" canopy color for their art and swatches; the surface derives each
+## species' own ground (litter, needles, sand, silt, peat or straw) from it.
 const PALETTE_KEYS: Array[String] = [
 	"empty", "grass", "fairway_light", "rough", "heavy_rough", "green_light",
-	"tee_box_light", "bunker", "water", "path", "oob", "grass", "flower_bed", "rocks",
+	"tee_box_light", "bunker", "water", "path", "oob", "trees", "flower_bed", "rocks",
 	"firm_fairway", "pot_bunker", "stream", "deep_rough", "waste_bunker", "brush",
+	"rocks", "rocks",
+	# One per species tile: OAK, PINE, MAPLE, BIRCH, CACTUS, FESCUE, CATTAILS,
+	# SHRUB, PALM, DEAD_TREE, HEATHER.
+	"trees", "trees", "trees", "trees", "trees", "trees", "trees", "trees",
+	"trees", "trees", "trees",
 ]
 var _grid: TerrainGrid
 var _data: Image
@@ -118,7 +126,7 @@ func _write_tile(pos: Vector2i) -> void:
 		float(_grid.get_bunker_depth(pos)),
 		float(_grid.get_elevation(pos) - _grid.MIN_ELEVATION)
 				/ float(_grid.MAX_ELEVATION - _grid.MIN_ELEVATION),
-		0.0 if _grid.is_object_footprint(pos) else 1.0))
+		1.0))
 
 func _on_tile_changed(pos: Vector2i, _old: int, _new: int) -> void:
 	update_tile(pos)

@@ -195,10 +195,6 @@ func _update_preview(delta: float) -> void:
 	# Get positions to preview based on placement mode
 	if placement_manager and placement_manager.placement_mode != PlacementManager.PlacementMode.NONE:
 		match placement_manager.placement_mode:
-			PlacementManager.PlacementMode.TREE:
-				current_preview_positions = [grid_pos]
-			PlacementManager.PlacementMode.ROCK:
-				current_preview_positions = [grid_pos]
 			PlacementManager.PlacementMode.BUILDING, PlacementManager.PlacementMode.DECORATION:
 				current_preview_positions = _get_building_footprint(grid_pos)
 			_:
@@ -541,144 +537,15 @@ func _draw_entity_ghost(alpha_mod: float) -> void:
 	if current_preview_positions.is_empty():
 		return
 
-	var base_pos = terrain_grid.grid_to_screen_center(current_grid_pos)
 	var ghost_color = VALID_COLOR if current_preview_valid else INVALID_COLOR
 	ghost_color.a = alpha_mod * 0.8
 
 	match placement_manager.placement_mode:
-		PlacementManager.PlacementMode.TREE:
-			_draw_tree_ghost(base_pos, ghost_color)
-		PlacementManager.PlacementMode.ROCK:
-			_draw_rock_ghost(base_pos, ghost_color)
 		PlacementManager.PlacementMode.BUILDING:
 			_draw_building_ghost(current_grid_pos, ghost_color)
 		PlacementManager.PlacementMode.DECORATION:
 			var top_left_dec = terrain_grid.grid_to_screen(current_grid_pos)
 			_draw_decoration_ghost(top_left_dec, ghost_color)
-
-func _draw_tree_ghost(pos: Vector2, color: Color) -> void:
-	var tree_type = placement_manager.selected_tree_type if placement_manager else "oak"
-
-	# Use pixel art sprite if available
-	if tree_type in TreeEntity.SPRITE_PATHS:
-		var tex = load(TreeEntity.SPRITE_PATHS[tree_type]) as Texture2D
-		if tex:
-			var base_y = TreeEntity.SPRITE_BASE_OFFSETS.get(tree_type, 40.0)
-			var tex_pos = pos - Vector2(tex.get_width() / 2.0, base_y + tex.get_height() / 2.0)
-			draw_texture(tex, tex_pos, Color(1, 1, 1, color.a))
-			return
-
-	# Fallback to procedural polygon ghost
-	var props = TreeEntity.TREE_PROPERTIES.get(tree_type, {})
-	var base_foliage = props.get("color", Color(0.2, 0.5, 0.2))
-	var base_trunk = props.get("trunk_color", Color(0.4, 0.2, 0.1))
-
-	var var_params = TreeEntity.TREE_VARIATION.get(tree_type, TreeEntity.TREE_VARIATION["oak"])
-	var variation = PropVariation.generate_custom_variation(
-		current_grid_pos, var_params["scale"], var_params["rotation"], var_params["hue"])
-
-	var scale_v = variation.scale
-	var visual_h = props.get("visual_height", 48.0) * scale_v
-	var base_w = props.get("base_width", 32.0) * scale_v
-
-	var varied_foliage = variation.apply_color_shift(base_foliage)
-	var foliage_color = Color(varied_foliage.r, varied_foliage.g, varied_foliage.b, color.a)
-	var varied_trunk = variation.apply_color_shift(base_trunk)
-	var trunk_color = Color(varied_trunk.r, varied_trunk.g, varied_trunk.b, color.a)
-
-	draw_set_transform(pos, variation.rotation)
-	var o = Vector2.ZERO
-
-	if tree_type in TreeEntity.TRUNKLESS_TYPES:
-		match tree_type:
-			"cactus":
-				var body_w = base_w * 0.35
-				draw_rect(Rect2(o.x - body_w / 2, o.y - visual_h, body_w, visual_h), foliage_color)
-				draw_rect(Rect2(o.x - base_w * 0.45, o.y - visual_h * 0.7, base_w * 0.25, body_w * 0.6), foliage_color)
-				draw_rect(Rect2(o.x - base_w * 0.45, o.y - visual_h * 0.85, body_w * 0.5, visual_h * 0.2), foliage_color)
-				draw_rect(Rect2(o.x + base_w * 0.2, o.y - visual_h * 0.45, base_w * 0.25, body_w * 0.6), foliage_color)
-				draw_rect(Rect2(o.x + base_w * 0.2, o.y - visual_h * 0.6, body_w * 0.5, visual_h * 0.2), foliage_color)
-			"fescue":
-				for i in range(5):
-					var x_off = (i - 2) * base_w * 0.2
-					draw_line(o + Vector2(x_off, 0), o + Vector2(x_off, -visual_h), foliage_color, 2.0)
-			"cattails":
-				for i in range(3):
-					var x_off = (i - 1) * 5.0 * scale_v
-					draw_line(o + Vector2(x_off, 0), o + Vector2(x_off, -visual_h), foliage_color, 1.5)
-					var head_color = Color(varied_trunk.r, varied_trunk.g, varied_trunk.b, color.a)
-					draw_rect(Rect2(o.x + x_off - 2 * scale_v, o.y - visual_h - 6 * scale_v, 4 * scale_v, 8 * scale_v), head_color)
-			"bush":
-				draw_circle(o + Vector2(0, -visual_h * 0.5), base_w * 0.45, foliage_color)
-			"heather":
-				draw_circle(o + Vector2(0, -visual_h * 0.4), base_w * 0.4, foliage_color)
-				var flower_color = Color(0.6, 0.3, 0.6, color.a)
-				draw_circle(o + Vector2(-4 * scale_v, -visual_h * 0.6), 3 * scale_v, flower_color)
-				draw_circle(o + Vector2(4 * scale_v, -visual_h * 0.5), 2.5 * scale_v, flower_color)
-	else:
-		var trunk_w = 6.0 * scale_v
-		var trunk_h = visual_h * 0.4
-
-		match tree_type:
-			"palm":
-				trunk_w = 5.0 * scale_v
-				trunk_h = visual_h * 0.6
-				draw_rect(Rect2(o.x - trunk_w / 2, o.y - trunk_h, trunk_w, trunk_h), trunk_color)
-				for angle in [0, 60, 120, 180, 240, 300]:
-					var rad = deg_to_rad(angle)
-					var tip = o + Vector2(cos(rad) * base_w * 0.5, -trunk_h + sin(rad) * 10 * scale_v - 8 * scale_v)
-					draw_line(o + Vector2(0, -trunk_h), tip, foliage_color, 2.5)
-			"dead_tree":
-				trunk_w = 8.0 * scale_v
-				trunk_h = visual_h * 0.5
-				draw_rect(Rect2(o.x - trunk_w / 2, o.y - trunk_h, trunk_w, trunk_h), trunk_color)
-				var branch_color = Color(varied_trunk.r * 0.95, varied_trunk.g * 0.94, varied_trunk.b * 0.91, color.a)
-				draw_line(o + Vector2(0, -trunk_h), o + Vector2(-14 * scale_v, -visual_h), branch_color, 2.0)
-				draw_line(o + Vector2(0, -trunk_h), o + Vector2(12 * scale_v, -visual_h * 0.9), branch_color, 2.0)
-				draw_line(o + Vector2(0, -trunk_h * 0.8), o + Vector2(-10 * scale_v, -trunk_h * 1.2), branch_color, 1.5)
-			"pine":
-				draw_rect(Rect2(o.x - trunk_w / 2, o.y - trunk_h, trunk_w, trunk_h), trunk_color)
-				var tri = PackedVector2Array([
-					o + Vector2(0, -visual_h),
-					o + Vector2(-base_w * 0.5, -trunk_h),
-					o + Vector2(base_w * 0.5, -trunk_h)
-				])
-				draw_colored_polygon(tri, foliage_color)
-			_:
-				draw_rect(Rect2(o.x - trunk_w / 2, o.y - trunk_h, trunk_w, trunk_h), trunk_color)
-				var foliage_r = base_w * 0.5
-				draw_circle(o + Vector2(0, -trunk_h - foliage_r * 0.7), foliage_r, foliage_color)
-				draw_circle(o + Vector2(0, -trunk_h - foliage_r * 1.5), foliage_r * 0.7, foliage_color)
-
-	draw_set_transform(Vector2.ZERO, 0.0)
-
-func _draw_rock_ghost(pos: Vector2, color: Color) -> void:
-	# Use pixel art sprite if available
-	var rock_size = placement_manager.selected_rock_size if placement_manager else "medium"
-	if rock_size in Rock.SPRITE_PATHS:
-		var tex = load(Rock.SPRITE_PATHS[rock_size]) as Texture2D
-		if tex:
-			var offset_y = Rock.SPRITE_BASE_OFFSETS.get(rock_size, 12.0)
-			var tex_pos = pos - Vector2(tex.get_width() / 2.0, offset_y)
-			draw_texture(tex, tex_pos, Color(1, 1, 1, color.a))
-			return
-
-	# Fallback to procedural polygon ghost
-	var rock_color = Color(0.5, 0.5, 0.5, color.a)
-	var points = PackedVector2Array([
-		pos + Vector2(-12, 0),
-		pos + Vector2(-8, -10),
-		pos + Vector2(0, -14),
-		pos + Vector2(10, -8),
-		pos + Vector2(14, 0),
-		pos + Vector2(8, 6),
-		pos + Vector2(-6, 4)
-	])
-	draw_colored_polygon(points, rock_color)
-
-	var highlight = rock_color
-	highlight.a *= 0.5
-	draw_circle(pos + Vector2(-3, -6), 4, highlight)
 
 func _draw_building_ghost(grid_pos: Vector2i, color: Color) -> void:
 	var footprint = placement_manager.get_building_footprint()
@@ -1122,10 +989,6 @@ func confirm_placement() -> void:
 	if current_preview_valid and current_grid_pos != Vector2i(-1, -1):
 		var placement_type = ""
 		match placement_manager.placement_mode:
-			PlacementManager.PlacementMode.TREE:
-				placement_type = "tree"
-			PlacementManager.PlacementMode.ROCK:
-				placement_type = "rock"
 			PlacementManager.PlacementMode.BUILDING:
 				placement_type = "building"
 			PlacementManager.PlacementMode.DECORATION:

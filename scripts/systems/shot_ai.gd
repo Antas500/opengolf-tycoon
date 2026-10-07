@@ -100,9 +100,24 @@ const TERRAIN_SCORES: Dictionary = {
 	TerrainTypes.Type.DEEP_ROUGH: -45.0,
 	TerrainTypes.Type.BUNKER: -50.0,
 	TerrainTypes.Type.TREES: -80.0,
+	# Every tree species tile on the Course Terrain tab plays like Trees: the
+	# sprite on the tile is the only difference (see TerrainTypes.is_tree).
+	TerrainTypes.Type.OAK: -80.0,
+	TerrainTypes.Type.PINE: -80.0,
+	TerrainTypes.Type.MAPLE: -80.0,
+	TerrainTypes.Type.BIRCH: -80.0,
+	TerrainTypes.Type.PALM: -80.0,
+	TerrainTypes.Type.CACTUS: -80.0,
+	TerrainTypes.Type.DEAD_TREE: -80.0,
+	TerrainTypes.Type.SHRUB: -80.0,
+	TerrainTypes.Type.FESCUE: -80.0,
+	TerrainTypes.Type.CATTAILS: -80.0,
+	TerrainTypes.Type.HEATHER: -80.0,
 	TerrainTypes.Type.BRUSH: -85.0,
 	TerrainTypes.Type.POT_BUNKER: -90.0,
 	TerrainTypes.Type.ROCKS: -100.0,
+	TerrainTypes.Type.SMALL_BOULDERS: -100.0,
+	TerrainTypes.Type.LARGE_BOULDERS: -100.0,
 	TerrainTypes.Type.WATER: -1000.0,
 	TerrainTypes.Type.STREAM: -1000.0,
 	TerrainTypes.Type.OUT_OF_BOUNDS: -1000.0,
@@ -332,11 +347,12 @@ static func _decide_recovery_shot(
 
 ## Get clubs allowed from a trouble lie
 static func _get_recovery_clubs(terrain_type: int) -> Array:
+	# The whole tree family — Trees plus every species tile — is one lie.
+	if TerrainTypes.is_tree(terrain_type):
+		return [Golfer.Club.WEDGE, Golfer.Club.IRON]  # No woods through trees
 	match terrain_type:
-		TerrainTypes.Type.TREES:
-			return [Golfer.Club.WEDGE, Golfer.Club.IRON]  # No woods through trees
-		TerrainTypes.Type.ROCKS:
-			return [Golfer.Club.WEDGE]  # Wedge only from rocks
+		TerrainTypes.Type.ROCKS, TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
+			return [Golfer.Club.WEDGE]  # Wedge only from stony ground
 		TerrainTypes.Type.BRUSH:
 			return [Golfer.Club.WEDGE]  # Hack it out of the scrub
 		TerrainTypes.Type.POT_BUNKER:
@@ -730,7 +746,7 @@ static func _nearby_hazard_penalty(pos: Vector2i, terrain_grid: TerrainGrid, agg
 			if TerrainTypes.is_out_of_play(t):
 				# Distance falloff: adjacent tiles (dist=1) are worst
 				penalty += (20.0 / dist) * (1.0 - aggression * 0.5)
-			elif t == TerrainTypes.Type.TREES:
+			elif TerrainTypes.is_tree(t):
 				# Trees nearby add rollout risk penalty (less severe than water/OB)
 				penalty += (10.0 / dist) * (1.0 - aggression * 0.3)
 	return penalty
@@ -854,6 +870,10 @@ static func _apply_green_center_bias(
 
 ## Assess how good the current lie is (0.0 = terrible, 1.0 = perfect)
 static func _assess_lie_quality(terrain_type: int) -> float:
+	# Woodland is a family: the Trees tile and every species tile are the same
+	# lie among the roots, so they are answered together rather than by id.
+	if TerrainTypes.is_tree(terrain_type):
+		return 0.15
 	match terrain_type:
 		TerrainTypes.Type.FAIRWAY, TerrainTypes.Type.FIRM_FAIRWAY, TerrainTypes.Type.TEE_BOX, TerrainTypes.Type.GREEN:
 			return 1.0
@@ -873,11 +893,9 @@ static func _assess_lie_quality(terrain_type: int) -> float:
 			return 0.2
 		TerrainTypes.Type.POT_BUNKER:
 			return 0.15
-		TerrainTypes.Type.TREES:
-			return 0.15
 		TerrainTypes.Type.BRUSH:
 			return 0.12
-		TerrainTypes.Type.ROCKS:
+		TerrainTypes.Type.ROCKS, TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
 			return 0.1
 		TerrainTypes.Type.EMPTY, TerrainTypes.Type.OUT_OF_BOUNDS, TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 			return 0.0
@@ -929,7 +947,7 @@ static func _path_crosses_trees(start: Vector2i, end: Vector2i, terrain_grid: Te
 		if not terrain_grid.is_valid_position(sample_pos):
 			continue
 
-		if terrain_grid.get_tile(sample_pos) == TerrainTypes.Type.TREES:
+		if TerrainTypes.is_tree(terrain_grid.get_tile(sample_pos)):
 			# Parabolic arc: ball is low at start and end, high in the middle
 			var height_factor: float = 4.0 * t * (1.0 - t)
 			if height_factor < 0.3:  # Must be above 30% of max height to clear
@@ -950,7 +968,7 @@ static func _count_trees_along_path(start: Vector2i, end: Vector2i, terrain_grid
 		if not terrain_grid.is_valid_position(sample_pos):
 			continue
 
-		if terrain_grid.get_tile(sample_pos) == TerrainTypes.Type.TREES:
+		if TerrainTypes.is_tree(terrain_grid.get_tile(sample_pos)):
 			count += 1
 
 	return count

@@ -1,12 +1,14 @@
 extends Node2D
 class_name EntityLayer
-## EntityLayer - Manages all placed buildings, trees, rocks, and decorations on the course
+## EntityLayer - Manages all placed buildings and decorations on the course
+##
+## Woodland is not an entity: every tree is a Course Terrain tile the surface
+## and the TreeOverlay draw (see TerrainTypes.is_tree), laid and replaced by
+## painting like Rocks or Wild Flowers. A save from before that carries a
+## "trees" block, which deserialize turns back into painted tiles.
 
 var buildings: Dictionary = {}     # key: Vector2i (grid_pos), value: Building node
-var trees: Dictionary = {}         # key: Vector2i (grid_pos), value: TreeEntity node
-var rocks: Dictionary = {}         # key: Vector2i (grid_pos), value: Rock node
 var decorations: Dictionary = {}   # key: Vector2i (grid_pos), value: Decoration node
-var _original_terrain: Dictionary = {}  # key: Vector2i, value: int (terrain type before entity was placed)
 
 var terrain_grid: TerrainGrid
 var building_registry: Dictionary = {}  # Can accept either Node or Dictionary
@@ -17,40 +19,28 @@ var decoration_registry: Dictionary = {}  # Loaded from data/decorations.json
 var map_seed: int = 0
 
 signal building_placed(building: Building, cost: int)
-signal tree_placed(tree: TreeEntity, cost: int)
-signal rock_placed(rock: Rock, cost: int)
 signal decoration_placed(decoration: Decoration, cost: int)
 signal building_removed(grid_pos: Vector2i)
 ## The building changed address: its dictionary key and its node both moved.
 signal building_moved(building: Building, from_pos: Vector2i, to_pos: Vector2i)
-signal tree_removed(grid_pos: Vector2i)
-signal rock_removed(grid_pos: Vector2i)
 signal decoration_removed(grid_pos: Vector2i)
 signal building_selected(building: Building)
 
 @onready var buildings_container = Node2D.new()
-@onready var trees_container = Node2D.new()
-@onready var rocks_container = Node2D.new()
 @onready var decorations_container = Node2D.new()
 
 func _ready() -> void:
 	# Relative shadow layers (-2/-1) must remain above the opaque terrain.
 	z_index = 2
 	buildings_container.name = "Buildings"
-	trees_container.name = "Trees"
-	rocks_container.name = "Rocks"
 	decorations_container.name = "Decorations"
 
 	# Enable Y-sorting for proper isometric depth ordering
 	# Objects lower on screen (higher Y) render in front of objects higher on screen
 	buildings_container.y_sort_enabled = true
-	trees_container.y_sort_enabled = true
-	rocks_container.y_sort_enabled = true
 	decorations_container.y_sort_enabled = true
 
 	add_child(buildings_container)
-	add_child(trees_container)
-	add_child(rocks_container)
 	add_child(decorations_container)
 
 	# Generate a random map seed if not set (new game)
@@ -127,97 +117,8 @@ func place_building(building_type: String, grid_pos: Vector2i, registry) -> Buil
 	building_placed.emit(building, building_data.get("cost", 0))
 	return building
 
-func place_tree(grid_pos: Vector2i, tree_type: String = "oak") -> TreeEntity:
-	"""Place a tree at the specified grid position"""
-	var tree = TreeEntity.new()
-	tree.set_terrain_grid(terrain_grid)
-	tree.set_position_in_grid(grid_pos)
-
-	# Pre-set tree data BEFORE add_child so _ready() skips the default build.
-	# Without this, _ready() builds default oak visuals, then set_tree_type()
-	# rebuilds with the correct type — doubling the work for every tree.
-	tree.tree_type = tree_type
-	if tree_type in TreeEntity.TREE_PROPERTIES:
-		tree.tree_data = TreeEntity.TREE_PROPERTIES[tree_type].duplicate(true)
-	else:
-		tree.tree_type = "oak"
-		tree.tree_data = TreeEntity.TREE_PROPERTIES["oak"].duplicate(true)
-
-	trees_container.add_child(tree)
-
-	# Now that the node is in tree, build visuals exactly once.
-	# _ready() skipped because tree_data was pre-populated above.
-	tree.set_tree_type(tree_type)
-
-	# Store by grid position
-	trees[grid_pos] = tree
-
-	# Stamp terrain at the tree's grid position (the visual base is shifted
-	# to align with this tile, so no offset needed for any tree type)
-	if terrain_grid and not _original_terrain.has(grid_pos):
-		_original_terrain[grid_pos] = terrain_grid.get_tile(grid_pos)
-	if terrain_grid:
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.TREES)
-
-	# Connect signals
-	tree.tree_selected.connect(_on_tree_selected)
-	tree.tree_destroyed.connect(_on_tree_destroyed)
-
-	# Get actual tree cost from tree data
-	var tree_cost = tree.tree_data.get("cost", 20)
-	tree_placed.emit(tree, tree_cost)
-	return tree
-
-func place_rock(grid_pos: Vector2i, rock_size: String = "medium") -> Rock:
-	"""Place a rock at the specified grid position"""
-	var rock = Rock.new()
-	rock.set_terrain_grid(terrain_grid)
-	rock.set_position_in_grid(grid_pos)
-
-	# Pre-set rock data BEFORE add_child so _ready() skips the default build.
-	rock.rock_size = rock_size
-	if rock_size in Rock.ROCK_PROPERTIES:
-		rock.rock_data = Rock.ROCK_PROPERTIES[rock_size].duplicate(true)
-	else:
-		rock.rock_size = "medium"
-		rock.rock_data = Rock.ROCK_PROPERTIES["medium"].duplicate(true)
-
-	rocks_container.add_child(rock)
-
-	# Now that the node is in tree, build visuals exactly once.
-	# _ready() skipped because rock_data was pre-populated above.
-	rock.set_rock_size(rock_size)
-
-	# Store by grid position
-	rocks[grid_pos] = rock
-
-	# Stamp the terrain tile at the rock position (rocks sit on the ground)
-	if terrain_grid and not _original_terrain.has(grid_pos):
-		_original_terrain[grid_pos] = terrain_grid.get_tile(grid_pos)
-	if terrain_grid:
-		terrain_grid.set_tile(grid_pos, TerrainTypes.Type.ROCKS)
-		# A boulder on other ground keeps that spot's native turf look; one set
-		# on painted Rocks ground sits on the stony surface around it.
-		terrain_grid.set_object_footprint(grid_pos,
-			_original_terrain.get(grid_pos) != TerrainTypes.Type.ROCKS)
-
-	# Connect signals
-	rock.rock_selected.connect(_on_rock_selected)
-	rock.rock_destroyed.connect(_on_rock_destroyed)
-
-	# Get actual rock cost from rock data
-	var rock_cost = rock.rock_data.get("cost", 15)
-	rock_placed.emit(rock, rock_cost)
-	return rock
-
 func get_building_at(grid_pos: Vector2i) -> Building:
 	return buildings.get(grid_pos, null)
-
-func get_tree_at(grid_pos: Vector2i) -> TreeEntity:
-	return trees.get(grid_pos, null)
-
-func get_rock_at(grid_pos: Vector2i) -> Rock:
-	return rocks.get(grid_pos, null)
 
 func get_buildings_in_area(top_left: Vector2i, bottom_right: Vector2i) -> Array:
 	"""Get all buildings within the specified area"""
@@ -226,24 +127,6 @@ func get_buildings_in_area(top_left: Vector2i, bottom_right: Vector2i) -> Array:
 		if pos.x >= top_left.x and pos.x <= bottom_right.x and \
 		   pos.y >= top_left.y and pos.y <= bottom_right.y:
 			result.append(buildings[pos])
-	return result
-
-func get_trees_in_area(top_left: Vector2i, bottom_right: Vector2i) -> Array:
-	"""Get all trees within the specified area"""
-	var result: Array = []
-	for pos in trees.keys():
-		if pos.x >= top_left.x and pos.x <= bottom_right.x and \
-		   pos.y >= top_left.y and pos.y <= bottom_right.y:
-			result.append(trees[pos])
-	return result
-
-func get_rocks_in_area(top_left: Vector2i, bottom_right: Vector2i) -> Array:
-	"""Get all rocks within the specified area"""
-	var result: Array = []
-	for pos in rocks.keys():
-		if pos.x >= top_left.x and pos.x <= bottom_right.x and \
-		   pos.y >= top_left.y and pos.y <= bottom_right.y:
-			result.append(rocks[pos])
 	return result
 
 func remove_building(grid_pos: Vector2i, force: bool = false) -> void:
@@ -280,79 +163,6 @@ func move_building(building: Building, new_pos: Vector2i) -> bool:
 	building_moved.emit(building, old_pos, new_pos)
 	return true
 
-func remove_tree(grid_pos: Vector2i) -> void:
-	var tree = trees.get(grid_pos, null)
-	if tree:
-		tree.destroy()
-		trees.erase(grid_pos)
-		_restore_terrain(grid_pos)
-		tree_removed.emit(grid_pos)
-
-func remove_rock(grid_pos: Vector2i) -> void:
-	var rock = rocks.get(grid_pos, null)
-	if rock:
-		rock.destroy()
-		rocks.erase(grid_pos)
-		_restore_terrain(grid_pos)
-		rock_removed.emit(grid_pos)
-
-## Lift a tree or boulder off a tile without putting its ground back.
-## Course Terrain replacement uses this so the new tile stays, instead of the
-## stamp the entity left behind. Returns {} when nothing stood here, otherwise
-## {type, position, subtype, original_terrain}. original_terrain is -1 when the
-## entity never recorded the ground it stood on.
-func take_course_terrain_entity(grid_pos: Vector2i) -> Dictionary:
-	var original := int(_original_terrain.get(grid_pos, -1))
-	if trees.has(grid_pos):
-		var tree: TreeEntity = trees[grid_pos]
-		var subtype := tree.tree_type
-		tree.destroy()
-		trees.erase(grid_pos)
-		_original_terrain.erase(grid_pos)
-		tree_removed.emit(grid_pos)
-		return {
-			"type": "tree",
-			"position": grid_pos,
-			"subtype": subtype,
-			"original_terrain": original,
-		}
-	if rocks.has(grid_pos):
-		var rock: Rock = rocks[grid_pos]
-		var subtype := rock.rock_size
-		rock.destroy()
-		rocks.erase(grid_pos)
-		_original_terrain.erase(grid_pos)
-		if terrain_grid:
-			terrain_grid.set_object_footprint(grid_pos, false)
-		rock_removed.emit(grid_pos)
-		return {
-			"type": "rock",
-			"position": grid_pos,
-			"subtype": subtype,
-			"original_terrain": original,
-		}
-	return {}
-
-## Remember the ground under a tile that is about to receive a new tree or
-## boulder, without changing the tile. place_tree / place_rock only snapshot
-## the current tile when nothing is remembered, so this keeps the real ground
-## (and any walking path the new tile can still host).
-func remember_original_terrain(grid_pos: Vector2i, terrain_type: int) -> void:
-	if terrain_type >= 0:
-		_original_terrain[grid_pos] = terrain_type
-
-## Put back a tree or boulder lifted by take_course_terrain_entity, including
-## the ground it stood on so a later removal restores that ground.
-func restore_course_terrain_entity(grid_pos: Vector2i, kind: String, subtype: String, original_terrain: int = -1) -> void:
-	if trees.has(grid_pos) or rocks.has(grid_pos):
-		take_course_terrain_entity(grid_pos)
-	if original_terrain >= 0:
-		_original_terrain[grid_pos] = original_terrain
-	if kind == "tree":
-		place_tree(grid_pos, subtype)
-	elif kind == "rock":
-		place_rock(grid_pos, subtype)
-
 func place_decoration(dec_type: String, grid_pos: Vector2i, dec_registry: Dictionary) -> Decoration:
 	"""Place a decoration at the specified grid position"""
 	var dec_data = dec_registry.get(dec_type, {})
@@ -371,14 +181,6 @@ func place_decoration(dec_type: String, grid_pos: Vector2i, dec_registry: Dictio
 	if _would_overlap_decoration(grid_pos, dec_width, dec_height):
 		push_error("Cannot place decoration: overlaps with existing decoration")
 		return null
-
-	# Check individual tiles for tree/rock occupancy
-	for x in range(dec_width):
-		for y in range(dec_height):
-			var check_pos = grid_pos + Vector2i(x, y)
-			if trees.has(check_pos) or rocks.has(check_pos):
-				push_error("Cannot place decoration: tile occupied by tree or rock")
-				return null
 
 	var decoration = Decoration.new()
 	decoration.set_terrain_grid(terrain_grid)
@@ -456,25 +258,6 @@ func is_tile_occupied_by_decoration(grid_pos: Vector2i) -> bool:
 	"""Check if a tile is occupied by any decoration (including multi-tile)"""
 	return get_decoration_at(grid_pos) != null
 
-func _restore_terrain(grid_pos: Vector2i) -> void:
-	"""Restore the original terrain type after removing an entity"""
-	if not terrain_grid:
-		return
-	var original = _original_terrain.get(grid_pos, TerrainTypes.Type.GRASS)
-	terrain_grid.set_object_footprint(grid_pos, false)
-	terrain_grid.set_tile(grid_pos, original)
-	_original_terrain.erase(grid_pos)
-
-## Rocks ground painted over a boulder's spot becomes the ground the boulder
-## stands on: the tile shows rocky ground now and stays Rocks if the boulder
-## is later removed. Returns true when the spot changed.
-func merge_rock_into_painted_rocks(grid_pos: Vector2i) -> bool:
-	if not terrain_grid or not rocks.has(grid_pos) or not terrain_grid.is_object_footprint(grid_pos):
-		return false
-	_original_terrain[grid_pos] = TerrainTypes.Type.ROCKS
-	terrain_grid.set_object_footprint(grid_pos, false)
-	return true
-
 func get_all_buildings() -> Array:
 	return buildings.values()
 
@@ -518,36 +301,18 @@ func get_building_containing(grid_pos: Vector2i) -> Building:
 			return building
 	return null
 
-func get_all_trees() -> Array:
-	return trees.values()
-
-func get_all_rocks() -> Array:
-	return rocks.values()
-
 func serialize() -> Dictionary:
 	var data: Dictionary = {
 		"map_seed": map_seed,
 		"buildings": {},
-		"trees": {},
-		"rocks": {},
 		"decorations": {},
-		"original_terrain": {}
 	}
 
 	for pos in buildings:
 		data["buildings"]["%d,%d" % [pos.x, pos.y]] = buildings[pos].get_building_info()
 
-	for pos in trees:
-		data["trees"]["%d,%d" % [pos.x, pos.y]] = trees[pos].get_tree_info()
-
-	for pos in rocks:
-		data["rocks"]["%d,%d" % [pos.x, pos.y]] = rocks[pos].get_rock_info()
-
 	for pos in decorations:
 		data["decorations"]["%d,%d" % [pos.x, pos.y]] = decorations[pos].get_decoration_info()
-
-	for pos in _original_terrain:
-		data["original_terrain"]["%d,%d" % [pos.x, pos.y]] = _original_terrain[pos]
 
 	return data
 
@@ -558,16 +323,9 @@ func clear_all() -> void:
 		# it. clear_all means "empty", not "demolish what the rules allow".
 		buildings[pos].destroy(true)
 	buildings.clear()
-	for pos in trees.keys():
-		trees[pos].destroy()
-	trees.clear()
-	for pos in rocks.keys():
-		rocks[pos].destroy()
-	rocks.clear()
 	for pos in decorations.keys():
 		decorations[pos].destroy()
 	decorations.clear()
-	_original_terrain.clear()
 
 func deserialize(data: Dictionary) -> void:
 	"""Reconstruct entities from saved data."""
@@ -577,26 +335,31 @@ func deserialize(data: Dictionary) -> void:
 	if data.has("map_seed"):
 		set_map_seed(data["map_seed"])
 
-	# Restore original terrain map before placing entities
-	# so place_tree/place_rock don't overwrite with TREES/ROCKS tile values
+	# Ground an entity stamped over, remembered by an old save. It is only
+	# needed while the legacy blocks below are read, and never written again.
+	var original_terrain: Dictionary = {}
 	if data.has("original_terrain"):
 		for key in data["original_terrain"]:
 			var parts = key.split(",")
 			if parts.size() == 2:
-				var pos = Vector2i(int(parts[0]), int(parts[1]))
-				_original_terrain[pos] = int(data["original_terrain"][key])
+				original_terrain[Vector2i(int(parts[0]), int(parts[1]))] = int(data["original_terrain"][key])
 
+	# Trees used to be sprite entities standing on a Trees tile; now every
+	# species is a Course Terrain tile of its own. A save from before the change
+	# still carries a "trees" block, and its wood is worth keeping: each planted
+	# tree becomes the tile of its species, painted where it stood.
 	if data.has("trees"):
 		for key in data["trees"]:
 			var parts = key.split(",")
-			if parts.size() == 2:
-				var pos = Vector2i(int(parts[0]), int(parts[1]))
-				var tree_data_saved = data["trees"][key]
-				# Support both "type" (current) and "tree_type" (legacy) keys
-				var tree_type_val = "oak"
-				if tree_data_saved is Dictionary:
-					tree_type_val = tree_data_saved.get("type", tree_data_saved.get("tree_type", "oak"))
-				place_tree(pos, tree_type_val)
+			if parts.size() != 2:
+				continue
+			var pos = Vector2i(int(parts[0]), int(parts[1]))
+			var saved = data["trees"][key]
+			var species := "oak"
+			if saved is Dictionary:
+				species = str(saved.get("type", saved.get("tree_type", "oak")))
+			if terrain_grid:
+				terrain_grid.set_tile_natural(pos, TerrainTypes.tree_tile_for_species(species))
 
 	if data.has("buildings"):
 		for key in data["buildings"]:
@@ -612,22 +375,20 @@ func deserialize(data: Dictionary) -> void:
 					if building and building_info is Dictionary:
 						building.restore_from_info(building_info)
 
+	# Boulders were once sprite entities placed on the course; they are Course
+	# Terrain paint now (Small Boulders / Large Boulders). A save from before
+	# that change still carries a "rocks" block, and dropping the boulder must
+	# not leave its stamp behind: the tile goes back to the ground the boulder
+	# stood on. Painted Rocks ground stays Rocks, because that is what it was.
 	if data.has("rocks"):
 		for key in data["rocks"]:
 			var parts = key.split(",")
-			if parts.size() == 2:
-				var pos = Vector2i(int(parts[0]), int(parts[1]))
-				var rock_data_saved = data["rocks"][key]
-				# Support both "size" (current) and "rock_size" (legacy) keys
-				var rock_size_val = "medium"
-				if rock_data_saved is Dictionary:
-					rock_size_val = rock_data_saved.get("size", rock_data_saved.get("rock_size", "medium"))
-				# Rocks ground couldn't be painted when a save lacks a boulder's
-				# original terrain, so that boulder stood on native grass.
-				if not _original_terrain.has(pos) and terrain_grid \
-						and terrain_grid.get_tile(pos) == TerrainTypes.Type.ROCKS:
-					_original_terrain[pos] = TerrainTypes.Type.GRASS
-				place_rock(pos, rock_size_val)
+			if parts.size() != 2:
+				continue
+			var pos = Vector2i(int(parts[0]), int(parts[1]))
+			var original := int(original_terrain.get(pos, -1))
+			if terrain_grid and original >= 0 and not TerrainTypes.is_rocks(original):
+				terrain_grid.set_tile(pos, original)
 
 	if data.has("decorations"):
 		for key in data["decorations"]:
@@ -645,18 +406,6 @@ func _on_building_selected(building: Building) -> void:
 	building_selected.emit(building)
 
 func _on_building_destroyed(_building: Building) -> void:
-	pass  # Clean up if needed
-
-func _on_tree_selected(_tree: TreeEntity) -> void:
-	pass  # Handle tree selection if needed
-
-func _on_tree_destroyed(_tree: TreeEntity) -> void:
-	pass  # Clean up if needed
-
-func _on_rock_selected(_rock: Rock) -> void:
-	pass  # Handle rock selection if needed
-
-func _on_rock_destroyed(_rock: Rock) -> void:
 	pass  # Clean up if needed
 
 func _on_decoration_selected(_decoration: Decoration) -> void:

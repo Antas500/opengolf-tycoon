@@ -11,12 +11,14 @@ their existing coordinates. Small visual edge blends do not redefine a ball's li
 
 Desktop and web use the same shader. A 128 × 128 RGBA8 data texture costs 64 KiB;
 each pixel stores a terrain ID in red, bunker depth in green, normalized
-base elevation in blue, and in alpha whether the tile is a boulder's footprint.
-Theme colors live in a separate palette with one texel per terrain ID
-(`CourseSurface.PALETTE_KEYS`, currently 20 × 1); the shader reads its width
-with `textureSize`, so appending a terrain type only needs a palette key.
-Trees, and boulders standing on other ground, use native grass underneath;
-painted Rocks tiles render as stony ground (see *Terrain expansion* below).
+base elevation in blue, and a reserved alpha (always 1). Theme colors live in a
+separate palette with one texel per terrain ID (`CourseSurface.PALETTE_KEYS`,
+currently 33 × 1); the shader reads its width with `textureSize`, so appending a
+terrain type only needs a palette key. The Rocks, Small Boulders and Large
+Boulders ids all point at the `rocks` key: one stone base colour, three stone
+sizes. The twelve woodland ids point at the `trees` key and each paints ground
+of its own from it (see *Woodland* below); the three stony grounds render as
+painted stone (see *Terrain expansion* below).
 The former per-tile turf, water, bunker, and path overlays are not instantiated,
 so their rectangular patterns cannot cover the continuous surface.
 
@@ -47,9 +49,10 @@ contour markings appear only while the elevation tool is active. Continuous
 light and smoothly gated ambient occlusion avoid rectangular bands from the
 low-resolution heightmap.
 
-Quick Start cleanup preserves the freshly painted terrain before removing a
-tree/rock and reapplies it afterward. Removal previously restored native ground,
-leaving holes in fairways and greens. Water is now included in cleanup.
+Quick Start paints the course it wants directly: a wood is a tile, so
+clearing a spot for a hole is one `set_tile()` away and there is no entity
+removal that used to restore native ground underneath and leave holes in
+fairways and greens.
 
 ## Tuning levers
 
@@ -63,7 +66,7 @@ leaving holes in fairways and greens. Water is now included in cleanup.
 | Terrain light/shadow | `elevation_shader_controller.gd` | 0.28 / 0.28 | Retains turf color on slopes |
 
 Validation covers normal painting, deep bunkers, quiet batches, deserialization,
-all ten theme palettes, unchanged serialization, and tree/rock cleanup. Native
+all ten theme palettes, unchanged serialization, and woodland painting. Native
 Compatibility rendering also exercises shader compilation; a browser-specific
 performance/device test remains separate.
 
@@ -73,9 +76,9 @@ Material mixing is restricted to a narrow 0.028 coverage interval around the dom
 
 September visitor-experience pass: fairway/tee boundaries now combine a lighter 14% collar with a narrow additional 8% cut line (coverage 0.50–0.53), replacing the broad 28% dark edge. This keeps the boundary legible without making level fairways look recessed.
 
-## Terrain expansion: Firm Fairway, Pot Bunker, Stream, Deep Rough, Waste Bunker, Rocks, Brush
+## Terrain expansion: Firm Fairway, Pot Bunker, Stream, Deep Rough, Waste Bunker, Rocks, Small Boulders, Large Boulders, Brush
 
-Seven paintable course tiles (IDs 14–19, plus the existing Rocks ID 13) have
+Nine paintable course tiles (IDs 14–21, plus the existing Rocks ID 13) have
 looks of their own in `surface()`. Two of them are plain turf patterns:
 
 - **Firm Fairway** reuses the fairway's mower passes, paler, with sun-dried
@@ -85,7 +88,7 @@ looks of their own in `surface()`. Two of them are plain turf patterns:
   (`u = x − y` fine, `v = x + y` coarse) to draw long standing blades, with
   darker clumps and pale seed-head dots.
 
-The other five are **inset terrain** (`is_inset()`): features drawn over
+The other seven are **inset terrain** (`is_inset()`): features drawn over
 whatever turf surrounds them, so a patch has a natural outline instead of a
 square one.
 
@@ -97,14 +100,56 @@ square one.
   that isn't turf. `neighbour_surface()` mirrors this inside the boundary band,
   so both sides of every edge agree. A waste bunker's sand also runs under
   neighbouring rocks and brush (`carries()`).
-- *Rocks and Brush* scatter stones or shrubs on cellular noise (`cells()`,
-  2.9 / 3.1 cells per tile). Each feature is kept or dropped per cell: it must
-  clear every open edge by its radius (`edge_room()` at the feature point), so
-  no stone or shrub is ever cut by a tile edge. Features are dome-shaded from
-  the upper left (`GROUND_LIGHT`) with a contact shadow cast away from the light;
+- *Rocks, Small Boulders, Large Boulders and Brush* scatter stones or shrubs on
+  cellular noise (`cells()`: 4.6 cells per tile for Rocks, 2.9 for Small
+  Boulders, 1.45 for Large Boulders, 3.1 for Brush). Each feature is kept or
+  dropped per cell: for stones the cell's roll must clear
+  `rocks_present_threshold()` (0.22, or 0.04 for Large Boulders, which fills
+  nearly every cell so no boulder tile reads as empty ground) and the feature
+  must clear every open edge by its radius times its height
+  (`edge_room()` at the feature point), so no stone or shrub is ever cut by a
+  tile edge. All three stony ids share one base ground and one boundary
+  class (`boundary_class()` folds them into `T_ROCKS`), so a patch that changes
+  stone size mid-way draws no material edge — only the stones change size.
+  Rocks is the gravel field, Small Boulders is pebbles with the odd larger
+  stone, and Large Boulders draws big stones that stand up: `rocks_tallness()`
+  stretches each stone along screen-up (the grid's (-1,-1) diagonal in the
+  isometric view, -y when the view is flat) by 1.7, deepens its contact shadow
+  and lights its crown, so the field reads as boulders rather than flat discs.
+  A standing stone that would not clear an edge is set back and shrunk instead
+  of dropped, so border cells stay furnished. Features are dome-shaded from the
+  upper left (`GROUND_LIGHT`) with a contact shadow cast away from the light;
   brush adds sparse blossoms.
 - *Waste Bunker* is coarse sand with pebbles and wiregrass tufts; within about
   0.2 tiles of an open edge it breaks up raggedly into the surrounding turf.
+
+### Woodland: one tile per species (IDs 11 and 22-32)
+
+Every tree is a painted tile: Oak, Pine, Maple, Birch, Cactus, Fescue,
+Cattails, Shrub, Palm, Dead Tree and Heather beside the generic Trees tile.
+They share the `trees` palette texel — the theme's canopy color, which the mini
+map reads for woodland too — and `tree_look()` sorts them into six grounds:
+
+| Ground | Species | Drawn as |
+| --- | --- | --- |
+| leaf litter | Trees, Oak, Maple, Birch, Shrub | shaded earth dappled by the canopy, with fallen leaves and twigs |
+| pine needles | Pine | rust-brown bed laid down in long drifts, cones scattered |
+| bare sand | Cactus, Palm, Dead Tree | the theme's waste-bunker sand: grit, pebbles, one tough tuft |
+| waterlogged silt | Cattails | the mud a stream leaves on its banks, wet sheen and reed litter |
+| acid peat | Heather | dark peat over rough stone, lit purple where the heather blooms |
+| dry straw | Fescue | the firm-fairway sward, uncut, gone to straw with seed heads |
+
+`surface()` asks `tree_ground()` for that color; `inset_tile()` then fades it
+into the surrounding turf along every open edge (`edge_room()` plus a
+per-ground `tree_looseness()`, so sand and silt spread wider than a thin carpet
+of litter), which is why a lone tree is a patch around its trunk and a grove is
+one unbroken floor rather than a grid of squares. Species agree about seams the
+way the boulder fields do: `boundary_class()` folds every tree id onto
+`100 + its ground`, so litter meeting litter draws no material edge while
+litter meeting sand fades across one. `carries()` lets a wood's ground host
+another species' ground, so `neighbour_surface()` blends the two floors instead
+of pushing grass between them, and `edge_between()` decides a tree-to-tree edge
+on the class alone rather than on the inset shortcut.
 - *Pot Bunker* and *Stream* use `link_distance()`: the distance to a skeleton
   joining the tile centre to each linked edge (same-type neighbours for pots,
   stream or pond neighbours for streams). A tile with one horizontal and one
@@ -123,11 +168,10 @@ square one.
     (`TerrainBrush.centers_4_connected()`), because channels only join
     edge-adjacent tiles.
 
-Boulders stamp Rocks terrain for gameplay. When one stands on other ground,
-`TerrainGrid.set_object_footprint()` marks the tile (alpha 0 in the data
-texture), and `tile_at()` draws native grass there exactly as before. Any
-`set_tile()` clears the mark, loading rebuilds it from the entity layer, and
-painting Rocks over a boulder's spot merges it into the rocky ground.
+There are no boulder entities: Small Boulders and Large Boulders are painted
+terrain tiles that play exactly like Rocks. The data texture's alpha channel is
+reserved and written as 1 for every tile, so what you paint is what the shader
+draws — a boulder patch can never leave a bare turf footprint behind.
 
 Neighbour materials only contribute inside their boundary band, so the shader
 now skips `surface()` for zero-weight neighbours: most pixels evaluate one
@@ -138,7 +182,10 @@ inset looks, which only run on their own tiles.
 | --- | --- | --- | --- |
 | Stream half-width | `inset_tile()` | 0.25 ± 0.045 tiles | Wider or narrower channel |
 | Inset edge blend | `fragment()` | `smoothstep(-0.5, 0, d)` | How far surrounding turf reaches in |
-| Stone size | `inset_tile()` | 0.075 + id² × 0.1 tiles | Mostly pebbles with the odd boulder |
+| Stone cell scale | `rocks_cell_scale()` | Rocks 4.6, Small 2.9, Large 1.45 cells/tile | How many stones share a tile |
+| Stone size | `rocks_radius()` | Rocks 0.045–0.095, Small 0.075–0.175, Large 0.20–0.42 tiles | Gravel, mixed stones or big boulders |
+| Stones per cell | `rocks_present_threshold()` | Rocks/Small 0.22, Large 0.04 | How many cells actually carry a stone |
+| Stone height | `rocks_tallness()` | Rocks/Small 1.0, Large 1.7 | How far a stone stands up out of the ground |
 | Shrub size / density | `inset_tile()` | 0.13–0.17 tiles, 92% of cells | Denser or sparser brush |
 | Pot rim / floor radius | `inset_tile()` | 0.38–0.41 / 0.27–0.30 | Pot size and wall thickness |
 | Waste margin | `inset_tile()` | 0.06–0.2 tiles + noise | Raggedness of the sand edge |
