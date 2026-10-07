@@ -37,7 +37,7 @@ Every document also includes a **Tuning Levers** table at the bottom listing all
 - [Course Rating (Stars)](course-rating.md) — 5-category weighted rating: condition, design, value, pace, aesthetics. Slope and course rating
 - [Aesthetics Rating](aesthetics-rating.md) — Decoration scoring near holes: diminishing returns, variety bonus, theme matching
 - [Bunker Depth](bunker-depth.md) — Shallow vs deep bunkers, lie/distance modifiers, visual differentiation, theme defaults
-- [Terrain Types](terrain-types.md) — All 20 terrain types: ids, families, costs, lies, roll-out, AI scores, hotkeys, and the Firm Fairway / Pot Bunker / Stream / Deep Rough / Waste Bunker / Rocks / Brush tiles
+- [Terrain Types](terrain-types.md) — All 22 terrain types: ids, families, costs, lies, roll-out, AI scores, hotkeys, and the Firm Fairway / Pot Bunker / Stream / Deep Rough / Waste Bunker / Rocks / Small Boulders / Large Boulders / Brush tiles
 
 ### Economy & Progression
 - [World Map, Locations & Site Land](world-map.md) — Buying destinations, site sizes and prestige pricing, how much land comes pre-cleared, Reset World, the generated first course, and the two-layer shader globe (baked land mask, marker layer, flick inertia)

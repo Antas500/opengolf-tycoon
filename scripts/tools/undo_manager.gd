@@ -51,7 +51,7 @@ func record_walking_path(position: Vector2i, added: bool) -> void:
 	_stroke_walking_paths.append(change)
 
 ## End the current paint stroke and push it as a single undo action.
-## A stroke that only replaced a tree or boulder (the ground type was already
+## A stroke that only replaced a tree (the ground type was already
 ## the new tile) still has to undo — the removal is the change.
 func end_stroke() -> void:
 	_is_recording_stroke = false
@@ -84,15 +84,15 @@ func record_elevation_stroke(changes: Array) -> void:
 	}
 	_push_action(action)
 
-## Record an entity placement (tree, building, or rock). `replaced` is the
+## Record an entity placement (tree, building or decoration). `replaced` is the
 ## Course Terrain entity this placement overwrote (take_course_terrain_entity),
 ## so undo can put that tile back.
 func record_entity_placement(entity_type: String, grid_pos: Vector2i, subtype: String, cost: int, replaced: Dictionary = {}) -> void:
 	var action = {
 		"type": "entity_place",
-		"entity_type": entity_type,  # "tree", "building", "rock"
+		"entity_type": entity_type,  # "tree", "building", "decoration"
 		"grid_pos": grid_pos,
-		"subtype": subtype,  # tree_type, building_type, or rock_size
+		"subtype": subtype,  # tree_type, building_type or decoration_type
 		"cost": cost
 	}
 	if not replaced.is_empty():

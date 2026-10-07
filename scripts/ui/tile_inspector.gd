@@ -46,13 +46,10 @@ static func describe_tile(grid: TerrainGrid, entities: EntityLayer, tile: Vector
 	if grid.has_walking_path(tile):
 		improvements.append("Walking Path")
 	if entities:
-		# Trees and boulders belong to Course Terrain, not Improvements.
+		# Trees belong to Course Terrain, not Improvements.
 		var tree := entities.get_tree_at(tile)
-		var rock := entities.get_rock_at(tile)
 		if tree:
 			terrain += " (%s)" % tree.tree_data.get("name", tree.tree_type.capitalize())
-		if rock:
-			terrain += " (%s)" % rock.rock_data.get("name", "Rock")
 		var decoration := entities.get_decoration_at(tile)
 		if decoration:
 			improvements.append(decoration.decoration_data.get("name", decoration.decoration_type.capitalize()))

@@ -32,8 +32,6 @@ func _check(condition: bool, label: String) -> void:
 func _clear_entity_at(pos: Vector2i) -> void:
 	if main.entity_layer.get_tree_at(pos):
 		main.entity_layer.remove_tree(pos)
-	if main.entity_layer.get_rock_at(pos):
-		main.entity_layer.remove_rock(pos)
 
 func _run() -> void:
 	await _frames(10)

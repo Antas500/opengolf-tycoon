@@ -34,10 +34,6 @@ var _vertex_elevation: PackedInt32Array = PackedInt32Array()  # (grid_width+1) *
 var _vertex_stride: int = 0  # Row length of _vertex_elevation (grid_width + 1)
 var _bunker_depth_grid: Dictionary = {}  # Vector2i -> 0 (SHALLOW) or 1 (DEEP)
 var _player_placed_tiles: Dictionary = {}  # Vector2i -> true for tiles player placed (for maintenance)
-## Vector2i -> true for Rocks tiles that only carry a boulder standing on other
-## ground. The course surface draws native turf there (the boulder sprite has
-## its own base) instead of painted rocky ground. See set_object_footprint().
-var _object_footprints: Dictionary = {}
 ## Green tiles carrying a cup that is not yet part of a hole — a "Green With Hole" tile
 ## waiting to be paired with a tee box. Once a hole is opened the marker is consumed and
 ## the cup lives on as the hole's `hole_position`, so every marker here is unused.
@@ -81,7 +77,6 @@ var _bunker_overlay: BunkerOverlay = null
 var _grass_overlay: GrassOverlay = null
 var _fairway_overlay: FairwayOverlay = null
 var _tree_overlay: TreeOverlay = null
-var _rock_overlay: RockOverlay = null
 var _flower_overlay: FlowerOverlay = null
 var _path_overlay: PathOverlay = null
 var _walking_path_overlay: WalkingPathOverlay = null
@@ -110,10 +105,10 @@ func _ready() -> void:
 	_setup_ob_markers_overlay()
 	_setup_cup_overlay()
 	_setup_tee_aim_overlay()
-	# The continuous surface supplies turf, sand, water, and paths on every platform.
-	# Keep the legacy overlay classes available for older tools, but don't double draw.
-	# TreeOverlay and RockOverlay disabled — entities render their own sprites.
-	# TREES/ROCKS terrain tiles use grass color to blend invisibly.
+	# The continuous surface supplies turf, sand, water, stones, and paths on
+	# every platform. Keep the legacy overlay classes available for older
+	# tools, but don't double draw: trees render as their own sprites and the
+	# TREES terrain tile draws as the turf around them.
 	_setup_flower_overlay()
 	_setup_walking_path_overlay()
 	_setup_elevation_overlay()
@@ -161,8 +156,6 @@ func _redraw_all_overlays() -> void:
 		_fairway_overlay.queue_redraw()
 	if _tree_overlay:
 		_tree_overlay.queue_redraw()
-	if _rock_overlay:
-		_rock_overlay.queue_redraw()
 	if _flower_overlay:
 		_flower_overlay.queue_redraw()
 	if _path_overlay:
@@ -176,7 +169,6 @@ func _initialize_grid() -> void:
 	terrain_revision += 1
 	_ensure_vertex_storage()
 	_tee_box_tiles.clear()
-	_object_footprints.clear()
 	_walking_paths.clear()
 	for x in range(grid_width):
 		for y in range(grid_height):
@@ -429,9 +421,6 @@ func refresh_all_overlays() -> void:
 	if _tree_overlay and _tree_overlay.has_method("_scan_tree_tiles"):
 		_tree_overlay._scan_tree_tiles()
 		_tree_overlay.queue_redraw()
-	if _rock_overlay and _rock_overlay.has_method("_scan_rock_tiles"):
-		_rock_overlay._scan_rock_tiles()
-		_rock_overlay.queue_redraw()
 	if _flower_overlay and _flower_overlay.has_method("_scan_flower_tiles"):
 		_flower_overlay._scan_flower_tiles()
 		_flower_overlay.queue_redraw()
@@ -460,8 +449,6 @@ func set_tile(pos: Vector2i, terrain_type: int, player_placed: bool = true) -> v
 		return
 	_grid[pos] = terrain_type
 	terrain_revision += 1
-	# A new terrain type replaces whatever object footprint the tile carried.
-	_object_footprints.erase(pos)
 	# A walking path only survives on hostable ground (see TerrainTypes.
 	# WALKING_PATH_TERRAINS) — repainting the tile to anything else clears it.
 	if _walking_paths.has(pos) and not TerrainTypes.can_host_walking_path(terrain_type):
@@ -501,23 +488,6 @@ func get_brush_tiles(center: Vector2i, brush_size: int, round_shape: bool = true
 
 func get_bunker_depth(pos: Vector2i) -> int:
 	return _bunker_depth_grid.get(pos, 0)
-
-## Mark a Rocks tile as the footprint of a boulder that stands on other ground.
-## Gameplay still sees Rocks, but the course surface keeps drawing the native
-## turf, so a lone boulder looks as it always has while painted Rocks ground
-## renders as stony ground. Any later set_tile() clears the mark.
-func set_object_footprint(pos: Vector2i, footprint: bool) -> void:
-	if not is_valid_position(pos) or footprint == _object_footprints.has(pos):
-		return
-	if footprint:
-		_object_footprints[pos] = true
-	else:
-		_object_footprints.erase(pos)
-	if _course_surface:
-		_course_surface.update_tile(pos)
-
-func is_object_footprint(pos: Vector2i) -> bool:
-	return _object_footprints.has(pos)
 
 func set_bunker_depth(pos: Vector2i, depth: int) -> void:
 	if not is_valid_position(pos):
@@ -620,7 +590,7 @@ func walking_path_placement_error(pos: Vector2i) -> String:
 	if not is_valid_position(pos):
 		return "Outside the course."
 	if not TerrainTypes.can_host_walking_path(get_tile(pos)):
-		return "Walking paths are laid on rough, deep rough, waste bunker, brush, rocks, streams, wild flowers, boulders and trees."
+		return "Walking paths are laid on rough, deep rough, waste bunker, brush, rocks, boulders, streams, wild flowers and trees."
 	return ""
 
 ## Lay (or remove) the walking path on a tile. Returns true when the layer
@@ -700,7 +670,6 @@ func create_analysis_copy() -> TerrainGrid:
 	copy.tile_height = tile_height
 	copy._grid = _grid.duplicate()
 	copy._bunker_depth_grid = _bunker_depth_grid.duplicate()
-	copy._object_footprints = _object_footprints.duplicate()
 	copy._walking_paths = _walking_paths.duplicate()
 	_ensure_vertex_storage()
 	copy._vertex_elevation = _vertex_elevation.duplicate()
@@ -821,12 +790,6 @@ func _setup_tree_overlay() -> void:
 	_tree_overlay.name = "TreeOverlay"
 	add_child(_tree_overlay)
 	_tree_overlay.initialize(self)
-
-func _setup_rock_overlay() -> void:
-	_rock_overlay = RockOverlay.new()
-	_rock_overlay.name = "RockOverlay"
-	add_child(_rock_overlay)
-	_rock_overlay.initialize(self)
 
 func _setup_flower_overlay() -> void:
 	_flower_overlay = FlowerOverlay.new()

@@ -261,7 +261,7 @@ func test_move_errors_explain_why_not() -> void:
 	grid.set_tile(Vector2i(34, 24), TerrainTypes.Type.GRASS)
 	entities.place_tree(Vector2i(34, 24), "oak")
 	assert_eq(CourseClubhouse.move_error(grid, entities, clubhouse, Vector2i(34, 24)),
-		"Clear the tree or rock first: paint another Course Terrain tile over it.")
+		"Clear the tree first: paint another Course Terrain tile over it.")
 
 
 func test_move_to_refuses_an_illegal_tile() -> void:

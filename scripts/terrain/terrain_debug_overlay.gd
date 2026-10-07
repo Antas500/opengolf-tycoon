@@ -27,6 +27,8 @@ const TYPE_COLORS = {
 	17: Color(0.2, 0.35, 0.15, 0.5),  # DEEP_ROUGH - deep green
 	18: Color(0.85, 0.75, 0.6, 0.5),  # WASTE_BUNKER - pale sand
 	19: Color(0.4, 0.45, 0.15, 0.5),  # BRUSH - olive
+	20: Color(0.6, 0.6, 0.6, 0.5),  # SMALL_BOULDERS - light gray
+	21: Color(0.4, 0.4, 0.4, 0.5),  # LARGE_BOULDERS - dark gray
 }
 
 func initialize(grid: TerrainGrid) -> void:

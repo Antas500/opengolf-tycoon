@@ -71,22 +71,60 @@ const float T_STREAM = 16.0;
 const float T_DEEP_ROUGH = 17.0;
 const float T_WASTE_BUNKER = 18.0;
 const float T_BRUSH = 19.0;
+const float T_SMALL_BOULDERS = 20.0;
+const float T_LARGE_BOULDERS = 21.0;
 // Light direction on the ground plane, in grid units (screen upper left).
 const vec2 GROUND_LIGHT = vec2(-0.83, -0.55);
+
+// Stony ground: painted Rocks and the two boulder fields. They share their
+// ground and rules, and differ only in the stones drawn on them.
+bool is_rocks(float id) {
+	return id == T_ROCKS || id == T_SMALL_BOULDERS || id == T_LARGE_BOULDERS;
+}
+
+// How many stone cells a tile of stony ground is cut into, and how many of
+// those cells actually carry a stone. Rocks is a gravelly field, Small
+// Boulders mixes pebbles with the odd larger stone, and Large Boulders is
+// crowded with big standing boulders — almost every cell has one.
+float rocks_cell_scale(float id) {
+	return id == T_SMALL_BOULDERS ? 2.9 : (id == T_LARGE_BOULDERS ? 1.45 : 4.6);
+}
+
+float rocks_radius(float id, float roll) {
+	if (id == T_SMALL_BOULDERS) {
+		return 0.075 + roll * roll * 0.1;    // Mixed: pebbles with the odd stone
+	}
+	if (id == T_LARGE_BOULDERS) {
+		return 0.2 + roll * roll * 0.22;     // Big boulders, shoulder to shoulder
+	}
+	return 0.045 + roll * roll * 0.05;       // A gravelly field of little stones
+}
+
+float rocks_present_threshold(float id) {
+	return id == T_LARGE_BOULDERS ? 0.04 : 0.22;  // Large Boulders leave no bare tiles
+}
+
+// How much taller a stone stands than its footprint along the ground (1 = a
+// stone lying flat on the ground, 1.7 = a boulder standing on its side).
+float rocks_tallness(float id) {
+	return id == T_LARGE_BOULDERS ? 1.7 : 1.0;
+}
 
 vec2 tile_at(vec2 p) {
 	vec4 data = texture(terrain_data, (clamp(p, vec2(0.0), grid_size - 1.0) + 0.5) / grid_size);
 	float id = floor(data.r * 255.0 + 0.5);
-	// Object tiles share the surrounding native turf; sprites supply the object.
-	// Trees always do; a boulder does when it stands on other ground (A = 0),
-	// while painted Rocks ground (A = 1) draws as stony ground.
-	if (id == 11.0 || (id == T_ROCKS && data.a < 0.5)) { id = 1.0; }
+	// Tree tiles share the surrounding native turf; the sprite supplies the tree.
+	if (id == 11.0) { id = 1.0; }
 	return vec2(id, data.g);
 }
 
-// Boundary class: a stream joins a pond without a shoreline between them.
+// Boundary class: terrain that reads as one material across tile borders. A
+// stream joins a pond, and the boulder fields bleed into painted Rocks, so a
+// stone-size change inside a rocky patch draws no material edge.
 float boundary_class(float id) {
-	return id == T_STREAM ? 8.0 : id;
+	if (id == T_STREAM) { return 8.0; }
+	if (is_rocks(id)) { return T_ROCKS; }
+	return id;
 }
 
 // 1 where two tiles need a material boundary between them.
@@ -103,13 +141,13 @@ bool is_turf(float id) {
 // scrape) over whatever turf surrounds it, so a patch has a natural outline
 // instead of a square one.
 bool is_inset(float id) {
-	return id == T_ROCKS || id == T_POT_BUNKER || id == T_STREAM || id == T_WASTE_BUNKER || id == T_BRUSH;
+	return is_rocks(id) || id == T_POT_BUNKER || id == T_STREAM || id == T_WASTE_BUNKER || id == T_BRUSH;
 }
 
 // Whether stones or shrubs on `id` can sit directly on neighbouring `ground`:
 // any turf, and the sand of a waste bunker.
 bool carries(float ground, float id) {
-	return is_turf(ground) || (ground == T_WASTE_BUNKER && (id == T_ROCKS || id == T_BRUSH));
+	return is_turf(ground) || (ground == T_WASTE_BUNKER && (is_rocks(id) || id == T_BRUSH));
 }
 
 // Whether a tile of type `own` draws a boundary against its neighbour `other`.
@@ -254,7 +292,7 @@ vec3 surface(float id, float cover, float depth, vec2 world, float grain, float 
 		float tuft = dots(g * 4.5 + vec2(3.0, 8.0), 0.22, 0.42 + noise(g * 9.0) * 0.12);
 		base = mix(base, palette_color(1.0) * (0.62 + noise(g * 26.0) * 0.3), tuft * 0.9);
 		variation = (grain - 0.5) * 0.04;
-	} else if (id == T_ROCKS) {
+	} else if (is_rocks(id)) {
 		// Earth and gravel between the stones inset_tile() draws.
 		vec2 g = world / tile_size;
 		base = mix(base * 0.66, vec3(0.43, 0.37, 0.29), 0.45) * (0.9 + noise(g * 9.0) * 0.18);
@@ -397,31 +435,48 @@ vec3 inset_tile(float id, vec3 own, vec3 outside, float edge_mix, vec4 open_edge
 		float room = edge_room(q, open_edges) + (noise(g * 3.4) - 0.5) * 0.2 + (noise(g * 11.0) - 0.5) * 0.08;
 		float margin = 1.0 - smoothstep(0.06, 0.2, room);
 		return mix(own, outside, margin);
-	} else if (id == T_ROCKS || id == T_BRUSH) {
+	} else if (is_rocks(id) || id == T_BRUSH) {
 		// Stones or shrubs scattered on cells; each keeps clear of edges
 		// shared with other materials, so none is cut off at a tile edge.
-		bool rocks = id == T_ROCKS;
-		float scale = rocks ? 2.9 : 3.1;
+		bool rocks = is_rocks(id);
+		float scale = rocks ? rocks_cell_scale(id) : 3.1;
 		vec2 to_point;
 		vec4 c = cells(g * scale, to_point);
 		vec2 feature_q = g + to_point / scale - cell;
 		float room = edge_room(feature_q, open_edges);
-		// Mostly small stones with the odd larger boulder; shrubs vary less.
-		float radius = rocks ? 0.075 + c.z * c.z * 0.1 : 0.13 + c.z * 0.04;
-		float present = step(rocks ? 0.22 : 0.08, c.z) * step(radius + 0.03, room);
+		float tall = rocks ? rocks_tallness(id) : 1.0;
+		float radius = rocks ? rocks_radius(id, c.z) : 0.13 + c.z * 0.04;
+		// A standing stone keeps its ground footprint; one that does not fit is
+		// set back from the edge (and shrunk) rather than dropped, so a border
+		// cell still carries a stone where a shorter one would.
+		if (tall > 1.0) {
+			radius = min(radius, max((room - 0.03) / tall, 0.02));
+		}
+		float present = step(rocks ? rocks_present_threshold(id) : 0.08, c.z) * step(radius * tall + 0.03, room);
 		vec2 from_center = -to_point / scale;  // Pixel relative to the feature, grid units
-		float r = length(from_center);
+		// Stones are round on the ground and rise along screen-up: in the
+		// isometric view that is the grid's (-1,-1) diagonal, and straight up
+		// the grid's -y when the view is flat.
+		vec2 up = is_isometric ? vec2(-0.70710678) : vec2(0.0, -1.0);
+		float rise = dot(from_center, up);
+		vec2 lateral = from_center - up * rise;
+		float r = sqrt((rise / tall) * (rise / tall) + dot(lateral, lateral));
 		float outline = rocks ? (noise(g * 13.0) - 0.5) * 0.05 : (noise(g * 21.0) - 0.5) * 0.07;
 		float body = (1.0 - smoothstep(radius - 0.012, radius + 0.012, r + outline)) * present;
 		float lit = clamp(0.5 + dot(from_center / radius, GROUND_LIGHT) * 0.55, 0.0, 1.0);
 		vec3 ground = mix(own, outside, edge_mix);
-		// Contact shadow on the ground, cast away from the light.
-		float shade = (1.0 - smoothstep(radius * 0.9, radius * 1.6, length(from_center + GROUND_LIGHT * radius * 0.45))) * present;
-		ground *= 1.0 - shade * 0.3;
+		// Contact shadow on the ground, cast away from the light; a tall stone
+		// throws it further.
+		float shade = (1.0 - smoothstep(radius * 0.9, radius * (1.6 + (tall - 1.0) * 0.9),
+				length(from_center + GROUND_LIGHT * radius * 0.45))) * present;
+		ground *= 1.0 - shade * (0.3 + (tall - 1.0) * 0.2);
 		vec3 feature;
 		if (rocks) {
-			feature = palette_color(T_ROCKS) * (0.64 + lit * 0.52) * (0.88 + c.z * 0.24);
+			feature = palette_color(id) * (0.64 + lit * 0.52) * (0.88 + c.z * 0.24);
 			feature *= 0.93 + noise(g * 34.0) * 0.12;
+			// A standing stone shades top-down: a lit crown over a dark foot.
+			float crown = clamp(rise / (radius * tall), -1.0, 1.0);
+			feature *= 1.0 + (tall - 1.0) * 0.34 * crown;
 			ground = mix(ground, ground * 1.25, dots(g * 19.0, 0.25, 0.28) * 0.6);  // Grit
 		} else {
 			feature = palette_color(T_BRUSH) * (0.62 + lit * 0.56) * (0.86 + noise(g * 26.0) * 0.26);

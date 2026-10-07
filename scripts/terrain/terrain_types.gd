@@ -9,6 +9,9 @@ enum Type {
 	# Later additions are appended: saves store these ids as raw ints.
 	FIRM_FAIRWAY = 14, POT_BUNKER = 15, STREAM = 16, DEEP_ROUGH = 17,
 	WASTE_BUNKER = 18, BRUSH = 19,
+	# Boulder fields: the Rocks tile's stony ground scattered with small or
+	# large stones. They play exactly like Rocks (see is_rocks).
+	SMALL_BOULDERS = 20, LARGE_BOULDERS = 21,
 }
 
 const PROPERTIES: Dictionary = {
@@ -27,10 +30,11 @@ const PROPERTIES: Dictionary = {
 	Type.OUT_OF_BOUNDS: {"name": "Out of Bounds", "color": Color(0.42, 0.35, 0.32), "playable": false, "placement_cost": 0, "maintenance_cost": 0, "penalty_strokes": 1},
 	Type.TREES: {"name": "Trees", "color": Color(0.22, 0.45, 0.22), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
 	Type.FLOWER_BED: {"name": "Wild Flowers", "color": Color(0.85, 0.5, 0.6), "playable": false, "placement_cost": 15, "maintenance_cost": 0, "beauty_bonus": 5},
-	# Rocky ground. Painted Rocks tiles render as stony ground; a boulder
-	# placed on other terrain stamps this type too, but keeps its native turf
-	# look (see TerrainGrid.set_object_footprint).
+	# Stony ground. The three Rocks tiles share one look and one set of rules;
+	# only the stones the course surface draws on them change (see the shader).
 	Type.ROCKS: {"name": "Rocks", "color": Color(0.55, 0.52, 0.48), "playable": true, "placement_cost": 8, "maintenance_cost": 0, "shot_difficulty": 0.8},
+	Type.SMALL_BOULDERS: {"name": "Small Boulders", "color": Color(0.60, 0.57, 0.53), "playable": true, "placement_cost": 8, "maintenance_cost": 0, "shot_difficulty": 0.8},
+	Type.LARGE_BOULDERS: {"name": "Large Boulders", "color": Color(0.50, 0.47, 0.44), "playable": true, "placement_cost": 8, "maintenance_cost": 0, "shot_difficulty": 0.8},
 	# Links-style fast running turf: plays like fairway but the ball releases.
 	Type.FIRM_FAIRWAY: {"name": "Firm Fairway", "color": Color(0.62, 0.70, 0.38), "playable": true, "placement_cost": 6, "maintenance_cost": 1, "shot_difficulty": 0.05},
 	# Small, deep bunker with a steep revetted face — wedge out, often sideways.
@@ -101,20 +105,27 @@ static func is_fairway(type: int) -> bool:
 static func is_rough(type: int) -> bool:
 	return type == Type.ROUGH or type == Type.HEAVY_ROUGH or type == Type.DEEP_ROUGH
 
+## Stony ground: painted Rocks and the two boulder fields. All three play the
+## same — the worst lie on the course — and differ only in the stones the
+## course surface draws on them.
+static func is_rocks(type: int) -> bool:
+	return type == Type.ROCKS or type == Type.SMALL_BOULDERS or type == Type.LARGE_BOULDERS
+
 ## Tooltip sentence shared by every Course Terrain tile. Each one overwrites
-## every other tile on that tab — ground, wild flowers, trees and boulders.
+## every other tile on that tab — ground, wild flowers and trees.
 const REPLACES_ANY_COURSE_TILE := "Replaces any other Course Terrain tile."
 
 ## Every terrain type the player can paint from the Course Terrain tab, in
 ## toolbar order: row 1 (tee box, green, bunker, rough, pot bunker, stream,
-## water) then row 2 (fairway, firm fairway, deep rough, waste bunker, brush,
-## rocks, out of bounds). Wild flowers, trees and boulders share the tab and
-## the same replacement rule; they are appended beside this list.
+## water, out of bounds) then row 2 (fairway, firm fairway, deep rough, waste
+## bunker, brush, rocks, small boulders, large boulders). Wild flowers and
+## theme trees share the tab and the same replacement rule; they are appended
+## beside this list.
 const COURSE_PAINT_TYPES: Array[int] = [
 	Type.TEE_BOX, Type.GREEN, Type.BUNKER, Type.ROUGH, Type.POT_BUNKER,
-	Type.STREAM, Type.WATER,
+	Type.STREAM, Type.WATER, Type.OUT_OF_BOUNDS,
 	Type.FAIRWAY, Type.FIRM_FAIRWAY, Type.DEEP_ROUGH, Type.WASTE_BUNKER,
-	Type.BRUSH, Type.ROCKS, Type.OUT_OF_BOUNDS,
+	Type.BRUSH, Type.ROCKS, Type.SMALL_BOULDERS, Type.LARGE_BOULDERS,
 ]
 
 ## Landscape terrain tiles beside COURSE_PAINT_TYPES on the Course Terrain tab.
@@ -140,11 +151,12 @@ static func is_natural_generation_type(type: int) -> bool:
 
 ## Ground the walking-path improvement can be laid over (the Path tool in the
 ## Improvements tab): the rough and scrubby Course Terrain tiles, painted
-## Rocks and boulder ground (Rocks), streams and wild flowers, plus tree tiles.
+## Rocks and the boulder fields, streams and wild flowers, plus tree tiles.
 ## The path sits on top of these tiles without replacing the terrain.
 const WALKING_PATH_TERRAINS: Array[int] = [
 	Type.ROUGH, Type.DEEP_ROUGH, Type.WASTE_BUNKER, Type.BRUSH,
-	Type.ROCKS, Type.STREAM, Type.FLOWER_BED, Type.TREES,
+	Type.ROCKS, Type.SMALL_BOULDERS, Type.LARGE_BOULDERS, Type.STREAM,
+	Type.FLOWER_BED, Type.TREES,
 ]
 
 ## Can a walking path be laid on this terrain?

@@ -48,11 +48,11 @@ rings outward from a list of anchors and takes the first legal footprint:
 3. The centre of the owned land, then the centre of the course.
 
 Each anchor is searched in two passes: ground that needs no clearing first, then
-ground the clubhouse may clear for its own plot (trees, boulders, brush). The
+ground the clubhouse may clear for its own plot (trees, brush, stony ground). The
 footprint must be owned, free of buildings and decorations, and on buildable
 terrain — grass, rough (all three grades), deep rough, flower bed, firm fairway,
 path — and never on a green, tee, fairway, bunker, water, stream or out of
-bounds. The tree/boulder scenery inside the chosen footprint is cleared and
+bounds. Trees, brush and stony ground inside the chosen footprint are cleared and
 re-laid as grass as landscaping (not as a player edit: it never enters the undo
 history or the maintenance books), and the chosen door tile is cleared so guests
 have somewhere to stand.
@@ -78,7 +78,7 @@ click handler and any future UI all ask, so they can never disagree:
 | The whole footprint must be owned land | "Buy this land first — the whole footprint must be owned." |
 | No other building in the footprint | "Move the footprint clear of the other building." |
 | No decoration in the footprint | "Remove the decoration in this footprint first." |
-| No tree or boulder in the footprint | "Clear the tree or rock first: paint another Course Terrain tile over it." |
+| No tree in the footprint | "Clear the tree first: paint another Course Terrain tile over it." |
 | Buildable terrain only | "Move it off the greens, tees, sand and water." |
 | Already there | "The clubhouse is already there." |
 

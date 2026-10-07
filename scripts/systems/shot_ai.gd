@@ -103,6 +103,8 @@ const TERRAIN_SCORES: Dictionary = {
 	TerrainTypes.Type.BRUSH: -85.0,
 	TerrainTypes.Type.POT_BUNKER: -90.0,
 	TerrainTypes.Type.ROCKS: -100.0,
+	TerrainTypes.Type.SMALL_BOULDERS: -100.0,
+	TerrainTypes.Type.LARGE_BOULDERS: -100.0,
 	TerrainTypes.Type.WATER: -1000.0,
 	TerrainTypes.Type.STREAM: -1000.0,
 	TerrainTypes.Type.OUT_OF_BOUNDS: -1000.0,
@@ -335,8 +337,8 @@ static func _get_recovery_clubs(terrain_type: int) -> Array:
 	match terrain_type:
 		TerrainTypes.Type.TREES:
 			return [Golfer.Club.WEDGE, Golfer.Club.IRON]  # No woods through trees
-		TerrainTypes.Type.ROCKS:
-			return [Golfer.Club.WEDGE]  # Wedge only from rocks
+		TerrainTypes.Type.ROCKS, TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
+			return [Golfer.Club.WEDGE]  # Wedge only from stony ground
 		TerrainTypes.Type.BRUSH:
 			return [Golfer.Club.WEDGE]  # Hack it out of the scrub
 		TerrainTypes.Type.POT_BUNKER:
@@ -877,7 +879,7 @@ static func _assess_lie_quality(terrain_type: int) -> float:
 			return 0.15
 		TerrainTypes.Type.BRUSH:
 			return 0.12
-		TerrainTypes.Type.ROCKS:
+		TerrainTypes.Type.ROCKS, TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
 			return 0.1
 		TerrainTypes.Type.EMPTY, TerrainTypes.Type.OUT_OF_BOUNDS, TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 			return 0.0

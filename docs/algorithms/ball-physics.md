@@ -126,6 +126,7 @@ if base_rollout < 0.0:
 | Brush | 0.05x | Swallowed by the scrub |
 | Trees | 0.2x | Dense ground cover |
 | Rocks | 0.15x | Rocky ground kills momentum |
+| Small Boulders, Large Boulders | 0.15x | The same stone ground as Rocks |
 | Path | 1.4x | Hard surface, extra bounce |
 | Water, Stream, OB, Bunker, Pot Bunker, Flower Bed | — | No roll: the ball stays where it lands |
 

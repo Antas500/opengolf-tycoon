@@ -197,8 +197,6 @@ func _update_preview(delta: float) -> void:
 		match placement_manager.placement_mode:
 			PlacementManager.PlacementMode.TREE:
 				current_preview_positions = [grid_pos]
-			PlacementManager.PlacementMode.ROCK:
-				current_preview_positions = [grid_pos]
 			PlacementManager.PlacementMode.BUILDING, PlacementManager.PlacementMode.DECORATION:
 				current_preview_positions = _get_building_footprint(grid_pos)
 			_:
@@ -548,8 +546,6 @@ func _draw_entity_ghost(alpha_mod: float) -> void:
 	match placement_manager.placement_mode:
 		PlacementManager.PlacementMode.TREE:
 			_draw_tree_ghost(base_pos, ghost_color)
-		PlacementManager.PlacementMode.ROCK:
-			_draw_rock_ghost(base_pos, ghost_color)
 		PlacementManager.PlacementMode.BUILDING:
 			_draw_building_ghost(current_grid_pos, ghost_color)
 		PlacementManager.PlacementMode.DECORATION:
@@ -651,34 +647,6 @@ func _draw_tree_ghost(pos: Vector2, color: Color) -> void:
 				draw_circle(o + Vector2(0, -trunk_h - foliage_r * 1.5), foliage_r * 0.7, foliage_color)
 
 	draw_set_transform(Vector2.ZERO, 0.0)
-
-func _draw_rock_ghost(pos: Vector2, color: Color) -> void:
-	# Use pixel art sprite if available
-	var rock_size = placement_manager.selected_rock_size if placement_manager else "medium"
-	if rock_size in Rock.SPRITE_PATHS:
-		var tex = load(Rock.SPRITE_PATHS[rock_size]) as Texture2D
-		if tex:
-			var offset_y = Rock.SPRITE_BASE_OFFSETS.get(rock_size, 12.0)
-			var tex_pos = pos - Vector2(tex.get_width() / 2.0, offset_y)
-			draw_texture(tex, tex_pos, Color(1, 1, 1, color.a))
-			return
-
-	# Fallback to procedural polygon ghost
-	var rock_color = Color(0.5, 0.5, 0.5, color.a)
-	var points = PackedVector2Array([
-		pos + Vector2(-12, 0),
-		pos + Vector2(-8, -10),
-		pos + Vector2(0, -14),
-		pos + Vector2(10, -8),
-		pos + Vector2(14, 0),
-		pos + Vector2(8, 6),
-		pos + Vector2(-6, 4)
-	])
-	draw_colored_polygon(points, rock_color)
-
-	var highlight = rock_color
-	highlight.a *= 0.5
-	draw_circle(pos + Vector2(-3, -6), 4, highlight)
 
 func _draw_building_ghost(grid_pos: Vector2i, color: Color) -> void:
 	var footprint = placement_manager.get_building_footprint()
@@ -1124,8 +1092,6 @@ func confirm_placement() -> void:
 		match placement_manager.placement_mode:
 			PlacementManager.PlacementMode.TREE:
 				placement_type = "tree"
-			PlacementManager.PlacementMode.ROCK:
-				placement_type = "rock"
 			PlacementManager.PlacementMode.BUILDING:
 				placement_type = "building"
 			PlacementManager.PlacementMode.DECORATION:

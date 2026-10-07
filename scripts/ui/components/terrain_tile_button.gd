@@ -20,7 +20,9 @@ const NAME_FONT_SIZE_MIN := 10  # Longest names shrink instead of spilling out.
 const GREEN_HOLE_FLAG_TEXTURE := preload("res://assets/sprites/flag/flag.png")
 static var _white_texture: ImageTexture
 ## Scattered terrain previewed as part of a patch rather than a lone tile.
-const FIELD_PREVIEWS: Array[int] = [TerrainTypes.Type.ROCKS, TerrainTypes.Type.BRUSH]
+const FIELD_PREVIEWS: Array[int] = [TerrainTypes.Type.ROCKS,
+	TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS,
+	TerrainTypes.Type.BRUSH]
 
 static func tile_corners(tile_size: Vector2 = TILE_SIZE) -> PackedVector2Array:
 	var center := tile_size * 0.5

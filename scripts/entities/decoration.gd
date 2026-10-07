@@ -154,7 +154,7 @@ static func visual_variation(type: String, pos: Vector2i) -> PropVariation.Varia
 		"hue": Vector2(-0.02, 0.02)
 	})
 
-	# Use salt offset 200 to differentiate from trees (0) and rocks (100)
+	# Use salt offset 200 to differentiate from trees (0)
 	return PropVariation.generate_custom_variation(
 		pos,
 		var_params["scale"],

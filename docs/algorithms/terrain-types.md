@@ -9,15 +9,15 @@ build and maintain, how well a golfer can strike a ball lying on it, how far a
 ball runs after landing on it, whether it is a penalty area, and how the course
 surface shader draws it.
 
-The **Course Terrain** tab combines course surfaces, hazards, Flower Bed,
-boulders, and theme-specific trees into one horizontally scrolling honeycomb.
-Two interlocking rows keep the course tiles first, with landscaping extending
-the right end of each row:
+The **Course Terrain** tab combines course surfaces, hazards, Flower Bed, the
+boulder grounds, and theme-specific trees into one horizontally scrolling
+honeycomb. Two interlocking rows keep the course tiles first, with landscaping
+extending the right end of each row:
 
 | Row | Course tiles (left to right) |
 | --- | --- |
-| Top | Tee Box, Green, Bunker, Rough, Pot Bunker, Stream, Water |
-| Bottom | Fairway, Firm Fairway, Deep Rough, Waste Bunker, Brush, Rocks, Out of Bounds |
+| Top | Tee Box, Green, Bunker, Rough, Pot Bunker, Stream, Water, Out of Bounds |
+| Bottom | Fairway, Firm Fairway, Deep Rough, Waste Bunker, Brush, Rocks, Small Boulders, Large Boulders |
 
 The honeycomb width adapts to the theme's tree catalogue while staying two rows
 high. The brush controls stay in a column before it. **Open Hole** is a tile too:
@@ -37,10 +37,11 @@ top of the ground rather than replacing it (see [garden catalog](garden-catalog.
 Natural Grass is never painted by generation: it is only the blank canvas a
 fresh grid starts from, and terrain generation sweeps it into Rough — the
 zero-upkeep base turf of every generated course. Heavy Rough, Trees and Empty
-are placed by generation or by entities (a tree stamps Trees, a boulder stamps
-Rocks).
+are placed by generation or by entities (a tree stamps Trees); the boulder
+grounds are ordinary painted course tiles, so generation may scatter them like
+any other zero-upkeep terrain.
 
-### The seven newer tiles
+### The newer tiles
 
 - **Firm Fairway** — Links-style, fast-running turf. The lie is as good as a
   fairway for full swings but tight for wedges (0.92), and a ball that lands on
@@ -58,11 +59,16 @@ Rocks).
 - **Waste Bunker** — Natural sandy scrubland. It is *not* a hazard (no raking,
   the club can be grounded), so it plays like sandy rough (0.8 / 0.7 lie, 85%
   distance) and costs nothing to maintain.
-- **Rocks** — Stony ground: the worst lie on the course (0.25), wedge only. A
-  boulder standing on other ground also plays as Rocks but keeps its grass look.
-  Painting any other Course Terrain tile over a boulder replaces it, Rocks
-  included. Like every course tile it is ground paint: the bulldozer never
-  touches course terrain.
+- **Rocks** — Stony ground: the worst lie on the course (0.25), wedge only.
+  The surface draws it as a gravelly field of small stones, the finest of the
+  three stony looks. Like every course tile it is ground paint: the bulldozer
+  never touches course terrain.
+- **Small Boulders** — The same stone ground drawn as pebbles with the odd
+  larger stone. Identical to Rocks in cost, lie, roll-out, AI score and
+  walking; only the stones the shader draws differ.
+- **Large Boulders** — The same ground again, crowded with big boulders that
+  stand up out of it (so no tile reads as bare gravel). Identical to Rocks in
+  every rule and different only in the stones drawn on it.
 - **Brush** — Dense scrub (gorse, heather, sagebrush): 0.3 lie, 50% distance,
   wedge only, and it swallows rolling balls. Golfers wade through it slowly.
   Replace it by painting another terrain tile over it; the bulldozer ignores it.
@@ -79,8 +85,11 @@ Saves store terrain as raw integers, so new types are only ever appended:
 EMPTY 0, GRASS 1, FAIRWAY 2, ROUGH 3, HEAVY_ROUGH 4, GREEN 5, TEE_BOX 6,
 BUNKER 7, WATER 8, PATH 9, OUT_OF_BOUNDS 10, TREES 11, FLOWER_BED 12,
 ROCKS 13, FIRM_FAIRWAY 14, POT_BUNKER 15, STREAM 16, DEEP_ROUGH 17,
-WASTE_BUNKER 18, BRUSH 19
+WASTE_BUNKER 18, BRUSH 19, SMALL_BOULDERS 20, LARGE_BOULDERS 21
 ```
+
+The boulder fields reuse the `rocks` palette key: all three stony grounds
+share one base colour and the shader only changes the stones it scatters.
 
 `CourseSurface.PALETTE_KEYS` holds one theme color key per id. The shader
 reads the palette width, so a new type needs a palette key and a color in every
@@ -98,6 +107,7 @@ is_bunker(t)      BUNKER, POT_BUNKER            hazards where the ball plugs
 is_sand(t)        is_bunker + WASTE_BUNKER      sand spray, sandy lies
 is_fairway(t)     FAIRWAY, FIRM_FAIRWAY         shot shapes, AI bonuses, carries
 is_rough(t)       ROUGH, HEAVY_ROUGH, DEEP_ROUGH
+is_rocks(t)       ROCKS, SMALL_BOULDERS, LARGE_BOULDERS
 ```
 
 Walking is the exception: golfers path around ponds, OB and off-property land
@@ -120,6 +130,8 @@ but cross streams.
 | Water | 20 | 1 | yes | 1 (drop at entry) | |
 | Stream | 15 | 1 | yes | 1 (drop at entry) | |
 | Rocks | 8 | 0 | | | |
+| Small Boulders | 8 | 0 | | | |
+| Large Boulders | 8 | 0 | | | |
 | Out of Bounds | 0 | 0 | | 1 (stroke and distance) | |
 
 Upkeep is summed over player-placed tiles and scaled as described in
@@ -139,9 +151,11 @@ Upkeep is summed over player-placed tiles and scaled as described in
 | Pot Bunker | 0.35 / 0.15 | 0.45 | no roll | yes | −90 | wedge |
 | Stream | — (penalty) | — | no roll | yes | −1000 | — |
 | Rocks | 0.25 | 0.50 | 0.15× | | −100 | wedge |
+| Small Boulders | 0.25 | 0.50 | 0.15× | | −100 | wedge |
+| Large Boulders | 0.25 | 0.50 | 0.15× | | −100 | wedge |
 
 ShotAI plays a recovery shot when its lie quality falls below 0.4: deep rough
-(0.2), pot bunker (0.15), brush (0.12) and rocks (0.1) do; waste bunker (0.6)
+(0.2), pot bunker (0.15), brush (0.12) and the three stony grounds (0.1) do; waste bunker (0.6)
 and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 [ball-physics.md](ball-physics.md) and
 [shot-ai-target-finding.md](shot-ai-target-finding.md).
@@ -149,18 +163,18 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 ### 5. Painting
 
 - Every Course Terrain tile replaces every other one. Painting fairway, rough,
-  brush, rocks, flower bed, water or any other tab tile clears the tree or
-  boulder on that spot (a clearing fee on top of the new tile's cost) and
-  `TerrainGrid.set_tile` swaps the ground, dropping the tile's cup, tee and
-  walking-path state when the new ground can't keep them. Placing a tree or
-  boulder does the same in reverse: it overwrites water, sand, greens, other
-  trees and other boulders. Buildings and decorations are not course terrain —
-  the bulldozer removes those, and a course tile will not paint over them.
+  brush, rocks, small boulders, large boulders, flower bed, water or any other
+  tab tile clears the tree on that spot (a clearing fee on top of the new tile's
+  cost) and `TerrainGrid.set_tile` swaps the ground, dropping the tile's cup,
+  tee and walking-path state when the new ground can't keep them. Placing a
+  tree does the same in reverse: it overwrites water, sand, greens and other
+  trees. Buildings and decorations are not course terrain — the bulldozer
+  removes those, and a course tile will not paint over them.
 - Stream strokes are 4-connected (`TerrainBrush.centers_4_connected()`) so the
   channel never breaks at a diagonal step.
-- A tree or boulder keeps the look of its toolbar tile wherever it is placed
-  (a tree stamps Trees, which draws as turf under the sprite; a boulder on
-  ground that isn't painted Rocks keeps that turf look via its footprint).
+- A tree keeps the look of its toolbar tile wherever it is placed: it stamps
+  Trees, which draws as turf under the sprite. The boulder fields are ground
+  paint like every other course tile, so what you paint is what the tile shows.
 - The bulldozer never touches course terrain — its button lives on the
   Improvements and Buildings tabs and only demolishes paths, decorations and
   buildings.
@@ -168,9 +182,9 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 ### 6. Rendering
 
 Each type has its own look in `shaders/course_surface.gdshader`; see
-[course-surface.md](course-surface.md). Pot Bunker, Stream, Waste Bunker, Rocks
-and Brush are *inset* terrain, drawn over the turf around them so patches have
-natural outlines.
+[course-surface.md](course-surface.md). Pot Bunker, Stream, Waste Bunker, Rocks,
+Small Boulders, Large Boulders and Brush are *inset* terrain, drawn over the
+turf around them so patches have natural outlines.
 
 ---
 
@@ -183,5 +197,5 @@ natural outlines.
 | Roll-out multipliers | `GolfRules.get_roll_multiplier()` | See table | How far balls run after landing |
 | Ground that catches rolling balls | `GolfRules.catches_rolling_ball()` | Water, stream, OB, bunkers, deep rough, brush | Where rolling balls stop |
 | AI terrain scores | `ShotAI.TERRAIN_SCORES` | See table | Where AI golfers aim |
-| Hotkeys | `terrain_toolbar.gd` | 9, 0, Shift+2/5/6/7/8 | Keyboard access to the new tiles |
+| Hotkeys | `terrain_toolbar.gd` | 9, 0, Shift+2/5/6/7/8/9/0 | Keyboard access to the new tiles (Shift+9 Small Boulders, Shift+0 Large Boulders) |
 | Walking speed | `terrain_types.gd` speed_modifier | Deep rough 0.85×, brush 0.75× | Pace of play through long grass and scrub |

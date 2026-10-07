@@ -2659,7 +2659,8 @@ func _find_water_drop_position(entry_position: Vector2i) -> Vector2i:
 						score = 15.0
 					TerrainTypes.Type.TREES:
 						score = 10.0
-					TerrainTypes.Type.BRUSH, TerrainTypes.Type.ROCKS:
+					TerrainTypes.Type.BRUSH, TerrainTypes.Type.ROCKS, \
+							TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
 						score = 5.0
 
 				# Prefer closer to the entry point (shorter walk)
@@ -3387,7 +3388,7 @@ func _find_amenity_approach(amenity: Node2D) -> Vector2:
 			var tile: Vector2i = amenity.grid_position + Vector2i(x,y)
 			var clear := true
 			for p in TerrainBrush.centers(origin,tile):
-				if not grid.is_valid_position(p) or grid.get_tile(p) == TerrainTypes.Type.WATER or entities.is_tile_occupied_by_building(p) or entities.get_tree_at(p) or entities.get_rock_at(p):
+				if not grid.is_valid_position(p) or grid.get_tile(p) == TerrainTypes.Type.WATER or entities.is_tile_occupied_by_building(p) or entities.get_tree_at(p):
 					clear = false
 					break
 			if not clear: continue

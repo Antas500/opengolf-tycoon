@@ -145,7 +145,7 @@ func _update_button() -> void:
 	else:
 		# "building" has no sprite: buildings are drawn, and the Buildings tab
 		# shows them as isometric tiles of their own artwork.
-		icon_path = {"tree": "res://assets/sprites/trees/oak.png", "rock": "res://assets/sprites/rocks/small.png"}.get(str(tool_type), "")
+		icon_path = {"tree": "res://assets/sprites/trees/oak.png"}.get(str(tool_type), "")
 	if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
 		icon = load(icon_path)
 		expand_icon = true

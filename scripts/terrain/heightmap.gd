@@ -30,6 +30,8 @@ const NOISE_AMPLITUDES: Dictionary = {
 	TerrainTypes.Type.TREES: 0.14,
 	TerrainTypes.Type.FLOWER_BED: 0.10,
 	TerrainTypes.Type.ROCKS: 0.12,
+	TerrainTypes.Type.SMALL_BOULDERS: 0.12,
+	TerrainTypes.Type.LARGE_BOULDERS: 0.12,
 	TerrainTypes.Type.FIRM_FAIRWAY: 0.12,
 	TerrainTypes.Type.POT_BUNKER: 0.04,
 	TerrainTypes.Type.STREAM: 0.0,

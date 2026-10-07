@@ -44,6 +44,8 @@ const FALLBACK_TERRAIN_COLORS: Dictionary = {
 	17: Color(0.24, 0.40, 0.20),  # DEEP_ROUGH
 	18: Color(0.78, 0.70, 0.52),  # WASTE_BUNKER
 	19: Color(0.30, 0.38, 0.18),  # BRUSH
+	20: Color(0.58, 0.55, 0.51),  # SMALL_BOULDERS
+	21: Color(0.44, 0.41, 0.38),  # LARGE_BOULDERS
 }
 
 # Cached theme-aware terrain colors (rebuilt on theme change)
@@ -77,6 +79,8 @@ func _build_terrain_colors() -> void:
 		TerrainTypes.Type.DEEP_ROUGH: theme_colors.get("deep_rough", Color(0.24, 0.40, 0.20)),
 		TerrainTypes.Type.WASTE_BUNKER: theme_colors.get("waste_bunker", Color(0.78, 0.70, 0.52)),
 		TerrainTypes.Type.BRUSH: theme_colors.get("brush", Color(0.30, 0.38, 0.18)),
+		TerrainTypes.Type.SMALL_BOULDERS: theme_colors.get("rocks", Color(0.58, 0.55, 0.51)),
+		TerrainTypes.Type.LARGE_BOULDERS: theme_colors.get("rocks", Color(0.44, 0.41, 0.38)),
 	}
 
 # Land boundary colors

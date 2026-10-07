@@ -191,7 +191,7 @@ func get_tool_icon(tool_type) -> String:
 			9: return TOOL_ICONS.get("path", "[.]")
 			10: return TOOL_ICONS.get("out_of_bounds", "[X]")
 			12: return TOOL_ICONS.get("flower", "[f]")
-			13: return TOOL_ICONS.get("rock", "[*]")
+			13, 20, 21: return TOOL_ICONS.get("rock", "[*]")  # ROCKS, SMALL_BOULDERS, LARGE_BOULDERS
 			14: return TOOL_ICONS.get("fairway", "[=]")  # FIRM_FAIRWAY
 			15, 18: return TOOL_ICONS.get("bunker", "[:]")  # POT_BUNKER, WASTE_BUNKER
 			16: return TOOL_ICONS.get("water", "[w]")  # STREAM

@@ -59,7 +59,6 @@ func run() -> void:
 		for y in range(54, 68):
 			var pos := Vector2i(x, y)
 			if main.entity_layer.get_tree_at(pos): main.entity_layer.remove_tree(pos)
-			if main.entity_layer.get_rock_at(pos): main.entity_layer.remove_rock(pos)
 			grid.set_tile(pos, TerrainTypes.Type.GRASS)
 
 	# --- Green tool with no tee box waiting: no path ---

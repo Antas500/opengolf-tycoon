@@ -14,7 +14,7 @@ The course rating system evaluates the course on a **1-5 star scale** across fiv
 
 - **Pace (20% weight):** How fast does play move? Uses the bogey-or-worse ratio as a proxy for slow play (more bogeys = more strokes = slower rounds). Marshals (from staff system) improve pace.
 
-- **Aesthetics (10% weight):** How well-landscaped is the course? Scores decorations, trees, and rocks within 8 tiles of each hole's tee and green. Diminishing returns per same type, variety bonuses, and theme-matching multiplier. See [aesthetics-rating.md](aesthetics-rating.md) for full algorithm.
+- **Aesthetics (10% weight):** How well-landscaped is the course? Scores decorations and trees within 8 tiles of each hole's tee and green. Diminishing returns per same type, variety bonuses, and theme-matching multiplier. See [aesthetics-rating.md](aesthetics-rating.md) for full algorithm.
 
 The system also calculates **slope rating** (how much harder the course is for average vs scratch golfers) and **course rating** (expected score for a scratch golfer), following USGA conventions.
 

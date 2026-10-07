@@ -36,11 +36,10 @@ When a Premium or Elite parcel is purchased, terrain features are generated with
 | Trees | 4-8 trees | 8-16 trees |
 | Elevation | ±2 range | ±4 range |
 | Rough | 1-2 patches | 2-4 patches |
-| Rocks | 3-6 rocks | 6-12 rocks |
 
 Each theme selects 2 features for Premium and 3 for Elite from the table above. For example:
 - Parkland: Premium gets water + trees; Elite adds elevation
-- Desert: Premium gets elevation + rough; Elite adds rocks
+- Desert: Premium gets elevation + rough; Elite adds trees
 - Mountain: Premium gets elevation + trees; Elite adds water
 
 Generation uses a deterministic RNG seed based on parcel position, so the same parcel always generates the same features.

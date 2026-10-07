@@ -19,6 +19,8 @@
     "stream": {"id": 16, "name": "Stream", "playable": false, "placement_cost": 15, "maintenance_cost": 0, "is_hazard": true, "penalty_strokes": 1},
     "deep_rough": {"id": 17, "name": "Deep Rough", "playable": true, "placement_cost": 1, "maintenance_cost": 0},
     "waste_bunker": {"id": 18, "name": "Waste Bunker", "playable": true, "placement_cost": 6, "maintenance_cost": 0},
-    "brush": {"id": 19, "name": "Brush", "playable": true, "placement_cost": 3, "maintenance_cost": 0}
+    "brush": {"id": 19, "name": "Brush", "playable": true, "placement_cost": 3, "maintenance_cost": 0},
+    "small_boulders": {"id": 20, "name": "Small Boulders", "playable": true, "placement_cost": 8},
+    "large_boulders": {"id": 21, "name": "Large Boulders", "playable": true, "placement_cost": 8}
   }
 }

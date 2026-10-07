@@ -14,7 +14,7 @@ When a golfer's turn comes, they need to decide **where to aim** and **which clu
 
 ### Recovery Mode
 
-When in trees, heavy or deep rough, bunkers, pot bunkers, brush or rocks, the golfer enters recovery mode. Club selection is restricted (no woods through trees or long grass, wedge-only from rocks, brush and pot bunkers). The AI scans a full 360 degrees for escape routes — even sideways or backwards is a valid option. It strongly prefers nearby safe targets (distance penalty of 2.0 per tile from ball) and rewards advancing toward the hole, with modest bonuses for landing on fairway (+30) or green (+50). This prevents golfers from choosing a distant fairway over a nearby green strip when escaping bunkers.
+When in trees, heavy or deep rough, bunkers, pot bunkers, brush or stony ground, the golfer enters recovery mode. Club selection is restricted (no woods through trees or long grass, wedge-only from rocks, brush and pot bunkers). The AI scans a full 360 degrees for escape routes — even sideways or backwards is a valid option. It strongly prefers nearby safe targets (distance penalty of 2.0 per tile from ball) and rewards advancing toward the hole, with modest bonuses for landing on fairway (+30) or green (+50). This prevents golfers from choosing a distant fairway over a nearby green strip when escaping bunkers.
 
 ### Wind Compensation
 
@@ -45,7 +45,7 @@ lie_quality = terrain_to_quality_score:
     Deep Rough:                  0.2
     Pot Bunker / Trees:          0.15
     Brush:                       0.12
-    Rocks:                       0.1
+    Rocks/Small/Large Boulders:  0.1
 
 if lie_quality < 0.4:  → enter recovery mode
 ```
@@ -115,6 +115,8 @@ For each candidate club, scan angles and distances:
 | Brush        | -85     |
 | Pot Bunker   | -90     |
 | Rocks        | -100    |
+| Small Boulders | -100  |
+| Large Boulders | -100  |
 | Empty        | -1000   |
 | Water        | -1000   |
 | Stream       | -1000   |
@@ -244,6 +246,7 @@ if score_to_par <= -2:
 allowed_clubs:
     Trees:      [Wedge, Iron]         # No woods through trees
     Rocks:      [Wedge]               # Wedge only
+    Small/Large Boulders: [Wedge]     # The same stone ground as Rocks
     Brush:      [Wedge]               # Hack it out of the scrub
     Pot Bunker: [Wedge]               # Only loft clears the revetted face
     Bunker:     [Wedge, Iron]         # Sand wedge preferred

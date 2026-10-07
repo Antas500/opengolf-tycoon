@@ -106,7 +106,6 @@ var course_scorecard_panel: CourseScorecardPanel = null
 var shot_heatmap_tracker: ShotHeatmapTracker = null
 var _active_panel: CenteredPanel = null  # Tracks the currently open panel to prevent stacking
 var selected_tree_type: String = "oak"
-var selected_rock_size: String = "medium"
 var bulldozer_mode: bool = false
 var _bulldoze_drag_count: int = 0
 var _bulldoze_drag_cost: int = 0
@@ -620,7 +619,6 @@ func _setup_terrain_toolbar() -> void:
 	terrain_toolbar.tool_selected.connect(_on_tool_selected)
 	terrain_toolbar.open_hole_pressed.connect(_on_open_hole_pressed)
 	terrain_toolbar.tree_selected.connect(_on_tree_type_selected_from_toolbar)
-	terrain_toolbar.rock_selected.connect(_on_rock_size_selected_from_toolbar)
 	terrain_toolbar.building_placement_pressed.connect(_on_building_placement_pressed)
 	terrain_toolbar.building_selected.connect(_on_building_type_selected_from_toolbar)
 	terrain_toolbar.set_building_registry(building_registry)
@@ -1023,7 +1021,7 @@ func _setup_rain_overlay() -> void:
 		rain_overlay.setup(weather_system)
 
 func _setup_placement_preview() -> void:
-	"""Create placement preview overlay for building/tree/rock placement"""
+	"""Create placement preview overlay for building, tree and decoration placement"""
 	placement_preview = PlacementPreview.new()
 	placement_preview.name = "PlacementPreview"
 	placement_preview.set_terrain_grid(terrain_grid)
@@ -1175,11 +1173,11 @@ func _start_painting() -> void:
 		_bulldoze_at_mouse()
 		return
 
-	# Check if we're in placement mode (building, tree, or rock)
+	# Check if we're in placement mode (building, tree, or decoration)
 	if placement_manager.placement_mode != PlacementManager.PlacementMode.NONE:
 		var mouse_world = camera.get_mouse_world_position()
 		var grid_pos = terrain_grid.screen_to_grid(mouse_world)
-		# Trees support drag-to-paint; buildings and rocks are single-click
+		# Trees support drag-to-paint; buildings and decorations are single-click
 		if placement_manager.placement_mode == PlacementManager.PlacementMode.TREE:
 			is_painting = true
 			last_paint_pos = grid_pos
@@ -1286,9 +1284,9 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 	var blocked_by_land = false
 	var blocked_by_money = false
 	# Every Course Terrain paint replaces the tile it lands on, including a
-	# tree or boulder standing there. Rough, brush, rocks and wild flowers used
-	# to grow around them; they replace them now, the same as fairway does.
-	# Buildings and decorations are improvements — the Bulldozer removes those.
+	# tree standing there. Rough, brush, rocks and wild flowers used to grow
+	# around them; they replace them now, the same as fairway does. Buildings
+	# and decorations are improvements — the Bulldozer removes those.
 	_suppress_tile_undo = true
 	# Batch tile changes to avoid per-tile overlay redraw cascade
 	if tiles_to_paint.size() > 1:
@@ -1302,19 +1300,15 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 		if entity_layer and (entity_layer.is_tile_occupied_by_building(tile_pos) or entity_layer.is_tile_occupied_by_decoration(tile_pos)):
 			continue
 		var has_tree := entity_layer != null and entity_layer.get_tree_at(tile_pos) != null
-		var has_rock := entity_layer != null and entity_layer.get_rock_at(tile_pos) != null
 		var terrain_changes := terrain_grid.get_tile(tile_pos) != current_tool
 		# Already this tile, and nothing standing on it to replace.
-		if not terrain_changes and not has_tree and not has_rock:
+		if not terrain_changes and not has_tree:
 			continue
 		var tile_removal_cost := 0
 		if has_tree:
 			tile_removal_cost += BULLDOZER_COSTS["tree"]
-		if has_rock:
-			tile_removal_cost += BULLDOZER_COSTS["rock"]
 		# The paint cost applies when the ground type changes. Replacing a
-		# boulder by painting Rocks (the tile is already Rocks) only charges
-		# the clearing fee.
+		# tree by painting over it only charges the clearing fee.
 		var tile_paint_cost: int = cost if terrain_changes else 0
 		var tile_total: int = tile_paint_cost + tile_removal_cost
 		if tile_total > 0 and not GameManager.can_afford(total_cost + obstacle_removal_cost + tile_total):
@@ -1322,11 +1316,11 @@ func _paint_terrain_stamp(grid_pos: Vector2i) -> void:
 			continue
 		var original_type: int = terrain_grid.get_tile(tile_pos)
 		var metadata := {"old_depth":terrain_grid.get_bunker_depth(tile_pos), "old_player_placed":terrain_grid._player_placed_tiles.has(tile_pos), "old_cup":terrain_grid.has_cup_tile(tile_pos)}
-		# Lift trees and boulders without restoring their stamp — the paint
-		# (or the Rocks tile they already stood on) is the ground that stays.
-		if has_tree or has_rock:
+		# Lift trees without restoring their stamp — the paint (or the Trees
+		# tile the tree already stood on) is the ground that stays.
+		if has_tree:
 			var lifts := 0
-			while entity_layer.get_tree_at(tile_pos) or entity_layer.get_rock_at(tile_pos):
+			while entity_layer.get_tree_at(tile_pos):
 				var taken := entity_layer.take_course_terrain_entity(tile_pos)
 				if taken.is_empty():
 					break
@@ -1662,9 +1656,6 @@ func _reposition_placed_entities() -> void:
 	for tree in entity_layer.get_all_trees():
 		if is_instance_valid(tree):
 			tree.set_position_in_grid(tree.grid_position)
-	for rock in entity_layer.get_all_rocks():
-		if is_instance_valid(rock):
-			rock.set_position_in_grid(rock.grid_position)
 	for building in entity_layer.get_all_buildings():
 		if is_instance_valid(building):
 			building.set_position_in_grid(building.grid_position)
@@ -1877,7 +1868,7 @@ func _rebuild_hole_list() -> void:
 			_on_hole_created(hole.hole_number, hole.par, hole.distance_yards)
 
 func _prepare_for_nature_placement() -> void:
-	"""Leave other placement modes before starting a tree or boulder placement."""
+	"""Leave other placement modes before starting a tree placement."""
 	_cancel_inspect_mode()
 	_cancel_hole_move_mode()
 	_cancel_building_move()
@@ -1918,13 +1909,6 @@ func _on_tree_type_selected_from_toolbar(tree_type: String) -> void:
 	selected_tree_type = tree_type
 	placement_manager.start_tree_placement(tree_type)
 	print("Tree placement mode from toolbar: %s" % tree_type)
-
-func _on_rock_size_selected_from_toolbar(rock_size: String) -> void:
-	"""Start placement immediately for a boulder tile in the Course Terrain tab."""
-	_prepare_for_nature_placement()
-	selected_rock_size = rock_size
-	placement_manager.start_rock_placement(rock_size)
-	print("Rock placement mode from toolbar: %s" % rock_size)
 
 func _on_decoration_placement_pressed() -> void:
 	"""Open the Improvements tab; decoration tiles there start placement directly."""
@@ -2247,7 +2231,7 @@ func _paint_elevation_at_mouse() -> void:
 		undo_manager.record_elevation_stroke(changes)
 
 func _handle_placement_click(grid_pos: Vector2i) -> void:
-	"""Handle clicking during building/tree placement"""
+	"""Handle clicking during building, tree or decoration placement"""
 	# Check land ownership first
 	if GameManager.land_manager and not GameManager.land_manager.is_tile_owned(grid_pos):
 		EventBus.notify("You don't own this land! Press L to buy parcels.", "error")
@@ -2274,8 +2258,6 @@ func _handle_placement_click(grid_pos: Vector2i) -> void:
 		_place_tree(grid_pos, cost)
 	elif placement_manager.placement_mode == PlacementManager.PlacementMode.BUILDING:
 		_place_building(grid_pos, cost)
-	elif placement_manager.placement_mode == PlacementManager.PlacementMode.ROCK:
-		_place_rock(grid_pos, cost)
 	elif placement_manager.placement_mode == PlacementManager.PlacementMode.DECORATION:
 		_place_decoration(grid_pos, cost)
 
@@ -2328,43 +2310,19 @@ func _place_building(grid_pos: Vector2i, cost: int) -> void:
 	# Always clear the building selector after placement attempt
 	placement_manager.cancel_placement()
 
-func _place_rock(grid_pos: Vector2i, cost: int) -> void:
-	"""Place a boulder at the grid position, replacing any Course Terrain tile there."""
-	if placement_manager.is_same_course_tile(grid_pos, terrain_grid):
-		return
-	var total := cost + _course_entity_removal_fee(grid_pos)
-	if total > 0 and not GameManager.can_afford(total):
-		_notify_cant_afford()
-		return
-	_suppress_tile_undo = true
-	var replaced := _displace_course_terrain_entity(grid_pos)
-	var rock = entity_layer.place_rock(grid_pos, selected_rock_size)
-	_suppress_tile_undo = false
-	if rock:
-		GameManager.modify_money(-total)
-		EventBus.log_transaction("Rock: %s" % selected_rock_size.capitalize(), -total)
-		undo_manager.record_entity_placement("rock", grid_pos, selected_rock_size, total, replaced)
-		print("Placed %s rock at %s" % [selected_rock_size, grid_pos])
-		# Placement feedback
-		_play_placement_feedback(grid_pos, "rock")
-	else:
-		EventBus.notify("Failed to place rock!", "error")
-
-## Clearing fee for the tree or boulder a Course Terrain tile is about to replace.
+## Clearing fee for the tree a Course Terrain tile is about to replace.
 func _course_entity_removal_fee(grid_pos: Vector2i) -> int:
 	if entity_layer == null:
 		return 0
 	var fee := 0
 	if entity_layer.get_tree_at(grid_pos):
 		fee += BULLDOZER_COSTS["tree"]
-	if entity_layer.get_rock_at(grid_pos):
-		fee += BULLDOZER_COSTS["rock"]
 	return fee
 
 ## Lift the Course Terrain entity on this tile and remember the ground it stood
-## on, so the tree or boulder about to be placed snapshots that ground without
-## a detour through it (that detour would drop a walking path the new tile can
-## still host). Returns the lifted entity ({} when the tile was empty).
+## on, so the tree about to be placed snapshots that ground without a detour
+## through it (that detour would drop a walking path the new tile can still
+## host). Returns the lifted entity ({} when the tile was empty).
 func _displace_course_terrain_entity(grid_pos: Vector2i) -> Dictionary:
 	if entity_layer == null:
 		return {}
@@ -2430,11 +2388,10 @@ func _bulldoze_at_mouse() -> void:
 
 # Bulldozer removal fees (Improvements & Buildings only: decorations, walking
 # paths, buildings). Course Terrain tiles replace each other — the bulldozer
-# never touches them. The tree and rock charges are the clearing fees when any
-# Course Terrain tile replaces a tree or boulder.
+# never touches them. The tree charge is the clearing fee when any Course
+# Terrain tile replaces a tree.
 const BULLDOZER_COSTS = {
 	"tree": 15,
-	"rock": 10,
 	"decoration": 20,
 	"building": 20,  # Flat demolition fee, whatever the facility cost
 	"walking_path": 5,  # The Path improvement (thin walking trail)
@@ -2445,8 +2402,8 @@ func _handle_bulldozer_click(grid_pos: Vector2i, _mouse_world: Vector2 = Vector2
 
 	The Bulldozer only demolishes Improvements and Buildings — decorations,
 	walking paths and facility buildings. Course Terrain tiles (every ground
-	paint, trees and boulders included) are untouched: replace one by painting
-	any other Course Terrain tile over it.
+	paint, trees included) are untouched: replace one by painting any other
+	Course Terrain tile over it.
 	"""
 	var dragging = is_painting
 	# Check land ownership
@@ -3252,8 +3209,6 @@ func _execute_undo_action(action: Dictionary) -> void:
 					entity_layer.remove_tree(grid_pos)
 				"building":
 					entity_layer.remove_building(grid_pos)
-				"rock":
-					entity_layer.remove_rock(grid_pos)
 				"decoration":
 					entity_layer.remove_decoration(grid_pos)
 			if not replaced.is_empty():
@@ -3299,9 +3254,8 @@ func _execute_redo_action(action: Dictionary) -> void:
 			# Re-apply all tile changes in order
 			var changes = action.get("changes", [])
 			var cost = 0
-			# Lift replaced trees and boulders without restoring their stamp;
-			# the tile changes below are the ground that should remain. A
-			# removal-only stroke (Rocks painted over a boulder) leaves Rocks.
+			# Lift replaced trees without restoring their stamp; the tile
+			# changes below are the ground that should remain.
 			for removed in action.get("removed_entities", []):
 				if entity_layer:
 					entity_layer.take_course_terrain_entity(removed.position)
@@ -3346,8 +3300,6 @@ func _execute_redo_action(action: Dictionary) -> void:
 					entity_layer.place_tree(grid_pos, subtype)
 				"building":
 					entity_layer.place_building(subtype, grid_pos, building_registry)
-				"rock":
-					entity_layer.place_rock(grid_pos, subtype)
 				"decoration":
 					entity_layer.place_decoration(subtype, grid_pos, decoration_registry)
 			if cost > 0:

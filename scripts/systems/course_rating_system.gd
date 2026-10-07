@@ -325,10 +325,10 @@ static func _calculate_pace_rating(daily_stats) -> float:
 
 	return clampf(rating, 2.0, 5.0)
 
-## Aesthetics rating: decorations, trees, and rocks near holes
+## Aesthetics rating: decorations and trees near holes
 ## Scores each open hole based on nearby decorations within 8-tile radius of tee and green.
 ## Variety bonus for using different decoration types, theme bonus for matching decorations.
-## Trees and rocks also contribute small amounts.
+## Trees also contribute a small amount.
 static func _calculate_aesthetics_rating(entity_layer, course_data) -> float:
 	if not entity_layer or not course_data:
 		return 2.5
@@ -390,7 +390,7 @@ static func _calculate_aesthetics_rating(entity_layer, course_data) -> float:
 
 			decoration_score += diminished
 
-		# Trees contribute 0.15 each, rocks 0.1 each
+		# Trees contribute 0.15 each
 		var tee_trees = entity_layer.get_trees_in_area(tee_area_min, tee_area_max)
 		var green_trees = entity_layer.get_trees_in_area(green_area_min, green_area_max)
 		var tree_positions: Dictionary = {}
@@ -399,15 +399,6 @@ static func _calculate_aesthetics_rating(entity_layer, course_data) -> float:
 				tree_positions[tree.grid_position] = true
 				decoration_score += 0.15
 
-		# Count rocks in area (rocks dict keyed by position)
-		var all_rocks = entity_layer.get_all_rocks()
-		for rock in all_rocks:
-			var rpos = rock.grid_position
-			if (rpos.x >= tee_area_min.x and rpos.x <= tee_area_max.x and
-				rpos.y >= tee_area_min.y and rpos.y <= tee_area_max.y) or \
-			   (rpos.x >= green_area_min.x and rpos.x <= green_area_max.x and
-				rpos.y >= green_area_min.y and rpos.y <= green_area_max.y):
-				decoration_score += 0.1
 
 		# Variety bonus
 		if unique_types >= 4:

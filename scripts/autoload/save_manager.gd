@@ -4,7 +4,7 @@ extends Node
 ## SAVE STATE CHECKLIST - Update when adding new saveable content:
 ## - [x] Game state (money, reputation, day, hour, green_fee)
 ## - [x] Terrain tiles and elevation
-## - [x] Entities (trees, buildings, rocks) via EntityLayer
+## - [x] Entities (trees, buildings, decorations) via EntityLayer
 ## - [x] Holes (positions, par, open/closed state)
 ## - [x] Wind (direction, speed)
 ## - [ ] Golfers - NOT persisted; cleared on load, respawn naturally when simulation resumes

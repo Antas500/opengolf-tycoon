@@ -55,10 +55,11 @@ static func _calculate_hazard_difficulty(corridor_tiles: Array, terrain_grid: Te
 			TerrainTypes.Type.BRUSH:
 				trouble_difficulty += 0.08
 			TerrainTypes.Type.ROCKS:
-				# A lone boulder is already an obstacle sprite; only painted
-				# rocky ground adds hole difficulty.
-				if not terrain_grid.is_object_footprint(tile_pos):
-					trouble_difficulty += 0.08
+				trouble_difficulty += 0.08
+			TerrainTypes.Type.SMALL_BOULDERS, TerrainTypes.Type.LARGE_BOULDERS:
+				# Every boulder tile is painted ground now: the same 0.08 of
+				# trouble the Rocks tile carries.
+				trouble_difficulty += 0.08
 			TerrainTypes.Type.DEEP_ROUGH:
 				trouble_difficulty += 0.04
 			TerrainTypes.Type.WASTE_BUNKER:

@@ -353,7 +353,6 @@ func _build_controls_tab() -> void:
 		["Ctrl+Shift+Z", "Redo"],
 		["H", "Open Hole"],
 		["T", "Place Tree"],
-		["R", "Place Rock"],
 		["B", "Place Building"],
 		["L", "Land Purchase"],
 		["M", "Marketing"],

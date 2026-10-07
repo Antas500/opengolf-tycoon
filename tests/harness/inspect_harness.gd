@@ -96,13 +96,12 @@ func _run() -> void:
 	main._unhandled_input(right_click)
 	_check(not main.inspect_mode, "Right-click exits Inspect")
 
-	for tool in ["terrain", "building", "tree", "rock", "decoration", "elevation", "bulldozer"]:
+	for tool in ["terrain", "building", "tree", "decoration", "elevation", "bulldozer"]:
 		main.inspect_btn.button_pressed = true
 		match tool:
 			"terrain": main._on_tool_selected(TerrainTypes.Type.ROUGH)
 			"building": main._on_building_type_selected_from_toolbar("restroom")
 			"tree": main._on_tree_type_selected_from_toolbar("oak")
-			"rock": main._on_rock_size_selected_from_toolbar("small")
 			"decoration": main._on_decoration_type_selected_from_toolbar("fountain")
 			"elevation": main._on_elevation_tool_pressed(ElevationTool.TOOL_VERTEX)
 			"bulldozer": main._on_bulldozer_pressed()

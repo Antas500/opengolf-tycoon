@@ -32,7 +32,6 @@ func run() -> void:
 	gm.land_manager = null
 	var pos := Vector2i(30,30)
 	main.entity_layer.remove_tree(pos)
-	main.entity_layer.remove_rock(pos)
 	main.terrain_grid.set_tile(pos, TerrainTypes.Type.GRASS)
 	main.entity_layer.place_tree(pos, "oak")
 	var before_type: int = main.terrain_grid.get_tile(pos)
@@ -62,7 +61,6 @@ func run() -> void:
 	assert(gm.money == cash - paid)
 	var natural := Vector2i(31,31)
 	main.entity_layer.remove_tree(natural)
-	main.entity_layer.remove_rock(natural)
 	main.terrain_grid.set_tile(natural, TerrainTypes.Type.BUNKER)
 	main.terrain_grid._player_placed_tiles.erase(natural)
 	main.terrain_grid.set_bunker_depth(natural, 1)

@@ -48,7 +48,7 @@ difficulty  = water_count  * 0.3        # water and stream tiles
             + bunker_difficulty          # 0.15 / 0.25 deep / 0.30 pot bunker
             + ob_count     * 0.2
             + tree_count   * 0.1
-            + trouble_difficulty         # brush, painted rocks, deep rough, waste
+            + trouble_difficulty         # brush, stony ground, deep rough, waste
 ```
 
 | Hazard | Per-Tile Weight | Rationale |
@@ -59,7 +59,7 @@ difficulty  = water_count  * 0.3        # water and stream tiles
 | Out of Bounds | 0.20 | Stroke and distance penalty |
 | Bunker | 0.15 | Difficult to escape, no penalty |
 | Trees | 0.10 | Blocked shots, limited recovery |
-| Brush, Rocks (painted) | 0.08 | Wedge-only hack-outs. A lone boulder's footprint (see `TerrainGrid.is_object_footprint()`) doesn't count |
+| Brush, Rocks, Small Boulders, Large Boulders | 0.08 | Wedge-only hack-outs. Every stony tile is painted ground now, so every one counts |
 | Deep Rough | 0.04 | Poor lie, ball snags |
 | Waste Bunker | 0.03 | Sandy lie, no penalty |
 

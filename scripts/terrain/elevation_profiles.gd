@@ -82,8 +82,21 @@ const PROFILES: Dictionary = {
 		[  0.00,  0.00,  0.00,  0.00 ],
 	],
 
-	# ROCKS: Jagged, raised prominently
+	# ROCKS: Jagged, raised prominently. The boulder fields share the profile:
+	# all three are the same stony ground.
 	TerrainTypes.Type.ROCKS: [
+		[  0.15,  0.40,  0.22,  0.08 ],
+		[  0.35,  0.65,  0.55,  0.28 ],
+		[  0.22,  0.48,  0.60,  0.40 ],
+		[  0.08,  0.22,  0.35,  0.15 ],
+	],
+	TerrainTypes.Type.SMALL_BOULDERS: [
+		[  0.15,  0.40,  0.22,  0.08 ],
+		[  0.35,  0.65,  0.55,  0.28 ],
+		[  0.22,  0.48,  0.60,  0.40 ],
+		[  0.08,  0.22,  0.35,  0.15 ],
+	],
+	TerrainTypes.Type.LARGE_BOULDERS: [
 		[  0.15,  0.40,  0.22,  0.08 ],
 		[  0.35,  0.65,  0.55,  0.28 ],
 		[  0.22,  0.48,  0.60,  0.40 ],

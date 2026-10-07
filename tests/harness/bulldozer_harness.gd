@@ -33,8 +33,6 @@ func _prep(pos: Vector2i, terrain: int) -> void:
 	main._suppress_tile_undo = true
 	if main.entity_layer.get_tree_at(pos):
 		main.entity_layer.remove_tree(pos)
-	if main.entity_layer.get_rock_at(pos):
-		main.entity_layer.remove_rock(pos)
 	grid.set_tile(pos, terrain)
 	main._suppress_tile_undo = false
 
@@ -58,9 +56,8 @@ func _run() -> void:
 	_prep(flowers_tile, TerrainTypes.Type.FLOWER_BED)
 	_prep(water_tile, TerrainTypes.Type.WATER)
 	_prep(tree_tile, TerrainTypes.Type.GRASS)
-	_prep(boulder_tile, TerrainTypes.Type.GRASS)
+	_prep(boulder_tile, TerrainTypes.Type.SMALL_BOULDERS)
 	main.entity_layer.place_tree(tree_tile, "oak")
-	main.entity_layer.place_rock(boulder_tile, "small")
 	await _frames(2)
 
 	# ------------------------------------------------------------------
@@ -84,20 +81,19 @@ func _run() -> void:
 			"painting Stream over Water replaces it")
 
 	# Every Course Terrain tile replaces every other one — natural ground
-	# clears trees and boulders, and trees and boulders overwrite hazards.
+	# clears trees, and the boulder terrains overwrite any tile they land on.
 	var tree_over_rough := Vector2i(52, 62)
-	var boulder_over_flowers := Vector2i(53, 62)
+	var small_boulders := Vector2i(53, 62)
 	var tree_on_water := Vector2i(61, 50)
-	var boulder_on_bunker := Vector2i(62, 50)
-	var tree_on_boulder := Vector2i(63, 50)
+	var large_boulders := Vector2i(62, 50)
+	var rocks_over_tree := Vector2i(63, 50)
 	_prep(tree_over_rough, TerrainTypes.Type.GRASS)
-	_prep(boulder_over_flowers, TerrainTypes.Type.GRASS)
+	_prep(small_boulders, TerrainTypes.Type.WATER)
 	_prep(tree_on_water, TerrainTypes.Type.WATER)
-	_prep(boulder_on_bunker, TerrainTypes.Type.BUNKER)
-	_prep(tree_on_boulder, TerrainTypes.Type.GRASS)
+	_prep(large_boulders, TerrainTypes.Type.BUNKER)
+	_prep(rocks_over_tree, TerrainTypes.Type.GRASS)
 	main.entity_layer.place_tree(tree_over_rough, "oak")
-	main.entity_layer.place_rock(boulder_over_flowers, "small")
-	main.entity_layer.place_rock(tree_on_boulder, "large")
+	main.entity_layer.place_tree(rocks_over_tree, "oak")
 	await _frames(1)
 
 	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.ROUGH)
@@ -119,21 +115,26 @@ func _run() -> void:
 	_check(grid.get_tile(tree_over_rough) == TerrainTypes.Type.ROUGH,
 			"redo paints Rough back")
 
-	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.FLOWER_BED)
-	main._paint_terrain_stamp(boulder_over_flowers)
-	_check(grid.get_tile(boulder_over_flowers) == TerrainTypes.Type.FLOWER_BED,
-			"painting Wild Flowers over a boulder replaces it")
-	_check(main.entity_layer.get_rock_at(boulder_over_flowers) == null,
-			"the boulder is gone after Wild Flowers replaces it")
+	# The boulder terrains are Course Terrain tiles too: they overwrite water
+	# and bunkers, and they lie over a tree, the same as Rough or Fairway.
+	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.SMALL_BOULDERS)
+	main._paint_terrain_stamp(small_boulders)
+	_check(grid.get_tile(small_boulders) == TerrainTypes.Type.SMALL_BOULDERS,
+			"painting Small Boulders over Water replaces it")
+
+	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.LARGE_BOULDERS)
+	main._paint_terrain_stamp(large_boulders)
+	_check(grid.get_tile(large_boulders) == TerrainTypes.Type.LARGE_BOULDERS,
+			"painting Large Boulders over a Bunker replaces it")
 
 	main.terrain_toolbar._on_tool_button_pressed(TerrainTypes.Type.ROCKS)
-	main._paint_terrain_stamp(tree_on_boulder)
-	_check(grid.get_tile(tree_on_boulder) == TerrainTypes.Type.ROCKS,
-			"painting Rocks over a boulder replaces it")
-	_check(main.entity_layer.get_rock_at(tree_on_boulder) == null,
-			"the boulder does not merge into the Rocks tile")
-	_check(not grid.is_object_footprint(tree_on_boulder),
-			"replaced boulder ground renders as painted Rocks")
+	main._paint_terrain_stamp(rocks_over_tree)
+	_check(grid.get_tile(rocks_over_tree) == TerrainTypes.Type.ROCKS,
+			"painting Rocks over a tree replaces it")
+	_check(main.entity_layer.get_tree_at(rocks_over_tree) == null,
+			"the tree is gone after Rocks replaces it")
+	_check(grid._course_surface._data.get_pixel(rocks_over_tree.x, rocks_over_tree.y).a == 1.0,
+			"painted Rocks render as stony ground")
 
 	main.selected_tree_type = "pine"
 	main.placement_manager.start_tree_placement("pine")
@@ -143,23 +144,13 @@ func _run() -> void:
 	_check(grid.get_tile(tree_on_water) == TerrainTypes.Type.TREES,
 			"the tree replaces the water tile")
 
-	main.selected_rock_size = "medium"
-	main.placement_manager.start_rock_placement("medium")
-	main._place_rock(boulder_on_bunker, main.placement_manager.get_placement_cost())
-	_check(main.entity_layer.get_rock_at(boulder_on_bunker) != null,
-			"a boulder can be placed on a bunker")
-	_check(grid.get_tile(boulder_on_bunker) == TerrainTypes.Type.ROCKS,
-			"the boulder replaces the bunker tile")
-
 	main.selected_tree_type = "oak"
 	main.placement_manager.start_tree_placement("oak")
-	main._place_tree(boulder_on_bunker, main.placement_manager.get_placement_cost())
-	_check(main.entity_layer.get_tree_at(boulder_on_bunker) != null,
-			"a tree replaces a boulder")
-	_check(main.entity_layer.get_rock_at(boulder_on_bunker) == null,
-			"the boulder is gone after the tree replaces it")
-	_check(grid.get_tile(boulder_on_bunker) == TerrainTypes.Type.TREES,
-			"the tree tile is what remains")
+	main._place_tree(large_boulders, main.placement_manager.get_placement_cost())
+	_check(main.entity_layer.get_tree_at(large_boulders) != null,
+			"a tree can be placed on boulder ground")
+	_check(grid.get_tile(large_boulders) == TerrainTypes.Type.TREES,
+			"the tree tile replaces the boulders")
 
 	# ------------------------------------------------------------------
 	# 2. The Bulldozer never touches Course Terrain tiles.
@@ -191,9 +182,9 @@ func _run() -> void:
 	_check(main.entity_layer.get_tree_at(tree_tile) != null,
 			"bulldozer left the tree standing")
 	main._handle_bulldozer_click(boulder_tile)
-	_check(main.entity_layer.get_rock_at(boulder_tile) != null,
-			"bulldozer left the boulder standing")
-	_check(GameManager.money == money, "bulldozing trees and boulders charges nothing")
+	_check(grid.get_tile(boulder_tile) == TerrainTypes.Type.SMALL_BOULDERS,
+			"bulldozer left the boulder ground standing")
+	_check(GameManager.money == money, "bulldozing trees and boulder ground charges nothing")
 
 	# ------------------------------------------------------------------
 	# 3. The Bulldozer demolishes Improvements: a decoration for $20.
