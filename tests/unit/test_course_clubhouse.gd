@@ -93,6 +93,35 @@ func test_ensure_skips_a_preferred_tile_that_is_a_playing_surface() -> void:
 	assert_lt(distance, 20, "It is searched for just outside the wet pocket")
 
 
+func test_the_home_search_clears_a_wood_for_its_plot() -> void:
+	# The search walks past wild ground while there is an open patch just as
+	# close, then takes it and paints the plot: woodland is a tile, so there is
+	# nothing to uproot (see _prepare_ground).
+	var wild := TerrainGrid.new()
+	wild.grid_width = 40
+	wild.grid_height = 32
+	add_child_autofree(wild)
+	for x in range(wild.grid_width):
+		for y in range(wild.grid_height):
+			wild.set_tile(Vector2i(x, y), TerrainTypes.Type.GRASS)
+	for x in range(10, 16):
+		for y in range(10, 16):
+			wild.set_tile(Vector2i(x, y), TerrainTypes.Type.PINE)
+	wild.set_tile(Vector2i(12, 12), TerrainTypes.Type.CATTAILS)
+	var layer := EntityLayer.new()
+	add_child_autofree(layer)
+	layer.set_terrain_grid(wild)
+
+	var placed := CourseClubhouse.ensure(wild, layer, Vector2i(10, 10))
+	assert_not_null(placed, "A wooded plot still takes the clubhouse")
+	assert_eq(placed.grid_position, Vector2i(10, 10),
+		"The grove is cleared for rather than searched past")
+	for tile in placed.get_footprint():
+		assert_false(TerrainTypes.is_tree(wild.get_tile(tile)),
+			"%s is not left standing under the building" % tile)
+		assert_eq(wild.get_tile(tile), TerrainTypes.Type.GRASS, "and is level lawn")
+
+
 func test_course_clubhouse_guarantee_leaves_greens_and_tees_alone() -> void:
 	var played := TerrainGrid.new()
 	played.grid_width = 40
@@ -258,10 +287,13 @@ func test_move_errors_explain_why_not() -> void:
 	assert_eq(CourseClubhouse.move_error(grid, entities, clubhouse, Vector2i(30, 20)),
 		"Remove the decoration in this footprint first.")
 
-	grid.set_tile(Vector2i(34, 24), TerrainTypes.Type.GRASS)
-	entities.place_tree(Vector2i(34, 24), "oak")
+	# A wood is ground, not an occupant in the way: it refuses a move for the
+	# same reason sand or water does — buildings need lawn under them — and no
+	# longer because a planted tree has to be cleared off the tile first.
+	grid.set_tile(Vector2i(34, 24), TerrainTypes.Type.OAK)
+	grid.set_tile(Vector2i(35, 24), TerrainTypes.Type.PINE)
 	assert_eq(CourseClubhouse.move_error(grid, entities, clubhouse, Vector2i(34, 24)),
-		"Clear the tree first: paint another Course Terrain tile over it.")
+		"Move it off the greens, tees, sand and water.")
 
 
 func test_move_to_refuses_an_illegal_tile() -> void:

@@ -26,7 +26,6 @@ class_name TerrainToolbar
 signal course_review_pressed
 signal tool_selected(tool_type: int)
 signal open_hole_pressed
-signal tree_selected(tree_type: String)
 signal building_placement_pressed
 signal building_selected(building_type: String)
 signal decoration_placement_pressed
@@ -91,8 +90,19 @@ const TOOL_TAB_MAP := {
 	TerrainTypes.Type.SMALL_BOULDERS: Tab.TERRAIN,
 	TerrainTypes.Type.LARGE_BOULDERS: Tab.TERRAIN,
 	TerrainTypes.Type.OUT_OF_BOUNDS: Tab.TERRAIN,
+	TerrainTypes.Type.TREES: Tab.TERRAIN,
+	TerrainTypes.Type.OAK: Tab.TERRAIN,
+	TerrainTypes.Type.PINE: Tab.TERRAIN,
+	TerrainTypes.Type.MAPLE: Tab.TERRAIN,
+	TerrainTypes.Type.BIRCH: Tab.TERRAIN,
+	TerrainTypes.Type.CACTUS: Tab.TERRAIN,
+	TerrainTypes.Type.FESCUE: Tab.TERRAIN,
+	TerrainTypes.Type.CATTAILS: Tab.TERRAIN,
+	TerrainTypes.Type.SHRUB: Tab.TERRAIN,
+	TerrainTypes.Type.PALM: Tab.TERRAIN,
+	TerrainTypes.Type.DEAD_TREE: Tab.TERRAIN,
+	TerrainTypes.Type.HEATHER: Tab.TERRAIN,
 	"open_hole": Tab.TERRAIN,
-	"tree": Tab.TERRAIN,
 	TerrainTypes.Type.PATH: Tab.IMPROVEMENTS,
 	TerrainTypes.Type.FLOWER_BED: Tab.TERRAIN,
 	"decoration": Tab.IMPROVEMENTS,
@@ -630,21 +640,17 @@ func _populate_landscape_tiles() -> void:
 	})
 	_tool_buttons[TerrainTypes.Type.FLOWER_BED] = fb_btn
 
-	# Theme trees
-	var first_tree_btn: TreeTileButton = null
+	# Woodland: one ordinary paint tile per species the theme grows. They behave
+	# like every other tile on the tab — cost, replacement and the Bulldozer all
+	# read them from TerrainTypes — and only the canopy differs (TreeOverlay).
 	for tree_type in theme_trees:
-		var t_data: Dictionary = TreeEntity.TREE_PROPERTIES.get(tree_type, {}).duplicate(true)
-		var t_btn := TreeTileButton.new()
-		t_btn.configure_tree(str(tree_type), t_data)
-		t_btn.tool_pressed.connect(_on_tool_button_pressed)
-		_course_tiles.add_child(t_btn)
-		t_btn.custom_minimum_size = TerrainTileButton.BUTTON_SIZE
-		t_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		var tool_id: String = "tree_" + str(tree_type)
-		_tool_buttons[tool_id] = t_btn
-		if first_tree_btn == null:
-			first_tree_btn = t_btn
-			_tool_buttons["tree"] = t_btn
+		var tree_btn := _add_tool_button(_course_tiles, {
+			"type": tree_type,
+			"name": TerrainTypes.get_type_name(tree_type),
+			"desc": _tree_tile_description(tree_type),
+			"tile_preview": true,
+		})
+		_landscape_buttons.append(tree_btn)
 
 	# Extend both existing course rows, rather than starting another honeycomb.
 	# Keeping the first COURSE_TILE_COLUMNS tiles in each row preserves the
@@ -1059,6 +1065,14 @@ func _make_tip_label(text: String) -> Control:
 	group.add_child(lbl)
 	return group
 
+## What a woodland tile does: it paints the species' own ground, and the course
+## draws the tree on it. Kept in one place so every species tile says the same.
+func _tree_tile_description(tree_type: int) -> String:
+	var species := TerrainTypes.get_type_name(tree_type).to_lower()
+	var ground := TerrainTypes.get_tree_ground(tree_type)
+	return "Woodland: %s canopy over %s. Blocks a shot that finds it, and the " % [species, ground] \
+			+ "ball plays badly from among the roots."
+
 func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 	var tool_type = tool_def["type"]
 	var cost = 0
@@ -1066,10 +1080,6 @@ func _add_tool_button(parent: Control, tool_def: Dictionary) -> ToolButton:
 	if tool_type is int:
 		cost = TerrainTypes.get_placement_cost(tool_type)
 		maintenance = TerrainTypes.get_maintenance_cost(tool_type)
-	else:
-		var costs = _get_special_tool_costs(tool_type)
-		cost = costs.get("cost", 0)
-		maintenance = costs.get("maintenance", 0)
 
 	var btn: ToolButton
 	var desc := str(tool_def.get("desc", ""))
@@ -1381,12 +1391,6 @@ func _build_refresh_timer() -> void:
 # Costs for special string tools
 # =============================================================================
 
-func _get_special_tool_costs(tool_type: String) -> Dictionary:
-	match tool_type:
-		"tree":
-			return {"cost": 20, "maintenance": 0}
-	return {"cost": 0, "maintenance": 0}
-
 # =============================================================================
 # Tab handling
 # =============================================================================
@@ -1414,8 +1418,6 @@ func select_tab(tab_index: int) -> void:
 		_show_page(tab_index)
 
 func _tab_index_for_tool(tool_type) -> int:
-	if tool_type is String and tool_type.begins_with("tree_"):
-		return Tab.TERRAIN
 	return TOOL_TAB_MAP.get(tool_type, -1)
 
 func _reveal_tab_for_tool(tool_type) -> void:
@@ -1605,48 +1607,33 @@ func _on_tool_button_pressed(tool_type) -> void:
 		_update_selection_highlight()
 		tool_selected.emit(tool_type)
 	else:
-		var s_tool := str(tool_type)
-		if s_tool.begins_with("tree_"):
-			var tree_type := s_tool.substr(5)
-			_current_tool = -1
-			_selected_string_tool = s_tool
-			_update_selection_highlight()
-			tree_selected.emit(tree_type)
-		elif s_tool == "tree":
-			_current_tool = -1
-			_selected_string_tool = s_tool
-			_update_selection_highlight()
-			var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else ["oak"]
-			var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
-			tree_selected.emit(first_tree)
-		else:
-			match tool_type:
-				"building":
-					building_placement_pressed.emit()
-				"decoration":
-					decoration_placement_pressed.emit()
-				"open_hole":
-					open_hole_pressed.emit()
-				"vertex":
-					elevation_tool_pressed.emit("vertex")
-				"flat":
-					elevation_tool_pressed.emit("flat")
-				"gradual":
-					elevation_tool_pressed.emit("gradual")
-				"bulldozer":
-					bulldozer_pressed.emit()
-				"play_course":
-					play_course_pressed.emit()
-				"tournaments":
-					tournaments_pressed.emit()
-				"land":
-					land_pressed.emit()
-				"marketing":
-					marketing_pressed.emit()
-				"milestones":
-					milestones_pressed.emit()
-				"scorecard":
-					scorecard_pressed.emit()
+		match tool_type:
+			"building":
+				building_placement_pressed.emit()
+			"decoration":
+				decoration_placement_pressed.emit()
+			"open_hole":
+				open_hole_pressed.emit()
+			"vertex":
+				elevation_tool_pressed.emit("vertex")
+			"flat":
+				elevation_tool_pressed.emit("flat")
+			"gradual":
+				elevation_tool_pressed.emit("gradual")
+			"bulldozer":
+				bulldozer_pressed.emit()
+			"play_course":
+				play_course_pressed.emit()
+			"tournaments":
+				tournaments_pressed.emit()
+			"land":
+				land_pressed.emit()
+			"marketing":
+				marketing_pressed.emit()
+			"milestones":
+				milestones_pressed.emit()
+			"scorecard":
+				scorecard_pressed.emit()
 
 func _update_selection_highlight() -> void:
 	for tool_type in _tool_buttons.keys():
@@ -1734,9 +1721,9 @@ func _input(event: InputEvent) -> void:
 				_on_tool_button_pressed(TerrainTypes.Type.WASTE_BUNKER)
 			KEY_T:
 				select_tab(Tab.TERRAIN)
-				var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else ["oak"]
-				var first_tree: String = theme_trees[0] if not theme_trees.is_empty() else "oak"
-				_on_tool_button_pressed("tree_" + first_tree)
+				var theme_trees: Array = CourseTheme.get_tree_types(GameManager.current_theme) if GameManager else []
+				if not theme_trees.is_empty():
+					_on_tool_button_pressed(theme_trees[0])
 			KEY_F:
 				if event.shift_pressed:
 					select_tab(Tab.TERRAIN)

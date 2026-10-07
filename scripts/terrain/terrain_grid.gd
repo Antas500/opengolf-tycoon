@@ -106,9 +106,9 @@ func _ready() -> void:
 	_setup_cup_overlay()
 	_setup_tee_aim_overlay()
 	# The continuous surface supplies turf, sand, water, stones, and paths on
-	# every platform. Keep the legacy overlay classes available for older
-	# tools, but don't double draw: trees render as their own sprites and the
-	# TREES terrain tile draws as the turf around them.
+	# every platform; the overlays paint what stands on it. Keep the legacy
+	# overlay classes available for older tools, but don't double draw.
+	_setup_tree_overlay()
 	_setup_flower_overlay()
 	_setup_walking_path_overlay()
 	_setup_elevation_overlay()
@@ -418,9 +418,8 @@ func refresh_all_overlays() -> void:
 	if _fairway_overlay and _fairway_overlay.has_method("_scan_tiles"):
 		_fairway_overlay._scan_tiles()
 		_fairway_overlay.queue_redraw()
-	if _tree_overlay and _tree_overlay.has_method("_scan_tree_tiles"):
-		_tree_overlay._scan_tree_tiles()
-		_tree_overlay.queue_redraw()
+	if _tree_overlay:
+		_tree_overlay.rescan()
 	if _flower_overlay and _flower_overlay.has_method("_scan_flower_tiles"):
 		_flower_overlay._scan_flower_tiles()
 		_flower_overlay.queue_redraw()

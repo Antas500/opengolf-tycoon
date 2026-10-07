@@ -149,7 +149,8 @@ const PROFILES: Dictionary = {
 		[  0.01, -0.02,  0.00,  0.03 ],
 	],
 
-	# TREES: Raised mound at base (root system)
+	# TREES: Raised mound at base (root system). Every tree species tile of the
+	# family reads this one row (see get_profile) — a pine mound is an oak mound.
 	TerrainTypes.Type.TREES: [
 		[  0.00,  0.08,  0.08,  0.00 ],
 		[  0.08,  0.22,  0.22,  0.08 ],
@@ -158,10 +159,19 @@ const PROFILES: Dictionary = {
 	],
 }
 
+## The profile a terrain id resolves to. The tree family shares one row: every
+## species tile is the same ground with different artwork, so the root mound is
+## the same mound.
+static func profile_key(terrain_type: int) -> int:
+	if TerrainTypes.is_tree(terrain_type):
+		return TerrainTypes.Type.TREES
+	return terrain_type
+
 ## Get the 4x4 profile for a terrain type. Returns flat (zeros) if no profile defined.
 static func get_profile(terrain_type: int) -> Array:
-	if PROFILES.has(terrain_type):
-		return PROFILES[terrain_type]
+	var key: int = profile_key(terrain_type)
+	if PROFILES.has(key):
+		return PROFILES[key]
 	# Default: flat
 	return [
 		[ 0.0, 0.0, 0.0, 0.0 ],

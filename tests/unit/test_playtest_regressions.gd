@@ -106,17 +106,18 @@ func test_daily_accounts_survive_json_round_trip() -> void:
 	assert_eq(GameManager.daily_stats.revenue, 0)
 	GameManager.daily_stats = old_stats
 
-func test_stroke_keeps_actual_cost_and_cleared_objects_as_one_action() -> void:
+func test_stroke_keeps_every_tile_and_its_cost_as_one_action() -> void:
 	var undo := UndoManager.new()
 	undo.begin_stroke()
 	undo.record_tile_change(Vector2i(2, 3), 0, 1)
+	# A wood painted in the same stroke is one of those tiles: there is no second
+	# layer of planted objects to remember alongside the ground any more.
+	undo.record_tile_change(Vector2i(2, 4), TerrainTypes.Type.GRASS, TerrainTypes.Type.OAK)
 	undo.record_stroke_cost(37)
-	undo.record_stroke_removal("tree", Vector2i(2, 3), "oak")
 	undo.end_stroke()
 	var action := undo.undo()
-	assert_eq(action.paid_cost, 37)
-	assert_eq(action.removed_entities.size(), 1)
-	assert_eq(action.removed_entities[0].subtype, "oak")
+	assert_eq(action.paid_cost, 37, "The stroke is refunded as a whole")
+	assert_eq((action.changes as Array).size(), 2, "Both tiles belong to the one action")
 	assert_eq(undo.redo(), action)
 	undo.free()
 

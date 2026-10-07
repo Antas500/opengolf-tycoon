@@ -429,20 +429,39 @@ static func get_terrain_colors(theme_type: int) -> Dictionary:
 	# Default fallback
 	return get_terrain_colors(Type.PARKLAND)
 
-## Tree/vegetation type distributions per theme
+## The woodland a theme plants: one Course Terrain tile per species, in the
+## order the Course Terrain tab shows them (see TerrainTypes for the rules they
+## all share and the art key each one draws under).
 static func get_tree_types(theme_type: int) -> Array:
 	match theme_type:
-		Type.PARKLAND: return ["oak", "pine", "maple", "birch", "bush", "cattails"]
-		Type.DESERT: return ["cactus", "dead_tree", "bush", "palm"]
-		Type.LINKS: return ["fescue", "heather", "bush", "pine"]
-		Type.MOUNTAIN: return ["pine", "birch", "bush", "heather"]
-		Type.CITY: return ["oak", "maple", "bush", "cattails"]
-		Type.RESORT: return ["palm", "oak", "cactus", "bush", "birch"]
-		Type.HEATHLAND: return ["pine", "birch", "heather", "bush", "fescue"]
-		Type.WOODLAND: return ["pine", "oak", "birch", "maple", "bush"]
-		Type.TROPICAL: return ["palm", "dead_tree", "bush", "oak", "cactus"]
-		Type.MARSHLAND: return ["oak", "pine", "cattails", "bush", "birch"]
-	return ["oak", "pine", "maple", "birch"]
+		Type.PARKLAND: return [TerrainTypes.Type.OAK, TerrainTypes.Type.PINE,
+				TerrainTypes.Type.MAPLE, TerrainTypes.Type.BIRCH,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.CATTAILS]
+		Type.DESERT: return [TerrainTypes.Type.CACTUS, TerrainTypes.Type.DEAD_TREE,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.PALM]
+		Type.LINKS: return [TerrainTypes.Type.FESCUE, TerrainTypes.Type.HEATHER,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.PINE]
+		Type.MOUNTAIN: return [TerrainTypes.Type.PINE, TerrainTypes.Type.BIRCH,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.HEATHER]
+		Type.CITY: return [TerrainTypes.Type.OAK, TerrainTypes.Type.MAPLE,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.CATTAILS]
+		Type.RESORT: return [TerrainTypes.Type.PALM, TerrainTypes.Type.OAK,
+				TerrainTypes.Type.CACTUS, TerrainTypes.Type.SHRUB,
+				TerrainTypes.Type.BIRCH]
+		Type.HEATHLAND: return [TerrainTypes.Type.PINE, TerrainTypes.Type.BIRCH,
+				TerrainTypes.Type.HEATHER, TerrainTypes.Type.SHRUB,
+				TerrainTypes.Type.FESCUE]
+		Type.WOODLAND: return [TerrainTypes.Type.PINE, TerrainTypes.Type.OAK,
+				TerrainTypes.Type.BIRCH, TerrainTypes.Type.MAPLE,
+				TerrainTypes.Type.SHRUB]
+		Type.TROPICAL: return [TerrainTypes.Type.PALM, TerrainTypes.Type.DEAD_TREE,
+				TerrainTypes.Type.SHRUB, TerrainTypes.Type.OAK,
+				TerrainTypes.Type.CACTUS]
+		Type.MARSHLAND: return [TerrainTypes.Type.OAK, TerrainTypes.Type.PINE,
+				TerrainTypes.Type.CATTAILS, TerrainTypes.Type.SHRUB,
+				TerrainTypes.Type.BIRCH]
+	return [TerrainTypes.Type.OAK, TerrainTypes.Type.PINE,
+			TerrainTypes.Type.MAPLE, TerrainTypes.Type.BIRCH]
 
 ## Natural terrain generation parameters per theme
 static func get_generation_params(theme_type: int) -> Dictionary:

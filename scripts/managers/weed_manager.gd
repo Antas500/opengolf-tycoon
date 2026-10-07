@@ -196,8 +196,6 @@ func _tile_occupied(pos: Vector2i) -> bool:
 		return true
 	if layer.has_method("is_tile_occupied_by_decoration") and layer.is_tile_occupied_by_decoration(pos):
 		return true
-	if layer.trees.has(pos):
-		return true
 	return false
 
 func _tile_owned(pos: Vector2i) -> bool:

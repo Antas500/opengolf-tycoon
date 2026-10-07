@@ -62,8 +62,9 @@ have somewhere to stand.
 `CourseClubhouse.front_tile()` returns the tile the golfers use: the first
 walkable tile just outside the footprint, starting at the middle of the
 screen-facing (south) edge and fanning out to the corners, the flanks and
-finally the back. A tile shadowed by an obstacle is passed over in favour of an
-open one, but a clubhouse ringed by trees still gets a door. Golfers spawn on
+finally the back. Woodland is ground rather than something standing on it, so a
+clubhouse at the edge of a grove gets its doorstep as easily as one at the edge
+of a lawn. Golfers spawn on
 that tile, walk home to it, and the walking-path overlay paves up to it, so a
 moved clubhouse moves its doorstep and the paving follows.
 
@@ -78,7 +79,6 @@ click handler and any future UI all ask, so they can never disagree:
 | The whole footprint must be owned land | "Buy this land first — the whole footprint must be owned." |
 | No other building in the footprint | "Move the footprint clear of the other building." |
 | No decoration in the footprint | "Remove the decoration in this footprint first." |
-| No tree in the footprint | "Clear the tree first: paint another Course Terrain tile over it." |
 | Buildable terrain only | "Move it off the greens, tees, sand and water." |
 | Already there | "The clubhouse is already there." |
 

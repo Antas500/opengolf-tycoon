@@ -10,7 +10,7 @@ ball runs after landing on it, whether it is a penalty area, and how the course
 surface shader draws it.
 
 The **Course Terrain** tab combines course surfaces, hazards, Flower Bed, the
-boulder grounds, and theme-specific trees into one horizontally scrolling
+boulder grounds, and the theme's woodland tiles into one horizontally scrolling
 honeycomb. Two interlocking rows keep the course tiles first, with landscaping
 extending the right end of each row:
 
@@ -36,10 +36,11 @@ the rough a trail is cut through with the dirt ribbon across it — a path lies 
 top of the ground rather than replacing it (see [garden catalog](garden-catalog.md)).
 Natural Grass is never painted by generation: it is only the blank canvas a
 fresh grid starts from, and terrain generation sweeps it into Rough — the
-zero-upkeep base turf of every generated course. Heavy Rough, Trees and Empty
-are placed by generation or by entities (a tree stamps Trees); the boulder
-grounds are ordinary painted course tiles, so generation may scatter them like
-any other zero-upkeep terrain.
+zero-upkeep base turf of every generated course. Heavy Rough, the woodland
+tiles and Empty are placed by generation; the boulder grounds and every tree
+species are ordinary painted course tiles, so generation may scatter them like
+any other zero-upkeep terrain. Nothing about a wood is a separate object: the
+tile is the tree.
 
 ### The newer tiles
 
@@ -72,6 +73,18 @@ any other zero-upkeep terrain.
 - **Brush** — Dense scrub (gorse, heather, sagebrush): 0.3 lie, 50% distance,
   wedge only, and it swallows rolling balls. Golfers wade through it slowly.
   Replace it by painting another terrain tile over it; the bulldozer ignores it.
+- **Woodland, one tile per species** — Oak, Pine, Maple, Birch, Cactus, Fescue,
+  Cattails, Shrub, Palm, Dead Tree and Heather, plus the generic Trees tile for
+  canopies the theme picks. Every one of them is the Trees tile with a new
+  name: same $10 to paint, no upkeep, same 0.7 lie, same blocked shot, same
+  roll-out, same walking, same AI score. Only two things change with the
+  species — the sprite the course stands on the tile (`TreeOverlay`) and the
+  ground the tile paints under it (`TREE_GROUND_LOOKS`): leaf litter for the
+  broadleaves and shrubs, pine needles, bare sand for cactus, palm and dead
+  trees, waterlogged silt for cattails, acid peat for heather and dry straw for
+  fescue. A theme offers the four or five species that suit it
+  (`CourseTheme.get_tree_types()`), so the tab shows a desert full of cacti and
+  a links full of fescue without any of them behaving differently.
 
 ---
 
@@ -85,15 +98,25 @@ Saves store terrain as raw integers, so new types are only ever appended:
 EMPTY 0, GRASS 1, FAIRWAY 2, ROUGH 3, HEAVY_ROUGH 4, GREEN 5, TEE_BOX 6,
 BUNKER 7, WATER 8, PATH 9, OUT_OF_BOUNDS 10, TREES 11, FLOWER_BED 12,
 ROCKS 13, FIRM_FAIRWAY 14, POT_BUNKER 15, STREAM 16, DEEP_ROUGH 17,
-WASTE_BUNKER 18, BRUSH 19, SMALL_BOULDERS 20, LARGE_BOULDERS 21
+WASTE_BUNKER 18, BRUSH 19, SMALL_BOULDERS 20, LARGE_BOULDERS 21,
+OAK 22, PINE 23, MAPLE 24, BIRCH 25, CACTUS 26, FESCUE 27, CATTAILS 28,
+SHRUB 29, PALM 30, DEAD_TREE 31, HEATHER 32
 ```
 
 The boulder fields reuse the `rocks` palette key: all three stony grounds
-share one base colour and the shader only changes the stones it scatters.
+share one base colour and the shader only changes the stones it scatters. The
+eleven species likewise reuse the `trees` key — one canopy colour per theme for
+their art, swatches and mini map — while the shader works each one up into the
+ground that species is planted in (see `TREE_GROUND_LOOKS`).
 
 `CourseSurface.PALETTE_KEYS` holds one theme color key per id. The shader
 reads the palette width, so a new type needs a palette key and a color in every
 theme (`CourseTheme.get_terrain_colors()` and `TerrainPalette.TERRAIN_COLORS`).
+
+`data/terrain_types.json` mirrors the ids one row each (`id`, `name`, `playable`,
+`placement_cost`, `blocks_shots`). Nothing reads it at runtime; it exists for
+tools and modders, and `test_json_mirror_lists_every_type` fails if an id goes
+missing or its name or cost drifts from `PROPERTIES`.
 
 ### 2. Families
 
@@ -108,6 +131,8 @@ is_sand(t)        is_bunker + WASTE_BUNKER      sand spray, sandy lies
 is_fairway(t)     FAIRWAY, FIRM_FAIRWAY         shot shapes, AI bonuses, carries
 is_rough(t)       ROUGH, HEAVY_ROUGH, DEEP_ROUGH
 is_rocks(t)       ROCKS, SMALL_BOULDERS, LARGE_BOULDERS
+is_tree(t)        TREES, OAK, PINE, MAPLE, BIRCH, CACTUS, FESCUE, CATTAILS,
+                  SHRUB, PALM, DEAD_TREE, HEATHER
 ```
 
 Walking is the exception: golfers path around ponds, OB and off-property land
@@ -130,6 +155,7 @@ but cross streams.
 | Water | 20 | 1 | yes | 1 (drop at entry) | |
 | Stream | 15 | 1 | yes | 1 (drop at entry) | |
 | Rocks | 8 | 0 | | | |
+| Trees, and every species tile | 10 | 0 | | | |
 | Small Boulders | 8 | 0 | | | |
 | Large Boulders | 8 | 0 | | | |
 | Out of Bounds | 0 | 0 | | 1 (stroke and distance) | |
@@ -162,19 +188,21 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 
 ### 5. Painting
 
-- Every Course Terrain tile replaces every other one. Painting fairway, rough,
-  brush, rocks, small boulders, large boulders, flower bed, water or any other
-  tab tile clears the tree on that spot (a clearing fee on top of the new tile's
-  cost) and `TerrainGrid.set_tile` swaps the ground, dropping the tile's cup,
-  tee and walking-path state when the new ground can't keep them. Placing a
-  tree does the same in reverse: it overwrites water, sand, greens and other
-  trees. Buildings and decorations are not course terrain — the bulldozer
-  removes those, and a course tile will not paint over them.
+- Every Course Terrain tile replaces every other one, the woodland tiles
+  included: `TerrainGrid.set_tile` swaps the ground, dropping the tile's cup,
+  tee and walking-path state when the new ground can't keep them. A pine tile
+  overwrites water, sand, greens, an oak, or a walking path's host ground
+  exactly as Rocks or Wild Flowers do, for its own `placement_cost` and nothing
+  more — there is no clearing fee, because there is nothing to clear.
+  Buildings and decorations are not course terrain — the bulldozer removes
+  those, and a course tile will not paint over them.
 - Stream strokes are 4-connected (`TerrainBrush.centers_4_connected()`) so the
   channel never breaks at a diagonal step.
-- A tree keeps the look of its toolbar tile wherever it is placed: it stamps
-  Trees, which draws as turf under the sprite. The boulder fields are ground
-  paint like every other course tile, so what you paint is what the tile shows.
+- What you paint is what the tile shows: a species tile draws that species'
+  canopy (`TreeOverlay`) on that species' ground, wherever it lands. Old saves
+  that planted trees as entities are converted on load — `EntityLayer.deserialize`
+  paints the matching species tile for each one — so a saved course loads as
+  painted woodland and the tiles are then edited like any other.
 - The bulldozer never touches course terrain — its button lives on the
   Improvements and Buildings tabs and only demolishes paths, decorations and
   buildings.
@@ -183,8 +211,9 @@ and firm fairway (1.0) don't. See [shot-accuracy.md](shot-accuracy.md),
 
 Each type has its own look in `shaders/course_surface.gdshader`; see
 [course-surface.md](course-surface.md). Pot Bunker, Stream, Waste Bunker, Rocks,
-Small Boulders, Large Boulders and Brush are *inset* terrain, drawn over the
-turf around them so patches have natural outlines.
+Small Boulders, Large Boulders, Brush and the twelve woodland tiles are *inset*
+terrain, drawn over the turf around them so patches have natural outlines —
+a wood ends where its ground does, not at a tile line.
 
 ---
 
@@ -199,3 +228,5 @@ turf around them so patches have natural outlines.
 | AI terrain scores | `ShotAI.TERRAIN_SCORES` | See table | Where AI golfers aim |
 | Hotkeys | `terrain_toolbar.gd` | 9, 0, Shift+2/5/6/7/8/9/0 | Keyboard access to the new tiles (Shift+9 Small Boulders, Shift+0 Large Boulders) |
 | Walking speed | `terrain_types.gd` speed_modifier | Deep rough 0.85×, brush 0.75× | Pace of play through long grass and scrub |
+| Woodland grounds | `terrain_types.gd` TREE_GROUND_LOOKS, mirrored by `tree_look()` in the shader | litter, needles, sand, silt, peat, straw | What each species is planted in, and which species' grounds meet without a seam |
+| Which species a theme grows | `course_theme.gd` get_tree_types() | 4-6 per theme | The tiles that appear on the Course Terrain tab |

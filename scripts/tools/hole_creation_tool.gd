@@ -111,14 +111,6 @@ func get_total_par() -> int:
 		return GameManager.current_course.total_par
 	return 0
 
-## Remove any tree entity at a grid position before placing tee/green
-func _remove_obstacles_at(position: Vector2i) -> void:
-	var el = GameManager.entity_layer
-	if not el:
-		return
-	if el.get_tree_at(position):
-		el.remove_tree(position)
-
 func delete_hole(hole_number: int) -> bool:
 	if not GameManager.current_course:
 		return false

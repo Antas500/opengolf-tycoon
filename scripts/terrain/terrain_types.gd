@@ -12,6 +12,11 @@ enum Type {
 	# Boulder fields: the Rocks tile's stony ground scattered with small or
 	# large stones. They play exactly like Rocks (see is_rocks).
 	SMALL_BOULDERS = 20, LARGE_BOULDERS = 21,
+	# The tree catalogue: one tile per species, painted like any other Course
+	# Terrain tile. They play exactly like Trees (see is_tree) and differ only
+	# in the canopy the course draws on the tile.
+	OAK = 22, PINE = 23, MAPLE = 24, BIRCH = 25, CACTUS = 26, FESCUE = 27,
+	CATTAILS = 28, SHRUB = 29, PALM = 30, DEAD_TREE = 31, HEATHER = 32,
 }
 
 const PROPERTIES: Dictionary = {
@@ -29,6 +34,20 @@ const PROPERTIES: Dictionary = {
 	Type.PATH: {"name": "Cart Path", "color": Color(0.78, 0.75, 0.68), "playable": true, "placement_cost": 8, "maintenance_cost": 0, "shot_difficulty": 0.1, "speed_modifier": 1.5},
 	Type.OUT_OF_BOUNDS: {"name": "Out of Bounds", "color": Color(0.42, 0.35, 0.32), "playable": false, "placement_cost": 0, "maintenance_cost": 0, "penalty_strokes": 1},
 	Type.TREES: {"name": "Trees", "color": Color(0.22, 0.45, 0.22), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	# One tile per species. Like the boulder fields beside Rocks, each copies
+	# the Trees tile's numbers exactly (see is_tree) and only changes the
+	# canopy the course paints on the tile.
+	Type.OAK: {"name": "Oak Tree", "color": Color(0.20, 0.50, 0.20), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.PINE: {"name": "Pine Tree", "color": Color(0.15, 0.40, 0.15), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.MAPLE: {"name": "Maple Tree", "color": Color(0.30, 0.50, 0.25), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.BIRCH: {"name": "Birch Tree", "color": Color(0.25, 0.45, 0.20), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.CACTUS: {"name": "Cactus", "color": Color(0.28, 0.55, 0.30), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.FESCUE: {"name": "Fescue Grass", "color": Color(0.58, 0.55, 0.32), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.CATTAILS: {"name": "Cattails", "color": Color(0.30, 0.48, 0.22), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.SHRUB: {"name": "Shrub", "color": Color(0.22, 0.48, 0.22), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.PALM: {"name": "Palm Tree", "color": Color(0.20, 0.58, 0.28), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.DEAD_TREE: {"name": "Dead Tree", "color": Color(0.45, 0.38, 0.28), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
+	Type.HEATHER: {"name": "Heather", "color": Color(0.55, 0.28, 0.55), "playable": true, "placement_cost": 10, "maintenance_cost": 0, "shot_difficulty": 0.7, "blocks_shots": true},
 	Type.FLOWER_BED: {"name": "Wild Flowers", "color": Color(0.85, 0.5, 0.6), "playable": false, "placement_cost": 15, "maintenance_cost": 0, "beauty_bonus": 5},
 	# Stony ground. The three Rocks tiles share one look and one set of rules;
 	# only the stones the course surface draws on them change (see the shader).
@@ -111,6 +130,65 @@ static func is_rough(type: int) -> bool:
 static func is_rocks(type: int) -> bool:
 	return type == Type.ROCKS or type == Type.SMALL_BOULDERS or type == Type.LARGE_BOULDERS
 
+## Woodland: the Trees tile and every species tile beside it. They play the
+## same — a ball buried in the roots, a shot that has to be punched out — and
+## differ only in the canopy painted on the tile.
+static func is_tree(type: int) -> bool:
+	return type == Type.TREES or type in TREE_SPECIES_TILES
+
+## The species tiles in toolbar order. Every one of them is a Course Terrain
+## tile: paint it, replace it, and it costs its `placement_cost` per tile.
+const TREE_SPECIES_TILES: Array[int] = [
+	Type.OAK, Type.PINE, Type.MAPLE, Type.BIRCH, Type.CACTUS, Type.FESCUE,
+	Type.CATTAILS, Type.SHRUB, Type.PALM, Type.DEAD_TREE, Type.HEATHER,
+]
+
+## Every tree tile: the generic Trees ground plus each species. The
+## TreeOverlay draws a canopy on each of them.
+const TREE_TERRAIN_TYPES: Array[int] = [Type.TREES,
+	Type.OAK, Type.PINE, Type.MAPLE, Type.BIRCH, Type.PALM, Type.CACTUS,
+	Type.DEAD_TREE, Type.SHRUB, Type.FESCUE, Type.CATTAILS, Type.HEATHER]
+
+## The ground each species is planted in, which the course surface paints under
+## the canopy (tree_look() in shaders/course_surface.gdshader mirrors this).
+## Species sharing a ground share its edge too, so an oak wood running into a
+## maple wood is one unbroken floor while a pine stand beside it still fades
+## needles into leaves.
+const TREE_GROUND_LOOKS: Dictionary = {
+	Type.TREES: "leaf litter", Type.OAK: "leaf litter", Type.MAPLE: "leaf litter",
+	Type.BIRCH: "leaf litter", Type.SHRUB: "leaf litter",
+	Type.PINE: "pine needles", Type.CACTUS: "bare sand", Type.PALM: "bare sand",
+	Type.DEAD_TREE: "bare sand", Type.CATTAILS: "waterlogged silt",
+	Type.HEATHER: "acid peat", Type.FESCUE: "dry straw",
+}
+
+## The ground a tree tile is painted on, or "" for any tile that is not
+## woodland. Every one of them is ordinary ground: nothing is planted in a
+## second layer, so a species tile costs its `placement_cost` and nothing more.
+static func get_tree_ground(type: int) -> String:
+	return str(TREE_GROUND_LOOKS.get(type, ""))
+
+## Each species tile's art key, which doubles as the name old saves gave a
+## planted tree of that species (see EntityLayer.deserialize).
+const TREE_SPECIES_KEYS: Dictionary = {
+	Type.OAK: "oak", Type.PINE: "pine", Type.MAPLE: "maple", Type.BIRCH: "birch",
+	Type.CACTUS: "cactus", Type.FESCUE: "fescue", Type.CATTAILS: "cattails",
+	Type.SHRUB: "bush", Type.PALM: "palm", Type.DEAD_TREE: "dead_tree",
+	Type.HEATHER: "heather",
+}
+
+## The art key a tree tile draws, or "" for the generic Trees tile, whose
+## canopy the course picks from the theme.
+static func get_tree_species(type: int) -> String:
+	return TREE_SPECIES_KEYS.get(type, "")
+
+## The tile a species grows on; anything unknown is the generic Trees tile.
+static func tree_tile_for_species(species: String) -> int:
+	for type in TREE_SPECIES_KEYS:
+		if TREE_SPECIES_KEYS[type] == species:
+			return type
+	return Type.TREES
+
 ## Tooltip sentence shared by every Course Terrain tile. Each one overwrites
 ## every other tile on that tab — ground, wild flowers and trees.
 const REPLACES_ANY_COURSE_TILE := "Replaces any other Course Terrain tile."
@@ -128,8 +206,12 @@ const COURSE_PAINT_TYPES: Array[int] = [
 	Type.BRUSH, Type.ROCKS, Type.SMALL_BOULDERS, Type.LARGE_BOULDERS,
 ]
 
-## Landscape terrain tiles beside COURSE_PAINT_TYPES on the Course Terrain tab.
-const COURSE_LANDSCAPE_TERRAIN_TYPES: Array[int] = [Type.FLOWER_BED, Type.TREES]
+## Landscape terrain tiles beside COURSE_PAINT_TYPES on the Course Terrain
+## tab: wild flowers and the woodlands — the generic Trees ground plus every
+## species tile the themes offer.
+const COURSE_LANDSCAPE_TERRAIN_TYPES: Array[int] = [Type.FLOWER_BED,
+	Type.TREES, Type.OAK, Type.PINE, Type.MAPLE, Type.BIRCH, Type.PALM, Type.CACTUS,
+	Type.DEAD_TREE, Type.SHRUB, Type.FESCUE, Type.CATTAILS, Type.HEATHER]
 
 ## Terrain tiles available on the Course Terrain tab that natural generation may
 ## use. Keep this derived from the tab inventory and upkeep data so generated
@@ -156,7 +238,9 @@ static func is_natural_generation_type(type: int) -> bool:
 const WALKING_PATH_TERRAINS: Array[int] = [
 	Type.ROUGH, Type.DEEP_ROUGH, Type.WASTE_BUNKER, Type.BRUSH,
 	Type.ROCKS, Type.SMALL_BOULDERS, Type.LARGE_BOULDERS, Type.STREAM,
-	Type.FLOWER_BED, Type.TREES,
+	Type.FLOWER_BED,
+	Type.TREES, Type.OAK, Type.PINE, Type.MAPLE, Type.BIRCH, Type.PALM,
+	Type.CACTUS, Type.DEAD_TREE, Type.SHRUB, Type.FESCUE, Type.CATTAILS, Type.HEATHER
 ]
 
 ## Can a walking path be laid on this terrain?

@@ -83,6 +83,13 @@ func _build_terrain_colors() -> void:
 		TerrainTypes.Type.LARGE_BOULDERS: theme_colors.get("rocks", Color(0.44, 0.41, 0.38)),
 	}
 
+## The map colour of one tile. Woodland is one colour whatever the species — at
+## this scale a pine and an oak are the same dark patch of trees — so every tree
+## tile reads the Trees row (see TerrainTypes.is_tree).
+func _terrain_color(terrain_type: int) -> Color:
+	var key: int = TerrainTypes.Type.TREES if TerrainTypes.is_tree(terrain_type) else terrain_type
+	return _terrain_colors.get(key, Color(0.3, 0.3, 0.3))
+
 # Land boundary colors
 const BOUNDARY_COLOR = Color(0.9, 0.6, 0.2, 1.0)  # Orange/gold property line
 const UNOWNED_TINT = Color(0.3, 0.2, 0.2, 0.4)    # Subtle dark tint on unowned
@@ -184,7 +191,7 @@ func _regenerate_map_texture() -> void:
 			var gy = int(float(py) / _map_size * grid_height)
 			var terrain_type = _terrain_grid.get_tile(Vector2i(gx, gy))
 
-			var color = _terrain_colors.get(terrain_type, Color(0.3, 0.3, 0.3))
+			var color = _terrain_color(terrain_type)
 			img.set_pixel(px, py, color)
 
 	_map_texture = ImageTexture.create_from_image(img)

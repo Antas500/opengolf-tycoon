@@ -73,6 +73,21 @@ const float T_WASTE_BUNKER = 18.0;
 const float T_BRUSH = 19.0;
 const float T_SMALL_BOULDERS = 20.0;
 const float T_LARGE_BOULDERS = 21.0;
+// The tree catalogue: one id per species, 11 and 22..32, matching
+// TerrainTypes.TREE_SPECIES_TILES. The canopies are drawn by the TreeOverlay;
+// the surface paints what each species stands on.
+const float T_TREES = 11.0;
+const float T_OAK = 22.0;
+const float T_PINE = 23.0;
+const float T_MAPLE = 24.0;
+const float T_BIRCH = 25.0;
+const float T_CACTUS = 26.0;
+const float T_FESCUE = 27.0;
+const float T_CATTAILS = 28.0;
+const float T_SHRUB = 29.0;
+const float T_PALM = 30.0;
+const float T_DEAD_TREE = 31.0;
+const float T_HEATHER = 32.0;
 // Light direction on the ground plane, in grid units (screen upper left).
 const vec2 GROUND_LIGHT = vec2(-0.83, -0.55);
 
@@ -80,6 +95,38 @@ const vec2 GROUND_LIGHT = vec2(-0.83, -0.55);
 // ground and rules, and differ only in the stones drawn on them.
 bool is_rocks(float id) {
 	return id == T_ROCKS || id == T_SMALL_BOULDERS || id == T_LARGE_BOULDERS;
+}
+
+// Woodland: the Trees tile and every species tile beside it. One family on the
+// course, but each species is planted in ground of its own.
+bool is_tree(float id) {
+	return id == T_TREES || (id >= T_OAK && id <= T_HEATHER);
+}
+
+// The ground each species grows in. Species sharing a look also share a
+// boundary class, so an oak wood running into a maple wood is seamless while a
+// pine stand beside it still fades needles into leaves.
+const float GROUND_LITTER = 0.0;   // Oak, maple, birch, shrubs, the Trees tile
+const float GROUND_NEEDLES = 1.0;  // Pine
+const float GROUND_SAND = 2.0;     // Cactus, palm, dead tree
+const float GROUND_SILT = 3.0;     // Cattails
+const float GROUND_HEATH = 4.0;    // Heather
+const float GROUND_STRAW = 5.0;    // Fescue
+
+float tree_look(float id) {
+	if (id == T_PINE) { return GROUND_NEEDLES; }
+	if (id == T_CACTUS || id == T_PALM || id == T_DEAD_TREE) { return GROUND_SAND; }
+	if (id == T_CATTAILS) { return GROUND_SILT; }
+	if (id == T_HEATHER) { return GROUND_HEATH; }
+	if (id == T_FESCUE) { return GROUND_STRAW; }
+	return GROUND_LITTER;
+}
+
+// How far a stand's ground gives way to the turf around it. Bare sand and wet
+// silt spread widest; a carpet of litter or needles ends closer to the trunks.
+float tree_looseness(float look) {
+	if (look == GROUND_SAND || look == GROUND_SILT) { return 0.30; }
+	return 0.16;
 }
 
 // How many stone cells a tile of stony ground is cut into, and how many of
@@ -113,17 +160,17 @@ float rocks_tallness(float id) {
 vec2 tile_at(vec2 p) {
 	vec4 data = texture(terrain_data, (clamp(p, vec2(0.0), grid_size - 1.0) + 0.5) / grid_size);
 	float id = floor(data.r * 255.0 + 0.5);
-	// Tree tiles share the surrounding native turf; the sprite supplies the tree.
-	if (id == 11.0) { id = 1.0; }
 	return vec2(id, data.g);
 }
 
 // Boundary class: terrain that reads as one material across tile borders. A
-// stream joins a pond, and the boulder fields bleed into painted Rocks, so a
-// stone-size change inside a rocky patch draws no material edge.
+// stream joins a pond, the boulder fields bleed into painted Rocks, and a wood
+// of any mix of species reads as one material per ground: litter tiles never
+// seam into each other, while litter meeting sand does.
 float boundary_class(float id) {
 	if (id == T_STREAM) { return 8.0; }
 	if (is_rocks(id)) { return T_ROCKS; }
+	if (is_tree(id)) { return 100.0 + tree_look(id); }
 	return id;
 }
 
@@ -141,19 +188,25 @@ bool is_turf(float id) {
 // scrape) over whatever turf surrounds it, so a patch has a natural outline
 // instead of a square one.
 bool is_inset(float id) {
-	return is_rocks(id) || id == T_POT_BUNKER || id == T_STREAM || id == T_WASTE_BUNKER || id == T_BRUSH;
+	return is_rocks(id) || id == T_POT_BUNKER || id == T_STREAM || id == T_WASTE_BUNKER
+		|| id == T_BRUSH || is_tree(id);
 }
 
 // Whether stones or shrubs on `id` can sit directly on neighbouring `ground`:
-// any turf, and the sand of a waste bunker.
+// any turf, the sand of a waste bunker, and the floor of a wood — where one
+// species' ground runs into another's they merge instead of showing grass.
 bool carries(float ground, float id) {
-	return is_turf(ground) || (ground == T_WASTE_BUNKER && (is_rocks(id) || id == T_BRUSH));
+	return is_turf(ground) || (ground == T_WASTE_BUNKER && (is_rocks(id) || id == T_BRUSH))
+		|| (is_tree(ground) && is_tree(id));
 }
 
 // Whether a tile of type `own` draws a boundary against its neighbour `other`.
 // Turf runs straight into inset terrain, which draws its own margin over that
 // turf (and a waste bunker's sand runs under neighbouring stones and shrubs).
+// Two woods are the exception: they share a ground rather than one sitting on
+// the other, so litter meeting needles keeps its band and blends across it.
 float edge_between(float own, float other) {
+	if (is_tree(own) && is_tree(other)) { return differs(own, other); }
 	return (is_inset(other) && carries(own, other)) ? 0.0 : differs(own, other);
 }
 
@@ -211,6 +264,60 @@ float dots(vec2 x, float density, float radius) {
 	vec2 o = vec2(hash(n + vec2(41.0, 7.0)), hash(n + vec2(3.0, 59.0))) * 0.5 + 0.25;
 	float d = length(fract(x) - o);
 	return (1.0 - smoothstep(radius * 0.6, radius, d)) * step(1.0 - density, hash(n + vec2(11.0, 23.0)));
+}
+
+// The ground a species is planted in, worked up from the theme's own colours so
+// a desert grove and a parkland grove are both leaf litter but not the same
+// brown. `base` is the palette colour of the tree tile, `g` grid coordinates.
+vec3 tree_ground(float id, vec3 base, vec2 g, float grain, float patch) {
+	float look = tree_look(id);
+	if (look == GROUND_LITTER) {
+		// Shaded earth, dappled by the canopy above it, strewn with the leaves
+		// and twigs the broadleaves drop.
+		base = mix(base * 0.7, vec3(0.35, 0.26, 0.17), 0.5) * (0.88 + noise(g * 5.5) * 0.2);
+		base = mix(base, vec3(0.6, 0.45, 0.22), dots(g * 13.0, 0.4, 0.3) * 0.45);
+		base = mix(base, vec3(0.42, 0.31, 0.2), dots(g * 6.5 + vec2(5.0, 2.0), 0.25, 0.45) * 0.3);
+		return base * (1.0 + (patch - 0.5) * 0.08);
+	}
+	if (look == GROUND_NEEDLES) {
+		// A rust-brown bed of needles, laid down in long drifts.
+		base = mix(base * 0.62, vec3(0.34, 0.23, 0.15), 0.62);
+		float drift = sin((g.x + g.y) * 6.5 + noise(g * 1.3) * 5.0);
+		base *= 0.93 + smoothstep(-0.4, 0.4, drift) * 0.1;
+		base = mix(base, vec3(0.5, 0.33, 0.17), dots(g * 20.0, 0.16, 0.26) * 0.55);  // cones
+		return base;
+	}
+	if (look == GROUND_SAND) {
+		// Bare sand blown smooth between the stems, gritty and pebbled, with
+		// whatever tough tuft survives the shade.
+		base = mix(palette_color(T_WASTE_BUNKER), base * 0.9, 0.12);
+		base *= 0.94 + hash(floor(g * 34.0)) * 0.11 + (noise(g * 2.4) - 0.5) * 0.06;
+		base = mix(base, base * vec3(0.66, 0.64, 0.6), dots(g * 10.0, 0.3, 0.26) * 0.7);
+		base = mix(base, palette_color(1.0) * 0.72, dots(g * 5.0 + vec2(3.0, 8.0), 0.1, 0.4) * 0.5);
+		return base;
+	}
+	if (look == GROUND_SILT) {
+		// Waterlogged silt, the same mud a stream leaves on its banks, with a
+		// wet sheen and dead reed litter floating on it.
+		base = mix(palette_color(1.0) * 0.5, vec3(0.36, 0.31, 0.24), 0.62);
+		base += vec3(0.05, 0.06, 0.05) * smoothstep(0.62, 0.9, noise(g * 4.0 + vec2(3.0, 7.0)));
+		base = mix(base, vec3(0.5, 0.47, 0.3), dots(g * 15.0, 0.22, 0.36) * 0.4);
+		return base * (0.96 + patch * 0.08);
+	}
+	if (look == GROUND_HEATH) {
+		// Acid peat over rough stone, lit purple where the heather is in bloom.
+		base = mix(base * 0.62, vec3(0.3, 0.23, 0.2), 0.55);
+		base = mix(base, vec3(0.52, 0.34, 0.56), dots(g * 16.0, 0.34, 0.3) * step(0.45, grain) * 0.6);
+		base = mix(base, vec3(0.55, 0.53, 0.5), dots(g * 12.0, 0.16, 0.2) * 0.45);
+		return base;
+	}
+	// Fescue: a sward of its own — dry, pale links grass gone to straw.
+	base = mix(palette_color(T_FIRM_FAIRWAY), base * 0.8, 0.25);
+	vec2 u = vec2(g.x - g.y, g.x + g.y);
+	float blades = noise(vec2(u.x * 22.0, u.y * 2.6 + noise(vec2(u.x * 2.0, u.y * 1.6)) * 1.4));
+	base *= 0.88 + blades * 0.24;
+	base = mix(base, base * vec3(1.14, 1.1, 0.86), dots(u * vec2(9.0, 6.0), 0.2, 0.3) * 0.5);
+	return base;
 }
 
 vec3 surface(float id, float cover, float depth, vec2 world, float grain, float patch) {
@@ -302,6 +409,11 @@ vec3 surface(float id, float cover, float depth, vec2 world, float grain, float 
 		vec2 g = world / tile_size;
 		base *= 0.58 + noise(g * 12.0) * 0.12;
 		variation *= 0.3;
+	} else if (is_tree(id)) {
+		// The floor of a stand: litter, needles, sand, silt, peat or straw,
+		// per species. inset_tile() fades it into the surrounding turf.
+		base = tree_ground(id, base, world / tile_size, grain, patch);
+		variation = (grain - 0.5) * 0.05;
 	}
 	return clamp(base + vec3(variation * 0.78, variation, variation * 0.48), vec3(0.0), vec3(1.0));
 }
@@ -434,6 +546,15 @@ vec3 inset_tile(float id, vec3 own, vec3 outside, float edge_mix, vec4 open_edge
 		// Sand breaking up raggedly into the surrounding turf.
 		float room = edge_room(q, open_edges) + (noise(g * 3.4) - 0.5) * 0.2 + (noise(g * 11.0) - 0.5) * 0.08;
 		float margin = 1.0 - smoothstep(0.06, 0.2, room);
+		return mix(own, outside, margin);
+	} else if (is_tree(id)) {
+		// A wood ends where its ground does, not at a tile line: the floor
+		// thins out into the turf along every edge the stand is open on, and a
+		// lone tree is a patch around its own trunk.
+		float looseness = tree_looseness(tree_look(id));
+		float room = edge_room(q, open_edges) + (noise(g * 2.6 + vec2(id, 0.0)) - 0.5) * looseness
+				+ (noise(g * 9.0) - 0.5) * 0.08;
+		float margin = 1.0 - smoothstep(0.04, 0.3, room);
 		return mix(own, outside, margin);
 	} else if (is_rocks(id) || id == T_BRUSH) {
 		// Stones or shrubs scattered on cells; each keeps clear of edges

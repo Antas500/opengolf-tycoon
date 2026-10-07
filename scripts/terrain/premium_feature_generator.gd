@@ -116,13 +116,14 @@ static func _generate_scoped_pond(
 static func _generate_scoped_tree_cluster(
 	bounds: Rect2i,
 	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
+	_entity_layer: EntityLayer,
 	rng: RandomNumberGenerator,
 	min_trees: int,
 	max_trees: int
 ) -> void:
+	# A tree is a Course Terrain tile, so a parcel's copse is painted ground.
 	var tree_types := CourseTheme.get_tree_types(GameManager.current_theme)
-	var waterside_only: Array = ["cattails"]
+	var waterside_only: Array = [TerrainTypes.Type.CATTAILS]
 	tree_types = tree_types.filter(func(t): return t not in waterside_only)
 	if tree_types.is_empty():
 		return
@@ -130,7 +131,7 @@ static func _generate_scoped_tree_cluster(
 	var target_count := rng.randi_range(min_trees, max_trees)
 	var placed := 0
 	var attempts := 0
-	var dominant_type: String = tree_types[rng.randi_range(0, tree_types.size() - 1)]
+	var dominant_type: int = tree_types[rng.randi_range(0, tree_types.size() - 1)]
 
 	while placed < target_count and attempts < target_count * 5:
 		attempts += 1
@@ -143,14 +144,14 @@ static func _generate_scoped_tree_cluster(
 		var tile := terrain_grid.get_tile(pos)
 		if tile == TerrainTypes.Type.WATER or tile == TerrainTypes.Type.FLOWER_BED:
 			continue
-		if entity_layer.get_tree_at(pos) != null:
+		if TerrainTypes.is_tree(tile):
 			continue
 
 		var tree_type := dominant_type
 		if rng.randf() < 0.3:
 			tree_type = tree_types[rng.randi_range(0, tree_types.size() - 1)]
 
-		entity_layer.place_tree(pos, tree_type)
+		terrain_grid.set_tile_natural(pos, tree_type)
 		placed += 1
 
 

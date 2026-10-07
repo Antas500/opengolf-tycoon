@@ -40,6 +40,11 @@ static func _calculate_hazard_difficulty(corridor_tiles: Array, terrain_grid: Te
 
 	for tile_pos in corridor_tiles:
 		var terrain_type = terrain_grid.get_tile(tile_pos)
+		# Every tree tile — the generic Trees one and each species — counts as
+		# woodland in the corridor, so a stand of pines rates like a stand of oaks.
+		if TerrainTypes.is_tree(terrain_type):
+			tree_count += 1
+			continue
 		match terrain_type:
 			TerrainTypes.Type.WATER, TerrainTypes.Type.STREAM:
 				water_count += 1
@@ -50,8 +55,6 @@ static func _calculate_hazard_difficulty(corridor_tiles: Array, terrain_grid: Te
 				bunker_difficulty += 0.3
 			TerrainTypes.Type.OUT_OF_BOUNDS:
 				ob_count += 1
-			TerrainTypes.Type.TREES:
-				tree_count += 1
 			TerrainTypes.Type.BRUSH:
 				trouble_difficulty += 0.08
 			TerrainTypes.Type.ROCKS:

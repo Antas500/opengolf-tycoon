@@ -101,7 +101,7 @@ func _run() -> void:
 		match tool:
 			"terrain": main._on_tool_selected(TerrainTypes.Type.ROUGH)
 			"building": main._on_building_type_selected_from_toolbar("restroom")
-			"tree": main._on_tree_type_selected_from_toolbar("oak")
+			"tree": main._on_tool_selected(TerrainTypes.Type.OAK)
 			"decoration": main._on_decoration_type_selected_from_toolbar("fountain")
 			"elevation": main._on_elevation_tool_pressed(ElevationTool.TOOL_VERTEX)
 			"bulldozer": main._on_bulldozer_pressed()

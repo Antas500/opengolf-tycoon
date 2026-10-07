@@ -13,10 +13,11 @@ Desktop and web use the same shader. A 128 × 128 RGBA8 data texture costs 64 Ki
 each pixel stores a terrain ID in red, bunker depth in green, normalized
 base elevation in blue, and a reserved alpha (always 1). Theme colors live in a
 separate palette with one texel per terrain ID (`CourseSurface.PALETTE_KEYS`,
-currently 22 × 1); the shader reads its width with `textureSize`, so appending a
+currently 33 × 1); the shader reads its width with `textureSize`, so appending a
 terrain type only needs a palette key. The Rocks, Small Boulders and Large
 Boulders ids all point at the `rocks` key: one stone base colour, three stone
-sizes. Trees use native grass underneath; the three stony grounds render as
+sizes. The twelve woodland ids point at the `trees` key and each paints ground
+of its own from it (see *Woodland* below); the three stony grounds render as
 painted stone (see *Terrain expansion* below).
 The former per-tile turf, water, bunker, and path overlays are not instantiated,
 so their rectangular patterns cannot cover the continuous surface.
@@ -48,9 +49,10 @@ contour markings appear only while the elevation tool is active. Continuous
 light and smoothly gated ambient occlusion avoid rectangular bands from the
 low-resolution heightmap.
 
-Quick Start cleanup preserves the freshly painted terrain before removing a
-tree and reapplies it afterward. Removal previously restored native ground,
-leaving holes in fairways and greens. Water is now included in cleanup.
+Quick Start paints the course it wants directly: a wood is a tile, so
+clearing a spot for a hole is one `set_tile()` away and there is no entity
+removal that used to restore native ground underneath and leave holes in
+fairways and greens.
 
 ## Tuning levers
 
@@ -64,7 +66,7 @@ leaving holes in fairways and greens. Water is now included in cleanup.
 | Terrain light/shadow | `elevation_shader_controller.gd` | 0.28 / 0.28 | Retains turf color on slopes |
 
 Validation covers normal painting, deep bunkers, quiet batches, deserialization,
-all ten theme palettes, unchanged serialization, and tree cleanup. Native
+all ten theme palettes, unchanged serialization, and woodland painting. Native
 Compatibility rendering also exercises shader compilation; a browser-specific
 performance/device test remains separate.
 
@@ -120,6 +122,34 @@ square one.
   brush adds sparse blossoms.
 - *Waste Bunker* is coarse sand with pebbles and wiregrass tufts; within about
   0.2 tiles of an open edge it breaks up raggedly into the surrounding turf.
+
+### Woodland: one tile per species (IDs 11 and 22-32)
+
+Every tree is a painted tile: Oak, Pine, Maple, Birch, Cactus, Fescue,
+Cattails, Shrub, Palm, Dead Tree and Heather beside the generic Trees tile.
+They share the `trees` palette texel — the theme's canopy color, which the mini
+map reads for woodland too — and `tree_look()` sorts them into six grounds:
+
+| Ground | Species | Drawn as |
+| --- | --- | --- |
+| leaf litter | Trees, Oak, Maple, Birch, Shrub | shaded earth dappled by the canopy, with fallen leaves and twigs |
+| pine needles | Pine | rust-brown bed laid down in long drifts, cones scattered |
+| bare sand | Cactus, Palm, Dead Tree | the theme's waste-bunker sand: grit, pebbles, one tough tuft |
+| waterlogged silt | Cattails | the mud a stream leaves on its banks, wet sheen and reed litter |
+| acid peat | Heather | dark peat over rough stone, lit purple where the heather blooms |
+| dry straw | Fescue | the firm-fairway sward, uncut, gone to straw with seed heads |
+
+`surface()` asks `tree_ground()` for that color; `inset_tile()` then fades it
+into the surrounding turf along every open edge (`edge_room()` plus a
+per-ground `tree_looseness()`, so sand and silt spread wider than a thin carpet
+of litter), which is why a lone tree is a patch around its trunk and a grove is
+one unbroken floor rather than a grid of squares. Species agree about seams the
+way the boulder fields do: `boundary_class()` folds every tree id onto
+`100 + its ground`, so litter meeting litter draws no material edge while
+litter meeting sand fades across one. `carries()` lets a wood's ground host
+another species' ground, so `neighbour_surface()` blends the two floors instead
+of pushing grass between them, and `edge_between()` decides a tree-to-tree edge
+on the class alone rather than on the inset shortcut.
 - *Pot Bunker* and *Stream* use `link_distance()`: the distance to a skeleton
   joining the tile centre to each linked edge (same-type neighbours for pots,
   stream or pond neighbours for streams). A tile with one horizontal and one

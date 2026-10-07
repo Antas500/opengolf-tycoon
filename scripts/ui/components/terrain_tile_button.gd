@@ -43,6 +43,7 @@ var _surface_material: ShaderMaterial
 var _outline: Line2D
 var _name_label: Label
 var _cup_flag: Sprite2D
+var _tree_art: Sprite2D = null  # The species sprite on a woodland tile
 var _green_places_cup := true
 var _hovered := false
 
@@ -56,6 +57,8 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if EventBus.theme_changed.is_connected(_on_theme_changed):
 		EventBus.theme_changed.disconnect(_on_theme_changed)
+	if EventBus.season_changed.is_connected(_on_season_changed):
+		EventBus.season_changed.disconnect(_on_season_changed)
 
 func _update_button() -> void:
 	# The tile and its caption replace ToolButton's flat sprite and button text.
@@ -160,9 +163,51 @@ func _build_tile() -> void:
 		add_child(trail)
 		if _name_label:
 			move_child(trail, _name_label.get_index())
+	elif tool_type is int and TerrainTypes.is_tree(tool_type):
+		# The tile already paints the species' own ground, so the button only
+		# has to stand the sprite the TreeOverlay uses on top of it — the same
+		# arrangement as a wild-flower bed, whose blooms the tile adds too.
+		_tree_art = _make_tree_art()
+		add_child(_tree_art)
+		if _name_label:
+			move_child(_tree_art, _name_label.get_index())
+		# Deciduous species change sprite with the calendar, as they do on grass.
+		EventBus.season_changed.connect(_on_season_changed)
 
 	_refresh_palette()
 	_update_visual_state()
+
+## The species sprite that stands on a woodland tile, sized to the diamond. It
+## is the art the course draws, so the tile and the grove always agree.
+func _make_tree_art() -> Sprite2D:
+	var sprite := Sprite2D.new()
+	sprite.name = "TreePreviewArt"
+	sprite.centered = true
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.position = Vector2(BUTTON_SIZE.x * 0.5, BUTTON_SIZE.y * 0.52)
+	_draw_tree_species(sprite)
+	return sprite
+
+func _draw_tree_species(sprite: Sprite2D) -> void:
+	var species := TreeOverlay.species_at(int(tool_type), Vector2i.ZERO)
+	var texture := TreeOverlay.texture_for(species)
+	if texture == null:
+		# No art on this machine: the tile falls back to the same silhouette the
+		# overlay paints, so the button never shows a bare patch of grass.
+		sprite.texture = null
+		sprite.custom_minimum_size = Vector2.ZERO
+		return
+	sprite.texture = texture
+	var art_size := texture.get_size()
+	# Keep the whole tree, crown and trunk, inside the diamond's height.
+	var scale_v := minf(44.0 / art_size.y, 86.0 / art_size.x)
+	sprite.scale = Vector2(scale_v, scale_v)
+	var base := TreeOverlay.base_offset(species, art_size * scale_v)
+	sprite.position = Vector2(BUTTON_SIZE.x * 0.5, BUTTON_SIZE.y * 0.52 + base)
+
+func _on_season_changed(_old_season: int, _new_season: int) -> void:
+	if _tree_art:
+		_draw_tree_species(_tree_art)
 
 func _make_flower_bed_art() -> Node2D:
 	var art := Node2D.new()

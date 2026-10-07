@@ -30,7 +30,7 @@ static func calculate_rating(
 		"design": _calculate_design_rating(course_data, terrain_grid),
 		"value": _calculate_value_rating(green_fee, reputation),
 		"pace": _calculate_pace_rating(daily_stats),
-		"aesthetics": _calculate_aesthetics_rating(entity_layer, course_data),
+		"aesthetics": _calculate_aesthetics_rating(entity_layer, course_data, terrain_grid),
 	}
 
 	# Weighted average
@@ -329,7 +329,7 @@ static func _calculate_pace_rating(daily_stats) -> float:
 ## Scores each open hole based on nearby decorations within 8-tile radius of tee and green.
 ## Variety bonus for using different decoration types, theme bonus for matching decorations.
 ## Trees also contribute a small amount.
-static func _calculate_aesthetics_rating(entity_layer, course_data) -> float:
+static func _calculate_aesthetics_rating(entity_layer, course_data, terrain_grid = null) -> float:
 	if not entity_layer or not course_data:
 		return 2.5
 
@@ -390,14 +390,14 @@ static func _calculate_aesthetics_rating(entity_layer, course_data) -> float:
 
 			decoration_score += diminished
 
-		# Trees contribute 0.15 each
-		var tee_trees = entity_layer.get_trees_in_area(tee_area_min, tee_area_max)
-		var green_trees = entity_layer.get_trees_in_area(green_area_min, green_area_max)
-		var tree_positions: Dictionary = {}
-		for tree in tee_trees + green_trees:
-			if not tree_positions.has(tree.grid_position):
-				tree_positions[tree.grid_position] = true
-				decoration_score += 0.15
+		# Woodland contributes 0.15 a tile. A tree is Course Terrain now, so the
+		# score reads the tiles around the tee and the green instead of entities
+		# standing on them, and every species counts the same.
+		if terrain_grid != null:
+			var counted_trees: Dictionary = {}
+			var tree_tiles: int = _count_tree_tiles(terrain_grid, counted_trees, tee_area_min, tee_area_max) \
+					+ _count_tree_tiles(terrain_grid, counted_trees, green_area_min, green_area_max)
+			decoration_score += 0.15 * tree_tiles
 
 
 		# Variety bonus
@@ -418,6 +418,21 @@ static func _calculate_aesthetics_rating(entity_layer, course_data) -> float:
 		return 2.5
 
 	return clampf(total_score / float(open_count), 1.0, 5.0)
+
+## Tree tiles inside a rectangle, skipping any tile already counted in `seen`.
+## The tee and green areas of a short hole overlap, and a tile is worth one
+## 0.15 however many times it is scanned.
+static func _count_tree_tiles(terrain_grid, seen: Dictionary, top_left: Vector2i, bottom_right: Vector2i) -> int:
+	var count: int = 0
+	for x in range(maxi(top_left.x, 0), bottom_right.x + 1):
+		for y in range(maxi(top_left.y, 0), bottom_right.y + 1):
+			var pos := Vector2i(x, y)
+			if seen.has(pos) or not terrain_grid.is_valid_position(pos):
+				continue
+			seen[pos] = true
+			if TerrainTypes.is_tree(terrain_grid.get_tile(pos)):
+				count += 1
+	return count
 
 ## Check if decoration matches current course theme
 static func _is_theme_appropriate(decoration) -> bool:

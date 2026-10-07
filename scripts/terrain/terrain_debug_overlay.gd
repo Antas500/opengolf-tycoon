@@ -19,6 +19,18 @@ const TYPE_COLORS = {
 	9: Color(0.7, 0.7, 0.6, 0.5),   # PATH - gray-tan
 	10: Color(0.8, 0.2, 0.2, 0.5),  # OUT_OF_BOUNDS - red
 	11: Color(0.1, 0.4, 0.1, 0.5),  # TREES - dark green
+	# The species tiles share the Trees swatch: the overlay reads families.
+	22: Color(0.1, 0.4, 0.1, 0.5),
+	23: Color(0.1, 0.4, 0.1, 0.5),
+	24: Color(0.1, 0.4, 0.1, 0.5),
+	25: Color(0.1, 0.4, 0.1, 0.5),
+	26: Color(0.1, 0.4, 0.1, 0.5),
+	27: Color(0.1, 0.4, 0.1, 0.5),
+	28: Color(0.1, 0.4, 0.1, 0.5),
+	29: Color(0.1, 0.4, 0.1, 0.5),
+	30: Color(0.1, 0.4, 0.1, 0.5),
+	31: Color(0.1, 0.4, 0.1, 0.5),
+	32: Color(0.1, 0.4, 0.1, 0.5),  # Tree species - same dark green as TREES
 	12: Color(0.9, 0.4, 0.6, 0.5),  # FLOWER_BED - pink
 	13: Color(0.5, 0.5, 0.5, 0.5),  # ROCKS - gray
 	14: Color(0.7, 0.8, 0.3, 0.5),  # FIRM_FAIRWAY - straw green

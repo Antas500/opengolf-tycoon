@@ -221,6 +221,10 @@ static func get_lie_modifier(terrain_type: int, club: int, bunker_depth: int = 0
 	# are single terrain ids).
 	if TerrainTypes.is_rocks(terrain_type):
 		return 0.25  # Extremely difficult — risk of injury/club damage
+	# Likewise one lie for the whole tree family: Trees plus every species tile
+	# on the Course Terrain tab, whatever the artwork on top of the turf is.
+	if TerrainTypes.is_tree(terrain_type):
+		return 0.3   # Very difficult shot
 	match terrain_type:
 		TerrainTypes.Type.GRASS, TerrainTypes.Type.FAIRWAY:
 			return 1.0  # Perfect lie
@@ -249,8 +253,6 @@ static func get_lie_modifier(terrain_type: int, club: int, bunker_depth: int = 0
 			# Firm, unraked sand: the club may be grounded, so it plays like
 			# a sandy rough rather than a bunker.
 			return 0.8 if club == Golfer.Club.WEDGE else 0.7
-		TerrainTypes.Type.TREES:
-			return 0.3   # Very difficult shot
 		TerrainTypes.Type.BRUSH:
 			return 0.3   # Tangled scrub — a hack-out at best
 		_:
@@ -262,6 +264,8 @@ static func get_lie_modifier(terrain_type: int, club: int, bunker_depth: int = 0
 static func get_terrain_distance_modifier(terrain_type: int, bunker_depth: int = 0) -> float:
 	if TerrainTypes.is_rocks(terrain_type):
 		return 0.5   # 50% distance loss on any stony ground
+	if TerrainTypes.is_tree(terrain_type):
+		return 0.6   # 40% distance loss (punch out)
 	match terrain_type:
 		TerrainTypes.Type.ROUGH:
 			return 0.85  # 15% distance loss
@@ -275,8 +279,6 @@ static func get_terrain_distance_modifier(terrain_type: int, bunker_depth: int =
 			return 0.45  # 55% distance loss — straight up over the face
 		TerrainTypes.Type.WASTE_BUNKER:
 			return 0.85  # 15% distance loss, like rough
-		TerrainTypes.Type.TREES:
-			return 0.6   # 40% distance loss (punch out)
 		TerrainTypes.Type.BRUSH:
 			return 0.5   # 50% distance loss
 		_:
@@ -303,6 +305,8 @@ static func catches_rolling_ball(terrain_type: int) -> bool:
 static func get_roll_multiplier(terrain_type: int) -> float:
 	if TerrainTypes.is_rocks(terrain_type):
 		return 0.15  # Stony ground kills momentum
+	if TerrainTypes.is_tree(terrain_type):
+		return 0.2   # Dense ground cover
 	match terrain_type:
 		TerrainTypes.Type.GREEN:
 			return 1.3   # Fast, smooth surface — more roll
@@ -322,8 +326,6 @@ static func get_roll_multiplier(terrain_type: int) -> float:
 			return 0.06  # Ball nestles down almost where it lands
 		TerrainTypes.Type.WASTE_BUNKER:
 			return 0.3   # Firm sand lets the ball skid a little
-		TerrainTypes.Type.TREES:
-			return 0.2   # Dense ground cover
 		TerrainTypes.Type.BRUSH:
 			return 0.05  # Swallowed by the scrub
 		TerrainTypes.Type.PATH:

@@ -24,7 +24,6 @@ const PACKAGE_NAMES: Dictionary = {
 static func build(
 	package_id: String,
 	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
 	hole_tool: HoleCreationTool
 ) -> void:
 	# Clear existing holes first
@@ -34,13 +33,13 @@ static func build(
 
 	match package_id:
 		"starter":
-			_build_starter(terrain_grid, entity_layer, hole_tool)
+			_build_starter(terrain_grid, hole_tool)
 		"executive":
-			_build_executive(terrain_grid, entity_layer, hole_tool)
+			_build_executive(terrain_grid, hole_tool)
 		"standard9":
-			_build_standard9(terrain_grid, entity_layer, hole_tool)
+			_build_standard9(terrain_grid, hole_tool)
 		"championship18":
-			_build_championship18(terrain_grid, entity_layer, hole_tool)
+			_build_championship18(terrain_grid, hole_tool)
 
 	terrain_grid.end_batch_quiet()
 	terrain_grid.refresh_all_overlays()
@@ -85,7 +84,6 @@ static func _clear_existing_course(hole_tool: HoleCreationTool) -> void:
 ## Starter Pack: 3 holes (Par 4, Par 3, Par 5) in a compact layout.
 static func _build_starter(
 	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
 	hole_tool: HoleCreationTool
 ) -> void:
 	var c := _get_owned_center()
@@ -109,14 +107,12 @@ static func _build_starter(
 	QuickStartCourse._paint_water_hazard(terrain_grid, c + Vector2i(-4, 5), 2)
 	QuickStartCourse._create_hole(terrain_grid, hole_tool, h3_tee, h3_green)
 
-	QuickStartCourse._clear_entities_on_course(terrain_grid, entity_layer)
 	EventBus.notify("Starter Pack: 3-hole course created!", "success")
 
 
 ## Executive 9: Nine par-3 holes in a clockwise oval.
 static func _build_executive(
 	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
 	hole_tool: HoleCreationTool
 ) -> void:
 	var c := _get_owned_center()
@@ -147,7 +143,6 @@ static func _build_executive(
 	# Add one water hazard for variety
 	QuickStartCourse._paint_water_hazard(terrain_grid, c + Vector2i(4, 4), 2)
 
-	QuickStartCourse._clear_entities_on_course(terrain_grid, entity_layer)
 	EventBus.notify("Executive 9: Par-3 course created!", "success")
 
 
@@ -155,7 +150,6 @@ static func _build_executive(
 ## Layout based on QuickStartCourse but offset from owned land center.
 static func _build_standard9(
 	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
 	hole_tool: HoleCreationTool
 ) -> void:
 	var c := _get_owned_center()
@@ -185,7 +179,6 @@ static func _build_standard9(
 			QuickStartCourse._paint_extra_bunker(terrain_grid, c + Vector2i(h[4]))
 		QuickStartCourse._create_hole(terrain_grid, hole_tool, tee, green)
 
-	QuickStartCourse._clear_entities_on_course(terrain_grid, entity_layer)
 	EventBus.notify("Standard 9: Par 36 course created!", "success")
 
 
@@ -193,7 +186,6 @@ static func _build_standard9(
 ## Two 9-hole loops — inner and outer.
 static func _build_championship18(
 	terrain_grid: TerrainGrid,
-	entity_layer: EntityLayer,
 	hole_tool: HoleCreationTool
 ) -> void:
 	var c := _get_owned_center()
@@ -247,5 +239,4 @@ static func _build_championship18(
 	QuickStartCourse._paint_extra_bunker(terrain_grid, c + Vector2i(-10, 8))
 	QuickStartCourse._paint_extra_bunker(terrain_grid, c + Vector2i(20, -14))
 
-	QuickStartCourse._clear_entities_on_course(terrain_grid, entity_layer)
 	EventBus.notify("Championship 18: Full course created! Par 72.", "success")

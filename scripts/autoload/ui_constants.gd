@@ -197,6 +197,8 @@ func get_tool_icon(tool_type) -> String:
 			16: return TOOL_ICONS.get("water", "[w]")  # STREAM
 			17: return TOOL_ICONS.get("rough", "[~]")  # DEEP_ROUGH
 			19: return TOOL_ICONS.get("tree", "[^]")  # BRUSH
+		if TerrainTypes.is_tree(tool_type):
+			return TOOL_ICONS.get("tree", "[^]")  # Trees and every species tile
 		return "[?]"
 	else:
 		return TOOL_ICONS.get(str(tool_type), "[?]")

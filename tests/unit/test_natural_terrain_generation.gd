@@ -9,6 +9,9 @@ func test_generation_inventory_is_course_tab_only_and_has_no_upkeep() -> void:
 	var generated_types := TerrainTypes.get_natural_generation_types()
 	assert_true(T.FLOWER_BED in generated_types, "Wild Flowers is a landscape tile on Course Terrain")
 	assert_true(T.TREES in generated_types, "Theme trees are landscape tiles on Course Terrain")
+	for species in TerrainTypes.TREE_SPECIES_TILES:
+		assert_true(species in generated_types,
+			"%s is a landscape tile on Course Terrain" % TerrainTypes.get_type_name(species))
 	assert_true(T.ROUGH in generated_types)
 	assert_true(T.DEEP_ROUGH in generated_types)
 	assert_true(T.WATER in generated_types)
@@ -20,7 +23,8 @@ func test_generation_inventory_is_course_tab_only_and_has_no_upkeep() -> void:
 	for type in generated_types:
 		assert_eq(TerrainTypes.get_maintenance_cost(type), 0,
 			"Generated terrain %s must not add maintenance" % TerrainTypes.get_type_name(type))
-		assert_true(type in TerrainTypes.COURSE_PAINT_TYPES or type in [T.FLOWER_BED, T.TREES],
+		assert_true(type in TerrainTypes.COURSE_PAINT_TYPES \
+				or type in TerrainTypes.COURSE_LANDSCAPE_TERRAIN_TYPES,
 			"Generated terrain %s must be offered on Course Terrain" % TerrainTypes.get_type_name(type))
 
 func test_maintenance_terrain_and_non_course_tiles_are_excluded() -> void:
@@ -67,7 +71,15 @@ func test_generation_never_leaves_natural_grass_the_base_turf_is_rough() -> void
 				rough_count += 1
 	assert_eq(grass_count, 0, "Terrain generation removes the Natural Grass tile from the map")
 	assert_gt(rough_count, 0, "The generated base turf is Rough")
-	assert_true(entities.trees.size() > 0, "Trees still grow on the Rough base")
+	# Woodland is painted ground: generation leaves tree tiles on the map and
+	# no entities anywhere.
+	var tree_tiles := 0
+	for y in range(grid.grid_height):
+		for x in range(grid.grid_width):
+			if TerrainTypes.is_tree(grid.get_tile(Vector2i(x, y))):
+				tree_tiles += 1
+	assert_gt(tree_tiles, 0, "Trees still grow on the Rough base")
+	assert_eq(entities.get_all_buildings().size(), 0, "Generation places no buildings")
 
 func test_premium_rough_features_paint_onto_the_rough_base() -> void:
 	var grid := TerrainGrid.new()
